@@ -8,9 +8,9 @@
   "license": "UNLICENSED",
   "scripts": {
     "build": "node ./node_modules/@nestjs/cli/bin/nest.js build",
-    "start": "nest start",
+    "start": "node dist/src/main.js",
     "start:dev": "nest start --watch",
-    "start:prod": "node dist/main",
+    "start:prod": "node dist/src/main.js",
     "seed": "ts-node -r tsconfig-paths/register src/seed.ts",
     "migrate:fix-patient-number": "ts-node -r tsconfig-paths/register scripts/fix-patient-number.ts"
   },
