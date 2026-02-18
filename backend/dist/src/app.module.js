@@ -23,65 +23,37 @@ const settings_module_1 = require("./settings/settings.module");
 const reports_module_1 = require("./reports/reports.module");
 const audit_module_1 = require("./audit/audit.module");
 const instruments_module_1 = require("./instruments/instruments.module");
-const lab_entity_1 = require("./entities/lab.entity");
-const department_entity_1 = require("./entities/department.entity");
-const user_department_assignment_entity_1 = require("./entities/user-department-assignment.entity");
-const patient_entity_1 = require("./entities/patient.entity");
-const shift_entity_1 = require("./entities/shift.entity");
-const user_entity_1 = require("./entities/user.entity");
-const user_lab_assignment_entity_1 = require("./entities/user-lab-assignment.entity");
-const user_shift_assignment_entity_1 = require("./entities/user-shift-assignment.entity");
-const order_entity_1 = require("./entities/order.entity");
-const sample_entity_1 = require("./entities/sample.entity");
-const order_test_entity_1 = require("./entities/order-test.entity");
-const test_entity_1 = require("./entities/test.entity");
-const pricing_entity_1 = require("./entities/pricing.entity");
-const audit_log_entity_1 = require("./entities/audit-log.entity");
-const instrument_entity_1 = require("./entities/instrument.entity");
-const test_component_entity_1 = require("./entities/test-component.entity");
-const order_test_result_history_entity_1 = require("./entities/order-test-result-history.entity");
-const unmatched_instrument_result_entity_1 = require("./entities/unmatched-instrument-result.entity");
-const lab_orders_worklist_entity_1 = require("./entities/lab-orders-worklist.entity");
 const panels_module_1 = require("./panels/panels.module");
 const unmatched_module_1 = require("./unmatched/unmatched.module");
+const entities_1 = require("./database/entities");
+const useDatabaseUrl = Boolean(process.env.DATABASE_URL);
+const shouldSynchronize = process.env.DB_SYNC === 'true' ||
+    (process.env.DB_SYNC !== 'false' &&
+        (process.env.NODE_ENV !== 'production' || useDatabaseUrl));
+const typeOrmConfig = useDatabaseUrl
+    ? {
+        type: 'postgres',
+        url: process.env.DATABASE_URL,
+        entities: entities_1.DATABASE_ENTITIES,
+        synchronize: shouldSynchronize,
+    }
+    : {
+        type: 'postgres',
+        host: process.env.DB_HOST || 'localhost',
+        port: parseInt(process.env.DB_PORT || '5432', 10),
+        username: process.env.DB_USERNAME || 'postgres',
+        password: process.env.DB_PASSWORD || 'postgres',
+        database: process.env.DB_DATABASE || 'lis',
+        entities: entities_1.DATABASE_ENTITIES,
+        synchronize: shouldSynchronize,
+    };
 let AppModule = class AppModule {
 };
 exports.AppModule = AppModule;
 exports.AppModule = AppModule = __decorate([
     (0, common_1.Module)({
         imports: [
-            typeorm_1.TypeOrmModule.forRoot({
-                type: 'postgres',
-                host: process.env.DB_HOST || 'localhost',
-                port: parseInt(process.env.DB_PORT || '5432', 10),
-                username: process.env.DB_USERNAME || 'postgres',
-                password: process.env.DB_PASSWORD || 'postgres',
-                database: process.env.DB_DATABASE || 'lis',
-                entities: [
-                    lab_entity_1.Lab,
-                    shift_entity_1.Shift,
-                    user_entity_1.User,
-                    user_lab_assignment_entity_1.UserLabAssignment,
-                    user_shift_assignment_entity_1.UserShiftAssignment,
-                    user_department_assignment_entity_1.UserDepartmentAssignment,
-                    department_entity_1.Department,
-                    patient_entity_1.Patient,
-                    order_entity_1.Order,
-                    sample_entity_1.Sample,
-                    order_test_entity_1.OrderTest,
-                    test_entity_1.Test,
-                    pricing_entity_1.Pricing,
-                    audit_log_entity_1.AuditLog,
-                    instrument_entity_1.Instrument,
-                    instrument_entity_1.InstrumentTestMapping,
-                    instrument_entity_1.InstrumentMessage,
-                    test_component_entity_1.TestComponent,
-                    order_test_result_history_entity_1.OrderTestResultHistory,
-                    unmatched_instrument_result_entity_1.UnmatchedInstrumentResult,
-                    lab_orders_worklist_entity_1.LabOrdersWorklist,
-                ],
-                synchronize: process.env.NODE_ENV !== 'production',
-            }),
+            typeorm_1.TypeOrmModule.forRoot(typeOrmConfig),
             auth_module_1.AuthModule,
             dashboard_module_1.DashboardModule,
             patients_module_1.PatientsModule,
