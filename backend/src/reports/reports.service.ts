@@ -462,6 +462,17 @@ export class ReportsService implements OnModuleDestroy {
       }
     }
 
+    let kurdishFontBase64: string | undefined;
+    const kurdishFontPath = join(__dirname, 'fonts', 'NotoNaskhArabic-Regular.ttf');
+    if (existsSync(kurdishFontPath)) {
+      try {
+        const fontBuf = readFileSync(kurdishFontPath);
+        kurdishFontBase64 = `data:font/ttf;base64,${fontBuf.toString('base64')}`;
+      } catch {
+        // ignore
+      }
+    }
+
     const html = buildResultsReportHtml({
       order,
       orderTests: reportableOrderTests,
@@ -471,6 +482,7 @@ export class ReportsService implements OnModuleDestroy {
       latestVerifiedAt: latestVerifiedAt ?? null,
       comments,
       defaultLogoBase64,
+      kurdishFontBase64,
     });
 
     try {
