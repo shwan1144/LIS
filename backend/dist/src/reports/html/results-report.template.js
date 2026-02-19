@@ -454,6 +454,7 @@ function buildResultsReportHtml(input) {
     @page { size: A4; margin: 3mm 3mm 3mm 3mm; }
     body {
       --content-x: 3mm;
+      --footer-height: 14mm;
       margin: 0;
       font-family: 'Segoe UI', Tahoma, Arial, sans-serif;
       font-size: 12px;
@@ -470,13 +471,18 @@ function buildResultsReportHtml(input) {
     .ltr { direction: ltr; unicode-bidi: isolate; }
     .nowrap { white-space: nowrap; }
     .watermark { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%) rotate(-30deg); opacity: 0.08; width: min(68vw, 170mm); z-index: 0; pointer-events: none; }
-    .page { position: relative; z-index: 1; padding: 0.5mm 0 3mm 0; page-break-inside: avoid; box-sizing: border-box; }
-    .banner-wrap,
+    .page { position: relative; z-index: 1; padding: 0 0 calc(var(--footer-height) + 4mm) 0; page-break-inside: avoid; min-height: calc(297mm - 6mm); box-sizing: border-box; }
     .patient-info,
-    .content,
-    .report-footer { margin-left: var(--content-x); margin-right: var(--content-x); }
-    .banner-wrap { margin-top: 0; margin-bottom: 6px; text-align: center; }
-    .banner-image { width: 100%; max-height: 30mm; object-fit: contain; display: block; }
+    .content { margin-left: var(--content-x); margin-right: var(--content-x); }
+    .banner-wrap {
+      width: calc(100% - (var(--content-x) * 2));
+      margin: 0 auto 6px auto;
+    }
+    .banner-image {
+      width: 100%;
+      height: auto;
+      display: block;
+    }
     .header { display: flex; align-items: center; justify-content: space-between; border-bottom: 2px solid #222; padding: 0 var(--content-x) 8px var(--content-x); }
     .header-col { flex: 1; font-size: 13px; font-weight: 700; line-height: 1.35; }
     .header-col.ltr { text-align: left; }
@@ -522,8 +528,14 @@ function buildResultsReportHtml(input) {
     .panel-page-title { font-size: 18px; font-weight: 800; margin-bottom: 12px; border-bottom: 2px solid #222; padding-bottom: 6px; }
     .panel-page .content { padding: 0; }
     .gue-gse-table { width: 100%; margin-top: 8px; margin-bottom: 12px; }
-    .report-footer { margin-top: 6px; margin-bottom: 1mm; text-align: center; }
-    .footer-image { width: 100%; max-height: 18mm; object-fit: contain; display: block; }
+    .report-footer {
+      position: absolute;
+      left: var(--content-x);
+      right: var(--content-x);
+      bottom: 1mm;
+      text-align: center;
+    }
+    .footer-image { width: 100%; height: var(--footer-height); object-fit: fill; object-position: center; display: block; }
     * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   </style>
 </head>

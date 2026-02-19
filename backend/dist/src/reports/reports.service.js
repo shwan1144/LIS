@@ -26,6 +26,8 @@ const lab_entity_1 = require("../entities/lab.entity");
 const user_entity_1 = require("../entities/user.entity");
 const test_entity_1 = require("../entities/test.entity");
 const results_report_template_1 = require("./html/results-report.template");
+const REPORT_BANNER_WIDTH = 2480;
+const REPORT_BANNER_HEIGHT = 220;
 function formatDateTime(value) {
     if (!value)
         return '-';
@@ -262,10 +264,11 @@ let ReportsService = class ReportsService {
         }
         if (opts.footerImage) {
             const footerWidth = pageWidth - marginLeft - marginRight;
-            const footerY = pageHeight - doc.page.margins.bottom + 4;
+            const footerHeight = Math.max(16, Math.round((footerWidth * REPORT_BANNER_HEIGHT) / REPORT_BANNER_WIDTH));
+            const footerY = pageHeight - footerHeight - 2;
             try {
                 doc.image(opts.footerImage, marginLeft, footerY, {
-                    fit: [footerWidth, 24],
+                    fit: [footerWidth, footerHeight],
                     align: 'center',
                     valign: 'center',
                 });
@@ -599,7 +602,12 @@ let ReportsService = class ReportsService {
         const logoImage = this.decodeImageDataUrl(labBranding?.reportLogoDataUrl);
         const watermarkImage = this.decodeImageDataUrl(labBranding?.reportWatermarkDataUrl) || logoImage;
         return new Promise((resolve, reject) => {
-            const doc = new PDFDocument({ size: 'A4', margin: 10 });
+            const doc = new PDFDocument({
+                size: 'A4',
+                margins: footerImage
+                    ? { top: 10, right: 10, bottom: 30, left: 10 }
+                    : { top: 10, right: 10, bottom: 10, left: 10 },
+            });
             const chunks = [];
             doc.on('data', (chunk) => chunks.push(chunk));
             doc.on('end', () => resolve(Buffer.concat(chunks)));
@@ -611,13 +619,12 @@ let ReportsService = class ReportsService {
                 const marginLeft = doc.page.margins.left;
                 const marginRight = doc.page.margins.right;
                 const maxWidth = doc.page.width - marginLeft - marginRight;
+                const bannerTop = doc.page.margins.top;
                 try {
-                    doc.image(bannerImage, marginLeft, 10, {
-                        fit: [maxWidth, 64],
-                        align: 'center',
-                        valign: 'center',
-                    });
-                    doc.y = 84;
+                    const openedBanner = doc.openImage(bannerImage);
+                    const bannerHeight = Math.max(24, Math.round((openedBanner.height / openedBanner.width) * maxWidth));
+                    doc.image(openedBanner, marginLeft, bannerTop, { width: maxWidth });
+                    doc.y = bannerTop + bannerHeight + 8;
                 }
                 catch {
                     drawHeaderBar(doc, {
@@ -648,12 +655,14 @@ let ReportsService = class ReportsService {
                 ['Verified By', verifiers.join(', ') || '-'],
             ]);
             const leftX = doc.page.margins.left;
+            const usableWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right;
             const widths = {
-                test: 210,
-                result: 120,
-                unit: 60,
-                range: 110,
+                test: Math.round(usableWidth * 0.42),
+                result: Math.round(usableWidth * 0.20),
+                unit: Math.round(usableWidth * 0.14),
+                range: 0,
             };
+            widths.range = usableWidth - widths.test - widths.result - widths.unit;
             const tableWidth = widths.test + widths.result + widths.unit + widths.range;
             const drawTableHeader = () => {
                 doc.font('Helvetica-Bold').fontSize(10).fillColor('#111827');

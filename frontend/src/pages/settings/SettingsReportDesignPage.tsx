@@ -23,7 +23,7 @@ const IMAGE_SETTINGS: ImageSettingMeta[] = [
   {
     key: 'bannerDataUrl',
     title: 'Report Banner',
-    recommendedSize: '2480 x 350 px',
+    recommendedSize: '2480 x 220 px',
     note: 'Wide image for the top of every report page.',
     maxBytes: 2 * 1024 * 1024,
   },
