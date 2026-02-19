@@ -410,6 +410,10 @@ let ReportsService = class ReportsService {
             return await this.renderPdfFromHtml(html);
         }
         catch (error) {
+            const allowFallback = process.env.REPORTS_PDF_FALLBACK !== 'false';
+            if (!allowFallback) {
+                throw error;
+            }
             console.error('Playwright PDF rendering failed; falling back to PDFKit renderer.', error);
             return this.renderTestResultsFallbackPDF({
                 order,
