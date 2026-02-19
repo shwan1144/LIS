@@ -8,6 +8,7 @@ import {
   Req,
   Res,
   ParseUUIDPipe,
+  HttpException,
 } from '@nestjs/common';
 import { Response } from 'express';
 import { ReportsService } from './reports.service';
@@ -55,6 +56,14 @@ export class ReportsController {
       );
       res.send(pdfBuffer);
     } catch (error) {
+      if (error instanceof HttpException) {
+        const response = error.getResponse();
+        const message =
+          typeof response === 'string'
+            ? response
+            : ((response as { message?: string | string[] }).message ?? error.message);
+        return res.status(error.getStatus()).json({ message });
+      }
       if (error instanceof Error && error.message.includes('not found')) {
         return res.status(404).json({ message: error.message });
       }
@@ -91,6 +100,14 @@ export class ReportsController {
       res.send(pdfBuffer);
     } catch (error) {
       console.error('Error generating results PDF:', error);
+      if (error instanceof HttpException) {
+        const response = error.getResponse();
+        const message =
+          typeof response === 'string'
+            ? response
+            : ((response as { message?: string | string[] }).message ?? error.message);
+        return res.status(error.getStatus()).json({ message });
+      }
       if (error instanceof Error && error.message.includes('not found')) {
         return res.status(404).json({ message: error.message });
       }

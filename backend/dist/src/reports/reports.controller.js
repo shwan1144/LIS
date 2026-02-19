@@ -43,6 +43,13 @@ let ReportsController = class ReportsController {
             res.send(pdfBuffer);
         }
         catch (error) {
+            if (error instanceof common_1.HttpException) {
+                const response = error.getResponse();
+                const message = typeof response === 'string'
+                    ? response
+                    : (response.message ?? error.message);
+                return res.status(error.getStatus()).json({ message });
+            }
             if (error instanceof Error && error.message.includes('not found')) {
                 return res.status(404).json({ message: error.message });
             }
@@ -70,6 +77,13 @@ let ReportsController = class ReportsController {
         }
         catch (error) {
             console.error('Error generating results PDF:', error);
+            if (error instanceof common_1.HttpException) {
+                const response = error.getResponse();
+                const message = typeof response === 'string'
+                    ? response
+                    : (response.message ?? error.message);
+                return res.status(error.getStatus()).json({ message });
+            }
             if (error instanceof Error && error.message.includes('not found')) {
                 return res.status(404).json({ message: error.message });
             }
