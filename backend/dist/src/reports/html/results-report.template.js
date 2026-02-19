@@ -470,9 +470,13 @@ function buildResultsReportHtml(input) {
     .ltr { direction: ltr; unicode-bidi: isolate; }
     .nowrap { white-space: nowrap; }
     .watermark { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%) rotate(-30deg); opacity: 0.08; width: min(68vw, 170mm); z-index: 0; pointer-events: none; }
-    .page { position: relative; z-index: 1; padding: 1mm 0 24mm 0; page-break-inside: avoid; min-height: 267mm; box-sizing: border-box; }
-    .banner-wrap { margin: 0 var(--content-x) 6px var(--content-x); text-align: center; }
-    .banner-image { width: 100%; max-height: 38mm; object-fit: contain; display: block; }
+    .page { position: relative; z-index: 1; padding: 0.5mm 0 3mm 0; page-break-inside: avoid; box-sizing: border-box; }
+    .banner-wrap,
+    .patient-info,
+    .content,
+    .report-footer { margin-left: var(--content-x); margin-right: var(--content-x); }
+    .banner-wrap { margin-top: 0; margin-bottom: 6px; text-align: center; }
+    .banner-image { width: 100%; max-height: 30mm; object-fit: contain; display: block; }
     .header { display: flex; align-items: center; justify-content: space-between; border-bottom: 2px solid #222; padding: 0 var(--content-x) 8px var(--content-x); }
     .header-col { flex: 1; font-size: 13px; font-weight: 700; line-height: 1.35; }
     .header-col.ltr { text-align: left; }
@@ -491,7 +495,7 @@ function buildResultsReportHtml(input) {
     .logo-wrap { flex: 0 0 120px; text-align: center; }
     .logo { width: 90px; height: auto; object-fit: contain; }
     .report-title { text-align: center; font-size: 20px; font-weight: 800; text-decoration: underline; margin: 12px 0 10px; }
-    .patient-info { margin: 10px var(--content-x) 10px var(--content-x); display: grid; grid-template-columns: 1fr 1fr; gap: 8px; border: 1px solid #ccc; border-radius: 6px; padding: 10px 12px; background: #fafafa; }
+    .patient-info { margin-top: 8px; margin-bottom: 8px; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; border: 1px solid #ccc; border-radius: 6px; padding: 10px 12px; background: #fafafa; }
     .info-item { font-size: 13px; }
     .info-item .label { font-weight: 700; margin-right: 4px; }
     .name-value { display: inline-block; }
@@ -503,7 +507,7 @@ function buildResultsReportHtml(input) {
       word-spacing: 0;
       font-feature-settings: "liga" 1, "calt" 1, "kern" 1;
     }
-    .content { padding: 0 var(--content-x); }
+    .content { padding: 0; }
     .dept-title { background: #222; color: #fff; padding: 8px 12px; font-weight: 800; margin-top: 18px; }
     .test-group-title { background: #f2f2f2; color: #555; padding: 6px 12px; font-weight: 700; border: 1px solid #ddd; border-top: 0; }
     table { width: 100%; border-collapse: collapse; margin-bottom: 8px; }
@@ -516,10 +520,10 @@ function buildResultsReportHtml(input) {
     tr.abnormal td { background-color: #fff5f5; }
     .panel-section { margin-top: 20px; }
     .panel-page-title { font-size: 18px; font-weight: 800; margin-bottom: 12px; border-bottom: 2px solid #222; padding-bottom: 6px; }
-    .panel-page .content { padding: 0 var(--content-x); }
+    .panel-page .content { padding: 0; }
     .gue-gse-table { width: 100%; margin-top: 8px; margin-bottom: 12px; }
-    .report-footer { position: absolute; left: var(--content-x); right: var(--content-x); bottom: 2mm; text-align: center; }
-    .footer-image { width: 100%; max-height: 20mm; object-fit: contain; display: block; }
+    .report-footer { margin-top: 6px; margin-bottom: 1mm; text-align: center; }
+    .footer-image { width: 100%; max-height: 18mm; object-fit: contain; display: block; }
     * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   </style>
 </head>
