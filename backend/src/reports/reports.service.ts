@@ -167,8 +167,14 @@ export class ReportsService implements OnModuleDestroy {
         const { chromium } = await import('playwright');
         return chromium.launch({
           headless: true,
-          // Avoid GPU issues on some Windows setups; harmless elsewhere.
-          args: ['--disable-gpu'],
+          executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH || undefined,
+          // Container-safe flags for Railway/Linux + Windows-safe fallback.
+          args: [
+            '--disable-gpu',
+            '--no-sandbox',
+            '--disable-setuid-sandbox',
+            '--disable-dev-shm-usage',
+          ],
         });
       })();
     }
@@ -467,6 +473,162 @@ export class ReportsService implements OnModuleDestroy {
       defaultLogoBase64,
     });
 
-    return this.renderPdfFromHtml(html);
+    try {
+      return await this.renderPdfFromHtml(html);
+    } catch (error) {
+      console.error(
+        'Playwright PDF rendering failed; falling back to PDFKit renderer.',
+        error,
+      );
+      return this.renderTestResultsFallbackPDF({
+        order,
+        orderTests: reportableOrderTests,
+        verifiers: verifierNames,
+        latestVerifiedAt: latestVerifiedAt ?? null,
+        comments,
+      });
+    }
+  }
+
+  private async renderTestResultsFallbackPDF(input: {
+    order: Order;
+    orderTests: OrderTest[];
+    verifiers: string[];
+    latestVerifiedAt: Date | null;
+    comments: string[];
+  }): Promise<Buffer> {
+    const { order, orderTests, verifiers, latestVerifiedAt, comments } = input;
+    const patient = order.patient;
+
+    return new Promise((resolve, reject) => {
+      const doc = new PDFDocument({ size: 'A4', margin: 32 });
+      const chunks: Buffer[] = [];
+
+      doc.on('data', (chunk: Buffer) => chunks.push(chunk));
+      doc.on('end', () => resolve(Buffer.concat(chunks)));
+      doc.on('error', reject);
+
+      drawHeaderBar(doc, {
+        title: 'Laboratory Test Results',
+        labName: order.lab?.name || 'Laboratory',
+        subtitle: order.orderNumber || order.id.substring(0, 8),
+      });
+
+      drawTwoColumnInfo(
+        doc,
+        [
+          ['Patient Name', patient?.fullName || '-'],
+          ['Patient ID', patient?.patientNumber || '-'],
+          ['Age', computeAgeYears(patient?.dateOfBirth ?? null)?.toString() || '-'],
+          ['Sex', patient?.sex || '-'],
+        ],
+        [
+          ['Order Number', order.orderNumber || order.id.substring(0, 8)],
+          ['Collected At', formatDateTime(order.registeredAt)],
+          ['Verified At', formatDateTime(latestVerifiedAt)],
+          ['Verified By', verifiers.join(', ') || '-'],
+        ],
+      );
+
+      const leftX = doc.page.margins.left;
+      const widths = {
+        test: 210,
+        result: 120,
+        unit: 60,
+        range: 110,
+      };
+      const tableWidth = widths.test + widths.result + widths.unit + widths.range;
+      const drawTableHeader = () => {
+        doc.font('Helvetica-Bold').fontSize(10).fillColor('#111827');
+        doc.text('Test', leftX, doc.y, { width: widths.test });
+        doc.text('Result', leftX + widths.test, doc.y, { width: widths.result });
+        doc.text('Unit', leftX + widths.test + widths.result, doc.y, { width: widths.unit });
+        doc.text(
+          'Reference',
+          leftX + widths.test + widths.result + widths.unit,
+          doc.y,
+          { width: widths.range },
+        );
+        doc.moveDown(0.6);
+        doc
+          .strokeColor('#CBD5E1')
+          .lineWidth(1)
+          .moveTo(leftX, doc.y)
+          .lineTo(leftX + tableWidth, doc.y)
+          .stroke();
+        doc.moveDown(0.5);
+      };
+
+      drawTableHeader();
+
+      doc.font('Helvetica').fontSize(9).fillColor('#111827');
+      for (const ot of orderTests) {
+        const t = ot.test as Test | undefined;
+        const testName = t?.name || 'Unknown test';
+        const testCode = t?.code ? ` (${t.code})` : '';
+        const result = formatResultValue(ot);
+        const unit = t?.unit || '-';
+        const reference = t ? getNormalRange(t, patient?.sex ?? null) : '-';
+        const params = formatResultParameters(ot.resultParameters);
+
+        ensureSpace(doc, params.length > 0 ? 48 : 28, drawTableHeader);
+        const rowY = doc.y;
+
+        doc.text(`${testName}${testCode}`, leftX, rowY, { width: widths.test });
+        doc.text(result, leftX + widths.test, rowY, { width: widths.result });
+        doc.text(unit, leftX + widths.test + widths.result, rowY, { width: widths.unit });
+        doc.text(
+          reference,
+          leftX + widths.test + widths.result + widths.unit,
+          rowY,
+          { width: widths.range },
+        );
+
+        let bottomY = Math.max(
+          doc.y,
+          doc.heightOfString(`${testName}${testCode}`, { width: widths.test }) + rowY,
+          doc.heightOfString(result, { width: widths.result }) + rowY,
+          doc.heightOfString(reference, { width: widths.range }) + rowY,
+        );
+
+        if (params.length > 0) {
+          const paramText = params.slice(0, 6).join(' | ');
+          doc
+            .font('Helvetica-Oblique')
+            .fontSize(8)
+            .fillColor('#475569')
+            .text(
+              paramText,
+              leftX + 8,
+              bottomY + 2,
+              { width: tableWidth - 16 },
+            );
+          bottomY = doc.y;
+          doc.font('Helvetica').fontSize(9).fillColor('#111827');
+        }
+
+        doc
+          .strokeColor('#E2E8F0')
+          .lineWidth(0.8)
+          .moveTo(leftX, bottomY + 4)
+          .lineTo(leftX + tableWidth, bottomY + 4)
+          .stroke();
+        doc.y = bottomY + 8;
+      }
+
+      if (comments.length > 0) {
+        ensureSpace(doc, 60);
+        doc.moveDown(0.4);
+        doc.font('Helvetica-Bold').fontSize(10).fillColor('#111827').text('Comments');
+        doc.moveDown(0.2);
+        doc
+          .font('Helvetica')
+          .fontSize(9)
+          .fillColor('#334155')
+          .text(comments.join(' | '), { width: tableWidth });
+      }
+
+      doc.end();
+    });
   }
 }

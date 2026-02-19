@@ -18,4 +18,5 @@ export declare class ReportsService implements OnModuleDestroy {
     onModuleDestroy(): Promise<void>;
     generateOrderReceiptPDF(orderId: string, labId: string): Promise<Buffer>;
     generateTestResultsPDF(orderId: string, labId: string): Promise<Buffer>;
+    private renderTestResultsFallbackPDF;
 }
