@@ -153,6 +153,7 @@ export function buildResultsReportHtml(input: {
 
   const orderNumber = order.orderNumber || order.id.substring(0, 8);
   const patientName = order.patient?.fullName?.trim() || '-';
+  const patientNameIsRtl = containsArabicScript(patientName);
   const age = computeAgeYears(order.patient?.dateOfBirth ?? null);
   const sex = order.patient?.sex || '-';
   const sexLabel = sex === 'M' ? 'Male' : sex === 'F' ? 'Female' : sex || '-';
@@ -290,7 +291,7 @@ export function buildResultsReportHtml(input: {
       </div>
     </header>
     <div class="patient-info">
-      <div class="info-item"><span class="label">Name :</span>${escapeHtml(patientName)}</div>
+      <div class="info-item"><span class="label">Name :</span><span class="name-value ${patientNameIsRtl ? 'rtl-text' : ''}">${escapeHtml(patientName)}</span></div>
       <div class="info-item"><span class="label">Visit Date:</span>${escapeHtml(visitDate)}</div>
       <div class="info-item"><span class="label">Patient ID:</span>${escapeHtml(patientId)}</div>
       <div class="info-item"><span class="label">Age/Sex:</span>${escapeHtml(ageSex)}</div>
@@ -519,6 +520,15 @@ export function buildResultsReportHtml(input: {
     .patient-info { margin: 16px 16mm 16px 16mm; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; border: 1px solid #ccc; border-radius: 6px; padding: 12px 14px; background: #fafafa; }
     .info-item { font-size: 13px; }
     .info-item .label { font-weight: 700; margin-right: 4px; }
+    .name-value { display: inline-block; }
+    .rtl-text {
+      direction: rtl;
+      unicode-bidi: isolate;
+      font-family: 'KurdishReportFont', 'Noto Naskh Arabic', 'Noto Sans Arabic', 'Segoe UI', Tahoma, Arial, sans-serif;
+      letter-spacing: 0;
+      word-spacing: 0;
+      font-feature-settings: "liga" 1, "calt" 1, "kern" 1;
+    }
     .content { padding: 0 16mm; }
     .dept-title { background: #222; color: #fff; padding: 8px 12px; font-weight: 800; margin-top: 18px; }
     .test-group-title { background: #f2f2f2; color: #555; padding: 6px 12px; font-weight: 700; border: 1px solid #ddd; border-top: 0; }
