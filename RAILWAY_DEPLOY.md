@@ -26,7 +26,7 @@ You need 3 Railway services in one project:
    - `PORT=3000`
    - `DATABASE_URL` linked from PostgreSQL (`DATABASE_URL`)
    - `JWT_SECRET` (any long random text)
-   - `CORS_ORIGIN` (set this to your frontend URL after Step 3)
+   - `CORS_ORIGIN` (set this to your frontend URL after Step 3, include `https://`)
    - `DB_SYNC=true`
 4. Deploy the backend.
 
@@ -50,7 +50,7 @@ Notes:
 ## Step 4: Final CORS Update
 1. Copy your frontend public URL.
 2. Go back to backend service variables.
-3. Set `CORS_ORIGIN` to that exact frontend URL.
+3. Set `CORS_ORIGIN` to that exact frontend URL (example: `https://heroic-rejoicing-production-4c01.up.railway.app`).
 4. Redeploy backend once.
 
 ---
@@ -80,3 +80,15 @@ Just push code to GitHub (`main` branch). Railway redeploys automatically.
 4. Frontend cannot call API:
    - Confirm `VITE_API_URL` points to backend public URL.
    - Redeploy frontend after variable changes.
+
+---
+
+## PDF/Kurdish Text Quick Fix
+If report PDF is old style or Kurdish text looks broken:
+1. Backend service must use `Root Directory=/backend`.
+2. Keep `Build Command` and `Start Command` empty (use repo defaults).
+3. Redeploy backend with `Clear build cache`.
+4. Open backend logs and verify this line is NOT appearing:
+   - `Playwright PDF rendering failed; falling back to PDFKit renderer.`
+
+If that line appears, backend is still in fallback mode, so old/broken PDF style can appear.

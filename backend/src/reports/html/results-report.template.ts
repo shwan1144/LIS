@@ -505,6 +505,14 @@ export function buildResultsReportHtml(input: {
       text-align: right;
       font-family: 'KurdishReportFont', 'Noto Naskh Arabic', 'Noto Sans Arabic', 'Segoe UI', Tahoma, Arial, sans-serif;
     }
+    .header-col.rtl * {
+      direction: rtl;
+      unicode-bidi: isolate;
+      font-family: 'KurdishReportFont', 'Noto Naskh Arabic', 'Noto Sans Arabic', 'Segoe UI', Tahoma, Arial, sans-serif;
+      letter-spacing: 0;
+      word-spacing: 0;
+      font-feature-settings: "liga" 1, "calt" 1, "kern" 1;
+    }
     .logo-wrap { flex: 0 0 120px; text-align: center; }
     .logo { width: 90px; height: auto; object-fit: contain; }
     .report-title { text-align: center; font-size: 20px; font-weight: 800; text-decoration: underline; margin: 16px 0 14px; }

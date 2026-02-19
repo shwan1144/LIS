@@ -143,6 +143,13 @@ function ensureSpace(doc: PdfKitDocument, neededHeight: number, onNewPage?: () =
   onNewPage?.();
 }
 
+function resolveReadablePath(candidates: string[]): string | null {
+  for (const candidate of candidates) {
+    if (existsSync(candidate)) return candidate;
+  }
+  return null;
+}
+
 @Injectable()
 export class ReportsService implements OnModuleDestroy {
   private browserPromise: Promise<Browser> | null = null;
@@ -452,8 +459,12 @@ export class ReportsService implements OnModuleDestroy {
     ];
 
     let defaultLogoBase64: string | undefined;
-    const logoPath = join(__dirname, 'logo.png');
-    if (existsSync(logoPath)) {
+    const logoPath = resolveReadablePath([
+      join(__dirname, 'logo.png'),
+      join(process.cwd(), 'dist', 'src', 'reports', 'logo.png'),
+      join(process.cwd(), 'src', 'reports', 'logo.png'),
+    ]);
+    if (logoPath) {
       try {
         const buf = readFileSync(logoPath);
         defaultLogoBase64 = `data:image/png;base64,${buf.toString('base64')}`;
@@ -463,8 +474,25 @@ export class ReportsService implements OnModuleDestroy {
     }
 
     let kurdishFontBase64: string | undefined;
-    const kurdishFontPath = join(__dirname, 'fonts', 'NotoNaskhArabic-Regular.ttf');
-    if (existsSync(kurdishFontPath)) {
+    const kurdishFontPath = resolveReadablePath([
+      join(__dirname, 'fonts', 'NotoNaskhArabic-Regular.ttf'),
+      join(
+        process.cwd(),
+        'dist',
+        'src',
+        'reports',
+        'fonts',
+        'NotoNaskhArabic-Regular.ttf',
+      ),
+      join(
+        process.cwd(),
+        'src',
+        'reports',
+        'fonts',
+        'NotoNaskhArabic-Regular.ttf',
+      ),
+    ]);
+    if (kurdishFontPath) {
       try {
         const fontBuf = readFileSync(kurdishFontPath);
         kurdishFontBase64 = `data:font/ttf;base64,${fontBuf.toString('base64')}`;
