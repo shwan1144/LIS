@@ -48,6 +48,7 @@ export interface LabDto {
   labelSequenceBy?: 'tube_type' | 'department';
   sequenceResetBy?: 'day' | 'shift';
   enableOnlineResults?: boolean;
+  onlineResultWatermarkDataUrl?: string | null;
   onlineResultWatermarkText?: string | null;
   reportBranding?: ReportBrandingDto;
 }
@@ -763,6 +764,7 @@ export interface LabSettingsDto {
   labelSequenceBy: 'tube_type' | 'department';
   sequenceResetBy: 'day' | 'shift';
   enableOnlineResults: boolean;
+  onlineResultWatermarkDataUrl: string | null;
   onlineResultWatermarkText: string | null;
   reportBranding: ReportBrandingDto;
 }
@@ -776,6 +778,7 @@ export async function updateLabSettings(data: {
   labelSequenceBy?: 'tube_type' | 'department';
   sequenceResetBy?: 'day' | 'shift';
   enableOnlineResults?: boolean;
+  onlineResultWatermarkDataUrl?: string | null;
   onlineResultWatermarkText?: string | null;
   reportBranding?: Partial<ReportBrandingDto>;
 }): Promise<LabSettingsDto> {

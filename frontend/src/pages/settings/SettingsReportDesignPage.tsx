@@ -79,12 +79,15 @@ async function readFileAsDataUrl(file: File): Promise<string> {
 
 export function SettingsReportDesignPage() {
   const fileInputRefs = useRef<Partial<Record<BrandingKey, HTMLInputElement | null>>>({});
+  const onlineWatermarkInputRef = useRef<HTMLInputElement | null>(null);
   const [settings, setSettings] = useState<LabSettingsDto | null>(null);
   const [branding, setBranding] = useState<ReportBrandingDto>(emptyBranding);
+  const [onlineResultWatermarkDataUrl, setOnlineResultWatermarkDataUrl] = useState<string | null>(null);
   const [onlineResultWatermarkText, setOnlineResultWatermarkText] = useState('');
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [uploadingKey, setUploadingKey] = useState<BrandingKey | null>(null);
+  const [uploadingOnlineWatermark, setUploadingOnlineWatermark] = useState(false);
 
   const hasChanges = useMemo(() => {
     if (!settings) return false;
@@ -94,9 +97,10 @@ export function SettingsReportDesignPage() {
       current.footerDataUrl !== branding.footerDataUrl ||
       current.logoDataUrl !== branding.logoDataUrl ||
       current.watermarkDataUrl !== branding.watermarkDataUrl ||
+      (settings.onlineResultWatermarkDataUrl || null) !== onlineResultWatermarkDataUrl ||
       (settings.onlineResultWatermarkText || '') !== onlineResultWatermarkText
     );
-  }, [branding, onlineResultWatermarkText, settings]);
+  }, [branding, onlineResultWatermarkDataUrl, onlineResultWatermarkText, settings]);
 
   const load = async () => {
     setLoading(true);
@@ -104,6 +108,7 @@ export function SettingsReportDesignPage() {
       const data = await getLabSettings();
       setSettings(data);
       setBranding(data.reportBranding || emptyBranding());
+      setOnlineResultWatermarkDataUrl(data.onlineResultWatermarkDataUrl || null);
       setOnlineResultWatermarkText(data.onlineResultWatermarkText || '');
     } catch {
       message.error('Failed to load report design settings');
@@ -152,15 +157,47 @@ export function SettingsReportDesignPage() {
     }
   };
 
+  const handleOnlineWatermarkFileSelect = async (
+    event: ChangeEvent<HTMLInputElement>,
+  ) => {
+    const input = event.currentTarget;
+    const file = input.files?.[0];
+    input.value = '';
+    if (!file) return;
+
+    const maxBytes = 2 * 1024 * 1024;
+    if (!ALLOWED_MIME_TYPES.has(file.type)) {
+      message.error('Only PNG, JPG/JPEG, and WebP images are allowed');
+      return;
+    }
+    if (file.size > maxBytes) {
+      message.error('Image is too large. Max size is 2 MB.');
+      return;
+    }
+
+    setUploadingOnlineWatermark(true);
+    try {
+      const dataUrl = await readFileAsDataUrl(file);
+      setOnlineResultWatermarkDataUrl(dataUrl);
+      message.success('Online watermark image uploaded');
+    } catch {
+      message.error('Failed to read image file');
+    } finally {
+      setUploadingOnlineWatermark(false);
+    }
+  };
+
   const handleSave = async () => {
     setSaving(true);
     try {
       const updated = await updateLabSettings({
         reportBranding: branding,
+        onlineResultWatermarkDataUrl,
         onlineResultWatermarkText: onlineResultWatermarkText.trim() || null,
       });
       setSettings(updated);
       setBranding(updated.reportBranding || emptyBranding());
+      setOnlineResultWatermarkDataUrl(updated.onlineResultWatermarkDataUrl || null);
       setOnlineResultWatermarkText(updated.onlineResultWatermarkText || '');
       message.success('Report design settings saved');
     } catch (err: unknown) {
@@ -270,7 +307,58 @@ export function SettingsReportDesignPage() {
             children: (
               <Card title="Online Result Watermark" loading={loading} style={{ maxWidth: 980 }}>
                 <Text type="secondary" style={{ display: 'block', marginBottom: 8 }}>
-                  This text appears as a faint watermark on the patient online result page.
+                  Upload an image watermark for the patient online result page.
+                </Text>
+                <Text type="secondary" style={{ display: 'block', marginBottom: 12 }}>
+                  Recommended size: 1200 x 1200 px (PNG with transparency works best).
+                </Text>
+                <div
+                  style={{
+                    border: '1px dashed #d9d9d9',
+                    borderRadius: 8,
+                    minHeight: 140,
+                    padding: 10,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    marginBottom: 12,
+                    background: '#fafafa',
+                  }}
+                >
+                  {onlineResultWatermarkDataUrl ? (
+                    <img
+                      src={onlineResultWatermarkDataUrl}
+                      alt="Online result watermark"
+                      style={{ maxWidth: '100%', maxHeight: 220, objectFit: 'contain' }}
+                    />
+                  ) : (
+                    <Text type="secondary">No online watermark image uploaded</Text>
+                  )}
+                </div>
+                <Space wrap style={{ marginBottom: 12 }}>
+                  <input
+                    ref={onlineWatermarkInputRef}
+                    type="file"
+                    accept="image/png,image/jpeg,image/jpg,image/webp"
+                    onChange={handleOnlineWatermarkFileSelect}
+                    style={{ display: 'none' }}
+                  />
+                  <Button
+                    loading={uploadingOnlineWatermark}
+                    onClick={() => onlineWatermarkInputRef.current?.click()}
+                  >
+                    {onlineResultWatermarkDataUrl ? 'Replace image' : 'Upload image'}
+                  </Button>
+                  <Button
+                    danger
+                    onClick={() => setOnlineResultWatermarkDataUrl(null)}
+                    disabled={!onlineResultWatermarkDataUrl}
+                  >
+                    Clear image
+                  </Button>
+                </Space>
+                <Text type="secondary" style={{ display: 'block', marginBottom: 8 }}>
+                  Optional text watermark (used if no image is uploaded):
                 </Text>
                 <Input
                   value={onlineResultWatermarkText}
@@ -299,6 +387,7 @@ export function SettingsReportDesignPage() {
           <Button
             onClick={() => {
               setBranding(settings?.reportBranding || emptyBranding());
+              setOnlineResultWatermarkDataUrl(settings?.onlineResultWatermarkDataUrl || null);
               setOnlineResultWatermarkText(settings?.onlineResultWatermarkText || '');
             }}
             disabled={!hasChanges}

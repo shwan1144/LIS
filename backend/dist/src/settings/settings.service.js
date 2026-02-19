@@ -52,6 +52,7 @@ let SettingsService = class SettingsService {
             labelSequenceBy: lab.labelSequenceBy ?? 'tube_type',
             sequenceResetBy: lab.sequenceResetBy ?? 'day',
             enableOnlineResults: lab.enableOnlineResults !== false,
+            onlineResultWatermarkDataUrl: lab.onlineResultWatermarkDataUrl ?? null,
             onlineResultWatermarkText: lab.onlineResultWatermarkText ?? null,
             reportBranding: {
                 bannerDataUrl: lab.reportBannerDataUrl ?? null,
@@ -82,6 +83,9 @@ let SettingsService = class SettingsService {
                 throw new common_1.BadRequestException('enableOnlineResults must be boolean');
             }
             lab.enableOnlineResults = data.enableOnlineResults;
+        }
+        if (data.onlineResultWatermarkDataUrl !== undefined) {
+            lab.onlineResultWatermarkDataUrl = this.normalizeReportImageDataUrl(data.onlineResultWatermarkDataUrl, 'onlineResultWatermarkDataUrl');
         }
         if (data.onlineResultWatermarkText !== undefined) {
             lab.onlineResultWatermarkText = this.normalizeOnlineResultWatermarkText(data.onlineResultWatermarkText);

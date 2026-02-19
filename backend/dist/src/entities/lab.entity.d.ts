@@ -14,6 +14,7 @@ export declare class Lab {
     reportFooterDataUrl: string | null;
     reportLogoDataUrl: string | null;
     reportWatermarkDataUrl: string | null;
+    onlineResultWatermarkDataUrl: string | null;
     onlineResultWatermarkText: string | null;
     createdAt: Date;
     updatedAt: Date;

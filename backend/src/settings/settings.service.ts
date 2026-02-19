@@ -60,6 +60,7 @@ export class SettingsService {
       labelSequenceBy: lab.labelSequenceBy ?? 'tube_type',
       sequenceResetBy: lab.sequenceResetBy ?? 'day',
       enableOnlineResults: lab.enableOnlineResults !== false,
+      onlineResultWatermarkDataUrl: lab.onlineResultWatermarkDataUrl ?? null,
       onlineResultWatermarkText: lab.onlineResultWatermarkText ?? null,
       reportBranding: {
         bannerDataUrl: lab.reportBannerDataUrl ?? null,
@@ -76,6 +77,7 @@ export class SettingsService {
       labelSequenceBy?: string;
       sequenceResetBy?: string;
       enableOnlineResults?: boolean;
+      onlineResultWatermarkDataUrl?: string | null;
       onlineResultWatermarkText?: string | null;
       reportBranding?: ReportBrandingUpdate;
     },
@@ -99,6 +101,12 @@ export class SettingsService {
         throw new BadRequestException('enableOnlineResults must be boolean');
       }
       lab.enableOnlineResults = data.enableOnlineResults;
+    }
+    if (data.onlineResultWatermarkDataUrl !== undefined) {
+      lab.onlineResultWatermarkDataUrl = this.normalizeReportImageDataUrl(
+        data.onlineResultWatermarkDataUrl,
+        'onlineResultWatermarkDataUrl',
+      );
     }
     if (data.onlineResultWatermarkText !== undefined) {
       lab.onlineResultWatermarkText = this.normalizeOnlineResultWatermarkText(

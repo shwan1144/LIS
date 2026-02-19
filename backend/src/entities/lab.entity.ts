@@ -55,6 +55,10 @@ export class Lab {
   @Column({ type: 'text', nullable: true })
   reportWatermarkDataUrl: string | null;
 
+  /** Optional image watermark shown on public online result page. */
+  @Column({ type: 'text', nullable: true })
+  onlineResultWatermarkDataUrl: string | null;
+
   /** Optional text watermark shown on public online result page (e.g. "ONLINE VERSION"). */
   @Column({ type: 'varchar', length: 120, nullable: true })
   onlineResultWatermarkText: string | null;

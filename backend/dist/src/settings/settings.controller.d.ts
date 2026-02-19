@@ -18,6 +18,7 @@ export declare class SettingsController {
         labelSequenceBy: string;
         sequenceResetBy: string;
         enableOnlineResults: boolean;
+        onlineResultWatermarkDataUrl: string | null;
         onlineResultWatermarkText: string | null;
         reportBranding: {
             bannerDataUrl: string | null;
@@ -30,6 +31,7 @@ export declare class SettingsController {
         labelSequenceBy?: string;
         sequenceResetBy?: string;
         enableOnlineResults?: boolean;
+        onlineResultWatermarkDataUrl?: string | null;
         onlineResultWatermarkText?: string | null;
         reportBranding?: {
             bannerDataUrl?: string | null;
@@ -44,6 +46,7 @@ export declare class SettingsController {
         labelSequenceBy: string;
         sequenceResetBy: string;
         enableOnlineResults: boolean;
+        onlineResultWatermarkDataUrl: string | null;
         onlineResultWatermarkText: string | null;
         reportBranding: {
             bannerDataUrl: string | null;
