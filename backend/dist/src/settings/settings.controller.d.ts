@@ -18,11 +18,23 @@ export declare class SettingsController {
         labelSequenceBy: string;
         sequenceResetBy: string;
         enableOnlineResults: boolean;
+        reportBranding: {
+            bannerDataUrl: string | null;
+            footerDataUrl: string | null;
+            logoDataUrl: string | null;
+            watermarkDataUrl: string | null;
+        };
     }>;
     updateLabSettings(req: RequestWithUser, body: {
         labelSequenceBy?: string;
         sequenceResetBy?: string;
         enableOnlineResults?: boolean;
+        reportBranding?: {
+            bannerDataUrl?: string | null;
+            footerDataUrl?: string | null;
+            logoDataUrl?: string | null;
+            watermarkDataUrl?: string | null;
+        };
     }): Promise<{
         id: string;
         code: string;
@@ -30,6 +42,12 @@ export declare class SettingsController {
         labelSequenceBy: string;
         sequenceResetBy: string;
         enableOnlineResults: boolean;
+        reportBranding: {
+            bannerDataUrl: string | null;
+            footerDataUrl: string | null;
+            logoDataUrl: string | null;
+            watermarkDataUrl: string | null;
+        };
     }>;
     getUsers(req: RequestWithUser): Promise<import("../entities/user.entity").User[]>;
     getUser(req: RequestWithUser, id: string): Promise<{

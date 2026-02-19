@@ -39,6 +39,22 @@ export class Lab {
   @Column({ type: 'boolean', default: true })
   enableOnlineResults: boolean;
 
+  /** Optional branded report banner image as data URL (PNG/JPG/WebP). */
+  @Column({ type: 'text', nullable: true })
+  reportBannerDataUrl: string | null;
+
+  /** Optional branded report footer image as data URL (PNG/JPG/WebP). */
+  @Column({ type: 'text', nullable: true })
+  reportFooterDataUrl: string | null;
+
+  /** Optional report logo image as data URL (PNG/JPG/WebP). */
+  @Column({ type: 'text', nullable: true })
+  reportLogoDataUrl: string | null;
+
+  /** Optional report watermark image as data URL (PNG/JPG/WebP). */
+  @Column({ type: 'text', nullable: true })
+  reportWatermarkDataUrl: string | null;
+
   @CreateDateColumn()
   createdAt: Date;
 

@@ -48,6 +48,14 @@ export interface LabDto {
   labelSequenceBy?: 'tube_type' | 'department';
   sequenceResetBy?: 'day' | 'shift';
   enableOnlineResults?: boolean;
+  reportBranding?: ReportBrandingDto;
+}
+
+export interface ReportBrandingDto {
+  bannerDataUrl: string | null;
+  footerDataUrl: string | null;
+  logoDataUrl: string | null;
+  watermarkDataUrl: string | null;
 }
 
 export interface UserDto {
@@ -754,6 +762,7 @@ export interface LabSettingsDto {
   labelSequenceBy: 'tube_type' | 'department';
   sequenceResetBy: 'day' | 'shift';
   enableOnlineResults: boolean;
+  reportBranding: ReportBrandingDto;
 }
 
 export async function getLabSettings(): Promise<LabSettingsDto> {
@@ -765,6 +774,7 @@ export async function updateLabSettings(data: {
   labelSequenceBy?: 'tube_type' | 'department';
   sequenceResetBy?: 'day' | 'shift';
   enableOnlineResults?: boolean;
+  reportBranding?: Partial<ReportBrandingDto>;
 }): Promise<LabSettingsDto> {
   const res = await api.patch<LabSettingsDto>('/settings/lab', data);
   return res.data;

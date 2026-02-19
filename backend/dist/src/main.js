@@ -7,6 +7,7 @@ if (!process.env.DB_PASSWORD && !process.env.DATABASE_URL) {
 }
 const core_1 = require("@nestjs/core");
 const common_1 = require("@nestjs/common");
+const express_1 = require("express");
 const app_module_1 = require("./app.module");
 const seed_1 = require("./seed");
 function shouldAutoSeedOnBoot() {
@@ -20,6 +21,8 @@ function shouldAutoSeedOnBoot() {
 }
 async function bootstrap() {
     const app = await core_1.NestFactory.create(app_module_1.AppModule);
+    app.use((0, express_1.json)({ limit: '10mb' }));
+    app.use((0, express_1.urlencoded)({ extended: true, limit: '10mb' }));
     if (shouldAutoSeedOnBoot()) {
         await (0, seed_1.runSeed)({ synchronizeSchema: false });
     }

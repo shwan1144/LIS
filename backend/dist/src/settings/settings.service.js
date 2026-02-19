@@ -25,6 +25,8 @@ const department_entity_1 = require("../entities/department.entity");
 const lab_entity_1 = require("../entities/lab.entity");
 const shift_entity_1 = require("../entities/shift.entity");
 const ROLES = ['SUPER_ADMIN', 'LAB_ADMIN', 'RECEPTION', 'TECHNICIAN', 'VERIFIER', 'DOCTOR', 'INSTRUMENT_SERVICE'];
+const MAX_REPORT_IMAGE_DATA_URL_LENGTH = 4 * 1024 * 1024;
+const REPORT_IMAGE_DATA_URL_PATTERN = /^data:image\/(png|jpeg|jpg|webp);base64,[a-zA-Z0-9+/=]+$/;
 let SettingsService = class SettingsService {
     constructor(userRepo, labAssignmentRepo, shiftAssignmentRepo, userDeptRepo, departmentRepo, labRepo, shiftRepo) {
         this.userRepo = userRepo;
@@ -49,6 +51,12 @@ let SettingsService = class SettingsService {
             labelSequenceBy: lab.labelSequenceBy ?? 'tube_type',
             sequenceResetBy: lab.sequenceResetBy ?? 'day',
             enableOnlineResults: lab.enableOnlineResults !== false,
+            reportBranding: {
+                bannerDataUrl: lab.reportBannerDataUrl ?? null,
+                footerDataUrl: lab.reportFooterDataUrl ?? null,
+                logoDataUrl: lab.reportLogoDataUrl ?? null,
+                watermarkDataUrl: lab.reportWatermarkDataUrl ?? null,
+            },
         };
     }
     async updateLabSettings(labId, data) {
@@ -73,8 +81,44 @@ let SettingsService = class SettingsService {
             }
             lab.enableOnlineResults = data.enableOnlineResults;
         }
+        if (data.reportBranding !== undefined) {
+            if (!data.reportBranding ||
+                typeof data.reportBranding !== 'object' ||
+                Array.isArray(data.reportBranding)) {
+                throw new common_1.BadRequestException('reportBranding must be an object');
+            }
+            if ('bannerDataUrl' in data.reportBranding) {
+                lab.reportBannerDataUrl = this.normalizeReportImageDataUrl(data.reportBranding.bannerDataUrl, 'reportBranding.bannerDataUrl');
+            }
+            if ('footerDataUrl' in data.reportBranding) {
+                lab.reportFooterDataUrl = this.normalizeReportImageDataUrl(data.reportBranding.footerDataUrl, 'reportBranding.footerDataUrl');
+            }
+            if ('logoDataUrl' in data.reportBranding) {
+                lab.reportLogoDataUrl = this.normalizeReportImageDataUrl(data.reportBranding.logoDataUrl, 'reportBranding.logoDataUrl');
+            }
+            if ('watermarkDataUrl' in data.reportBranding) {
+                lab.reportWatermarkDataUrl = this.normalizeReportImageDataUrl(data.reportBranding.watermarkDataUrl, 'reportBranding.watermarkDataUrl');
+            }
+        }
         await this.labRepo.save(lab);
         return this.getLabSettings(labId);
+    }
+    normalizeReportImageDataUrl(value, fieldName) {
+        if (value === null || value === undefined)
+            return null;
+        if (typeof value !== 'string') {
+            throw new common_1.BadRequestException(`${fieldName} must be a string or null`);
+        }
+        const trimmed = value.trim();
+        if (!trimmed)
+            return null;
+        if (trimmed.length > MAX_REPORT_IMAGE_DATA_URL_LENGTH) {
+            throw new common_1.BadRequestException(`${fieldName} is too large`);
+        }
+        if (!REPORT_IMAGE_DATA_URL_PATTERN.test(trimmed)) {
+            throw new common_1.BadRequestException(`${fieldName} must be a valid image data URL (png, jpg/jpeg, or webp)`);
+        }
+        return trimmed;
     }
     async getUsersForLab(labId) {
         const assignments = await this.labAssignmentRepo.find({

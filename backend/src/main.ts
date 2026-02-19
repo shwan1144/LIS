@@ -8,6 +8,7 @@ if (!process.env.DB_PASSWORD && !process.env.DATABASE_URL) {
 
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
+import { json, urlencoded } from 'express';
 import { AppModule } from './app.module';
 import { runSeed } from './seed';
 
@@ -23,6 +24,9 @@ function shouldAutoSeedOnBoot(): boolean {
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+  app.use(json({ limit: '10mb' }));
+  app.use(urlencoded({ extended: true, limit: '10mb' }));
+
   if (shouldAutoSeedOnBoot()) {
     await runSeed({ synchronizeSchema: false });
   }

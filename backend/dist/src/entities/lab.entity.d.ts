@@ -10,6 +10,10 @@ export declare class Lab {
     labelSequenceBy: string;
     sequenceResetBy: string;
     enableOnlineResults: boolean;
+    reportBannerDataUrl: string | null;
+    reportFooterDataUrl: string | null;
+    reportLogoDataUrl: string | null;
+    reportWatermarkDataUrl: string | null;
     createdAt: Date;
     updatedAt: Date;
     userAssignments: UserLabAssignment[];

@@ -143,10 +143,20 @@ function buildResultsReportHtml(input) {
     const referredBy = order.patient?.address || order.notes || 'Himself';
     const dir = getDirection(order, orderTests, input.comments);
     const labAny = order.lab;
-    const logoSrc = labAny?.logoBase64 || labAny?.logoUrl || (input.defaultLogoBase64 ?? '');
+    const bannerSrc = labAny?.reportBannerDataUrl || '';
+    const footerSrc = labAny?.reportFooterDataUrl || '';
+    const logoSrc = labAny?.reportLogoDataUrl ||
+        labAny?.logoBase64 ||
+        labAny?.logoUrl ||
+        (input.defaultLogoBase64 ?? '');
+    const watermarkSrc = labAny?.reportWatermarkDataUrl || logoSrc;
+    const hasCustomBanner = Boolean(bannerSrc);
     const visitDate = formatDateTime(order.registeredAt);
     const ageSex = `${age != null ? `${age} Years` : '-'}/${sexLabel}`;
+    const bannerUrlAttr = bannerSrc ? `src="${escapeHtml(bannerSrc)}"` : '';
+    const footerUrlAttr = footerSrc ? `src="${escapeHtml(footerSrc)}"` : '';
     const logoUrlAttr = logoSrc ? `src="${escapeHtml(logoSrc)}"` : '';
+    const watermarkUrlAttr = watermarkSrc ? `src="${escapeHtml(watermarkSrc)}"` : '';
     const kurdishFontFace = input.kurdishFontBase64
         ? `@font-face { font-family: 'KurdishReportFont'; src: url('${escapeHtml(input.kurdishFontBase64)}') format('truetype'); font-weight: 400; font-style: normal; }`
         : '';
@@ -234,7 +244,9 @@ function buildResultsReportHtml(input) {
     })
         .join('');
     const pageHeaderHtml = `
-    <header class="header">
+    ${hasCustomBanner && bannerUrlAttr
+        ? `<div class="banner-wrap"><img class="banner-image" ${bannerUrlAttr} alt="Report Banner" /></div>`
+        : `<header class="header">
       <div class="header-col ltr">
         <div>Kurdistan Regional Government - Iraq</div>
         <div>Ministry of Health</div>
@@ -248,7 +260,7 @@ function buildResultsReportHtml(input) {
         <div>وەزارەتی تەندروستی</div>
         <div>بەڕێوەبەرایەتی گشتی تەندروستی گەرمیان</div>
       </div>
-    </header>
+    </header>`}
     <div class="patient-info">
       <div class="info-item"><span class="label">Name :</span><span class="name-value ${patientNameIsRtl ? 'rtl-text' : ''}">${escapeHtml(patientName)}</span></div>
       <div class="info-item"><span class="label">Visit Date:</span>${escapeHtml(visitDate)}</div>
@@ -257,6 +269,9 @@ function buildResultsReportHtml(input) {
     </div>
     <div class="report-title">Laboratory Report</div>
   `;
+    const pageFooterHtml = footerUrlAttr
+        ? `<div class="report-footer"><img class="footer-image" ${footerUrlAttr} alt="Report Footer" /></div>`
+        : '';
     const isPanelParent = (ot) => !ot.parentOrderTestId && ot.test?.type === test_entity_1.TestType.PANEL;
     const panelTests = flattenedTests.filter(isPanelParent);
     const regularTests = flattenedTests.filter((ot) => ot.parentOrderTestId || ot.test?.type !== test_entity_1.TestType.PANEL);
@@ -403,6 +418,7 @@ function buildResultsReportHtml(input) {
         ${sectionsHtml}
         ${commentsText && panelTests.length === 0 ? `<div class="comments" style="margin-top:8px;font-size:11px;font-weight:700;"><strong>Comments:</strong> ${escapeHtml(commentsText)}</div>` : ''}
       </div>
+      ${pageFooterHtml}
     </div>`;
     }
     if (panelContentHtml) {
@@ -413,6 +429,7 @@ function buildResultsReportHtml(input) {
         ${panelContentHtml}
         ${commentsText ? `<div class="comments" style="margin-top:8px;font-size:11px;font-weight:700;"><strong>Comments:</strong> ${escapeHtml(commentsText)}</div>` : ''}
       </div>
+      ${pageFooterHtml}
     </div>`;
     }
     if (regularTests.length === 0 && panelTests.length === 0) {
@@ -422,6 +439,7 @@ function buildResultsReportHtml(input) {
       <div class="content">
         ${sectionsHtml}
       </div>
+      ${pageFooterHtml}
     </div>`;
     }
     return `
@@ -433,7 +451,7 @@ function buildResultsReportHtml(input) {
   <title>Laboratory Report</title>
   <style>
     ${kurdishFontFace}
-    @page { size: A4; margin: 7mm 7mm 7mm 7mm; }
+    @page { size: A4; margin: 4mm 4mm 4mm 4mm; }
     body { margin: 0; font-family: 'Segoe UI', Tahoma, Arial, sans-serif; font-size: 12px; color: #333; position: relative; }
     .rtl {
       direction: rtl;
@@ -444,9 +462,11 @@ function buildResultsReportHtml(input) {
     }
     .ltr { direction: ltr; unicode-bidi: isolate; }
     .nowrap { white-space: nowrap; }
-    .watermark { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%) rotate(-30deg); opacity: 0.06; width: 420px; z-index: 0; pointer-events: none; }
-    .page { position: relative; z-index: 1; padding: 5mm 0 20mm 0; page-break-inside: avoid; }
-    .header { display: flex; align-items: center; justify-content: space-between; border-bottom: 2px solid #222; padding: 0 16mm 12px 16mm; }
+    .watermark { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%) rotate(-30deg); opacity: 0.08; width: min(68vw, 170mm); z-index: 0; pointer-events: none; }
+    .page { position: relative; z-index: 1; padding: 3mm 0 30mm 0; page-break-inside: avoid; min-height: 267mm; box-sizing: border-box; }
+    .banner-wrap { margin: 0 8mm 8px 8mm; text-align: center; }
+    .banner-image { width: 100%; max-height: 38mm; object-fit: contain; display: block; }
+    .header { display: flex; align-items: center; justify-content: space-between; border-bottom: 2px solid #222; padding: 0 8mm 10px 8mm; }
     .header-col { flex: 1; font-size: 13px; font-weight: 700; line-height: 1.35; }
     .header-col.ltr { text-align: left; }
     .header-col.rtl {
@@ -464,7 +484,7 @@ function buildResultsReportHtml(input) {
     .logo-wrap { flex: 0 0 120px; text-align: center; }
     .logo { width: 90px; height: auto; object-fit: contain; }
     .report-title { text-align: center; font-size: 20px; font-weight: 800; text-decoration: underline; margin: 16px 0 14px; }
-    .patient-info { margin: 16px 16mm 16px 16mm; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; border: 1px solid #ccc; border-radius: 6px; padding: 12px 14px; background: #fafafa; }
+    .patient-info { margin: 14px 8mm 14px 8mm; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; border: 1px solid #ccc; border-radius: 6px; padding: 12px 14px; background: #fafafa; }
     .info-item { font-size: 13px; }
     .info-item .label { font-weight: 700; margin-right: 4px; }
     .name-value { display: inline-block; }
@@ -476,7 +496,7 @@ function buildResultsReportHtml(input) {
       word-spacing: 0;
       font-feature-settings: "liga" 1, "calt" 1, "kern" 1;
     }
-    .content { padding: 0 16mm; }
+    .content { padding: 0 8mm; }
     .dept-title { background: #222; color: #fff; padding: 8px 12px; font-weight: 800; margin-top: 18px; }
     .test-group-title { background: #f2f2f2; color: #555; padding: 6px 12px; font-weight: 700; border: 1px solid #ddd; border-top: 0; }
     table { width: 100%; border-collapse: collapse; margin-bottom: 8px; }
@@ -489,14 +509,15 @@ function buildResultsReportHtml(input) {
     tr.abnormal td { background-color: #fff5f5; }
     .panel-section { margin-top: 20px; }
     .panel-page-title { font-size: 18px; font-weight: 800; margin-bottom: 12px; border-bottom: 2px solid #222; padding-bottom: 6px; }
-    .panel-page .content { padding: 0 16mm; }
+    .panel-page .content { padding: 0 8mm; }
     .gue-gse-table { width: 100%; margin-top: 8px; margin-bottom: 12px; }
-    .footer { margin: 28px 16mm 0 16mm; text-align: center; font-size: 11px; border-top: 1px solid #eee; padding-top: 10px; color: #888; }
+    .report-footer { position: absolute; left: 8mm; right: 8mm; bottom: 4mm; text-align: center; }
+    .footer-image { width: 100%; max-height: 24mm; object-fit: contain; display: block; }
     * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   </style>
 </head>
 <body>
-  ${logoUrlAttr ? `<img ${logoUrlAttr} class="watermark" alt="Watermark" />` : ''}
+  ${watermarkUrlAttr ? `<img ${watermarkUrlAttr} class="watermark" alt="Watermark" />` : ''}
   ${pagesHtml}
 </body>
 </html>

@@ -6,6 +6,12 @@ import { UserDepartmentAssignment } from '../entities/user-department-assignment
 import { Department } from '../entities/department.entity';
 import { Lab } from '../entities/lab.entity';
 import { Shift } from '../entities/shift.entity';
+type ReportBrandingUpdate = {
+    bannerDataUrl?: string | null;
+    footerDataUrl?: string | null;
+    logoDataUrl?: string | null;
+    watermarkDataUrl?: string | null;
+};
 export declare class SettingsService {
     private readonly userRepo;
     private readonly labAssignmentRepo;
@@ -23,11 +29,18 @@ export declare class SettingsService {
         labelSequenceBy: string;
         sequenceResetBy: string;
         enableOnlineResults: boolean;
+        reportBranding: {
+            bannerDataUrl: string | null;
+            footerDataUrl: string | null;
+            logoDataUrl: string | null;
+            watermarkDataUrl: string | null;
+        };
     }>;
     updateLabSettings(labId: string, data: {
         labelSequenceBy?: string;
         sequenceResetBy?: string;
         enableOnlineResults?: boolean;
+        reportBranding?: ReportBrandingUpdate;
     }): Promise<{
         id: string;
         code: string;
@@ -35,7 +48,14 @@ export declare class SettingsService {
         labelSequenceBy: string;
         sequenceResetBy: string;
         enableOnlineResults: boolean;
+        reportBranding: {
+            bannerDataUrl: string | null;
+            footerDataUrl: string | null;
+            logoDataUrl: string | null;
+            watermarkDataUrl: string | null;
+        };
     }>;
+    private normalizeReportImageDataUrl;
     getUsersForLab(labId: string): Promise<User[]>;
     getUserWithDetails(id: string, labId: string): Promise<{
         user: User;
@@ -66,3 +86,4 @@ export declare class SettingsService {
     private ensureDepartmentsBelongToLab;
     deleteUser(userId: string, labId: string, currentUserId: string): Promise<void>;
 }
+export {};

@@ -104,6 +104,14 @@ function drawHeaderBar(doc, opts) {
             align: 'right',
         });
     }
+    if (opts.logoImage) {
+        try {
+            const logoSize = 34;
+            doc.image(opts.logoImage, pageWidth - margin - logoSize, 10, { fit: [logoSize, logoSize], align: 'center', valign: 'center' });
+        }
+        catch {
+        }
+    }
     doc.restore();
     doc.y = barHeight + 18;
 }
@@ -212,6 +220,58 @@ let ReportsService = class ReportsService {
         }
         finally {
             this.browserPromise = null;
+        }
+    }
+    decodeImageDataUrl(value) {
+        if (typeof value !== 'string')
+            return null;
+        const trimmed = value.trim();
+        if (!trimmed)
+            return null;
+        const match = trimmed.match(/^data:image\/[a-zA-Z0-9.+-]+;base64,(.+)$/);
+        if (!match?.[1])
+            return null;
+        try {
+            return Buffer.from(match[1], 'base64');
+        }
+        catch {
+            return null;
+        }
+    }
+    applyFallbackPageBranding(doc, opts) {
+        const pageWidth = doc.page.width;
+        const pageHeight = doc.page.height;
+        const marginLeft = doc.page.margins.left;
+        const marginRight = doc.page.margins.right;
+        if (opts.watermarkImage) {
+            const watermarkSize = Math.min(320, pageWidth - marginLeft - marginRight - 40);
+            const watermarkX = (pageWidth - watermarkSize) / 2;
+            const watermarkY = (pageHeight - watermarkSize) / 2;
+            doc.save();
+            doc.opacity(0.08);
+            try {
+                doc.image(opts.watermarkImage, watermarkX, watermarkY, {
+                    fit: [watermarkSize, watermarkSize],
+                    align: 'center',
+                    valign: 'center',
+                });
+            }
+            catch {
+            }
+            doc.restore();
+        }
+        if (opts.footerImage) {
+            const footerWidth = pageWidth - marginLeft - marginRight;
+            const footerY = pageHeight - doc.page.margins.bottom + 4;
+            try {
+                doc.image(opts.footerImage, marginLeft, footerY, {
+                    fit: [footerWidth, 24],
+                    align: 'center',
+                    valign: 'center',
+                });
+            }
+            catch {
+            }
         }
     }
     getReportableOrderTests(orderTests) {
@@ -533,17 +593,49 @@ let ReportsService = class ReportsService {
     async renderTestResultsFallbackPDF(input) {
         const { order, orderTests, verifiers, latestVerifiedAt, comments } = input;
         const patient = order.patient;
+        const labBranding = order.lab;
+        const bannerImage = this.decodeImageDataUrl(labBranding?.reportBannerDataUrl);
+        const footerImage = this.decodeImageDataUrl(labBranding?.reportFooterDataUrl);
+        const logoImage = this.decodeImageDataUrl(labBranding?.reportLogoDataUrl);
+        const watermarkImage = this.decodeImageDataUrl(labBranding?.reportWatermarkDataUrl) || logoImage;
         return new Promise((resolve, reject) => {
-            const doc = new PDFDocument({ size: 'A4', margin: 32 });
+            const doc = new PDFDocument({ size: 'A4', margin: 20 });
             const chunks = [];
             doc.on('data', (chunk) => chunks.push(chunk));
             doc.on('end', () => resolve(Buffer.concat(chunks)));
             doc.on('error', reject);
-            drawHeaderBar(doc, {
-                title: 'Laboratory Test Results',
-                labName: order.lab?.name || 'Laboratory',
-                subtitle: order.orderNumber || order.id.substring(0, 8),
-            });
+            const applyPageBranding = () => this.applyFallbackPageBranding(doc, { watermarkImage, footerImage });
+            doc.on('pageAdded', applyPageBranding);
+            applyPageBranding();
+            if (bannerImage) {
+                const marginLeft = doc.page.margins.left;
+                const marginRight = doc.page.margins.right;
+                const maxWidth = doc.page.width - marginLeft - marginRight;
+                try {
+                    doc.image(bannerImage, marginLeft, 10, {
+                        fit: [maxWidth, 64],
+                        align: 'center',
+                        valign: 'center',
+                    });
+                    doc.y = 84;
+                }
+                catch {
+                    drawHeaderBar(doc, {
+                        title: 'Laboratory Test Results',
+                        labName: order.lab?.name || 'Laboratory',
+                        subtitle: order.orderNumber || order.id.substring(0, 8),
+                        logoImage,
+                    });
+                }
+            }
+            else {
+                drawHeaderBar(doc, {
+                    title: 'Laboratory Test Results',
+                    labName: order.lab?.name || 'Laboratory',
+                    subtitle: order.orderNumber || order.id.substring(0, 8),
+                    logoImage,
+                });
+            }
             drawTwoColumnInfo(doc, [
                 ['Patient Name', patient?.fullName || '-'],
                 ['Patient ID', patient?.patientNumber || '-'],

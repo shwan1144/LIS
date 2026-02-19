@@ -42,6 +42,8 @@ export declare class ReportsService implements OnModuleDestroy {
     private getBrowser;
     private renderPdfFromHtml;
     onModuleDestroy(): Promise<void>;
+    private decodeImageDataUrl;
+    private applyFallbackPageBranding;
     private getReportableOrderTests;
     private loadOrderResultsSnapshot;
     getPublicResultStatus(orderId: string): Promise<PublicResultStatus>;

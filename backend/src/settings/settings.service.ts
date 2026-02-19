@@ -16,6 +16,15 @@ import { Lab } from '../entities/lab.entity';
 import { Shift } from '../entities/shift.entity';
 
 const ROLES = ['SUPER_ADMIN', 'LAB_ADMIN', 'RECEPTION', 'TECHNICIAN', 'VERIFIER', 'DOCTOR', 'INSTRUMENT_SERVICE'];
+const MAX_REPORT_IMAGE_DATA_URL_LENGTH = 4 * 1024 * 1024;
+const REPORT_IMAGE_DATA_URL_PATTERN = /^data:image\/(png|jpeg|jpg|webp);base64,[a-zA-Z0-9+/=]+$/;
+
+type ReportBrandingUpdate = {
+  bannerDataUrl?: string | null;
+  footerDataUrl?: string | null;
+  logoDataUrl?: string | null;
+  watermarkDataUrl?: string | null;
+};
 
 @Injectable()
 export class SettingsService {
@@ -50,12 +59,23 @@ export class SettingsService {
       labelSequenceBy: lab.labelSequenceBy ?? 'tube_type',
       sequenceResetBy: lab.sequenceResetBy ?? 'day',
       enableOnlineResults: lab.enableOnlineResults !== false,
+      reportBranding: {
+        bannerDataUrl: lab.reportBannerDataUrl ?? null,
+        footerDataUrl: lab.reportFooterDataUrl ?? null,
+        logoDataUrl: lab.reportLogoDataUrl ?? null,
+        watermarkDataUrl: lab.reportWatermarkDataUrl ?? null,
+      },
     };
   }
 
   async updateLabSettings(
     labId: string,
-    data: { labelSequenceBy?: string; sequenceResetBy?: string; enableOnlineResults?: boolean },
+    data: {
+      labelSequenceBy?: string;
+      sequenceResetBy?: string;
+      enableOnlineResults?: boolean;
+      reportBranding?: ReportBrandingUpdate;
+    },
   ) {
     const lab = await this.labRepo.findOne({ where: { id: labId } });
     if (!lab) throw new NotFoundException('Lab not found');
@@ -77,8 +97,62 @@ export class SettingsService {
       }
       lab.enableOnlineResults = data.enableOnlineResults;
     }
+    if (data.reportBranding !== undefined) {
+      if (
+        !data.reportBranding ||
+        typeof data.reportBranding !== 'object' ||
+        Array.isArray(data.reportBranding)
+      ) {
+        throw new BadRequestException('reportBranding must be an object');
+      }
+      if ('bannerDataUrl' in data.reportBranding) {
+        lab.reportBannerDataUrl = this.normalizeReportImageDataUrl(
+          data.reportBranding.bannerDataUrl,
+          'reportBranding.bannerDataUrl',
+        );
+      }
+      if ('footerDataUrl' in data.reportBranding) {
+        lab.reportFooterDataUrl = this.normalizeReportImageDataUrl(
+          data.reportBranding.footerDataUrl,
+          'reportBranding.footerDataUrl',
+        );
+      }
+      if ('logoDataUrl' in data.reportBranding) {
+        lab.reportLogoDataUrl = this.normalizeReportImageDataUrl(
+          data.reportBranding.logoDataUrl,
+          'reportBranding.logoDataUrl',
+        );
+      }
+      if ('watermarkDataUrl' in data.reportBranding) {
+        lab.reportWatermarkDataUrl = this.normalizeReportImageDataUrl(
+          data.reportBranding.watermarkDataUrl,
+          'reportBranding.watermarkDataUrl',
+        );
+      }
+    }
     await this.labRepo.save(lab);
     return this.getLabSettings(labId);
+  }
+
+  private normalizeReportImageDataUrl(
+    value: string | null | undefined,
+    fieldName: string,
+  ): string | null {
+    if (value === null || value === undefined) return null;
+    if (typeof value !== 'string') {
+      throw new BadRequestException(`${fieldName} must be a string or null`);
+    }
+    const trimmed = value.trim();
+    if (!trimmed) return null;
+    if (trimmed.length > MAX_REPORT_IMAGE_DATA_URL_LENGTH) {
+      throw new BadRequestException(`${fieldName} is too large`);
+    }
+    if (!REPORT_IMAGE_DATA_URL_PATTERN.test(trimmed)) {
+      throw new BadRequestException(
+        `${fieldName} must be a valid image data URL (png, jpg/jpeg, or webp)`,
+      );
+    }
+    return trimmed;
   }
 
   async getUsersForLab(labId: string): Promise<User[]> {

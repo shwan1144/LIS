@@ -58,6 +58,7 @@ function getMenuItems(role: string | undefined) {
         { key: '/settings/departments', label: 'Departments' },
         { key: '/settings/users', label: 'User management' },
         { key: '/settings/label', label: 'Label & sequence' },
+        { key: '/settings/report-design', label: 'Report Design' },
         { key: '/settings/online-results', label: 'Online Results QR' },
         { key: '/settings/instruments', label: 'Instruments' },
         { key: '/settings/tests', label: 'Test management' },

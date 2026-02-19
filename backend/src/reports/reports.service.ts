@@ -92,7 +92,10 @@ function formatResultParameters(params: Record<string, string> | null): string[]
     .map(([k, v]) => `${k}: ${String(v).trim()}`);
 }
 
-function drawHeaderBar(doc: PdfKitDocument, opts: { title: string; labName: string; subtitle?: string }) {
+function drawHeaderBar(
+  doc: PdfKitDocument,
+  opts: { title: string; labName: string; subtitle?: string; logoImage?: Buffer | null },
+) {
   const pageWidth = doc.page.width;
   const margin = doc.page.margins.left;
   const barHeight = 54;
@@ -113,6 +116,19 @@ function drawHeaderBar(doc: PdfKitDocument, opts: { title: string; labName: stri
       width: pageWidth - margin * 2,
       align: 'right',
     });
+  }
+  if (opts.logoImage) {
+    try {
+      const logoSize = 34;
+      doc.image(
+        opts.logoImage,
+        pageWidth - margin - logoSize,
+        10,
+        { fit: [logoSize, logoSize], align: 'center', valign: 'center' },
+      );
+    } catch {
+      // Ignore invalid custom logo and continue rendering.
+    }
   }
   doc.restore();
 
@@ -244,6 +260,61 @@ export class ReportsService implements OnModuleDestroy {
       // ignore
     } finally {
       this.browserPromise = null;
+    }
+  }
+
+  private decodeImageDataUrl(value: unknown): Buffer | null {
+    if (typeof value !== 'string') return null;
+    const trimmed = value.trim();
+    if (!trimmed) return null;
+    const match = trimmed.match(/^data:image\/[a-zA-Z0-9.+-]+;base64,(.+)$/);
+    if (!match?.[1]) return null;
+    try {
+      return Buffer.from(match[1], 'base64');
+    } catch {
+      return null;
+    }
+  }
+
+  private applyFallbackPageBranding(
+    doc: PdfKitDocument,
+    opts: { watermarkImage: Buffer | null; footerImage: Buffer | null },
+  ): void {
+    const pageWidth = doc.page.width;
+    const pageHeight = doc.page.height;
+    const marginLeft = doc.page.margins.left;
+    const marginRight = doc.page.margins.right;
+
+    if (opts.watermarkImage) {
+      const watermarkSize = Math.min(320, pageWidth - marginLeft - marginRight - 40);
+      const watermarkX = (pageWidth - watermarkSize) / 2;
+      const watermarkY = (pageHeight - watermarkSize) / 2;
+      doc.save();
+      doc.opacity(0.08);
+      try {
+        doc.image(opts.watermarkImage, watermarkX, watermarkY, {
+          fit: [watermarkSize, watermarkSize],
+          align: 'center',
+          valign: 'center',
+        });
+      } catch {
+        // Ignore invalid watermark and continue rendering.
+      }
+      doc.restore();
+    }
+
+    if (opts.footerImage) {
+      const footerWidth = pageWidth - marginLeft - marginRight;
+      const footerY = pageHeight - doc.page.margins.bottom + 4;
+      try {
+        doc.image(opts.footerImage, marginLeft, footerY, {
+          fit: [footerWidth, 24],
+          align: 'center',
+          valign: 'center',
+        });
+      } catch {
+        // Ignore invalid footer and continue rendering.
+      }
     }
   }
 
@@ -673,20 +744,57 @@ export class ReportsService implements OnModuleDestroy {
   }): Promise<Buffer> {
     const { order, orderTests, verifiers, latestVerifiedAt, comments } = input;
     const patient = order.patient;
+    const labBranding = order.lab as unknown as {
+      reportBannerDataUrl?: string | null;
+      reportFooterDataUrl?: string | null;
+      reportLogoDataUrl?: string | null;
+      reportWatermarkDataUrl?: string | null;
+    };
+    const bannerImage = this.decodeImageDataUrl(labBranding?.reportBannerDataUrl);
+    const footerImage = this.decodeImageDataUrl(labBranding?.reportFooterDataUrl);
+    const logoImage = this.decodeImageDataUrl(labBranding?.reportLogoDataUrl);
+    const watermarkImage =
+      this.decodeImageDataUrl(labBranding?.reportWatermarkDataUrl) || logoImage;
 
     return new Promise((resolve, reject) => {
-      const doc = new PDFDocument({ size: 'A4', margin: 32 });
+      const doc = new PDFDocument({ size: 'A4', margin: 20 });
       const chunks: Buffer[] = [];
 
       doc.on('data', (chunk: Buffer) => chunks.push(chunk));
       doc.on('end', () => resolve(Buffer.concat(chunks)));
       doc.on('error', reject);
+      const applyPageBranding = () =>
+        this.applyFallbackPageBranding(doc, { watermarkImage, footerImage });
+      doc.on('pageAdded', applyPageBranding);
+      applyPageBranding();
 
-      drawHeaderBar(doc, {
-        title: 'Laboratory Test Results',
-        labName: order.lab?.name || 'Laboratory',
-        subtitle: order.orderNumber || order.id.substring(0, 8),
-      });
+      if (bannerImage) {
+        const marginLeft = doc.page.margins.left;
+        const marginRight = doc.page.margins.right;
+        const maxWidth = doc.page.width - marginLeft - marginRight;
+        try {
+          doc.image(bannerImage, marginLeft, 10, {
+            fit: [maxWidth, 64],
+            align: 'center',
+            valign: 'center',
+          });
+          doc.y = 84;
+        } catch {
+          drawHeaderBar(doc, {
+            title: 'Laboratory Test Results',
+            labName: order.lab?.name || 'Laboratory',
+            subtitle: order.orderNumber || order.id.substring(0, 8),
+            logoImage,
+          });
+        }
+      } else {
+        drawHeaderBar(doc, {
+          title: 'Laboratory Test Results',
+          labName: order.lab?.name || 'Laboratory',
+          subtitle: order.orderNumber || order.id.substring(0, 8),
+          logoImage,
+        });
+      }
 
       drawTwoColumnInfo(
         doc,
