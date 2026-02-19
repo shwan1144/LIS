@@ -22,6 +22,7 @@ export interface PublicResultStatus {
     orderNumber: string;
     patientName: string;
     labName: string;
+    onlineResultWatermarkText: string | null;
     registeredAt: string;
     paymentStatus: string;
     reportableCount: number;

@@ -1,5 +1,5 @@
 import { type ChangeEvent, useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, Button, Card, Col, Row, Space, Typography, message } from 'antd';
+import { Alert, Button, Card, Col, Input, Row, Space, Tabs, Typography, message } from 'antd';
 import {
   getLabSettings,
   updateLabSettings,
@@ -81,6 +81,7 @@ export function SettingsReportDesignPage() {
   const fileInputRefs = useRef<Partial<Record<BrandingKey, HTMLInputElement | null>>>({});
   const [settings, setSettings] = useState<LabSettingsDto | null>(null);
   const [branding, setBranding] = useState<ReportBrandingDto>(emptyBranding);
+  const [onlineResultWatermarkText, setOnlineResultWatermarkText] = useState('');
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [uploadingKey, setUploadingKey] = useState<BrandingKey | null>(null);
@@ -92,9 +93,10 @@ export function SettingsReportDesignPage() {
       current.bannerDataUrl !== branding.bannerDataUrl ||
       current.footerDataUrl !== branding.footerDataUrl ||
       current.logoDataUrl !== branding.logoDataUrl ||
-      current.watermarkDataUrl !== branding.watermarkDataUrl
+      current.watermarkDataUrl !== branding.watermarkDataUrl ||
+      (settings.onlineResultWatermarkText || '') !== onlineResultWatermarkText
     );
-  }, [branding, settings]);
+  }, [branding, onlineResultWatermarkText, settings]);
 
   const load = async () => {
     setLoading(true);
@@ -102,6 +104,7 @@ export function SettingsReportDesignPage() {
       const data = await getLabSettings();
       setSettings(data);
       setBranding(data.reportBranding || emptyBranding());
+      setOnlineResultWatermarkText(data.onlineResultWatermarkText || '');
     } catch {
       message.error('Failed to load report design settings');
     } finally {
@@ -152,9 +155,13 @@ export function SettingsReportDesignPage() {
   const handleSave = async () => {
     setSaving(true);
     try {
-      const updated = await updateLabSettings({ reportBranding: branding });
+      const updated = await updateLabSettings({
+        reportBranding: branding,
+        onlineResultWatermarkText: onlineResultWatermarkText.trim() || null,
+      });
       setSettings(updated);
       setBranding(updated.reportBranding || emptyBranding());
+      setOnlineResultWatermarkText(updated.onlineResultWatermarkText || '');
       message.success('Report design settings saved');
     } catch (err: unknown) {
       const msg =
@@ -182,72 +189,102 @@ export function SettingsReportDesignPage() {
         description="Use PNG for transparent logo/watermark. Keep banner and footer wide to match A4 report width."
       />
 
-      <Row gutter={[16, 16]}>
-        {IMAGE_SETTINGS.map((item) => {
-          const currentImage = branding[item.key];
-          return (
-            <Col key={item.key} xs={24} lg={12}>
-              <Card title={item.title} loading={loading}>
-                <Text type="secondary" style={{ display: 'block', marginBottom: 4 }}>
-                  Recommended size: {item.recommendedSize}
-                </Text>
-                <Text type="secondary" style={{ display: 'block', marginBottom: 12 }}>
-                  {item.note}
-                </Text>
+      <Tabs
+        defaultActiveKey="pdf-design"
+        items={[
+          {
+            key: 'pdf-design',
+            label: 'PDF Design',
+            children: (
+              <Row gutter={[16, 16]}>
+                {IMAGE_SETTINGS.map((item) => {
+                  const currentImage = branding[item.key];
+                  return (
+                    <Col key={item.key} xs={24} lg={12}>
+                      <Card title={item.title} loading={loading}>
+                        <Text type="secondary" style={{ display: 'block', marginBottom: 4 }}>
+                          Recommended size: {item.recommendedSize}
+                        </Text>
+                        <Text type="secondary" style={{ display: 'block', marginBottom: 12 }}>
+                          {item.note}
+                        </Text>
 
-                <div
-                  style={{
-                    border: '1px dashed #d9d9d9',
-                    borderRadius: 8,
-                    minHeight: 120,
-                    padding: 8,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    marginBottom: 12,
-                    background: '#fafafa',
-                  }}
-                >
-                  {currentImage ? (
-                    <img
-                      src={currentImage}
-                      alt={item.title}
-                      style={{ maxWidth: '100%', maxHeight: 180, objectFit: 'contain' }}
-                    />
-                  ) : (
-                    <Text type="secondary">No image uploaded</Text>
-                  )}
-                </div>
+                        <div
+                          style={{
+                            border: '1px dashed #d9d9d9',
+                            borderRadius: 8,
+                            minHeight: 120,
+                            padding: 8,
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            marginBottom: 12,
+                            background: '#fafafa',
+                          }}
+                        >
+                          {currentImage ? (
+                            <img
+                              src={currentImage}
+                              alt={item.title}
+                              style={{ maxWidth: '100%', maxHeight: 180, objectFit: 'contain' }}
+                            />
+                          ) : (
+                            <Text type="secondary">No image uploaded</Text>
+                          )}
+                        </div>
 
-                <Space wrap>
-                  <input
-                    ref={(el) => {
-                      fileInputRefs.current[item.key] = el;
-                    }}
-                    type="file"
-                    accept="image/png,image/jpeg,image/jpg,image/webp"
-                    onChange={(event) => handleFileSelect(item.key, item.maxBytes, event)}
-                    style={{ display: 'none' }}
-                  />
-                  <Button
-                    loading={uploadingKey === item.key}
-                    onClick={() => fileInputRefs.current[item.key]?.click()}
-                  >
-                    {currentImage ? 'Replace image' : 'Upload image'}
-                  </Button>
-                  <Button
-                    danger
-                    onClick={() => setImage(item.key, null)}
-                    disabled={!currentImage}
-                  >
-                    Clear
-                  </Button>
-                </Space>
+                        <Space wrap>
+                          <input
+                            ref={(el) => {
+                              fileInputRefs.current[item.key] = el;
+                            }}
+                            type="file"
+                            accept="image/png,image/jpeg,image/jpg,image/webp"
+                            onChange={(event) => handleFileSelect(item.key, item.maxBytes, event)}
+                            style={{ display: 'none' }}
+                          />
+                          <Button
+                            loading={uploadingKey === item.key}
+                            onClick={() => fileInputRefs.current[item.key]?.click()}
+                          >
+                            {currentImage ? 'Replace image' : 'Upload image'}
+                          </Button>
+                          <Button
+                            danger
+                            onClick={() => setImage(item.key, null)}
+                            disabled={!currentImage}
+                          >
+                            Clear
+                          </Button>
+                        </Space>
+                      </Card>
+                    </Col>
+                  );
+                })}
+              </Row>
+            ),
+          },
+          {
+            key: 'online-result',
+            label: 'Online Result',
+            children: (
+              <Card title="Online Result Watermark" loading={loading} style={{ maxWidth: 980 }}>
+                <Text type="secondary" style={{ display: 'block', marginBottom: 8 }}>
+                  This text appears as a faint watermark on the patient online result page.
+                </Text>
+                <Input
+                  value={onlineResultWatermarkText}
+                  onChange={(event) => setOnlineResultWatermarkText(event.target.value)}
+                  maxLength={120}
+                  showCount
+                  placeholder="ONLINE VERSION"
+                  allowClear
+                />
               </Card>
-            </Col>
-          );
-        })}
-      </Row>
+            ),
+          },
+        ]}
+      />
 
       <div style={{ marginTop: 16 }}>
         <Space>
@@ -260,7 +297,10 @@ export function SettingsReportDesignPage() {
             Save report design
           </Button>
           <Button
-            onClick={() => setBranding(settings?.reportBranding || emptyBranding())}
+            onClick={() => {
+              setBranding(settings?.reportBranding || emptyBranding());
+              setOnlineResultWatermarkText(settings?.onlineResultWatermarkText || '');
+            }}
             disabled={!hasChanges}
           >
             Reset changes

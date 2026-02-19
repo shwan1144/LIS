@@ -27,6 +27,7 @@ const shift_entity_1 = require("../entities/shift.entity");
 const ROLES = ['SUPER_ADMIN', 'LAB_ADMIN', 'RECEPTION', 'TECHNICIAN', 'VERIFIER', 'DOCTOR', 'INSTRUMENT_SERVICE'];
 const MAX_REPORT_IMAGE_DATA_URL_LENGTH = 4 * 1024 * 1024;
 const REPORT_IMAGE_DATA_URL_PATTERN = /^data:image\/(png|jpeg|jpg|webp);base64,[a-zA-Z0-9+/=]+$/;
+const MAX_ONLINE_WATERMARK_TEXT_LENGTH = 120;
 let SettingsService = class SettingsService {
     constructor(userRepo, labAssignmentRepo, shiftAssignmentRepo, userDeptRepo, departmentRepo, labRepo, shiftRepo) {
         this.userRepo = userRepo;
@@ -51,6 +52,7 @@ let SettingsService = class SettingsService {
             labelSequenceBy: lab.labelSequenceBy ?? 'tube_type',
             sequenceResetBy: lab.sequenceResetBy ?? 'day',
             enableOnlineResults: lab.enableOnlineResults !== false,
+            onlineResultWatermarkText: lab.onlineResultWatermarkText ?? null,
             reportBranding: {
                 bannerDataUrl: lab.reportBannerDataUrl ?? null,
                 footerDataUrl: lab.reportFooterDataUrl ?? null,
@@ -80,6 +82,9 @@ let SettingsService = class SettingsService {
                 throw new common_1.BadRequestException('enableOnlineResults must be boolean');
             }
             lab.enableOnlineResults = data.enableOnlineResults;
+        }
+        if (data.onlineResultWatermarkText !== undefined) {
+            lab.onlineResultWatermarkText = this.normalizeOnlineResultWatermarkText(data.onlineResultWatermarkText);
         }
         if (data.reportBranding !== undefined) {
             if (!data.reportBranding ||
@@ -117,6 +122,20 @@ let SettingsService = class SettingsService {
         }
         if (!REPORT_IMAGE_DATA_URL_PATTERN.test(trimmed)) {
             throw new common_1.BadRequestException(`${fieldName} must be a valid image data URL (png, jpg/jpeg, or webp)`);
+        }
+        return trimmed;
+    }
+    normalizeOnlineResultWatermarkText(value) {
+        if (value === null)
+            return null;
+        if (typeof value !== 'string') {
+            throw new common_1.BadRequestException('onlineResultWatermarkText must be a string or null');
+        }
+        const trimmed = value.trim();
+        if (!trimmed)
+            return null;
+        if (trimmed.length > MAX_ONLINE_WATERMARK_TEXT_LENGTH) {
+            throw new common_1.BadRequestException(`onlineResultWatermarkText must be at most ${MAX_ONLINE_WATERMARK_TEXT_LENGTH} characters`);
         }
         return trimmed;
     }

@@ -113,6 +113,7 @@ function renderTestsSection(status: PublicResultStatus): string {
 }
 
 function renderStatusPage(status: PublicResultStatus): string {
+  const watermarkText = status.onlineResultWatermarkText?.trim() || '';
   const readyBadge = status.ready
     ? '<span class="badge ready">Ready</span>'
     : '<span class="badge pending">Pending</span>';
@@ -145,6 +146,9 @@ function renderStatusPage(status: PublicResultStatus): string {
           }, 1000);
         })();
       </script>`;
+  const watermarkHtml = watermarkText
+    ? `<div class="online-watermark" aria-hidden="true"><span>${escapeHtml(watermarkText)}</span></div>`
+    : '';
 
   return `<!doctype html>
 <html lang="en">
@@ -154,8 +158,11 @@ function renderStatusPage(status: PublicResultStatus): string {
   <title>Patient Result Status</title>
   <style>
     body { margin: 0; font-family: Arial, sans-serif; background: #f3f5f9; color: #111827; }
+    .online-watermark { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; pointer-events: none; z-index: 0; }
+    .online-watermark span { font-size: clamp(34px, 10vw, 78px); letter-spacing: 4px; font-weight: 800; color: rgba(15, 23, 42, 0.08); transform: rotate(-24deg); text-transform: uppercase; user-select: none; }
     .wrap { max-width: 640px; margin: 24px auto; padding: 0 14px; }
     .card { background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; padding: 18px; box-shadow: 0 3px 14px rgba(0,0,0,0.06); }
+    .wrap, .card { position: relative; z-index: 1; }
     h1 { margin: 0 0 10px 0; font-size: 22px; }
     .row { display: flex; justify-content: space-between; gap: 10px; padding: 7px 0; border-bottom: 1px solid #f1f5f9; }
     .row:last-child { border-bottom: 0; }
@@ -190,6 +197,7 @@ function renderStatusPage(status: PublicResultStatus): string {
   </style>
 </head>
 <body>
+  ${watermarkHtml}
   <div class="wrap">
     <div class="card">
       <div class="top">

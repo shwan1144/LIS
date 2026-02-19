@@ -375,6 +375,7 @@ let ReportsService = class ReportsService {
             orderNumber: order.orderNumber || order.id.substring(0, 8),
             patientName: order.patient?.fullName || '-',
             labName: order.lab?.name || 'Laboratory',
+            onlineResultWatermarkText: order.lab?.onlineResultWatermarkText ?? null,
             registeredAt: order.registeredAt.toISOString(),
             paymentStatus: order.paymentStatus || 'unpaid',
             reportableCount: reportableOrderTests.length,

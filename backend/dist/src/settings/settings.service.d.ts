@@ -29,6 +29,7 @@ export declare class SettingsService {
         labelSequenceBy: string;
         sequenceResetBy: string;
         enableOnlineResults: boolean;
+        onlineResultWatermarkText: string | null;
         reportBranding: {
             bannerDataUrl: string | null;
             footerDataUrl: string | null;
@@ -40,6 +41,7 @@ export declare class SettingsService {
         labelSequenceBy?: string;
         sequenceResetBy?: string;
         enableOnlineResults?: boolean;
+        onlineResultWatermarkText?: string | null;
         reportBranding?: ReportBrandingUpdate;
     }): Promise<{
         id: string;
@@ -48,6 +50,7 @@ export declare class SettingsService {
         labelSequenceBy: string;
         sequenceResetBy: string;
         enableOnlineResults: boolean;
+        onlineResultWatermarkText: string | null;
         reportBranding: {
             bannerDataUrl: string | null;
             footerDataUrl: string | null;
@@ -56,6 +59,7 @@ export declare class SettingsService {
         };
     }>;
     private normalizeReportImageDataUrl;
+    private normalizeOnlineResultWatermarkText;
     getUsersForLab(labId: string): Promise<User[]>;
     getUserWithDetails(id: string, labId: string): Promise<{
         user: User;
