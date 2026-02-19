@@ -757,7 +757,7 @@ export class ReportsService implements OnModuleDestroy {
       this.decodeImageDataUrl(labBranding?.reportWatermarkDataUrl) || logoImage;
 
     return new Promise((resolve, reject) => {
-      const doc = new PDFDocument({ size: 'A4', margin: 20 });
+      const doc = new PDFDocument({ size: 'A4', margin: 10 });
       const chunks: Buffer[] = [];
 
       doc.on('data', (chunk: Buffer) => chunks.push(chunk));

@@ -10,6 +10,8 @@ const common_1 = require("@nestjs/common");
 const express_1 = require("express");
 const app_module_1 = require("./app.module");
 const seed_1 = require("./seed");
+const typeorm_1 = require("typeorm");
+const bootstrapLogger = new common_1.Logger('Bootstrap');
 function shouldAutoSeedOnBoot() {
     if (process.env.AUTO_SEED_ON_BOOT === 'true') {
         return true;
@@ -19,10 +21,28 @@ function shouldAutoSeedOnBoot() {
     }
     return process.env.NODE_ENV === 'production';
 }
+async function ensureReportBrandingColumns(dataSource) {
+    const sqlStatements = [
+        'ALTER TABLE IF EXISTS "labs" ADD COLUMN IF NOT EXISTS "reportBannerDataUrl" text',
+        'ALTER TABLE IF EXISTS "labs" ADD COLUMN IF NOT EXISTS "reportFooterDataUrl" text',
+        'ALTER TABLE IF EXISTS "labs" ADD COLUMN IF NOT EXISTS "reportLogoDataUrl" text',
+        'ALTER TABLE IF EXISTS "labs" ADD COLUMN IF NOT EXISTS "reportWatermarkDataUrl" text',
+    ];
+    for (const sql of sqlStatements) {
+        await dataSource.query(sql);
+    }
+}
 async function bootstrap() {
     const app = await core_1.NestFactory.create(app_module_1.AppModule);
     app.use((0, express_1.json)({ limit: '10mb' }));
     app.use((0, express_1.urlencoded)({ extended: true, limit: '10mb' }));
+    const dataSource = app.get(typeorm_1.DataSource);
+    try {
+        await ensureReportBrandingColumns(dataSource);
+    }
+    catch (error) {
+        bootstrapLogger.warn(`Failed to auto-ensure report branding columns: ${error instanceof Error ? error.message : String(error)}`);
+    }
     if (shouldAutoSeedOnBoot()) {
         await (0, seed_1.runSeed)({ synchronizeSchema: false });
     }

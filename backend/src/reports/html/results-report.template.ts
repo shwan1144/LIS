@@ -506,8 +506,15 @@ export function buildResultsReportHtml(input: {
   <title>Laboratory Report</title>
   <style>
     ${kurdishFontFace}
-    @page { size: A4; margin: 4mm 4mm 4mm 4mm; }
-    body { margin: 0; font-family: 'Segoe UI', Tahoma, Arial, sans-serif; font-size: 12px; color: #333; position: relative; }
+    @page { size: A4; margin: 3mm 3mm 3mm 3mm; }
+    body {
+      --content-x: 3mm;
+      margin: 0;
+      font-family: 'Segoe UI', Tahoma, Arial, sans-serif;
+      font-size: 12px;
+      color: #333;
+      position: relative;
+    }
     .rtl {
       direction: rtl;
       unicode-bidi: isolate;
@@ -518,10 +525,10 @@ export function buildResultsReportHtml(input: {
     .ltr { direction: ltr; unicode-bidi: isolate; }
     .nowrap { white-space: nowrap; }
     .watermark { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%) rotate(-30deg); opacity: 0.08; width: min(68vw, 170mm); z-index: 0; pointer-events: none; }
-    .page { position: relative; z-index: 1; padding: 3mm 0 30mm 0; page-break-inside: avoid; min-height: 267mm; box-sizing: border-box; }
-    .banner-wrap { margin: 0 8mm 8px 8mm; text-align: center; }
+    .page { position: relative; z-index: 1; padding: 1mm 0 24mm 0; page-break-inside: avoid; min-height: 267mm; box-sizing: border-box; }
+    .banner-wrap { margin: 0 var(--content-x) 6px var(--content-x); text-align: center; }
     .banner-image { width: 100%; max-height: 38mm; object-fit: contain; display: block; }
-    .header { display: flex; align-items: center; justify-content: space-between; border-bottom: 2px solid #222; padding: 0 8mm 10px 8mm; }
+    .header { display: flex; align-items: center; justify-content: space-between; border-bottom: 2px solid #222; padding: 0 var(--content-x) 8px var(--content-x); }
     .header-col { flex: 1; font-size: 13px; font-weight: 700; line-height: 1.35; }
     .header-col.ltr { text-align: left; }
     .header-col.rtl {
@@ -538,8 +545,8 @@ export function buildResultsReportHtml(input: {
     }
     .logo-wrap { flex: 0 0 120px; text-align: center; }
     .logo { width: 90px; height: auto; object-fit: contain; }
-    .report-title { text-align: center; font-size: 20px; font-weight: 800; text-decoration: underline; margin: 16px 0 14px; }
-    .patient-info { margin: 14px 8mm 14px 8mm; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; border: 1px solid #ccc; border-radius: 6px; padding: 12px 14px; background: #fafafa; }
+    .report-title { text-align: center; font-size: 20px; font-weight: 800; text-decoration: underline; margin: 12px 0 10px; }
+    .patient-info { margin: 10px var(--content-x) 10px var(--content-x); display: grid; grid-template-columns: 1fr 1fr; gap: 8px; border: 1px solid #ccc; border-radius: 6px; padding: 10px 12px; background: #fafafa; }
     .info-item { font-size: 13px; }
     .info-item .label { font-weight: 700; margin-right: 4px; }
     .name-value { display: inline-block; }
@@ -551,7 +558,7 @@ export function buildResultsReportHtml(input: {
       word-spacing: 0;
       font-feature-settings: "liga" 1, "calt" 1, "kern" 1;
     }
-    .content { padding: 0 8mm; }
+    .content { padding: 0 var(--content-x); }
     .dept-title { background: #222; color: #fff; padding: 8px 12px; font-weight: 800; margin-top: 18px; }
     .test-group-title { background: #f2f2f2; color: #555; padding: 6px 12px; font-weight: 700; border: 1px solid #ddd; border-top: 0; }
     table { width: 100%; border-collapse: collapse; margin-bottom: 8px; }
@@ -564,10 +571,10 @@ export function buildResultsReportHtml(input: {
     tr.abnormal td { background-color: #fff5f5; }
     .panel-section { margin-top: 20px; }
     .panel-page-title { font-size: 18px; font-weight: 800; margin-bottom: 12px; border-bottom: 2px solid #222; padding-bottom: 6px; }
-    .panel-page .content { padding: 0 8mm; }
+    .panel-page .content { padding: 0 var(--content-x); }
     .gue-gse-table { width: 100%; margin-top: 8px; margin-bottom: 12px; }
-    .report-footer { position: absolute; left: 8mm; right: 8mm; bottom: 4mm; text-align: center; }
-    .footer-image { width: 100%; max-height: 24mm; object-fit: contain; display: block; }
+    .report-footer { position: absolute; left: var(--content-x); right: var(--content-x); bottom: 2mm; text-align: center; }
+    .footer-image { width: 100%; max-height: 20mm; object-fit: contain; display: block; }
     * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   </style>
 </head>
