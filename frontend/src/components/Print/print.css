@@ -33,6 +33,12 @@
   margin: 12px 0;
 }
 
+.receipt-qr-note {
+  margin-top: 6px;
+  font-size: 9px;
+  color: #666;
+}
+
 .receipt-order-info,
 .receipt-patient-info {
   margin: 8px 0;

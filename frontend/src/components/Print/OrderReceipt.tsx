@@ -25,6 +25,8 @@ export const OrderReceipt = forwardRef<HTMLDivElement, OrderReceiptProps>(
     const patientAge = order.patient.dateOfBirth
       ? dayjs().diff(dayjs(order.patient.dateOfBirth), 'year')
       : null;
+    const apiBase = (import.meta.env.VITE_API_URL || window.location.origin).replace(/\/+$/, '');
+    const patientResultUrl = `${apiBase}/public/results/${order.id}`;
 
     return (
       <div ref={ref} className="print-receipt">
@@ -37,10 +39,11 @@ export const OrderReceipt = forwardRef<HTMLDivElement, OrderReceiptProps>(
         {/* QR Code */}
         <div className="receipt-qr">
           <QRCodeSVG
-            value={order.orderNumber || order.id}
+            value={patientResultUrl}
             size={80}
             level="M"
           />
+          <div className="receipt-qr-note">Scan to check result status</div>
         </div>
 
         {/* Order Info */}

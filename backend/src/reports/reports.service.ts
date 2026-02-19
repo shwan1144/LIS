@@ -17,6 +17,19 @@ import type { Browser } from 'playwright';
 
 type PdfKitDocument = InstanceType<typeof PDFDocument>;
 
+export interface PublicResultStatus {
+  orderId: string;
+  orderNumber: string;
+  patientName: string;
+  labName: string;
+  registeredAt: string;
+  paymentStatus: string;
+  reportableCount: number;
+  verifiedCount: number;
+  ready: boolean;
+  verifiedAt: string | null;
+}
+
 function formatDateTime(value: Date | string | null | undefined): string {
   if (!value) return '-';
   const d = value instanceof Date ? value : new Date(value);
@@ -219,6 +232,109 @@ export class ReportsService implements OnModuleDestroy {
     }
   }
 
+  private getReportableOrderTests(orderTests: OrderTest[]): OrderTest[] {
+    return orderTests.filter((ot) => {
+      const t = ot.test as Test | undefined;
+      if (!t) return false;
+      if (t.type === TestType.PANEL) {
+        if (ot.parentOrderTestId) return true;
+        const hasParams = Array.isArray(t.parameterDefinitions) && t.parameterDefinitions.length > 0;
+        return hasParams;
+      }
+      return true;
+    });
+  }
+
+  private async loadOrderResultsSnapshot(
+    orderId: string,
+    labId?: string,
+  ): Promise<{
+    order: Order;
+    reportableOrderTests: OrderTest[];
+    verifiedTests: OrderTest[];
+    latestVerifiedAt: Date | null;
+  }> {
+    const where = labId ? { id: orderId, labId } : { id: orderId };
+    const order = await this.orderRepo.findOne({
+      where,
+      relations: [
+        'patient',
+        'lab',
+        'shift',
+        'samples',
+        'samples.orderTests',
+        'samples.orderTests.test',
+        'samples.orderTests.test.department',
+      ],
+    });
+
+    if (!order) {
+      throw new NotFoundException('Order not found');
+    }
+
+    const sampleIds = order.samples?.map((s) => s.id) ?? [];
+    const orderTests =
+      sampleIds.length === 0
+        ? []
+        : await this.orderTestRepo.find({
+            where: { sampleId: In(sampleIds) },
+            relations: ['test', 'test.department', 'sample'],
+            order: { test: { code: 'ASC' } },
+          });
+
+    const reportableOrderTests = this.getReportableOrderTests(orderTests);
+    const verifiedTests = reportableOrderTests.filter(
+      (ot) => ot.status === 'VERIFIED' || !!ot.verifiedAt,
+    );
+    const latestVerifiedAt =
+      verifiedTests
+        .map((ot) => (ot.verifiedAt ? new Date(ot.verifiedAt) : null))
+        .filter((d): d is Date => d !== null)
+        .sort((a, b) => b.getTime() - a.getTime())[0] ?? null;
+
+    return {
+      order,
+      reportableOrderTests,
+      verifiedTests,
+      latestVerifiedAt,
+    };
+  }
+
+  async getPublicResultStatus(orderId: string): Promise<PublicResultStatus> {
+    const { order, reportableOrderTests, verifiedTests, latestVerifiedAt } =
+      await this.loadOrderResultsSnapshot(orderId);
+
+    const ready =
+      order.paymentStatus === 'paid' &&
+      reportableOrderTests.length > 0 &&
+      verifiedTests.length === reportableOrderTests.length;
+
+    return {
+      orderId: order.id,
+      orderNumber: order.orderNumber || order.id.substring(0, 8),
+      patientName: order.patient?.fullName || '-',
+      labName: order.lab?.name || 'Laboratory',
+      registeredAt: order.registeredAt.toISOString(),
+      paymentStatus: order.paymentStatus || 'unpaid',
+      reportableCount: reportableOrderTests.length,
+      verifiedCount: verifiedTests.length,
+      ready,
+      verifiedAt: latestVerifiedAt ? latestVerifiedAt.toISOString() : null,
+    };
+  }
+
+  async generatePublicTestResultsPDF(orderId: string): Promise<Buffer> {
+    const { order, reportableOrderTests, verifiedTests } = await this.loadOrderResultsSnapshot(orderId);
+    const ready =
+      order.paymentStatus === 'paid' &&
+      reportableOrderTests.length > 0 &&
+      verifiedTests.length === reportableOrderTests.length;
+    if (!ready) {
+      throw new ForbiddenException('Results are not completed yet. Please check again later.');
+    }
+    return this.generateTestResultsPDF(orderId, order.labId);
+  }
+
   async generateOrderReceiptPDF(orderId: string, labId: string): Promise<Buffer> {
     const order = await this.orderRepo.findOne({
       where: { id: orderId, labId },
@@ -373,51 +489,14 @@ export class ReportsService implements OnModuleDestroy {
   }
 
   async generateTestResultsPDF(orderId: string, labId: string): Promise<Buffer> {
-    const order = await this.orderRepo.findOne({
-      where: { id: orderId, labId },
-      relations: [
-        'patient',
-        'lab',
-        'shift',
-        'samples',
-        'samples.orderTests',
-        'samples.orderTests.test',
-        'samples.orderTests.test.department',
-      ],
-    });
-
-    if (!order) {
-      throw new NotFoundException('Order not found');
-    }
+    const { order, reportableOrderTests, verifiedTests, latestVerifiedAt } =
+      await this.loadOrderResultsSnapshot(orderId, labId);
 
     if (order.paymentStatus !== 'paid') {
       throw new ForbiddenException(
         'Order is unpaid or partially paid. Complete payment to download or print results.',
       );
     }
-
-    const sampleIds = order.samples?.map((s) => s.id) ?? [];
-    const orderTests =
-      sampleIds.length === 0
-        ? []
-        : await this.orderTestRepo.find({
-            where: { sampleId: In(sampleIds) },
-            relations: ['test', 'sample'],
-            order: { test: { code: 'ASC' } },
-          });
-
-    const reportableOrderTests = orderTests.filter((ot) => {
-      const t = ot.test as Test | undefined;
-      if (!t) return false;
-      if (t.type === TestType.PANEL) {
-        if (ot.parentOrderTestId) return true;
-        const hasParams =
-          Array.isArray(t.parameterDefinitions) && t.parameterDefinitions.length > 0;
-        if (hasParams) return true;
-        return false;
-      }
-      return true;
-    });
 
     const verifierIds = [
       ...new Set(
@@ -436,13 +515,6 @@ export class ReportsService implements OnModuleDestroy {
       verifiers.map((u) => [u.id, u.fullName || u.username || u.id.substring(0, 8)]),
     );
 
-    const verifiedTests = reportableOrderTests.filter(
-      (ot) => ot.status === 'VERIFIED' || !!ot.verifiedAt,
-    );
-    const latestVerifiedAt = verifiedTests
-      .map((ot) => (ot.verifiedAt ? new Date(ot.verifiedAt) : null))
-      .filter((d): d is Date => d !== null)
-      .sort((a, b) => b.getTime() - a.getTime())[0];
     const verifierNames = [
       ...new Set(
         verifiedTests
