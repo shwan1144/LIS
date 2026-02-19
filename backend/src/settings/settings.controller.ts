@@ -40,7 +40,7 @@ export class SettingsController {
   @Patch('lab')
   async updateLabSettings(
     @Req() req: RequestWithUser,
-    @Body() body: { labelSequenceBy?: string; sequenceResetBy?: string },
+    @Body() body: { labelSequenceBy?: string; sequenceResetBy?: string; enableOnlineResults?: boolean },
   ) {
     const labId = req.user?.labId;
     if (!labId) throw new Error('Lab ID not found in token');

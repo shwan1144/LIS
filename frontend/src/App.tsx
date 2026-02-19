@@ -21,6 +21,7 @@ import { SettingsUsersPage } from './pages/settings/SettingsUsersPage';
 import { SettingsDepartmentsPage } from './pages/settings/SettingsDepartmentsPage';
 import { SettingsInstrumentsPage } from './pages/settings/SettingsInstrumentsPage';
 import { SettingsLabelPage } from './pages/settings/SettingsLabelPage';
+import { SettingsOnlineResultsPage } from './pages/settings/SettingsOnlineResultsPage';
 import { Outlet } from 'react-router-dom';
 import './App.css';
 
@@ -69,6 +70,7 @@ function AppContent() {
                 <Route path="departments" element={<SettingsDepartmentsPage />} />
                 <Route path="users" element={<SettingsUsersPage />} />
                 <Route path="label" element={<SettingsLabelPage />} />
+                <Route path="online-results" element={<SettingsOnlineResultsPage />} />
                 <Route path="instruments" element={<SettingsInstrumentsPage />} />
                 <Route path="tests" element={<TestsPage />} />
                 <Route path="audit" element={<AuditLogPage />} />

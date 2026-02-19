@@ -1,0 +1,107 @@
+"use strict";
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+var __metadata = (this && this.__metadata) || function (k, v) {
+    if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
+};
+var __param = (this && this.__param) || function (paramIndex, decorator) {
+    return function (target, key) { decorator(target, key, paramIndex); }
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.AuditService = void 0;
+const common_1 = require("@nestjs/common");
+const typeorm_1 = require("@nestjs/typeorm");
+const typeorm_2 = require("typeorm");
+const audit_log_entity_1 = require("../entities/audit-log.entity");
+let AuditService = class AuditService {
+    constructor(auditLogRepo) {
+        this.auditLogRepo = auditLogRepo;
+    }
+    async log(dto) {
+        const auditLog = this.auditLogRepo.create({
+            labId: dto.labId ?? null,
+            userId: dto.userId ?? null,
+            action: dto.action,
+            entityType: dto.entityType ?? null,
+            entityId: dto.entityId ?? null,
+            oldValues: dto.oldValues ?? null,
+            newValues: dto.newValues ?? null,
+            description: dto.description ?? null,
+            ipAddress: dto.ipAddress ?? null,
+            userAgent: dto.userAgent ?? null,
+        });
+        return this.auditLogRepo.save(auditLog);
+    }
+    async findAll(labId, params) {
+        const page = params.page ?? 1;
+        const size = params.size ?? 50;
+        const skip = (page - 1) * size;
+        const qb = this.auditLogRepo
+            .createQueryBuilder('audit')
+            .leftJoinAndSelect('audit.user', 'user')
+            .where('audit.labId = :labId', { labId });
+        if (params.userId) {
+            qb.andWhere('audit.userId = :userId', { userId: params.userId });
+        }
+        if (params.action) {
+            if (Array.isArray(params.action)) {
+                qb.andWhere('audit.action IN (:...actions)', { actions: params.action });
+            }
+            else {
+                qb.andWhere('audit.action = :action', { action: params.action });
+            }
+        }
+        if (params.entityType) {
+            qb.andWhere('audit.entityType = :entityType', { entityType: params.entityType });
+        }
+        if (params.entityId) {
+            qb.andWhere('audit.entityId = :entityId', { entityId: params.entityId });
+        }
+        if (params.startDate && params.endDate) {
+            qb.andWhere('audit.createdAt BETWEEN :startDate AND :endDate', {
+                startDate: new Date(params.startDate),
+                endDate: new Date(params.endDate + 'T23:59:59.999Z'),
+            });
+        }
+        else if (params.startDate) {
+            qb.andWhere('audit.createdAt >= :startDate', {
+                startDate: new Date(params.startDate),
+            });
+        }
+        else if (params.endDate) {
+            qb.andWhere('audit.createdAt <= :endDate', {
+                endDate: new Date(params.endDate + 'T23:59:59.999Z'),
+            });
+        }
+        if (params.search) {
+            qb.andWhere('(audit.description ILIKE :search OR user.username ILIKE :search OR user.fullName ILIKE :search)', { search: `%${params.search}%` });
+        }
+        qb.orderBy('audit.createdAt', 'DESC');
+        const total = await qb.getCount();
+        const items = await qb.skip(skip).take(size).getMany();
+        return { items, total };
+    }
+    async getActions() {
+        return Object.values(audit_log_entity_1.AuditAction);
+    }
+    async getEntityTypes(labId) {
+        const result = await this.auditLogRepo
+            .createQueryBuilder('audit')
+            .select('DISTINCT audit.entityType', 'entityType')
+            .where('audit.labId = :labId', { labId })
+            .andWhere('audit.entityType IS NOT NULL')
+            .getRawMany();
+        return result.map((r) => r.entityType).filter(Boolean);
+    }
+};
+exports.AuditService = AuditService;
+exports.AuditService = AuditService = __decorate([
+    (0, common_1.Injectable)(),
+    __param(0, (0, typeorm_1.InjectRepository)(audit_log_entity_1.AuditLog)),
+    __metadata("design:paramtypes", [typeorm_2.Repository])
+], AuditService);
+//# sourceMappingURL=audit.service.js.map

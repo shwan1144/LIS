@@ -319,6 +319,10 @@ export class ReportsService implements OnModuleDestroy {
     const { order, reportableOrderTests, verifiedTests, latestVerifiedAt } =
       await this.loadOrderResultsSnapshot(orderId);
 
+    if (order.lab?.enableOnlineResults === false) {
+      throw new ForbiddenException('Online results are disabled by laboratory settings.');
+    }
+
     const ready =
       order.paymentStatus === 'paid' &&
       reportableOrderTests.length > 0 &&
@@ -376,6 +380,9 @@ export class ReportsService implements OnModuleDestroy {
 
   async generatePublicTestResultsPDF(orderId: string): Promise<Buffer> {
     const { order, reportableOrderTests, verifiedTests } = await this.loadOrderResultsSnapshot(orderId);
+    if (order.lab?.enableOnlineResults === false) {
+      throw new ForbiddenException('Online results are disabled by laboratory settings.');
+    }
     const ready =
       order.paymentStatus === 'paid' &&
       reportableOrderTests.length > 0 &&

@@ -49,12 +49,13 @@ export class SettingsService {
       name: lab.name,
       labelSequenceBy: lab.labelSequenceBy ?? 'tube_type',
       sequenceResetBy: lab.sequenceResetBy ?? 'day',
+      enableOnlineResults: lab.enableOnlineResults !== false,
     };
   }
 
   async updateLabSettings(
     labId: string,
-    data: { labelSequenceBy?: string; sequenceResetBy?: string },
+    data: { labelSequenceBy?: string; sequenceResetBy?: string; enableOnlineResults?: boolean },
   ) {
     const lab = await this.labRepo.findOne({ where: { id: labId } });
     if (!lab) throw new NotFoundException('Lab not found');
@@ -70,7 +71,14 @@ export class SettingsService {
       }
       lab.sequenceResetBy = data.sequenceResetBy;
     }
-    return this.labRepo.save(lab);
+    if (data.enableOnlineResults !== undefined) {
+      if (typeof data.enableOnlineResults !== 'boolean') {
+        throw new BadRequestException('enableOnlineResults must be boolean');
+      }
+      lab.enableOnlineResults = data.enableOnlineResults;
+    }
+    await this.labRepo.save(lab);
+    return this.getLabSettings(labId);
   }
 
   async getUsersForLab(labId: string): Promise<User[]> {

@@ -47,6 +47,7 @@ export interface LabDto {
   name: string;
   labelSequenceBy?: 'tube_type' | 'department';
   sequenceResetBy?: 'day' | 'shift';
+  enableOnlineResults?: boolean;
 }
 
 export interface UserDto {
@@ -752,6 +753,7 @@ export interface LabSettingsDto {
   name: string;
   labelSequenceBy: 'tube_type' | 'department';
   sequenceResetBy: 'day' | 'shift';
+  enableOnlineResults: boolean;
 }
 
 export async function getLabSettings(): Promise<LabSettingsDto> {
@@ -762,6 +764,7 @@ export async function getLabSettings(): Promise<LabSettingsDto> {
 export async function updateLabSettings(data: {
   labelSequenceBy?: 'tube_type' | 'department';
   sequenceResetBy?: 'day' | 'shift';
+  enableOnlineResults?: boolean;
 }): Promise<LabSettingsDto> {
   const res = await api.patch<LabSettingsDto>('/settings/lab', data);
   return res.data;

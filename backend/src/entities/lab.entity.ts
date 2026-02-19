@@ -35,6 +35,10 @@ export class Lab {
   @Column({ type: 'varchar', length: 32, default: 'day' })
   sequenceResetBy: string;
 
+  /** Allow patients to open online result page from receipt QR. */
+  @Column({ type: 'boolean', default: true })
+  enableOnlineResults: boolean;
+
   @CreateDateColumn()
   createdAt: Date;
 

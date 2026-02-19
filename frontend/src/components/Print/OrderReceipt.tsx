@@ -27,6 +27,9 @@ export const OrderReceipt = forwardRef<HTMLDivElement, OrderReceiptProps>(
       : null;
     const apiBase = (import.meta.env.VITE_API_URL || window.location.origin).replace(/\/+$/, '');
     const patientResultUrl = `${apiBase}/public/results/${order.id}`;
+    const onlineResultsEnabled = order.lab?.enableOnlineResults !== false;
+    const qrValue = onlineResultsEnabled ? patientResultUrl : (order.orderNumber || order.id);
+    const qrNote = onlineResultsEnabled ? 'Scan to check result status' : 'QR shows order number';
 
     return (
       <div ref={ref} className="print-receipt">
@@ -39,11 +42,11 @@ export const OrderReceipt = forwardRef<HTMLDivElement, OrderReceiptProps>(
         {/* QR Code */}
         <div className="receipt-qr">
           <QRCodeSVG
-            value={patientResultUrl}
+            value={qrValue}
             size={80}
             level="M"
           />
-          <div className="receipt-qr-note">Scan to check result status</div>
+          <div className="receipt-qr-note">{qrNote}</div>
         </div>
 
         {/* Order Info */}

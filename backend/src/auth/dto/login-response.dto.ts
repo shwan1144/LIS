@@ -4,6 +4,7 @@ export class LabDto {
   name: string;
   labelSequenceBy?: string;
   sequenceResetBy?: string;
+  enableOnlineResults?: boolean;
 }
 
 export class UserDto {

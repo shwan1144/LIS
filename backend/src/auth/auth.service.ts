@@ -83,6 +83,7 @@ export class AuthService {
       name: lab.name,
       labelSequenceBy: lab.labelSequenceBy ?? 'tube_type',
       sequenceResetBy: lab.sequenceResetBy ?? 'day',
+      enableOnlineResults: lab.enableOnlineResults !== false,
     };
   }
 }
