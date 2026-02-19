@@ -17,6 +17,19 @@ import type { Browser } from 'playwright';
 
 type PdfKitDocument = InstanceType<typeof PDFDocument>;
 
+export interface PublicResultTestItem {
+  orderTestId: string;
+  testCode: string;
+  testName: string;
+  departmentName: string;
+  status: string;
+  isVerified: boolean;
+  hasResult: boolean;
+  resultValue: string | null;
+  unit: string | null;
+  verifiedAt: string | null;
+}
+
 export interface PublicResultStatus {
   orderId: string;
   orderNumber: string;
@@ -26,8 +39,10 @@ export interface PublicResultStatus {
   paymentStatus: string;
   reportableCount: number;
   verifiedCount: number;
+  progressPercent: number;
   ready: boolean;
   verifiedAt: string | null;
+  tests: PublicResultTestItem[];
 }
 
 function formatDateTime(value: Date | string | null | undefined): string {
@@ -308,6 +323,40 @@ export class ReportsService implements OnModuleDestroy {
       order.paymentStatus === 'paid' &&
       reportableOrderTests.length > 0 &&
       verifiedTests.length === reportableOrderTests.length;
+    const progressPercent =
+      reportableOrderTests.length > 0
+        ? Math.round((verifiedTests.length / reportableOrderTests.length) * 100)
+        : 0;
+    const tests: PublicResultTestItem[] = reportableOrderTests
+      .map((ot) => {
+        const test = ot.test as Test | undefined;
+        const departmentName =
+          (test as unknown as { department?: { name?: string | null } })?.department?.name ||
+          'General Department';
+        const resultValue =
+          ot.resultValue !== null && ot.resultValue !== undefined
+            ? String(ot.resultValue)
+            : ot.resultText?.trim() || null;
+        return {
+          orderTestId: ot.id,
+          testCode: test?.code || '-',
+          testName: test?.name || 'Unknown test',
+          departmentName,
+          status: ot.status,
+          isVerified: ot.status === 'VERIFIED' || !!ot.verifiedAt,
+          hasResult: resultValue !== null,
+          resultValue,
+          unit: test?.unit || null,
+          verifiedAt: ot.verifiedAt ? ot.verifiedAt.toISOString() : null,
+        };
+      })
+      .sort((a, b) => {
+        const dept = a.departmentName.localeCompare(b.departmentName);
+        if (dept !== 0) return dept;
+        const code = a.testCode.localeCompare(b.testCode);
+        if (code !== 0) return code;
+        return a.testName.localeCompare(b.testName);
+      });
 
     return {
       orderId: order.id,
@@ -318,8 +367,10 @@ export class ReportsService implements OnModuleDestroy {
       paymentStatus: order.paymentStatus || 'unpaid',
       reportableCount: reportableOrderTests.length,
       verifiedCount: verifiedTests.length,
+      progressPercent,
       ready,
       verifiedAt: latestVerifiedAt ? latestVerifiedAt.toISOString() : null,
+      tests,
     };
   }
 
