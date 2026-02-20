@@ -23,7 +23,7 @@ let SettingsController = class SettingsController {
         this.settingsService = settingsService;
     }
     getRoles() {
-        return this.settingsService.getRoles();
+        throw new common_1.ForbiddenException('Lab user management moved to admin panel. Use admin endpoints.');
     }
     async getLabSettings(req) {
         const labId = req.user?.labId;
@@ -35,39 +35,34 @@ let SettingsController = class SettingsController {
         const labId = req.user?.labId;
         if (!labId)
             throw new Error('Lab ID not found in token');
-        return this.settingsService.updateLabSettings(labId, body);
+        if (body.enableOnlineResults !== undefined ||
+            body.onlineResultWatermarkDataUrl !== undefined ||
+            body.onlineResultWatermarkText !== undefined ||
+            body.reportBranding !== undefined) {
+            throw new common_1.ForbiddenException('Online result and report design settings moved to admin panel.');
+        }
+        if (Object.keys(body).length === 0) {
+            throw new common_1.BadRequestException('No settings provided');
+        }
+        return this.settingsService.updateLabSettings(labId, {
+            labelSequenceBy: body.labelSequenceBy,
+            sequenceResetBy: body.sequenceResetBy,
+        });
     }
     async getUsers(req) {
-        const labId = req.user?.labId;
-        if (!labId)
-            throw new Error('Lab ID not found in token');
-        return this.settingsService.getUsersForLab(labId);
+        throw new common_1.ForbiddenException('Lab user management moved to admin panel. Use admin endpoints.');
     }
     async getUser(req, id) {
-        const labId = req.user?.labId;
-        if (!labId)
-            throw new Error('Lab ID not found in token');
-        return this.settingsService.getUserWithDetails(id, labId);
+        throw new common_1.ForbiddenException('Lab user management moved to admin panel. Use admin endpoints.');
     }
     async createUser(req, body) {
-        const labId = req.user?.labId;
-        if (!labId)
-            throw new Error('Lab ID not found in token');
-        return this.settingsService.createUser(labId, body);
+        throw new common_1.ForbiddenException('Lab user management moved to admin panel. Use admin endpoints.');
     }
     async updateUser(req, id, body) {
-        const labId = req.user?.labId;
-        if (!labId)
-            throw new Error('Lab ID not found in token');
-        return this.settingsService.updateUser(id, labId, body);
+        throw new common_1.ForbiddenException('Lab user management moved to admin panel. Use admin endpoints.');
     }
     async deleteUser(req, id) {
-        const labId = req.user?.labId;
-        const currentUserId = req.user?.userId;
-        if (!labId || !currentUserId)
-            throw new Error('User info not found in token');
-        await this.settingsService.deleteUser(id, labId, currentUserId);
-        return { success: true };
+        throw new common_1.ForbiddenException('Lab user management moved to admin panel. Use admin endpoints.');
     }
 };
 exports.SettingsController = SettingsController;

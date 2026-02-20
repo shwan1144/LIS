@@ -51,6 +51,8 @@ export declare class ReportsService implements OnModuleDestroy {
     getPublicResultStatus(orderId: string): Promise<PublicResultStatus>;
     generatePublicTestResultsPDF(orderId: string): Promise<Buffer>;
     generateOrderReceiptPDF(orderId: string, labId: string): Promise<Buffer>;
-    generateTestResultsPDF(orderId: string, labId: string): Promise<Buffer>;
+    generateTestResultsPDF(orderId: string, labId: string, options?: {
+        bypassPaymentCheck?: boolean;
+    }): Promise<Buffer>;
     private renderTestResultsFallbackPDF;
 }

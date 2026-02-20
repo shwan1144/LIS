@@ -7,6 +7,7 @@ import {
   OneToMany,
   ManyToOne,
   JoinColumn,
+  Index,
 } from 'typeorm';
 import { UserLabAssignment } from './user-lab-assignment.entity';
 import { UserShiftAssignment } from './user-shift-assignment.entity';
@@ -14,12 +15,19 @@ import { UserDepartmentAssignment } from './user-department-assignment.entity';
 import { Lab } from './lab.entity';
 
 @Entity('users')
+@Index('UQ_users_lab_username', ['labId', 'username'], {
+  unique: true,
+  where: '"labId" IS NOT NULL',
+})
 export class User {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @Column({ type: 'varchar', length: 64, unique: true })
+  @Column({ type: 'varchar', length: 64 })
   username: string;
+
+  @Column({ type: 'uuid', nullable: true })
+  labId: string | null;
 
   @Column({ type: 'varchar', length: 255 })
   passwordHash: string;
@@ -57,4 +65,8 @@ export class User {
   @ManyToOne(() => Lab, { nullable: true })
   @JoinColumn({ name: 'defaultLabId' })
   defaultLab: Lab | null;
+
+  @ManyToOne(() => Lab, { nullable: true })
+  @JoinColumn({ name: 'labId' })
+  lab: Lab | null;
 }

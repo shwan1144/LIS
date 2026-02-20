@@ -1,5 +1,6 @@
 import { Repository } from 'typeorm';
-import { AuditLog, AuditAction } from '../entities/audit-log.entity';
+import { AuditLog, AuditAction, AuditActorType } from '../entities/audit-log.entity';
+import { User } from '../entities/user.entity';
 export interface AuditLogParams {
     labId?: string;
     userId?: string;
@@ -13,6 +14,8 @@ export interface AuditLogParams {
     size?: number;
 }
 export interface CreateAuditLogDto {
+    actorType?: AuditActorType | null;
+    actorId?: string | null;
     labId?: string | null;
     userId?: string | null;
     action: AuditAction;
@@ -26,7 +29,8 @@ export interface CreateAuditLogDto {
 }
 export declare class AuditService {
     private readonly auditLogRepo;
-    constructor(auditLogRepo: Repository<AuditLog>);
+    private readonly userRepo;
+    constructor(auditLogRepo: Repository<AuditLog>, userRepo: Repository<User>);
     log(dto: CreateAuditLogDto): Promise<AuditLog>;
     findAll(labId: string, params: AuditLogParams): Promise<{
         items: AuditLog[];

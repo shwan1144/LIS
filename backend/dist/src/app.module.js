@@ -25,6 +25,10 @@ const audit_module_1 = require("./audit/audit.module");
 const instruments_module_1 = require("./instruments/instruments.module");
 const panels_module_1 = require("./panels/panels.module");
 const unmatched_module_1 = require("./unmatched/unmatched.module");
+const tenant_module_1 = require("./tenant/tenant.module");
+const admin_auth_module_1 = require("./admin-auth/admin-auth.module");
+const platform_admin_module_1 = require("./platform-admin/platform-admin.module");
+const lab_api_module_1 = require("./lab-api/lab-api.module");
 const entities_1 = require("./database/entities");
 const useDatabaseUrl = Boolean(process.env.DATABASE_URL);
 const shouldSynchronize = process.env.DB_SYNC === 'true' ||
@@ -68,6 +72,10 @@ exports.AppModule = AppModule = __decorate([
             instruments_module_1.InstrumentsModule,
             panels_module_1.PanelsModule,
             unmatched_module_1.UnmatchedModule,
+            tenant_module_1.TenantModule,
+            admin_auth_module_1.AdminAuthModule,
+            platform_admin_module_1.PlatformAdminModule,
+            lab_api_module_1.LabApiModule,
         ],
         controllers: [app_controller_1.AppController],
         providers: [app_service_1.AppService],

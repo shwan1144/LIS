@@ -13,6 +13,7 @@ exports.OrderTest = exports.ResultFlag = exports.OrderTestStatus = void 0;
 const typeorm_1 = require("typeorm");
 const sample_entity_1 = require("./sample.entity");
 const test_entity_1 = require("./test.entity");
+const lab_entity_1 = require("./lab.entity");
 var OrderTestStatus;
 (function (OrderTestStatus) {
     OrderTestStatus["PENDING"] = "PENDING";
@@ -36,6 +37,10 @@ __decorate([
     (0, typeorm_1.PrimaryGeneratedColumn)('uuid'),
     __metadata("design:type", String)
 ], OrderTest.prototype, "id", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ type: 'uuid', nullable: true }),
+    __metadata("design:type", Object)
+], OrderTest.prototype, "labId", void 0);
 __decorate([
     (0, typeorm_1.Column)({ type: 'uuid' }),
     __metadata("design:type", String)
@@ -117,6 +122,11 @@ __decorate([
     (0, typeorm_1.JoinColumn)({ name: 'sampleId' }),
     __metadata("design:type", sample_entity_1.Sample)
 ], OrderTest.prototype, "sample", void 0);
+__decorate([
+    (0, typeorm_1.ManyToOne)(() => lab_entity_1.Lab, { nullable: true, onDelete: 'CASCADE' }),
+    (0, typeorm_1.JoinColumn)({ name: 'labId' }),
+    __metadata("design:type", Object)
+], OrderTest.prototype, "lab", void 0);
 __decorate([
     (0, typeorm_1.ManyToOne)(() => test_entity_1.Test, { onDelete: 'RESTRICT' }),
     (0, typeorm_1.JoinColumn)({ name: 'testId' }),

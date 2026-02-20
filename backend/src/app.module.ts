@@ -16,6 +16,10 @@ import { AuditModule } from './audit/audit.module';
 import { InstrumentsModule } from './instruments/instruments.module';
 import { PanelsModule } from './panels/panels.module';
 import { UnmatchedModule } from './unmatched/unmatched.module';
+import { TenantModule } from './tenant/tenant.module';
+import { AdminAuthModule } from './admin-auth/admin-auth.module';
+import { PlatformAdminModule } from './platform-admin/platform-admin.module';
+import { LabApiModule } from './lab-api/lab-api.module';
 import { DATABASE_ENTITIES } from './database/entities';
 
 const useDatabaseUrl = Boolean(process.env.DATABASE_URL);
@@ -59,6 +63,10 @@ const typeOrmConfig = useDatabaseUrl
     InstrumentsModule,
     PanelsModule,
     UnmatchedModule,
+    TenantModule,
+    AdminAuthModule,
+    PlatformAdminModule,
+    LabApiModule,
   ],
   controllers: [AppController],
   providers: [AppService],

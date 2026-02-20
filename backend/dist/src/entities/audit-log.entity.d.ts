@@ -1,5 +1,9 @@
 import { User } from './user.entity';
 import { Lab } from './lab.entity';
+export declare enum AuditActorType {
+    LAB_USER = "LAB_USER",
+    PLATFORM_USER = "PLATFORM_USER"
+}
 export declare enum AuditAction {
     LOGIN = "LOGIN",
     LOGOUT = "LOGOUT",
@@ -26,10 +30,21 @@ export declare enum AuditAction {
     DEPARTMENT_UPDATE = "DEPARTMENT_UPDATE",
     DEPARTMENT_DELETE = "DEPARTMENT_DELETE",
     REPORT_GENERATE = "REPORT_GENERATE",
-    REPORT_PRINT = "REPORT_PRINT"
+    REPORT_PRINT = "REPORT_PRINT",
+    REPORT_EXPORT = "REPORT_EXPORT",
+    PLATFORM_LOGIN = "PLATFORM_LOGIN",
+    PLATFORM_LOGIN_FAILED = "PLATFORM_LOGIN_FAILED",
+    PLATFORM_LAB_CREATE = "PLATFORM_LAB_CREATE",
+    PLATFORM_LAB_UPDATE = "PLATFORM_LAB_UPDATE",
+    PLATFORM_LAB_STATUS_CHANGE = "PLATFORM_LAB_STATUS_CHANGE",
+    PLATFORM_SENSITIVE_READ = "PLATFORM_SENSITIVE_READ",
+    PLATFORM_IMPERSONATE_START = "PLATFORM_IMPERSONATE_START",
+    PLATFORM_IMPERSONATE_STOP = "PLATFORM_IMPERSONATE_STOP"
 }
 export declare class AuditLog {
     id: string;
+    actorType: AuditActorType | null;
+    actorId: string | null;
     labId: string | null;
     userId: string | null;
     action: AuditAction;

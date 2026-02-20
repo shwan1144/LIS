@@ -13,7 +13,12 @@ import { UnmatchedResultsService, ResolveUnmatchedDto } from './unmatched-result
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 
 interface RequestWithUser {
-  user: { userId: string; username: string; labId: string };
+  user: {
+    userId?: string | null;
+    platformUserId?: string | null;
+    username: string;
+    labId: string;
+  };
 }
 
 @Controller('unmatched-results')
@@ -63,8 +68,8 @@ export class UnmatchedResultsController {
     @Body() dto: ResolveUnmatchedDto,
   ) {
     const labId = req.user?.labId;
-    const userId = req.user?.userId;
-    if (!labId || !userId) throw new Error('Lab ID or User ID not found');
+    const userId = req.user?.userId ?? null;
+    if (!labId) throw new Error('Lab ID not found');
     return this.unmatchedService.resolve(id, labId, userId, dto);
   }
 }

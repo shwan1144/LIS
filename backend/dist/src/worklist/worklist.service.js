@@ -232,13 +232,13 @@ let WorklistService = class WorklistService {
         const isUpdate = orderTest.resultedAt !== null;
         orderTest.status = order_test_entity_1.OrderTestStatus.COMPLETED;
         orderTest.resultedAt = new Date();
-        orderTest.resultedBy = userId;
+        orderTest.resultedBy = userId ?? null;
         const saved = await this.orderTestRepo.save(orderTest);
         await this.panelStatusService.recomputeAfterChildUpdate(orderTest.id);
         await this.syncOrderStatus(orderTest.sample.orderId);
         await this.auditService.log({
             labId,
-            userId,
+            userId: userId ?? null,
             action: isUpdate ? audit_log_entity_1.AuditAction.RESULT_UPDATE : audit_log_entity_1.AuditAction.RESULT_ENTER,
             entityType: 'order_test',
             entityId: orderTestId,
@@ -270,13 +270,13 @@ let WorklistService = class WorklistService {
         }
         orderTest.status = order_test_entity_1.OrderTestStatus.VERIFIED;
         orderTest.verifiedAt = new Date();
-        orderTest.verifiedBy = userId;
+        orderTest.verifiedBy = userId ?? null;
         const saved = await this.orderTestRepo.save(orderTest);
         await this.panelStatusService.recomputeAfterChildUpdate(orderTest.id);
         await this.syncOrderStatus(orderTest.sample.orderId);
         await this.auditService.log({
             labId,
-            userId,
+            userId: userId ?? null,
             action: audit_log_entity_1.AuditAction.RESULT_VERIFY,
             entityType: 'order_test',
             entityId: orderTestId,
@@ -321,13 +321,13 @@ let WorklistService = class WorklistService {
         orderTest.status = order_test_entity_1.OrderTestStatus.REJECTED;
         orderTest.rejectionReason = reason;
         orderTest.verifiedAt = new Date();
-        orderTest.verifiedBy = userId;
+        orderTest.verifiedBy = userId ?? null;
         const saved = await this.orderTestRepo.save(orderTest);
         await this.panelStatusService.recomputeAfterChildUpdate(orderTest.id);
         await this.syncOrderStatus(orderTest.sample.orderId);
         await this.auditService.log({
             labId,
-            userId,
+            userId: userId ?? null,
             action: audit_log_entity_1.AuditAction.RESULT_REJECT,
             entityType: 'order_test',
             entityId: orderTestId,

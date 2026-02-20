@@ -10,6 +10,7 @@ import {
 } from 'typeorm';
 import { Sample } from './sample.entity';
 import { Test } from './test.entity';
+import { Lab } from './lab.entity';
 
 export enum OrderTestStatus {
   PENDING = 'PENDING',
@@ -31,6 +32,9 @@ export enum ResultFlag {
 export class OrderTest {
   @PrimaryGeneratedColumn('uuid')
   id: string;
+
+  @Column({ type: 'uuid', nullable: true })
+  labId: string | null;
 
   @Column({ type: 'uuid' })
   sampleId: string;
@@ -97,6 +101,10 @@ export class OrderTest {
   @ManyToOne(() => Sample, (sample) => sample.orderTests, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'sampleId' })
   sample: Sample;
+
+  @ManyToOne(() => Lab, { nullable: true, onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'labId' })
+  lab: Lab | null;
 
   @ManyToOne(() => Test, { onDelete: 'RESTRICT' })
   @JoinColumn({ name: 'testId' })

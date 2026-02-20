@@ -12,6 +12,54 @@ const app_module_1 = require("./app.module");
 const seed_1 = require("./seed");
 const typeorm_1 = require("typeorm");
 const bootstrapLogger = new common_1.Logger('Bootstrap');
+const DEV_CORS_RULES = [
+    'http://localhost:*',
+    'http://127.0.0.1:*',
+    'http://*.localhost:*',
+    'https://localhost:*',
+    'https://127.0.0.1:*',
+    'https://*.localhost:*',
+];
+function normalizeOrigin(input) {
+    const trimmed = input.trim().replace(/\/+$/, '');
+    try {
+        const url = new URL(trimmed);
+        return `${url.protocol}//${url.host}`.toLowerCase();
+    }
+    catch {
+        return trimmed.toLowerCase();
+    }
+}
+function parseCorsRules() {
+    const raw = (process.env.CORS_ORIGIN || '').trim();
+    const baseRules = raw
+        .split(',')
+        .map((part) => part.trim())
+        .filter((part) => part.length > 0)
+        .map(normalizeOrigin);
+    if (baseRules.length === 0) {
+        baseRules.push('http://localhost:5173');
+    }
+    if (process.env.NODE_ENV !== 'production') {
+        for (const rule of DEV_CORS_RULES) {
+            baseRules.push(normalizeOrigin(rule));
+        }
+    }
+    return Array.from(new Set(baseRules));
+}
+function isOriginAllowed(origin, rules) {
+    const normalizedOrigin = normalizeOrigin(origin);
+    return rules.some((rule) => {
+        if (rule === '*')
+            return true;
+        if (!rule.includes('*'))
+            return normalizedOrigin === rule;
+        const escaped = rule
+            .replace(/[.+?^${}()|[\]\\]/g, '\\$&')
+            .replace(/\*/g, '.*');
+        return new RegExp(`^${escaped}$`, 'i').test(normalizedOrigin);
+    });
+}
 function shouldAutoSeedOnBoot() {
     if (process.env.AUTO_SEED_ON_BOOT === 'true') {
         return true;
@@ -49,8 +97,20 @@ async function bootstrap() {
         await (0, seed_1.runSeed)({ synchronizeSchema: false });
     }
     app.useGlobalPipes(new common_1.ValidationPipe({ whitelist: true, forbidNonWhitelisted: true }));
+    const corsRules = parseCorsRules();
+    bootstrapLogger.log(`CORS rules: ${corsRules.join(', ')}`);
     app.enableCors({
-        origin: process.env.CORS_ORIGIN || 'http://localhost:5173',
+        origin: (origin, callback) => {
+            if (!origin) {
+                callback(null, true);
+                return;
+            }
+            if (isOriginAllowed(origin, corsRules)) {
+                callback(null, true);
+                return;
+            }
+            callback(new Error(`Not allowed by CORS: ${origin}`));
+        },
         credentials: true,
     });
     await app.listen(process.env.PORT ?? 3000);

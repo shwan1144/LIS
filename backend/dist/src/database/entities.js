@@ -2,6 +2,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.DATABASE_ENTITIES = void 0;
 const audit_log_entity_1 = require("../entities/audit-log.entity");
+const admin_lab_portal_token_entity_1 = require("../entities/admin-lab-portal-token.entity");
 const department_entity_1 = require("../entities/department.entity");
 const instrument_entity_1 = require("../entities/instrument.entity");
 const lab_orders_worklist_entity_1 = require("../entities/lab-orders-worklist.entity");
@@ -11,6 +12,9 @@ const order_test_entity_1 = require("../entities/order-test.entity");
 const order_entity_1 = require("../entities/order.entity");
 const patient_entity_1 = require("../entities/patient.entity");
 const pricing_entity_1 = require("../entities/pricing.entity");
+const platform_user_entity_1 = require("../entities/platform-user.entity");
+const refresh_token_entity_1 = require("../entities/refresh-token.entity");
+const result_entity_1 = require("../entities/result.entity");
 const sample_entity_1 = require("../entities/sample.entity");
 const shift_entity_1 = require("../entities/shift.entity");
 const test_component_entity_1 = require("../entities/test-component.entity");
@@ -21,6 +25,7 @@ const user_lab_assignment_entity_1 = require("../entities/user-lab-assignment.en
 const user_shift_assignment_entity_1 = require("../entities/user-shift-assignment.entity");
 const user_entity_1 = require("../entities/user.entity");
 exports.DATABASE_ENTITIES = [
+    admin_lab_portal_token_entity_1.AdminLabPortalToken,
     lab_entity_1.Lab,
     shift_entity_1.Shift,
     user_entity_1.User,
@@ -34,6 +39,9 @@ exports.DATABASE_ENTITIES = [
     order_test_entity_1.OrderTest,
     test_entity_1.Test,
     pricing_entity_1.Pricing,
+    platform_user_entity_1.PlatformUser,
+    refresh_token_entity_1.RefreshToken,
+    result_entity_1.Result,
     audit_log_entity_1.AuditLog,
     instrument_entity_1.Instrument,
     instrument_entity_1.InstrumentTestMapping,

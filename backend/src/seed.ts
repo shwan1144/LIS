@@ -7,7 +7,6 @@ import { join } from 'path';
 
 config({ path: join(__dirname, '..', '.env') });
 
-import * as bcrypt from 'bcrypt';
 import { DataSource, IsNull } from 'typeorm';
 import { DATABASE_ENTITIES } from './database/entities';
 import { Lab } from './entities/lab.entity';
@@ -17,6 +16,8 @@ import { UserLabAssignment } from './entities/user-lab-assignment.entity';
 import { Test, TestType } from './entities/test.entity';
 import { Pricing } from './entities/pricing.entity';
 import { PatientType } from './entities/order.entity';
+import { hashPassword } from './auth/password.util';
+import { PlatformUser, PlatformUserRole } from './entities/platform-user.entity';
 
 type RunSeedOptions = {
   synchronizeSchema?: boolean;
@@ -58,17 +59,32 @@ export async function runSeed(options: RunSeedOptions = {}) {
     const shiftRepo = dataSource.getRepository(Shift);
     const userRepo = dataSource.getRepository(User);
     const assignmentRepo = dataSource.getRepository(UserLabAssignment);
+    const platformUserRepo = dataSource.getRepository(PlatformUser);
+
+    const isProduction = process.env.NODE_ENV === 'production';
+    const platformSeedEmail = (
+      process.env.PLATFORM_SEED_EMAIL ||
+      (isProduction ? '' : 'superadmin@lis.local')
+    )
+      .trim()
+      .toLowerCase();
+    const platformSeedPassword =
+      process.env.PLATFORM_SEED_PASSWORD || (isProduction ? '' : 'password');
 
     let lab = await labRepo.findOne({ where: { code: 'LAB01' } });
     if (!lab) {
       lab = labRepo.create({
         code: 'LAB01',
+        subdomain: 'lab01',
         name: 'Main Lab',
         timezone: 'UTC',
         isActive: true,
       });
       await labRepo.save(lab);
       console.log('Created lab:', lab.name);
+    } else if (!lab.subdomain) {
+      lab.subdomain = 'lab01';
+      await labRepo.save(lab);
     }
 
     let shift = await shiftRepo.findOne({
@@ -91,11 +107,12 @@ export async function runSeed(options: RunSeedOptions = {}) {
       await shiftRepo.save(shift);
     }
 
-    let user = await userRepo.findOne({ where: { username: 'admin' } });
+    let user = await userRepo.findOne({ where: { username: 'admin', labId: lab.id } });
     if (!user) {
-      const passwordHash = await bcrypt.hash('password', 10);
+      const passwordHash = await hashPassword('password');
       user = userRepo.create({
         username: 'admin',
+        labId: lab.id,
         passwordHash,
         fullName: 'Lab Admin',
         role: 'LAB_ADMIN',
@@ -115,6 +132,27 @@ export async function runSeed(options: RunSeedOptions = {}) {
         labId: lab.id,
       });
       console.log('Assigned admin to Main Lab');
+    }
+
+    if (platformSeedEmail && platformSeedPassword) {
+      let platformUser = await platformUserRepo.findOne({
+        where: { email: platformSeedEmail },
+      });
+      if (!platformUser) {
+        const passwordHash = await hashPassword(platformSeedPassword);
+        platformUser = platformUserRepo.create({
+          email: platformSeedEmail,
+          passwordHash,
+          role: PlatformUserRole.SUPER_ADMIN,
+          isActive: true,
+        });
+        await platformUserRepo.save(platformUser);
+        console.log(`Created platform admin: ${platformSeedEmail} / ${platformSeedPassword}`);
+      }
+    } else {
+      console.log(
+        'Skipped platform admin seed (set PLATFORM_SEED_EMAIL and PLATFORM_SEED_PASSWORD to create one).',
+      );
     }
 
     // Seed Tests

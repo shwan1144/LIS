@@ -627,11 +627,15 @@ export class ReportsService implements OnModuleDestroy {
     });
   }
 
-  async generateTestResultsPDF(orderId: string, labId: string): Promise<Buffer> {
+  async generateTestResultsPDF(
+    orderId: string,
+    labId: string,
+    options?: { bypassPaymentCheck?: boolean },
+  ): Promise<Buffer> {
     const { order, reportableOrderTests, verifiedTests, latestVerifiedAt } =
       await this.loadOrderResultsSnapshot(orderId, labId);
 
-    if (order.paymentStatus !== 'paid') {
+    if (!options?.bypassPaymentCheck && order.paymentStatus !== 'paid') {
       throw new ForbiddenException(
         'Order is unpaid or partially paid. Complete payment to download or print results.',
       );

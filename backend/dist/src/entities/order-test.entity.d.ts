@@ -1,5 +1,6 @@
 import { Sample } from './sample.entity';
 import { Test } from './test.entity';
+import { Lab } from './lab.entity';
 export declare enum OrderTestStatus {
     PENDING = "PENDING",
     IN_PROGRESS = "IN_PROGRESS",
@@ -16,6 +17,7 @@ export declare enum ResultFlag {
 }
 export declare class OrderTest {
     id: string;
+    labId: string | null;
     sampleId: string;
     testId: string;
     parentOrderTestId: string | null;
@@ -34,6 +36,7 @@ export declare class OrderTest {
     createdAt: Date;
     updatedAt: Date;
     sample: Sample;
+    lab: Lab | null;
     test: Test;
     parentOrderTest: OrderTest | null;
     childOrderTests: OrderTest[];

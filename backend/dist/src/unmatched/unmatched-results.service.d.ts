@@ -42,7 +42,7 @@ export declare class UnmatchedResultsService {
         total: number;
     }>;
     findOne(id: string, labId: string): Promise<UnmatchedInstrumentResult>;
-    resolve(id: string, labId: string, userId: string, dto: ResolveUnmatchedDto): Promise<UnmatchedInstrumentResult>;
+    resolve(id: string, labId: string, userId: string | null, dto: ResolveUnmatchedDto): Promise<UnmatchedInstrumentResult>;
     getStats(labId: string): Promise<{
         pending: number;
         resolved: number;

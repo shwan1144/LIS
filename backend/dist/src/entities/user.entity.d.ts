@@ -5,6 +5,7 @@ import { Lab } from './lab.entity';
 export declare class User {
     id: string;
     username: string;
+    labId: string | null;
     passwordHash: string;
     fullName: string | null;
     email: string | null;
@@ -17,4 +18,5 @@ export declare class User {
     shiftAssignments: UserShiftAssignment[];
     departmentAssignments: UserDepartmentAssignment[];
     defaultLab: Lab | null;
+    lab: Lab | null;
 }

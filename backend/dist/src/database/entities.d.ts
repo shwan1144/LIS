@@ -1,4 +1,5 @@
 import { AuditLog } from '../entities/audit-log.entity';
+import { AdminLabPortalToken } from '../entities/admin-lab-portal-token.entity';
 import { Department } from '../entities/department.entity';
 import { InstrumentMessage, InstrumentTestMapping } from '../entities/instrument.entity';
 import { LabOrdersWorklist } from '../entities/lab-orders-worklist.entity';
@@ -8,6 +9,9 @@ import { OrderTest } from '../entities/order-test.entity';
 import { Order } from '../entities/order.entity';
 import { Patient } from '../entities/patient.entity';
 import { Pricing } from '../entities/pricing.entity';
+import { PlatformUser } from '../entities/platform-user.entity';
+import { RefreshToken } from '../entities/refresh-token.entity';
+import { Result } from '../entities/result.entity';
 import { Sample } from '../entities/sample.entity';
 import { Shift } from '../entities/shift.entity';
 import { TestComponent } from '../entities/test-component.entity';
@@ -17,4 +21,4 @@ import { UserDepartmentAssignment } from '../entities/user-department-assignment
 import { UserLabAssignment } from '../entities/user-lab-assignment.entity';
 import { UserShiftAssignment } from '../entities/user-shift-assignment.entity';
 import { User } from '../entities/user.entity';
-export declare const DATABASE_ENTITIES: (typeof UserShiftAssignment | typeof User | typeof Shift | typeof Lab | typeof Department | typeof UserLabAssignment | typeof UserDepartmentAssignment | typeof AuditLog | typeof Patient | typeof Order | typeof Sample | typeof OrderTest | typeof Test | typeof Pricing | typeof TestComponent | typeof LabOrdersWorklist | typeof InstrumentTestMapping | typeof InstrumentMessage | typeof UnmatchedInstrumentResult | typeof OrderTestResultHistory)[];
+export declare const DATABASE_ENTITIES: (typeof UserShiftAssignment | typeof User | typeof Shift | typeof Lab | typeof Department | typeof UserLabAssignment | typeof UserDepartmentAssignment | typeof RefreshToken | typeof AuditLog | typeof PlatformUser | typeof AdminLabPortalToken | typeof Patient | typeof Order | typeof Sample | typeof OrderTest | typeof Test | typeof Pricing | typeof TestComponent | typeof LabOrdersWorklist | typeof InstrumentTestMapping | typeof InstrumentMessage | typeof UnmatchedInstrumentResult | typeof OrderTestResultHistory | typeof Result)[];

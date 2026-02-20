@@ -46,9 +46,9 @@ let UnmatchedResultsController = class UnmatchedResultsController {
     }
     async resolve(req, id, dto) {
         const labId = req.user?.labId;
-        const userId = req.user?.userId;
-        if (!labId || !userId)
-            throw new Error('Lab ID or User ID not found');
+        const userId = req.user?.userId ?? null;
+        if (!labId)
+            throw new Error('Lab ID not found');
         return this.unmatchedService.resolve(id, labId, userId, dto);
     }
 };

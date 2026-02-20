@@ -38,7 +38,7 @@ let WorklistController = class WorklistController {
             departmentId,
             page: page ? parseInt(page, 10) : undefined,
             size: size ? parseInt(size, 10) : undefined,
-        }, userId);
+        }, userId ?? undefined);
     }
     async getStats(req) {
         const labId = req.user?.labId;
@@ -49,33 +49,33 @@ let WorklistController = class WorklistController {
     }
     async enterResult(req, id, body) {
         const labId = req.user?.labId;
-        const userId = req.user?.userId;
-        if (!labId || !userId) {
-            throw new Error('User info not found in token');
+        const userId = req.user?.userId ?? null;
+        if (!labId) {
+            throw new Error('Lab ID not found in token');
         }
         return this.worklistService.enterResult(id, labId, userId, body);
     }
     async verifyResult(req, id) {
         const labId = req.user?.labId;
-        const userId = req.user?.userId;
-        if (!labId || !userId) {
-            throw new Error('User info not found in token');
+        const userId = req.user?.userId ?? null;
+        if (!labId) {
+            throw new Error('Lab ID not found in token');
         }
         return this.worklistService.verifyResult(id, labId, userId);
     }
     async verifyMultiple(req, body) {
         const labId = req.user?.labId;
-        const userId = req.user?.userId;
-        if (!labId || !userId) {
-            throw new Error('User info not found in token');
+        const userId = req.user?.userId ?? null;
+        if (!labId) {
+            throw new Error('Lab ID not found in token');
         }
         return this.worklistService.verifyMultiple(body.ids, labId, userId);
     }
     async rejectResult(req, id, body) {
         const labId = req.user?.labId;
-        const userId = req.user?.userId;
-        if (!labId || !userId) {
-            throw new Error('User info not found in token');
+        const userId = req.user?.userId ?? null;
+        if (!labId) {
+            throw new Error('Lab ID not found in token');
         }
         return this.worklistService.rejectResult(id, labId, userId, body.reason);
     }

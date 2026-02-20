@@ -16,7 +16,6 @@ exports.SettingsService = void 0;
 const common_1 = require("@nestjs/common");
 const typeorm_1 = require("@nestjs/typeorm");
 const typeorm_2 = require("typeorm");
-const bcrypt = require("bcrypt");
 const user_entity_1 = require("../entities/user.entity");
 const user_lab_assignment_entity_1 = require("../entities/user-lab-assignment.entity");
 const user_shift_assignment_entity_1 = require("../entities/user-shift-assignment.entity");
@@ -24,6 +23,7 @@ const user_department_assignment_entity_1 = require("../entities/user-department
 const department_entity_1 = require("../entities/department.entity");
 const lab_entity_1 = require("../entities/lab.entity");
 const shift_entity_1 = require("../entities/shift.entity");
+const password_util_1 = require("../auth/password.util");
 const ROLES = ['SUPER_ADMIN', 'LAB_ADMIN', 'RECEPTION', 'TECHNICIAN', 'VERIFIER', 'DOCTOR', 'INSTRUMENT_SERVICE'];
 const MAX_REPORT_IMAGE_DATA_URL_LENGTH = 4 * 1024 * 1024;
 const REPORT_IMAGE_DATA_URL_PATTERN = /^data:image\/(png|jpeg|jpg|webp);base64,[a-zA-Z0-9+/=]+$/;
@@ -157,6 +157,18 @@ let SettingsService = class SettingsService {
         const users = assignments.map((a) => a.user);
         return users;
     }
+    async getShiftsForLab(labId) {
+        return this.shiftRepo.find({
+            where: { labId },
+            order: { code: 'ASC' },
+        });
+    }
+    async getDepartmentsForLab(labId) {
+        return this.departmentRepo.find({
+            where: { labId },
+            order: { code: 'ASC' },
+        });
+    }
     async getUserWithDetails(id, labId) {
         const user = await this.userRepo.findOne({
             where: { id },
@@ -185,14 +197,17 @@ let SettingsService = class SettingsService {
         };
     }
     async createUser(labId, data) {
-        const existing = await this.userRepo.findOne({ where: { username: data.username.trim() } });
+        const existing = await this.userRepo.findOne({
+            where: { username: data.username.trim(), labId },
+        });
         if (existing)
             throw new common_1.ConflictException('Username already exists');
         if (!ROLES.includes(data.role))
             throw new common_1.BadRequestException('Invalid role');
-        const passwordHash = await bcrypt.hash(data.password, 10);
+        const passwordHash = await (0, password_util_1.hashPassword)(data.password);
         const user = this.userRepo.create({
             username: data.username.trim(),
+            labId,
             passwordHash,
             fullName: data.fullName?.trim() || null,
             email: data.email?.trim() || null,
@@ -241,7 +256,7 @@ let SettingsService = class SettingsService {
         if (data.isActive !== undefined)
             user.isActive = data.isActive;
         if (data.password?.trim()) {
-            user.passwordHash = await bcrypt.hash(data.password.trim(), 10);
+            user.passwordHash = await (0, password_util_1.hashPassword)(data.password.trim());
         }
         await this.userRepo.save(user);
         if (data.shiftIds !== undefined) {

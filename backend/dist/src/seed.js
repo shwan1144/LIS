@@ -4,7 +4,6 @@ exports.runSeed = runSeed;
 const dotenv_1 = require("dotenv");
 const path_1 = require("path");
 (0, dotenv_1.config)({ path: (0, path_1.join)(__dirname, '..', '.env') });
-const bcrypt = require("bcrypt");
 const typeorm_1 = require("typeorm");
 const entities_1 = require("./database/entities");
 const lab_entity_1 = require("./entities/lab.entity");
@@ -14,6 +13,8 @@ const user_lab_assignment_entity_1 = require("./entities/user-lab-assignment.ent
 const test_entity_1 = require("./entities/test.entity");
 const pricing_entity_1 = require("./entities/pricing.entity");
 const order_entity_1 = require("./entities/order.entity");
+const password_util_1 = require("./auth/password.util");
+const platform_user_entity_1 = require("./entities/platform-user.entity");
 function createSeedDataSource(options = {}) {
     const shouldSynchronize = options.synchronizeSchema ??
         (process.env.SEED_SYNC === 'true' ||
@@ -45,16 +46,28 @@ async function runSeed(options = {}) {
         const shiftRepo = dataSource.getRepository(shift_entity_1.Shift);
         const userRepo = dataSource.getRepository(user_entity_1.User);
         const assignmentRepo = dataSource.getRepository(user_lab_assignment_entity_1.UserLabAssignment);
+        const platformUserRepo = dataSource.getRepository(platform_user_entity_1.PlatformUser);
+        const isProduction = process.env.NODE_ENV === 'production';
+        const platformSeedEmail = (process.env.PLATFORM_SEED_EMAIL ||
+            (isProduction ? '' : 'superadmin@lis.local'))
+            .trim()
+            .toLowerCase();
+        const platformSeedPassword = process.env.PLATFORM_SEED_PASSWORD || (isProduction ? '' : 'password');
         let lab = await labRepo.findOne({ where: { code: 'LAB01' } });
         if (!lab) {
             lab = labRepo.create({
                 code: 'LAB01',
+                subdomain: 'lab01',
                 name: 'Main Lab',
                 timezone: 'UTC',
                 isActive: true,
             });
             await labRepo.save(lab);
             console.log('Created lab:', lab.name);
+        }
+        else if (!lab.subdomain) {
+            lab.subdomain = 'lab01';
+            await labRepo.save(lab);
         }
         let shift = await shiftRepo.findOne({
             where: { labId: lab.id, code: 'DAY' },
@@ -76,11 +89,12 @@ async function runSeed(options = {}) {
             shift.endTime = '14:00';
             await shiftRepo.save(shift);
         }
-        let user = await userRepo.findOne({ where: { username: 'admin' } });
+        let user = await userRepo.findOne({ where: { username: 'admin', labId: lab.id } });
         if (!user) {
-            const passwordHash = await bcrypt.hash('password', 10);
+            const passwordHash = await (0, password_util_1.hashPassword)('password');
             user = userRepo.create({
                 username: 'admin',
+                labId: lab.id,
                 passwordHash,
                 fullName: 'Lab Admin',
                 role: 'LAB_ADMIN',
@@ -99,6 +113,25 @@ async function runSeed(options = {}) {
                 labId: lab.id,
             });
             console.log('Assigned admin to Main Lab');
+        }
+        if (platformSeedEmail && platformSeedPassword) {
+            let platformUser = await platformUserRepo.findOne({
+                where: { email: platformSeedEmail },
+            });
+            if (!platformUser) {
+                const passwordHash = await (0, password_util_1.hashPassword)(platformSeedPassword);
+                platformUser = platformUserRepo.create({
+                    email: platformSeedEmail,
+                    passwordHash,
+                    role: platform_user_entity_1.PlatformUserRole.SUPER_ADMIN,
+                    isActive: true,
+                });
+                await platformUserRepo.save(platformUser);
+                console.log(`Created platform admin: ${platformSeedEmail} / ${platformSeedPassword}`);
+            }
+        }
+        else {
+            console.log('Skipped platform admin seed (set PLATFORM_SEED_EMAIL and PLATFORM_SEED_PASSWORD to create one).');
         }
         const testRepo = dataSource.getRepository(test_entity_1.Test);
         const tests = [

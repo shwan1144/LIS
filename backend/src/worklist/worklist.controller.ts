@@ -15,7 +15,12 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { OrderTestStatus } from '../entities/order-test.entity';
 
 interface RequestWithUser {
-  user: { userId: string; username: string; labId: string };
+  user: {
+    userId?: string | null;
+    platformUserId?: string | null;
+    username: string;
+    labId: string;
+  };
 }
 
 @Controller('worklist')
@@ -57,7 +62,7 @@ export class WorklistController {
         page: page ? parseInt(page, 10) : undefined,
         size: size ? parseInt(size, 10) : undefined,
       },
-      userId,
+      userId ?? undefined,
     );
   }
 
@@ -83,9 +88,9 @@ export class WorklistController {
     },
   ) {
     const labId = req.user?.labId;
-    const userId = req.user?.userId;
-    if (!labId || !userId) {
-      throw new Error('User info not found in token');
+    const userId = req.user?.userId ?? null;
+    if (!labId) {
+      throw new Error('Lab ID not found in token');
     }
     return this.worklistService.enterResult(id, labId, userId, body);
   }
@@ -96,9 +101,9 @@ export class WorklistController {
     @Param('id', ParseUUIDPipe) id: string,
   ) {
     const labId = req.user?.labId;
-    const userId = req.user?.userId;
-    if (!labId || !userId) {
-      throw new Error('User info not found in token');
+    const userId = req.user?.userId ?? null;
+    if (!labId) {
+      throw new Error('Lab ID not found in token');
     }
     return this.worklistService.verifyResult(id, labId, userId);
   }
@@ -109,9 +114,9 @@ export class WorklistController {
     @Body() body: { ids: string[] },
   ) {
     const labId = req.user?.labId;
-    const userId = req.user?.userId;
-    if (!labId || !userId) {
-      throw new Error('User info not found in token');
+    const userId = req.user?.userId ?? null;
+    if (!labId) {
+      throw new Error('Lab ID not found in token');
     }
     return this.worklistService.verifyMultiple(body.ids, labId, userId);
   }
@@ -123,9 +128,9 @@ export class WorklistController {
     @Body() body: { reason: string },
   ) {
     const labId = req.user?.labId;
-    const userId = req.user?.userId;
-    if (!labId || !userId) {
-      throw new Error('User info not found in token');
+    const userId = req.user?.userId ?? null;
+    if (!labId) {
+      throw new Error('Lab ID not found in token');
     }
     return this.worklistService.rejectResult(id, labId, userId, body.reason);
   }

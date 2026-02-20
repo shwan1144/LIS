@@ -23,9 +23,13 @@ __decorate([
     __metadata("design:type", String)
 ], User.prototype, "id", void 0);
 __decorate([
-    (0, typeorm_1.Column)({ type: 'varchar', length: 64, unique: true }),
+    (0, typeorm_1.Column)({ type: 'varchar', length: 64 }),
     __metadata("design:type", String)
 ], User.prototype, "username", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ type: 'uuid', nullable: true }),
+    __metadata("design:type", Object)
+], User.prototype, "labId", void 0);
 __decorate([
     (0, typeorm_1.Column)({ type: 'varchar', length: 255 }),
     __metadata("design:type", String)
@@ -75,7 +79,16 @@ __decorate([
     (0, typeorm_1.JoinColumn)({ name: 'defaultLabId' }),
     __metadata("design:type", Object)
 ], User.prototype, "defaultLab", void 0);
+__decorate([
+    (0, typeorm_1.ManyToOne)(() => lab_entity_1.Lab, { nullable: true }),
+    (0, typeorm_1.JoinColumn)({ name: 'labId' }),
+    __metadata("design:type", Object)
+], User.prototype, "lab", void 0);
 exports.User = User = __decorate([
-    (0, typeorm_1.Entity)('users')
+    (0, typeorm_1.Entity)('users'),
+    (0, typeorm_1.Index)('UQ_users_lab_username', ['labId', 'username'], {
+        unique: true,
+        where: '"labId" IS NOT NULL',
+    })
 ], User);
 //# sourceMappingURL=user.entity.js.map

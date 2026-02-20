@@ -18,6 +18,9 @@ export class Lab {
   @Column({ type: 'varchar', length: 32, unique: true })
   code: string;
 
+  @Column({ type: 'varchar', length: 63, unique: true, nullable: true })
+  subdomain: string | null;
+
   @Column({ type: 'varchar', length: 255 })
   name: string;
 

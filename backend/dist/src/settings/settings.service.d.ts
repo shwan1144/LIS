@@ -64,6 +64,8 @@ export declare class SettingsService {
     private normalizeReportImageDataUrl;
     private normalizeOnlineResultWatermarkText;
     getUsersForLab(labId: string): Promise<User[]>;
+    getShiftsForLab(labId: string): Promise<Shift[]>;
+    getDepartmentsForLab(labId: string): Promise<Department[]>;
     getUserWithDetails(id: string, labId: string): Promise<{
         user: User;
         labIds: string[];

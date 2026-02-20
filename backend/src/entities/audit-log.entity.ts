@@ -10,6 +10,11 @@ import {
 import { User } from './user.entity';
 import { Lab } from './lab.entity';
 
+export enum AuditActorType {
+  LAB_USER = 'LAB_USER',
+  PLATFORM_USER = 'PLATFORM_USER',
+}
+
 export enum AuditAction {
   // Auth
   LOGIN = 'LOGIN',
@@ -52,6 +57,17 @@ export enum AuditAction {
   // Report
   REPORT_GENERATE = 'REPORT_GENERATE',
   REPORT_PRINT = 'REPORT_PRINT',
+  REPORT_EXPORT = 'REPORT_EXPORT',
+
+  // Platform admin
+  PLATFORM_LOGIN = 'PLATFORM_LOGIN',
+  PLATFORM_LOGIN_FAILED = 'PLATFORM_LOGIN_FAILED',
+  PLATFORM_LAB_CREATE = 'PLATFORM_LAB_CREATE',
+  PLATFORM_LAB_UPDATE = 'PLATFORM_LAB_UPDATE',
+  PLATFORM_LAB_STATUS_CHANGE = 'PLATFORM_LAB_STATUS_CHANGE',
+  PLATFORM_SENSITIVE_READ = 'PLATFORM_SENSITIVE_READ',
+  PLATFORM_IMPERSONATE_START = 'PLATFORM_IMPERSONATE_START',
+  PLATFORM_IMPERSONATE_STOP = 'PLATFORM_IMPERSONATE_STOP',
 }
 
 @Entity('audit_logs')
@@ -62,6 +78,16 @@ export enum AuditAction {
 export class AuditLog {
   @PrimaryGeneratedColumn('uuid')
   id: string;
+
+  @Column({
+    type: 'enum',
+    enum: AuditActorType,
+    nullable: true,
+  })
+  actorType: AuditActorType | null;
+
+  @Column({ type: 'uuid', nullable: true })
+  actorId: string | null;
 
   @Column({ type: 'uuid', nullable: true })
   labId: string | null;

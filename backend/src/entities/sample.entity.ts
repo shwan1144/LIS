@@ -10,6 +10,7 @@ import {
 } from 'typeorm';
 import { Order } from './order.entity';
 import { OrderTest } from './order-test.entity';
+import { Lab } from './lab.entity';
 
 export enum TubeType {
   SERUM = 'SERUM',
@@ -25,6 +26,9 @@ export enum TubeType {
 export class Sample {
   @PrimaryGeneratedColumn('uuid')
   id: string;
+
+  @Column({ type: 'uuid', nullable: true })
+  labId: string | null;
 
   @Column({ type: 'uuid' })
   orderId: string;
@@ -64,6 +68,10 @@ export class Sample {
   @ManyToOne(() => Order, (order) => order.samples, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'orderId' })
   order: Order;
+
+  @ManyToOne(() => Lab, { nullable: true, onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'labId' })
+  lab: Lab | null;
 
   @OneToMany(() => OrderTest, (orderTest) => orderTest.sample, { cascade: true })
   orderTests: OrderTest[];

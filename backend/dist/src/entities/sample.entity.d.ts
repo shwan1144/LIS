@@ -1,5 +1,6 @@
 import { Order } from './order.entity';
 import { OrderTest } from './order-test.entity';
+import { Lab } from './lab.entity';
 export declare enum TubeType {
     SERUM = "SERUM",
     PLASMA = "PLASMA",
@@ -11,6 +12,7 @@ export declare enum TubeType {
 }
 export declare class Sample {
     id: string;
+    labId: string | null;
     orderId: string;
     sampleId: string | null;
     tubeType: TubeType | null;
@@ -22,5 +24,6 @@ export declare class Sample {
     createdAt: Date;
     updatedAt: Date;
     order: Order;
+    lab: Lab | null;
     orderTests: OrderTest[];
 }

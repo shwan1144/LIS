@@ -1,6 +1,7 @@
 import axios from 'axios';
+import { getCurrentAuthScope, resolveApiBaseUrl, type AuthScope } from '../utils/tenant-scope';
 
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+const API_BASE = resolveApiBaseUrl(import.meta.env.VITE_API_URL);
 
 export const api = axios.create({
   baseURL: API_BASE,
@@ -29,6 +30,7 @@ api.interceptors.response.use(
         localStorage.removeItem('accessToken');
         localStorage.removeItem('user');
         localStorage.removeItem('lab');
+        localStorage.removeItem('authScope');
         window.location.href = '/login';
       }
     }
@@ -36,8 +38,13 @@ api.interceptors.response.use(
   },
 );
 
-export interface LoginRequest {
+export interface LabLoginRequest {
   username: string;
+  password: string;
+}
+
+export interface PlatformLoginRequest {
+  email: string;
   password: string;
 }
 
@@ -70,11 +77,602 @@ export interface UserDto {
 export interface LoginResponse {
   accessToken: string;
   user: UserDto;
-  lab: LabDto;
+  lab: LabDto | null;
+  scope: AuthScope;
 }
 
-export async function login(data: LoginRequest): Promise<LoginResponse> {
+export interface PlatformUserDto {
+  id: string;
+  email: string;
+  role: string;
+}
+
+export interface PlatformLoginResponse {
+  accessToken: string;
+  platformUser: PlatformUserDto;
+}
+
+export async function loginLab(data: LabLoginRequest): Promise<LoginResponse> {
   const res = await api.post<LoginResponse>('/auth/login', data);
+  return { ...res.data, scope: 'LAB', lab: res.data.lab };
+}
+
+export async function loginLabViaBridgeToken(data: { token: string }): Promise<LoginResponse> {
+  const res = await api.post<LoginResponse>('/auth/portal-login', data);
+  return { ...res.data, scope: 'LAB', lab: res.data.lab };
+}
+
+export async function loginPlatform(data: PlatformLoginRequest): Promise<LoginResponse> {
+  const res = await api.post<PlatformLoginResponse>('/admin/auth/login', data);
+  return {
+    accessToken: res.data.accessToken,
+    scope: 'PLATFORM',
+    lab: null,
+    user: {
+      id: res.data.platformUser.id,
+      username: res.data.platformUser.email,
+      fullName: null,
+      role: res.data.platformUser.role,
+    },
+  };
+}
+
+export async function login(data: LabLoginRequest): Promise<LoginResponse> {
+  return getCurrentAuthScope() === 'PLATFORM'
+    ? loginPlatform({ email: data.username, password: data.password })
+    : loginLab(data);
+}
+
+export interface AdminLabDto {
+  id: string;
+  code: string;
+  name: string;
+  timezone: string;
+  subdomain: string | null;
+  isActive: boolean;
+  usersCount?: number;
+  orders30dCount?: number;
+  createdAt: string;
+}
+
+export interface AdminLabsResult {
+  items: AdminLabDto[];
+  total: number;
+  page: number;
+  size: number;
+  totalPages: number;
+}
+
+export interface CreateAdminLabRequest {
+  code: string;
+  name: string;
+  subdomain?: string;
+  timezone?: string;
+  isActive?: boolean;
+}
+
+export interface UpdateAdminLabRequest {
+  code?: string;
+  name?: string;
+  subdomain?: string;
+  timezone?: string;
+}
+
+export interface SetAdminLabStatusRequest {
+  isActive: boolean;
+  reason: string;
+}
+
+export interface AdminSummaryDto {
+  labsCount: number;
+  activeLabsCount: number;
+  totalPatientsCount: number;
+  ordersCount: number;
+  ordersTodayCount: number;
+  pendingResultsCount: number;
+  completedTodayCount: number;
+  dateRange: {
+    from: string;
+    to: string;
+  };
+  ordersTrend: Array<{
+    date: string;
+    ordersCount: number;
+  }>;
+  topTests: Array<{
+    testId: string;
+    testCode: string;
+    testName: string;
+    ordersCount: number;
+    verifiedCount: number;
+  }>;
+  ordersByLab: Array<{
+    labId: string;
+    labCode: string;
+    labName: string;
+    ordersCount: number;
+    totalTestsCount: number;
+    verifiedTestsCount: number;
+    pendingResultsCount: number;
+    completionRate: number;
+  }>;
+  alerts: {
+    inactiveLabs: Array<{
+      labId: string;
+      labCode: string;
+      labName: string;
+      lastOrderAt: string | null;
+      daysSinceLastOrder: number | null;
+    }>;
+    highPendingLabs: Array<{
+      labId: string;
+      labCode: string;
+      labName: string;
+      pendingResultsCount: number;
+      totalTestsCount: number;
+      pendingRate: number;
+    }>;
+    failedLoginsLast24h: {
+      totalCount: number;
+      platformCount: number;
+      labCount: number;
+      byLab: Array<{
+        labId: string;
+        labCode: string;
+        labName: string;
+        failedCount: number;
+      }>;
+    };
+  };
+}
+
+export interface AdminOrderListItem {
+  id: string;
+  labId: string;
+  labCode: string | null;
+  labName: string | null;
+  orderNumber: string | null;
+  status: 'REGISTERED' | 'COLLECTED' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED';
+  registeredAt: string;
+  patientId: string;
+  patientName: string | null;
+  patientPhone: string | null;
+  paymentStatus: string | null;
+  finalAmount: number | null;
+  testsCount: number;
+  verifiedTestsCount: number;
+  hasCriticalFlag: boolean;
+  barcode: string | null;
+}
+
+export interface AdminOrderTestDetail {
+  id: string;
+  status: 'PENDING' | 'IN_PROGRESS' | 'COMPLETED' | 'VERIFIED' | 'REJECTED';
+  flag: 'N' | 'H' | 'L' | 'HH' | 'LL' | null;
+  resultValue: number | null;
+  resultText: string | null;
+  verifiedAt: string | null;
+  test: {
+    id: string;
+    code: string;
+    name: string;
+    unit: string | null;
+  };
+}
+
+export interface AdminOrderSampleDetail {
+  id: string;
+  sampleId: string | null;
+  tubeType: string | null;
+  barcode: string | null;
+  collectedAt: string | null;
+  orderTests: AdminOrderTestDetail[];
+}
+
+export interface AdminOrderDetail {
+  id: string;
+  labId: string;
+  orderNumber: string | null;
+  status: 'REGISTERED' | 'COLLECTED' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED';
+  patientType: string;
+  notes: string | null;
+  paymentStatus: string;
+  paidAmount: number | null;
+  totalAmount: number;
+  finalAmount: number;
+  registeredAt: string;
+  createdAt: string;
+  updatedAt: string;
+  patient: {
+    id: string;
+    fullName: string;
+    phone: string | null;
+    nationalId: string | null;
+    sex: string | null;
+    dateOfBirth: string | null;
+  };
+  lab: {
+    id: string;
+    code: string;
+    name: string;
+    subdomain: string | null;
+  };
+  shift: { id: string; code: string; name: string | null } | null;
+  samples: AdminOrderSampleDetail[];
+  testsCount: number;
+  verifiedTestsCount: number;
+  completedTestsCount: number;
+  pendingTestsCount: number;
+  hasCriticalFlag: boolean;
+  lastVerifiedAt: string | null;
+}
+
+export interface AdminOrdersResult {
+  items: AdminOrderListItem[];
+  total: number;
+  page: number;
+  size: number;
+  totalPages: number;
+}
+
+export interface AdminAuditLogItem {
+  id: string;
+  actorType: 'LAB_USER' | 'PLATFORM_USER' | null;
+  actorId: string | null;
+  labId: string | null;
+  userId: string | null;
+  action: string;
+  entityType: string | null;
+  entityId: string | null;
+  oldValues: Record<string, unknown> | null;
+  newValues: Record<string, unknown> | null;
+  description: string | null;
+  ipAddress: string | null;
+  userAgent: string | null;
+  createdAt: string;
+  user: {
+    id: string;
+    username: string;
+    fullName: string | null;
+  } | null;
+  lab: {
+    id: string;
+    code: string;
+    name: string;
+    subdomain: string | null;
+  } | null;
+}
+
+export interface AdminAuditLogResult {
+  items: AdminAuditLogItem[];
+  total: number;
+  page: number;
+  size: number;
+  totalPages: number;
+}
+
+export interface AdminSystemHealthDto {
+  status: 'ok' | 'degraded';
+  checkedAt: string;
+  uptimeSeconds: number;
+  environment: string;
+  db: {
+    connected: boolean;
+    serverTime: string | null;
+    error: string | null;
+  };
+}
+
+export interface AdminPlatformSettingsOverviewDto {
+  branding: {
+    logoUploadEnabled: boolean;
+    themeColor: string;
+  };
+  securityPolicy: {
+    sessionTimeoutMinutes: number;
+    passwordMinLength: number;
+    requireStrongPassword: boolean;
+  };
+  mfa: {
+    mode: 'OPTIONAL' | 'REQUIRED';
+    enabledAccounts: number;
+    totalAccounts: number;
+  };
+}
+
+export interface AdminImpersonationStatusDto {
+  active: boolean;
+  labId: string | null;
+  lab: {
+    id: string;
+    code: string;
+    name: string;
+    subdomain: string | null;
+    isActive: boolean;
+  } | null;
+}
+
+export interface AdminImpersonationTokenResponse {
+  accessToken: string;
+  impersonation: AdminImpersonationStatusDto;
+}
+
+export interface AdminImpersonationOpenLabResponse {
+  bridgeToken: string;
+  expiresAt: string;
+  lab: {
+    id: string;
+    code: string;
+    name: string;
+    subdomain: string | null;
+  };
+}
+
+export async function getAdminLabs(): Promise<AdminLabDto[]> {
+  const res = await api.get<AdminLabDto[]>('/admin/api/labs');
+  return res.data;
+}
+
+export async function getAdminLabsPage(params: {
+  q?: string;
+  status?: 'all' | 'active' | 'disabled';
+  page?: number;
+  size?: number;
+}): Promise<AdminLabsResult> {
+  const res = await api.get<AdminLabsResult>('/admin/api/labs/list', { params });
+  return res.data;
+}
+
+export async function getAdminLab(labId: string): Promise<AdminLabDto> {
+  const res = await api.get<AdminLabDto>(`/admin/api/labs/${labId}`);
+  return res.data;
+}
+
+export async function getAdminSummary(params?: {
+  labId?: string;
+  dateFrom?: string;
+  dateTo?: string;
+}): Promise<AdminSummaryDto> {
+  const res = await api.get<AdminSummaryDto>('/admin/api/dashboard/summary', { params });
+  return res.data;
+}
+
+export async function createAdminLab(data: CreateAdminLabRequest): Promise<AdminLabDto> {
+  const res = await api.post<AdminLabDto>('/admin/api/labs', data);
+  return res.data;
+}
+
+export async function getAdminOrders(params: {
+  labId?: string;
+  status?: 'REGISTERED' | 'COLLECTED' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED';
+  q?: string;
+  dateFrom?: string;
+  dateTo?: string;
+  page?: number;
+  size?: number;
+}): Promise<AdminOrdersResult> {
+  const res = await api.get<AdminOrdersResult>('/admin/api/orders', { params });
+  return res.data;
+}
+
+export async function getAdminOrder(orderId: string): Promise<AdminOrderDetail> {
+  const res = await api.get<AdminOrderDetail>(`/admin/api/orders/${orderId}`);
+  return res.data;
+}
+
+export async function getAdminOrderResultsPdf(orderId: string): Promise<Blob> {
+  const res = await api.get<Blob>(`/admin/api/orders/${orderId}/results`, {
+    responseType: 'blob',
+  });
+  return res.data;
+}
+
+export async function getAdminAuditLogs(params: {
+  labId?: string;
+  actorType?: 'LAB_USER' | 'PLATFORM_USER';
+  action?: string;
+  entityType?: string;
+  search?: string;
+  dateFrom?: string;
+  dateTo?: string;
+  page?: number;
+  size?: number;
+}): Promise<AdminAuditLogResult> {
+  const res = await api.get<AdminAuditLogResult>('/admin/api/audit-logs', { params });
+  return res.data;
+}
+
+export async function getAdminAuditActions(): Promise<string[]> {
+  const res = await api.get<string[]>('/admin/api/audit-logs/actions');
+  return res.data;
+}
+
+export async function getAdminAuditEntityTypes(labId?: string): Promise<string[]> {
+  const res = await api.get<string[]>('/admin/api/audit-logs/entity-types', {
+    params: labId ? { labId } : undefined,
+  });
+  return res.data;
+}
+
+export async function exportAdminAuditLogsCsv(data: {
+  labId?: string;
+  actorType?: 'LAB_USER' | 'PLATFORM_USER';
+  action?: string;
+  entityType?: string;
+  search?: string;
+  dateFrom?: string;
+  dateTo?: string;
+  maxRows?: number;
+  reason: string;
+}): Promise<{ blob: Blob; fileName: string }> {
+  const res = await api.post<Blob>('/admin/api/audit-logs/export', data, {
+    responseType: 'blob',
+  });
+
+  const dispositionHeader = res.headers['content-disposition'] as string | undefined;
+  const fileNameMatch = dispositionHeader?.match(/filename="([^"]+)"/i);
+  const fileName = fileNameMatch?.[1] || 'audit-logs.csv';
+
+  return {
+    blob: res.data,
+    fileName,
+  };
+}
+
+export async function getAdminSystemHealth(): Promise<AdminSystemHealthDto> {
+  const res = await api.get<AdminSystemHealthDto>('/admin/api/system-health');
+  return res.data;
+}
+
+export async function getAdminPlatformSettingsOverview(): Promise<AdminPlatformSettingsOverviewDto> {
+  const res = await api.get<AdminPlatformSettingsOverviewDto>('/admin/api/settings/platform');
+  return res.data;
+}
+
+export async function getAdminImpersonationStatus(): Promise<AdminImpersonationStatusDto> {
+  const res = await api.get<AdminImpersonationStatusDto>('/admin/api/impersonation');
+  return res.data;
+}
+
+export async function startAdminImpersonation(data: {
+  labId: string;
+  reason: string;
+}): Promise<AdminImpersonationTokenResponse> {
+  const res = await api.post<AdminImpersonationTokenResponse>('/admin/api/impersonation/start', data);
+  return res.data;
+}
+
+export async function stopAdminImpersonation(): Promise<AdminImpersonationTokenResponse> {
+  const res = await api.post<AdminImpersonationTokenResponse>('/admin/api/impersonation/stop');
+  return res.data;
+}
+
+export async function createAdminImpersonationLabPortalToken(): Promise<AdminImpersonationOpenLabResponse> {
+  const res = await api.post<AdminImpersonationOpenLabResponse>('/admin/api/impersonation/open-lab');
+  return res.data;
+}
+
+export async function updateAdminLab(labId: string, data: UpdateAdminLabRequest): Promise<AdminLabDto> {
+  const res = await api.patch<AdminLabDto>(`/admin/api/labs/${labId}`, data);
+  return res.data;
+}
+
+export async function setAdminLabStatus(
+  labId: string,
+  data: SetAdminLabStatusRequest,
+): Promise<AdminLabDto> {
+  const res = await api.post<AdminLabDto>(`/admin/api/labs/${labId}/status`, data);
+  return res.data;
+}
+
+export async function getAdminSettingsRoles(): Promise<string[]> {
+  const res = await api.get<string[]>('/admin/api/settings/roles');
+  return res.data;
+}
+
+export async function getAdminLabSettings(labId: string): Promise<LabSettingsDto> {
+  const res = await api.get<LabSettingsDto>(`/admin/api/labs/${labId}/settings`);
+  return res.data;
+}
+
+export async function updateAdminLabSettings(
+  labId: string,
+  data: {
+    labelSequenceBy?: 'tube_type' | 'department';
+    sequenceResetBy?: 'day' | 'shift';
+    enableOnlineResults?: boolean;
+    onlineResultWatermarkDataUrl?: string | null;
+    onlineResultWatermarkText?: string | null;
+    reportBranding?: Partial<ReportBrandingDto>;
+  },
+): Promise<LabSettingsDto> {
+  const res = await api.patch<LabSettingsDto>(`/admin/api/labs/${labId}/settings`, data);
+  return res.data;
+}
+
+export async function getAdminLabUsers(labId: string): Promise<SettingsUserDto[]> {
+  const res = await api.get<SettingsUserDto[]>(`/admin/api/labs/${labId}/users`);
+  return res.data;
+}
+
+export async function getAdminLabUser(
+  labId: string,
+  userId: string,
+): Promise<{
+  user: SettingsUserDto;
+  labIds: string[];
+  shiftIds: string[];
+  departmentIds: string[];
+}> {
+  const res = await api.get<{
+    user: SettingsUserDto;
+    labIds: string[];
+    shiftIds: string[];
+    departmentIds: string[];
+  }>(`/admin/api/labs/${labId}/users/${userId}`);
+  return res.data;
+}
+
+export async function createAdminLabUser(
+  labId: string,
+  data: {
+    username: string;
+    password: string;
+    fullName?: string;
+    email?: string;
+    role: string;
+    shiftIds?: string[];
+    departmentIds?: string[];
+  },
+): Promise<SettingsUserDto> {
+  const res = await api.post<SettingsUserDto>(`/admin/api/labs/${labId}/users`, data);
+  return res.data;
+}
+
+export async function updateAdminLabUser(
+  labId: string,
+  userId: string,
+  data: {
+    fullName?: string;
+    email?: string;
+    role?: string;
+    defaultLabId?: string;
+    isActive?: boolean;
+    shiftIds?: string[];
+    departmentIds?: string[];
+    password?: string;
+  },
+): Promise<SettingsUserDto> {
+  const res = await api.patch<SettingsUserDto>(`/admin/api/labs/${labId}/users/${userId}`, data);
+  return res.data;
+}
+
+export async function deleteAdminLabUser(labId: string, userId: string): Promise<void> {
+  await api.delete(`/admin/api/labs/${labId}/users/${userId}`);
+}
+
+export async function resetAdminLabUserPassword(
+  labId: string,
+  userId: string,
+  data: {
+    password: string;
+    reason: string;
+  },
+): Promise<{ success: true }> {
+  const res = await api.post<{ success: true }>(
+    `/admin/api/labs/${labId}/users/${userId}/reset-password`,
+    data,
+  );
+  return res.data;
+}
+
+export async function getAdminLabShifts(labId: string): Promise<ShiftDto[]> {
+  const res = await api.get<ShiftDto[]>(`/admin/api/labs/${labId}/shifts`);
+  return res.data;
+}
+
+export async function getAdminLabDepartments(labId: string): Promise<DepartmentDto[]> {
+  const res = await api.get<DepartmentDto[]>(`/admin/api/labs/${labId}/departments`);
   return res.data;
 }
 

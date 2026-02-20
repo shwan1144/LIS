@@ -57,18 +57,18 @@ export declare class WorklistService {
         items: WorklistItem[];
         total: number;
     }>;
-    enterResult(orderTestId: string, labId: string, userId: string, data: {
+    enterResult(orderTestId: string, labId: string, userId: string | null, data: {
         resultValue?: number | null;
         resultText?: string | null;
         comments?: string | null;
         resultParameters?: Record<string, string> | null;
     }): Promise<OrderTest>;
-    verifyResult(orderTestId: string, labId: string, userId: string): Promise<OrderTest>;
-    verifyMultiple(orderTestIds: string[], labId: string, userId: string): Promise<{
+    verifyResult(orderTestId: string, labId: string, userId: string | null): Promise<OrderTest>;
+    verifyMultiple(orderTestIds: string[], labId: string, userId: string | null): Promise<{
         verified: number;
         failed: number;
     }>;
-    rejectResult(orderTestId: string, labId: string, userId: string, reason: string): Promise<OrderTest>;
+    rejectResult(orderTestId: string, labId: string, userId: string | null, reason: string): Promise<OrderTest>;
     private calculateFlag;
     getWorklistStats(labId: string): Promise<{
         pending: number;

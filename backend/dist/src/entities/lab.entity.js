@@ -26,6 +26,10 @@ __decorate([
     __metadata("design:type", String)
 ], Lab.prototype, "code", void 0);
 __decorate([
+    (0, typeorm_1.Column)({ type: 'varchar', length: 63, unique: true, nullable: true }),
+    __metadata("design:type", Object)
+], Lab.prototype, "subdomain", void 0);
+__decorate([
     (0, typeorm_1.Column)({ type: 'varchar', length: 255 }),
     __metadata("design:type", String)
 ], Lab.prototype, "name", void 0);

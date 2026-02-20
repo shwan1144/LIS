@@ -260,7 +260,7 @@ export class WorklistService {
   async enterResult(
     orderTestId: string,
     labId: string,
-    userId: string,
+    userId: string | null,
     data: {
       resultValue?: number | null;
       resultText?: string | null;
@@ -312,7 +312,7 @@ export class WorklistService {
     const isUpdate = orderTest.resultedAt !== null;
     orderTest.status = OrderTestStatus.COMPLETED;
     orderTest.resultedAt = new Date();
-    orderTest.resultedBy = userId;
+    orderTest.resultedBy = userId ?? null;
 
     const saved = await this.orderTestRepo.save(orderTest);
     await this.panelStatusService.recomputeAfterChildUpdate(orderTest.id);
@@ -321,7 +321,7 @@ export class WorklistService {
     // Audit log
     await this.auditService.log({
       labId,
-      userId,
+      userId: userId ?? null,
       action: isUpdate ? AuditAction.RESULT_UPDATE : AuditAction.RESULT_ENTER,
       entityType: 'order_test',
       entityId: orderTestId,
@@ -339,7 +339,7 @@ export class WorklistService {
   async verifyResult(
     orderTestId: string,
     labId: string,
-    userId: string,
+    userId: string | null,
   ): Promise<OrderTest> {
     const orderTest = await this.orderTestRepo.findOne({
       where: { id: orderTestId },
@@ -364,7 +364,7 @@ export class WorklistService {
 
     orderTest.status = OrderTestStatus.VERIFIED;
     orderTest.verifiedAt = new Date();
-    orderTest.verifiedBy = userId;
+    orderTest.verifiedBy = userId ?? null;
 
     const saved = await this.orderTestRepo.save(orderTest);
     await this.panelStatusService.recomputeAfterChildUpdate(orderTest.id);
@@ -373,7 +373,7 @@ export class WorklistService {
     // Audit log
     await this.auditService.log({
       labId,
-      userId,
+      userId: userId ?? null,
       action: AuditAction.RESULT_VERIFY,
       entityType: 'order_test',
       entityId: orderTestId,
@@ -392,7 +392,7 @@ export class WorklistService {
   async verifyMultiple(
     orderTestIds: string[],
     labId: string,
-    userId: string,
+    userId: string | null,
   ): Promise<{ verified: number; failed: number }> {
     let verified = 0;
     let failed = 0;
@@ -412,7 +412,7 @@ export class WorklistService {
   async rejectResult(
     orderTestId: string,
     labId: string,
-    userId: string,
+    userId: string | null,
     reason: string,
   ): Promise<OrderTest> {
     const orderTest = await this.orderTestRepo.findOne({
@@ -435,7 +435,7 @@ export class WorklistService {
     orderTest.status = OrderTestStatus.REJECTED;
     orderTest.rejectionReason = reason;
     orderTest.verifiedAt = new Date();
-    orderTest.verifiedBy = userId;
+    orderTest.verifiedBy = userId ?? null;
 
     const saved = await this.orderTestRepo.save(orderTest);
     await this.panelStatusService.recomputeAfterChildUpdate(orderTest.id);
@@ -444,7 +444,7 @@ export class WorklistService {
     // Audit log
     await this.auditService.log({
       labId,
-      userId,
+      userId: userId ?? null,
       action: AuditAction.RESULT_REJECT,
       entityType: 'order_test',
       entityId: orderTestId,

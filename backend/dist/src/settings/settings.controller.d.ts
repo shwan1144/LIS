@@ -10,7 +10,7 @@ interface RequestWithUser {
 export declare class SettingsController {
     private readonly settingsService;
     constructor(settingsService: SettingsService);
-    getRoles(): string[];
+    getRoles(): void;
     getLabSettings(req: RequestWithUser): Promise<{
         id: string;
         code: string;
@@ -55,13 +55,8 @@ export declare class SettingsController {
             watermarkDataUrl: string | null;
         };
     }>;
-    getUsers(req: RequestWithUser): Promise<import("../entities/user.entity").User[]>;
-    getUser(req: RequestWithUser, id: string): Promise<{
-        user: import("../entities/user.entity").User;
-        labIds: string[];
-        shiftIds: string[];
-        departmentIds: string[];
-    }>;
+    getUsers(req: RequestWithUser): Promise<void>;
+    getUser(req: RequestWithUser, id: string): Promise<void>;
     createUser(req: RequestWithUser, body: {
         username: string;
         password: string;
@@ -70,7 +65,7 @@ export declare class SettingsController {
         role: string;
         shiftIds?: string[];
         departmentIds?: string[];
-    }): Promise<import("../entities/user.entity").User>;
+    }): Promise<void>;
     updateUser(req: RequestWithUser, id: string, body: {
         fullName?: string;
         email?: string;
@@ -80,9 +75,7 @@ export declare class SettingsController {
         shiftIds?: string[];
         departmentIds?: string[];
         password?: string;
-    }): Promise<import("../entities/user.entity").User>;
-    deleteUser(req: RequestWithUser, id: string): Promise<{
-        success: boolean;
-    }>;
+    }): Promise<void>;
+    deleteUser(req: RequestWithUser, id: string): Promise<void>;
 }
 export {};

@@ -150,6 +150,7 @@ export class OrdersService {
         labelSequenceBy,
       );
       const sample = this.orderRepo.manager.create(Sample, {
+        labId,
         orderId: savedOrder.id,
         sampleId: sampleDto.sampleId || null,
         tubeType: sampleDto.tubeType || null,
@@ -170,6 +171,7 @@ export class OrdersService {
         if (test.type === TestType.PANEL) {
           // 1. Create parent OrderTest for the panel
           const parentOrderTest = this.orderRepo.manager.create(OrderTest, {
+            labId,
             sampleId: savedSample.id,
             testId: test.id,
             parentOrderTestId: null,
@@ -191,6 +193,7 @@ export class OrdersService {
           // 3. Create child OrderTests for each component
           for (const component of components) {
             const childOrderTest = this.orderRepo.manager.create(OrderTest, {
+              labId,
               sampleId: savedSample.id,
               testId: component.childTestId,
               parentOrderTestId: savedParent.id,
@@ -203,6 +206,7 @@ export class OrdersService {
         } else {
           // Regular single test
           const orderTest = this.orderRepo.manager.create(OrderTest, {
+            labId,
             sampleId: savedSample.id,
             testId: testDto.testId,
             parentOrderTestId: null,

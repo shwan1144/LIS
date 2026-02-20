@@ -9,10 +9,15 @@ var __metadata = (this && this.__metadata) || function (k, v) {
     if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.AuditLog = exports.AuditAction = void 0;
+exports.AuditLog = exports.AuditAction = exports.AuditActorType = void 0;
 const typeorm_1 = require("typeorm");
 const user_entity_1 = require("./user.entity");
 const lab_entity_1 = require("./lab.entity");
+var AuditActorType;
+(function (AuditActorType) {
+    AuditActorType["LAB_USER"] = "LAB_USER";
+    AuditActorType["PLATFORM_USER"] = "PLATFORM_USER";
+})(AuditActorType || (exports.AuditActorType = AuditActorType = {}));
 var AuditAction;
 (function (AuditAction) {
     AuditAction["LOGIN"] = "LOGIN";
@@ -41,6 +46,15 @@ var AuditAction;
     AuditAction["DEPARTMENT_DELETE"] = "DEPARTMENT_DELETE";
     AuditAction["REPORT_GENERATE"] = "REPORT_GENERATE";
     AuditAction["REPORT_PRINT"] = "REPORT_PRINT";
+    AuditAction["REPORT_EXPORT"] = "REPORT_EXPORT";
+    AuditAction["PLATFORM_LOGIN"] = "PLATFORM_LOGIN";
+    AuditAction["PLATFORM_LOGIN_FAILED"] = "PLATFORM_LOGIN_FAILED";
+    AuditAction["PLATFORM_LAB_CREATE"] = "PLATFORM_LAB_CREATE";
+    AuditAction["PLATFORM_LAB_UPDATE"] = "PLATFORM_LAB_UPDATE";
+    AuditAction["PLATFORM_LAB_STATUS_CHANGE"] = "PLATFORM_LAB_STATUS_CHANGE";
+    AuditAction["PLATFORM_SENSITIVE_READ"] = "PLATFORM_SENSITIVE_READ";
+    AuditAction["PLATFORM_IMPERSONATE_START"] = "PLATFORM_IMPERSONATE_START";
+    AuditAction["PLATFORM_IMPERSONATE_STOP"] = "PLATFORM_IMPERSONATE_STOP";
 })(AuditAction || (exports.AuditAction = AuditAction = {}));
 let AuditLog = class AuditLog {
 };
@@ -49,6 +63,18 @@ __decorate([
     (0, typeorm_1.PrimaryGeneratedColumn)('uuid'),
     __metadata("design:type", String)
 ], AuditLog.prototype, "id", void 0);
+__decorate([
+    (0, typeorm_1.Column)({
+        type: 'enum',
+        enum: AuditActorType,
+        nullable: true,
+    }),
+    __metadata("design:type", Object)
+], AuditLog.prototype, "actorType", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ type: 'uuid', nullable: true }),
+    __metadata("design:type", Object)
+], AuditLog.prototype, "actorId", void 0);
 __decorate([
     (0, typeorm_1.Column)({ type: 'uuid', nullable: true }),
     __metadata("design:type", Object)

@@ -14,6 +14,7 @@ export declare class UserDto {
 }
 export declare class LoginResponseDto {
     accessToken: string;
+    refreshToken?: string;
     user: UserDto;
     lab: LabDto;
 }

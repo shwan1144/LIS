@@ -1,94 +1,85 @@
-# Railway Deployment (Easy Mode)
+# Railway Deployment (Step-by-Step, Non-Coder Friendly)
 
-This guide is for non-coders. Follow it exactly and your LIS app should deploy with less manual work.
+This guide deploys your LIS with:
+1. PostgreSQL
+2. Backend (`/backend`)
+3. Frontend (`/frontend`)
+4. Multi-tenant-ready backend (lab subdomains + `admin.` host)
 
-## What You Will Deploy
-You need 3 Railway services in one project:
-1. PostgreSQL database
-2. Backend API (`/backend`)
-3. Frontend web app (`/frontend`)
-
----
-
-## Step 1: Create Railway Project + Database
-1. Log in to Railway.
+## Step 1: Create Project + Database
+1. Open Railway.
 2. Click `New Project`.
-3. Choose `Deploy from GitHub Repo` and select `shwan1144/LIS`.
-4. In the same Railway project, click `+ Add` and add `PostgreSQL`.
-
----
+3. Select your GitHub repo.
+4. Add a `PostgreSQL` service in the same project.
 
 ## Step 2: Configure Backend Service
-1. Open the backend service (created from your repo).
-2. Go to `Settings` and set:
-   - `Root Directory`: `/backend`
-3. Go to `Variables` and add:
+1. Open backend service `Settings`.
+2. Set `Root Directory` to `/backend`.
+3. In backend `Variables`, add:
    - `PORT=3000`
-   - `DATABASE_URL` linked from PostgreSQL (`DATABASE_URL`)
-   - `JWT_SECRET` (any long random text)
-   - `CORS_ORIGIN` (set this to your frontend URL after Step 3, include `https://`)
-   - `DB_SYNC=true`
-4. Deploy the backend.
+   - `DATABASE_URL` (link from PostgreSQL service)
+   - `JWT_SECRET=<long random secret>`
+   - `PLATFORM_JWT_SECRET=<different long random secret>`
+   - `JWT_ACCESS_TTL=900`
+   - `PLATFORM_JWT_ACCESS_TTL=900`
+   - `APP_BASE_DOMAIN=yourlis.com` (your real domain)
+   - `APP_ADMIN_HOST=admin.yourlis.com`
+   - `CORS_ORIGIN=https://<your-frontend-url>`
+   - `DB_SYNC=false`
+   - `AUTO_SEED_ON_BOOT=true` (first deploy only)
+4. Deploy backend once.
 
-Notes:
-- Backend now supports `DATABASE_URL` directly (no need to copy `DB_HOST`, `DB_PORT`, etc.).
-- On production boot, backend seeds default data automatically.
+## Step 3: Run SQL Migrations (Important)
+Run migration script one time after backend is deployed:
+1. Railway CLI way (recommended):
+   - `npm i -g @railway/cli`
+   - `railway login`
+   - `railway link` (inside your project folder)
+   - `railway run --service <backend-service-name> npm run migrate:sql`
+2. Expected output: `SQL migrations completed.`
 
----
+This creates new multi-tenant tables, columns, and RLS policies.
 
-## Step 3: Configure Frontend Service
-1. In Railway project, click `+ Add` -> `GitHub Repo`.
-2. Select `shwan1144/LIS` again (this creates a second app service).
-3. Open that new service `Settings`:
-   - `Root Directory`: `/frontend`
-4. In `Variables`, add:
-   - `VITE_API_URL=https://<your-backend-domain>`
-5. Deploy frontend.
+## Step 4: Configure Frontend Service
+1. Add another app service from same GitHub repo.
+2. Set `Root Directory` to `/frontend`.
+3. Add variable:
+   - `VITE_API_URL=https://<your-backend-public-domain>`
+4. Deploy frontend.
 
----
+## Step 5: DNS for Subdomains (Multi-Lab)
+In your DNS provider:
+1. Create wildcard record:
+   - `*.yourlis.com` -> backend public domain
+2. Create admin record:
+   - `admin.yourlis.com` -> backend public domain
 
-## Step 4: Final CORS Update
-1. Copy your frontend public URL.
-2. Go back to backend service variables.
-3. Set `CORS_ORIGIN` to that exact frontend URL (example: `https://heroic-rejoicing-production-4c01.up.railway.app`).
-4. Redeploy backend once.
+Now you can use:
+- `lab1.yourlis.com` (lab users)
+- `lab2.yourlis.com` (lab users)
+- `admin.yourlis.com` (platform super admin / auditor)
 
----
-
-## Step 5: First Login
-After backend deploy completes, use:
+## Step 6: First Login
+Default seeded lab user:
 - Username: `admin`
 - Password: `password`
 
-Change this password immediately in your app.
+Change it immediately.
 
----
-
-## Every Future Deploy
-Just push code to GitHub (`main` branch). Railway redeploys automatically.
-
----
+## Step 7: Quick Validation Checklist
+1. `https://admin.yourlis.com/admin/auth/login` responds (not 404).
+2. `https://lab1.yourlis.com/auth/login` responds (not 404).
+3. Backend logs show no DB column errors.
+4. Migration command printed `SQL migrations completed.`
 
 ## If Something Fails
-1. Backend crashes on startup:
-   - Check `DATABASE_URL` is linked correctly from PostgreSQL.
-2. Frontend shows CORS error:
-   - `CORS_ORIGIN` must exactly match frontend URL (`https://...`).
-3. Login does not work:
-   - Check backend logs for `Seed done.`
-   - If needed, set `AUTO_SEED_ON_BOOT=true` and redeploy backend.
-4. Frontend cannot call API:
-   - Confirm `VITE_API_URL` points to backend public URL.
-   - Redeploy frontend after variable changes.
-
----
-
-## PDF/Kurdish Text Quick Fix
-If report PDF is old style or Kurdish text looks broken:
-1. Backend service must use `Root Directory=/backend`.
-2. Keep `Build Command` and `Start Command` empty (use repo defaults).
-3. Redeploy backend with `Clear build cache`.
-4. Open backend logs and verify this line is NOT appearing:
-   - `Playwright PDF rendering failed; falling back to PDFKit renderer.`
-
-If that line appears, backend is still in fallback mode, so old/broken PDF style can appear.
+1. Backend crash at startup:
+   - Check `DATABASE_URL` is linked correctly.
+2. Login fails on lab host:
+   - Verify `APP_BASE_DOMAIN` and `APP_ADMIN_HOST` exactly match your DNS.
+3. `column ... does not exist` errors:
+   - Run `npm run migrate:sql` again.
+4. CORS errors:
+   - `CORS_ORIGIN` must exactly equal frontend URL (`https://...`).
+5. PDF style issues:
+   - Redeploy backend with `Clear build cache`.

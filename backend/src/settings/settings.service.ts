@@ -6,7 +6,6 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import * as bcrypt from 'bcrypt';
 import { User } from '../entities/user.entity';
 import { UserLabAssignment } from '../entities/user-lab-assignment.entity';
 import { UserShiftAssignment } from '../entities/user-shift-assignment.entity';
@@ -14,6 +13,7 @@ import { UserDepartmentAssignment } from '../entities/user-department-assignment
 import { Department } from '../entities/department.entity';
 import { Lab } from '../entities/lab.entity';
 import { Shift } from '../entities/shift.entity';
+import { hashPassword } from '../auth/password.util';
 
 const ROLES = ['SUPER_ADMIN', 'LAB_ADMIN', 'RECEPTION', 'TECHNICIAN', 'VERIFIER', 'DOCTOR', 'INSTRUMENT_SERVICE'];
 const MAX_REPORT_IMAGE_DATA_URL_LENGTH = 4 * 1024 * 1024;
@@ -201,6 +201,20 @@ export class SettingsService {
     return users;
   }
 
+  async getShiftsForLab(labId: string): Promise<Shift[]> {
+    return this.shiftRepo.find({
+      where: { labId },
+      order: { code: 'ASC' },
+    });
+  }
+
+  async getDepartmentsForLab(labId: string): Promise<Department[]> {
+    return this.departmentRepo.find({
+      where: { labId },
+      order: { code: 'ASC' },
+    });
+  }
+
   async getUserWithDetails(id: string, labId: string): Promise<{
     user: User;
     labIds: string[];
@@ -242,12 +256,15 @@ export class SettingsService {
     shiftIds?: string[];
     departmentIds?: string[];
   }): Promise<User> {
-    const existing = await this.userRepo.findOne({ where: { username: data.username.trim() } });
+    const existing = await this.userRepo.findOne({
+      where: { username: data.username.trim(), labId },
+    });
     if (existing) throw new ConflictException('Username already exists');
     if (!ROLES.includes(data.role)) throw new BadRequestException('Invalid role');
-    const passwordHash = await bcrypt.hash(data.password, 10);
+    const passwordHash = await hashPassword(data.password);
     const user = this.userRepo.create({
       username: data.username.trim(),
+      labId,
       passwordHash,
       fullName: data.fullName?.trim() || null,
       email: data.email?.trim() || null,
@@ -301,7 +318,7 @@ export class SettingsService {
     if (data.defaultLabId !== undefined) user.defaultLabId = data.defaultLabId || null;
     if (data.isActive !== undefined) user.isActive = data.isActive;
     if (data.password?.trim()) {
-      user.passwordHash = await bcrypt.hash(data.password.trim(), 10);
+      user.passwordHash = await hashPassword(data.password.trim());
     }
     await this.userRepo.save(user);
     if (data.shiftIds !== undefined) {

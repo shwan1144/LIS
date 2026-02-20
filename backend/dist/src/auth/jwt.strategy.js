@@ -19,21 +19,50 @@ const passport_jwt_1 = require("passport-jwt");
 const typeorm_1 = require("@nestjs/typeorm");
 const typeorm_2 = require("typeorm");
 const user_entity_1 = require("../entities/user.entity");
-let JwtStrategy = class JwtStrategy extends (0, passport_1.PassportStrategy)(passport_jwt_1.Strategy) {
-    constructor(userRepository) {
+const platform_user_entity_1 = require("../entities/platform-user.entity");
+let JwtStrategy = class JwtStrategy extends (0, passport_1.PassportStrategy)(passport_jwt_1.Strategy, 'lab-jwt') {
+    constructor(userRepository, platformUserRepository) {
         super({
             jwtFromRequest: passport_jwt_1.ExtractJwt.fromAuthHeaderAsBearerToken(),
             ignoreExpiration: false,
             secretOrKey: process.env.JWT_SECRET || 'lis-dev-secret-change-in-production',
+            passReqToCallback: true,
         });
         this.userRepository = userRepository;
+        this.platformUserRepository = platformUserRepository;
     }
-    async validate(payload) {
+    async validate(req, payload) {
+        if (payload.tokenType === 'lab_impersonation_access') {
+            const platformUserId = payload.platformUserId?.trim() || payload.sub;
+            const platformUser = await this.platformUserRepository.findOne({
+                where: { id: platformUserId, isActive: true },
+            });
+            if (!platformUser) {
+                throw new common_1.UnauthorizedException();
+            }
+            if (req.labId && payload.labId !== req.labId) {
+                throw new common_1.UnauthorizedException('Invalid token for subdomain lab');
+            }
+            return {
+                userId: null,
+                username: platformUser.email,
+                labId: payload.labId,
+                role: 'SUPER_ADMIN',
+                isImpersonation: true,
+                platformUserId: platformUser.id,
+            };
+        }
         const user = await this.userRepository.findOne({
             where: { id: payload.sub, isActive: true },
         });
         if (!user) {
             throw new common_1.UnauthorizedException();
+        }
+        if (user.labId && payload.labId !== user.labId) {
+            throw new common_1.UnauthorizedException('Token lab mismatch');
+        }
+        if (req.labId && payload.labId !== req.labId) {
+            throw new common_1.UnauthorizedException('Invalid token for subdomain lab');
         }
         return {
             userId: payload.sub,
@@ -47,6 +76,8 @@ exports.JwtStrategy = JwtStrategy;
 exports.JwtStrategy = JwtStrategy = __decorate([
     (0, common_1.Injectable)(),
     __param(0, (0, typeorm_1.InjectRepository)(user_entity_1.User)),
-    __metadata("design:paramtypes", [typeorm_2.Repository])
+    __param(1, (0, typeorm_1.InjectRepository)(platform_user_entity_1.PlatformUser)),
+    __metadata("design:paramtypes", [typeorm_2.Repository,
+        typeorm_2.Repository])
 ], JwtStrategy);
 //# sourceMappingURL=jwt.strategy.js.map

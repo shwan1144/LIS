@@ -4,6 +4,7 @@ import { Department } from './department.entity';
 export declare class Lab {
     id: string;
     code: string;
+    subdomain: string | null;
     name: string;
     timezone: string;
     isActive: boolean;

@@ -1,7 +1,8 @@
 import { WorklistService } from './worklist.service';
 interface RequestWithUser {
     user: {
-        userId: string;
+        userId?: string | null;
+        platformUserId?: string | null;
         username: string;
         labId: string;
     };

@@ -512,9 +512,9 @@ let ReportsService = class ReportsService {
             doc.end();
         });
     }
-    async generateTestResultsPDF(orderId, labId) {
+    async generateTestResultsPDF(orderId, labId, options) {
         const { order, reportableOrderTests, verifiedTests, latestVerifiedAt } = await this.loadOrderResultsSnapshot(orderId, labId);
-        if (order.paymentStatus !== 'paid') {
+        if (!options?.bypassPaymentCheck && order.paymentStatus !== 'paid') {
             throw new common_1.ForbiddenException('Order is unpaid or partially paid. Complete payment to download or print results.');
         }
         const verifierIds = [

@@ -85,7 +85,7 @@ let UnmatchedResultsService = class UnmatchedResultsService {
             orderTest.resultText = unmatched.resultText;
             orderTest.flag = unmatched.flag;
             orderTest.resultedAt = unmatched.receivedAt;
-            orderTest.resultedBy = userId;
+            orderTest.resultedBy = userId ?? null;
             orderTest.status = order_test_entity_1.OrderTestStatus.COMPLETED;
             if (unmatched.unit) {
             }
@@ -95,7 +95,7 @@ let UnmatchedResultsService = class UnmatchedResultsService {
             }
             await this.auditService.log({
                 labId,
-                userId,
+                userId: userId ?? null,
                 action: audit_log_entity_1.AuditAction.RESULT_ENTER,
                 entityType: 'order_test',
                 entityId: orderTest.id,
@@ -113,13 +113,13 @@ let UnmatchedResultsService = class UnmatchedResultsService {
             });
             unmatched.status = 'RESOLVED';
             unmatched.resolvedOrderTestId = orderTest.id;
-            unmatched.resolvedBy = userId;
+            unmatched.resolvedBy = userId ?? null;
             unmatched.resolvedAt = new Date();
             unmatched.resolutionNotes = dto.notes || null;
         }
         else if (dto.action === 'DISCARD') {
             unmatched.status = 'DISCARDED';
-            unmatched.resolvedBy = userId;
+            unmatched.resolvedBy = userId ?? null;
             unmatched.resolvedAt = new Date();
             unmatched.resolutionNotes = dto.notes || 'Discarded by user';
         }

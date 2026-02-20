@@ -104,6 +104,7 @@ let OrdersService = class OrdersService {
                 : (sampleDto.tubeType ?? null);
             const sequenceNumber = await this.getNextSequenceForScope(labId, sequenceResetBy, effectiveShiftId, scopeKey, labelSequenceBy);
             const sample = this.orderRepo.manager.create(sample_entity_1.Sample, {
+                labId,
                 orderId: savedOrder.id,
                 sampleId: sampleDto.sampleId || null,
                 tubeType: sampleDto.tubeType || null,
@@ -119,6 +120,7 @@ let OrdersService = class OrdersService {
                 }
                 if (test.type === test_entity_1.TestType.PANEL) {
                     const parentOrderTest = this.orderRepo.manager.create(order_test_entity_1.OrderTest, {
+                        labId,
                         sampleId: savedSample.id,
                         testId: test.id,
                         parentOrderTestId: null,
@@ -135,6 +137,7 @@ let OrdersService = class OrdersService {
                     });
                     for (const component of components) {
                         const childOrderTest = this.orderRepo.manager.create(order_test_entity_1.OrderTest, {
+                            labId,
                             sampleId: savedSample.id,
                             testId: component.childTestId,
                             parentOrderTestId: savedParent.id,
@@ -146,6 +149,7 @@ let OrdersService = class OrdersService {
                 }
                 else {
                     const orderTest = this.orderRepo.manager.create(order_test_entity_1.OrderTest, {
+                        labId,
                         sampleId: savedSample.id,
                         testId: testDto.testId,
                         parentOrderTestId: null,

@@ -105,7 +105,7 @@ export class UnmatchedResultsService {
   async resolve(
     id: string,
     labId: string,
-    userId: string,
+    userId: string | null,
     dto: ResolveUnmatchedDto,
   ): Promise<UnmatchedInstrumentResult> {
     const unmatched = await this.findOne(id, labId);
@@ -140,7 +140,7 @@ export class UnmatchedResultsService {
       orderTest.resultText = unmatched.resultText;
       orderTest.flag = unmatched.flag;
       orderTest.resultedAt = unmatched.receivedAt;
-      orderTest.resultedBy = userId;
+      orderTest.resultedBy = userId ?? null;
       orderTest.status = OrderTestStatus.COMPLETED;
 
       if (unmatched.unit) {
@@ -158,7 +158,7 @@ export class UnmatchedResultsService {
       // Audit log
       await this.auditService.log({
         labId,
-        userId,
+        userId: userId ?? null,
         action: AuditAction.RESULT_ENTER,
         entityType: 'order_test',
         entityId: orderTest.id,
@@ -177,12 +177,12 @@ export class UnmatchedResultsService {
 
       unmatched.status = 'RESOLVED';
       unmatched.resolvedOrderTestId = orderTest.id;
-      unmatched.resolvedBy = userId;
+      unmatched.resolvedBy = userId ?? null;
       unmatched.resolvedAt = new Date();
       unmatched.resolutionNotes = dto.notes || null;
     } else if (dto.action === 'DISCARD') {
       unmatched.status = 'DISCARDED';
-      unmatched.resolvedBy = userId;
+      unmatched.resolvedBy = userId ?? null;
       unmatched.resolvedAt = new Date();
       unmatched.resolutionNotes = dto.notes || 'Discarded by user';
     }

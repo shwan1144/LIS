@@ -1,5 +1,7 @@
 import {
+  BadRequestException,
   Controller,
+  ForbiddenException,
   Get,
   Post,
   Patch,
@@ -27,7 +29,9 @@ export class SettingsController {
 
   @Get('roles')
   getRoles() {
-    return this.settingsService.getRoles();
+    throw new ForbiddenException(
+      'Lab user management moved to admin panel. Use admin endpoints.',
+    );
   }
 
   @Get('lab')
@@ -57,21 +61,41 @@ export class SettingsController {
   ) {
     const labId = req.user?.labId;
     if (!labId) throw new Error('Lab ID not found in token');
-    return this.settingsService.updateLabSettings(labId, body);
+
+    // Lab panel can only update label/sequence settings.
+    if (
+      body.enableOnlineResults !== undefined ||
+      body.onlineResultWatermarkDataUrl !== undefined ||
+      body.onlineResultWatermarkText !== undefined ||
+      body.reportBranding !== undefined
+    ) {
+      throw new ForbiddenException(
+        'Online result and report design settings moved to admin panel.',
+      );
+    }
+
+    if (Object.keys(body).length === 0) {
+      throw new BadRequestException('No settings provided');
+    }
+
+    return this.settingsService.updateLabSettings(labId, {
+      labelSequenceBy: body.labelSequenceBy,
+      sequenceResetBy: body.sequenceResetBy,
+    });
   }
 
   @Get('users')
   async getUsers(@Req() req: RequestWithUser) {
-    const labId = req.user?.labId;
-    if (!labId) throw new Error('Lab ID not found in token');
-    return this.settingsService.getUsersForLab(labId);
+    throw new ForbiddenException(
+      'Lab user management moved to admin panel. Use admin endpoints.',
+    );
   }
 
   @Get('users/:id')
   async getUser(@Req() req: RequestWithUser, @Param('id', ParseUUIDPipe) id: string) {
-    const labId = req.user?.labId;
-    if (!labId) throw new Error('Lab ID not found in token');
-    return this.settingsService.getUserWithDetails(id, labId);
+    throw new ForbiddenException(
+      'Lab user management moved to admin panel. Use admin endpoints.',
+    );
   }
 
   @Post('users')
@@ -84,9 +108,9 @@ export class SettingsController {
     shiftIds?: string[];
     departmentIds?: string[];
   }) {
-    const labId = req.user?.labId;
-    if (!labId) throw new Error('Lab ID not found in token');
-    return this.settingsService.createUser(labId, body);
+    throw new ForbiddenException(
+      'Lab user management moved to admin panel. Use admin endpoints.',
+    );
   }
 
   @Patch('users/:id')
@@ -104,9 +128,9 @@ export class SettingsController {
       password?: string;
     },
   ) {
-    const labId = req.user?.labId;
-    if (!labId) throw new Error('Lab ID not found in token');
-    return this.settingsService.updateUser(id, labId, body);
+    throw new ForbiddenException(
+      'Lab user management moved to admin panel. Use admin endpoints.',
+    );
   }
 
   @Delete('users/:id')
@@ -114,10 +138,8 @@ export class SettingsController {
     @Req() req: RequestWithUser,
     @Param('id', ParseUUIDPipe) id: string,
   ) {
-    const labId = req.user?.labId;
-    const currentUserId = req.user?.userId;
-    if (!labId || !currentUserId) throw new Error('User info not found in token');
-    await this.settingsService.deleteUser(id, labId, currentUserId);
-    return { success: true };
+    throw new ForbiddenException(
+      'Lab user management moved to admin panel. Use admin endpoints.',
+    );
   }
 }

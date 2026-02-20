@@ -13,6 +13,7 @@ exports.Sample = exports.TubeType = void 0;
 const typeorm_1 = require("typeorm");
 const order_entity_1 = require("./order.entity");
 const order_test_entity_1 = require("./order-test.entity");
+const lab_entity_1 = require("./lab.entity");
 var TubeType;
 (function (TubeType) {
     TubeType["SERUM"] = "SERUM";
@@ -30,6 +31,10 @@ __decorate([
     (0, typeorm_1.PrimaryGeneratedColumn)('uuid'),
     __metadata("design:type", String)
 ], Sample.prototype, "id", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ type: 'uuid', nullable: true }),
+    __metadata("design:type", Object)
+], Sample.prototype, "labId", void 0);
 __decorate([
     (0, typeorm_1.Column)({ type: 'uuid' }),
     __metadata("design:type", String)
@@ -79,6 +84,11 @@ __decorate([
     (0, typeorm_1.JoinColumn)({ name: 'orderId' }),
     __metadata("design:type", order_entity_1.Order)
 ], Sample.prototype, "order", void 0);
+__decorate([
+    (0, typeorm_1.ManyToOne)(() => lab_entity_1.Lab, { nullable: true, onDelete: 'CASCADE' }),
+    (0, typeorm_1.JoinColumn)({ name: 'labId' }),
+    __metadata("design:type", Object)
+], Sample.prototype, "lab", void 0);
 __decorate([
     (0, typeorm_1.OneToMany)(() => order_test_entity_1.OrderTest, (orderTest) => orderTest.sample, { cascade: true }),
     __metadata("design:type", Array)
