@@ -350,6 +350,12 @@ let LabApiService = class LabApiService {
             return order_test_entity_1.ResultFlag.CRITICAL_HIGH;
         if (value === order_test_entity_1.ResultFlag.CRITICAL_LOW)
             return order_test_entity_1.ResultFlag.CRITICAL_LOW;
+        if (value === order_test_entity_1.ResultFlag.POSITIVE)
+            return order_test_entity_1.ResultFlag.POSITIVE;
+        if (value === order_test_entity_1.ResultFlag.NEGATIVE)
+            return order_test_entity_1.ResultFlag.NEGATIVE;
+        if (value === order_test_entity_1.ResultFlag.ABNORMAL)
+            return order_test_entity_1.ResultFlag.ABNORMAL;
         return null;
     }
     async updateOrderStatusAfterResult(manager, labId, sampleId) {

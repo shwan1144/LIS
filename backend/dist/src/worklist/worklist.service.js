@@ -254,9 +254,16 @@ let WorklistService = class WorklistService {
             orderTest.resultValue = null;
             orderTest.flag = this.toResultFlag(matchedOption?.flag ?? null);
         }
+        else if (resultEntryType === 'TEXT') {
+            if (data.resultText !== undefined) {
+                orderTest.resultText = normalizedResultTextInput ?? null;
+            }
+            orderTest.resultValue = null;
+            orderTest.flag = this.resolveFlagFromResultText(orderTest.resultText, resultTextOptions);
+        }
         else {
             if (data.resultText !== undefined) {
-                orderTest.resultText = normalizedResultTextInput;
+                orderTest.resultText = normalizedResultTextInput ?? null;
             }
             const optionFlag = this.resolveFlagFromResultText(orderTest.resultText, resultTextOptions);
             if (optionFlag) {
@@ -418,6 +425,71 @@ let WorklistService = class WorklistService {
             description: `Rejected result: ${reason}`,
         });
         return saved;
+    }
+    normalizeResultEntryType(value) {
+        const normalized = String(value || 'NUMERIC').trim().toUpperCase();
+        if (normalized === 'NUMERIC' ||
+            normalized === 'QUALITATIVE' ||
+            normalized === 'TEXT') {
+            return normalized;
+        }
+        return 'NUMERIC';
+    }
+    normalizeResultText(value) {
+        const normalized = String(value ?? '').trim();
+        return normalized.length ? normalized : null;
+    }
+    normalizeResultTextOptions(options) {
+        if (!options || !Array.isArray(options))
+            return null;
+        const normalized = options
+            .map((option) => ({
+            value: this.normalizeResultText(option?.value),
+            flag: this.toResultFlag(option?.flag ?? null),
+            isDefault: Boolean(option?.isDefault),
+        }))
+            .filter((option) => Boolean(option.value))
+            .map((option) => ({
+            value: option.value,
+            flag: option.flag,
+            isDefault: option.isDefault,
+        }));
+        return normalized.length ? normalized : null;
+    }
+    findMatchingResultTextOption(text, options) {
+        if (!options?.length)
+            return null;
+        const candidate = text.trim().toLowerCase();
+        return (options.find((option) => option.value.trim().toLowerCase() === candidate) ??
+            null);
+    }
+    resolveFlagFromResultText(resultText, options) {
+        if (!resultText || !options?.length)
+            return null;
+        const matched = this.findMatchingResultTextOption(resultText, options);
+        return this.toResultFlag(matched?.flag ?? null);
+    }
+    toResultFlag(flag) {
+        const normalized = String(flag ?? '').trim().toUpperCase();
+        if (!normalized)
+            return null;
+        if (normalized === order_test_entity_1.ResultFlag.NORMAL)
+            return order_test_entity_1.ResultFlag.NORMAL;
+        if (normalized === order_test_entity_1.ResultFlag.HIGH)
+            return order_test_entity_1.ResultFlag.HIGH;
+        if (normalized === order_test_entity_1.ResultFlag.LOW)
+            return order_test_entity_1.ResultFlag.LOW;
+        if (normalized === order_test_entity_1.ResultFlag.CRITICAL_HIGH)
+            return order_test_entity_1.ResultFlag.CRITICAL_HIGH;
+        if (normalized === order_test_entity_1.ResultFlag.CRITICAL_LOW)
+            return order_test_entity_1.ResultFlag.CRITICAL_LOW;
+        if (normalized === order_test_entity_1.ResultFlag.POSITIVE)
+            return order_test_entity_1.ResultFlag.POSITIVE;
+        if (normalized === order_test_entity_1.ResultFlag.NEGATIVE)
+            return order_test_entity_1.ResultFlag.NEGATIVE;
+        if (normalized === order_test_entity_1.ResultFlag.ABNORMAL)
+            return order_test_entity_1.ResultFlag.ABNORMAL;
+        return null;
     }
     calculateFlag(resultValue, test, patientSex, patientAgeYears) {
         if (resultValue === null)

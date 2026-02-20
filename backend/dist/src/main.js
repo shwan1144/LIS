@@ -78,6 +78,28 @@ async function ensureReportBrandingColumns(dataSource) {
         'ALTER TABLE IF EXISTS "labs" ADD COLUMN IF NOT EXISTS "onlineResultWatermarkDataUrl" text',
         'ALTER TABLE IF EXISTS "labs" ADD COLUMN IF NOT EXISTS "onlineResultWatermarkText" varchar(120)',
         'ALTER TABLE IF EXISTS "tests" ADD COLUMN IF NOT EXISTS "numericAgeRanges" jsonb',
+        `ALTER TABLE IF EXISTS "tests" ADD COLUMN IF NOT EXISTS "resultEntryType" varchar(16) NOT NULL DEFAULT 'NUMERIC'`,
+        'ALTER TABLE IF EXISTS "tests" ADD COLUMN IF NOT EXISTS "resultTextOptions" jsonb',
+        'ALTER TABLE IF EXISTS "tests" ADD COLUMN IF NOT EXISTS "allowCustomResultText" boolean NOT NULL DEFAULT false',
+        `
+      DO $$
+      DECLARE
+        enum_name text;
+      BEGIN
+        FOREACH enum_name IN ARRAY ARRAY[
+          'order_tests_flag_enum',
+          'order_test_result_history_flag_enum',
+          'unmatched_instrument_results_flag_enum'
+        ]
+        LOOP
+          IF EXISTS (SELECT 1 FROM pg_type WHERE typname = enum_name) THEN
+            EXECUTE format('ALTER TYPE %I ADD VALUE IF NOT EXISTS ''POS''', enum_name);
+            EXECUTE format('ALTER TYPE %I ADD VALUE IF NOT EXISTS ''NEG''', enum_name);
+            EXECUTE format('ALTER TYPE %I ADD VALUE IF NOT EXISTS ''ABN''', enum_name);
+          END IF;
+        END LOOP;
+      END $$;
+    `,
     ];
     for (const sql of sqlStatements) {
         await dataSource.query(sql);

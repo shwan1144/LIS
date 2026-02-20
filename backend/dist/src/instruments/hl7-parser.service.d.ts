@@ -69,5 +69,5 @@ export declare class HL7ParserService {
     parseHL7DateTime(hl7DateTime: string): Date | null;
     private removeMLLPFraming;
     addMLLPFraming(message: string): string;
-    mapFlag(hl7Flag: string): 'N' | 'H' | 'L' | 'HH' | 'LL' | null;
+    mapFlag(hl7Flag: string): 'N' | 'H' | 'L' | 'HH' | 'LL' | 'POS' | 'NEG' | 'ABN' | null;
 }

@@ -39,6 +39,7 @@ import {
   searchOrders,
   getNextOrderNumber,
   getOrderPriceEstimate,
+  getLabSettings,
   downloadOrderReceiptPDF,
   updateOrderPayment,
   updateOrderTests,
@@ -132,6 +133,7 @@ export function OrdersPage() {
     }),
     [isDark]
   );
+  const orderHistoryGridTemplate = 'minmax(220px, 1.8fr) 108px 88px 84px 120px';
 
   const [patientList, setPatientList] = useState<OrderListRow[]>([]);
   const [selectedRowId, setSelectedRowId] = useState<string | null>(null);
@@ -158,6 +160,9 @@ export function OrdersPage() {
   const [printModalOpen, setPrintModalOpen] = useState(false);
   const [printType, setPrintType] = useState<'receipt' | 'labels'>('receipt');
   const [printOrder, setPrintOrder] = useState<OrderDto | null>(null);
+  const [printLabelSequenceBy, setPrintLabelSequenceBy] = useState<'tube_type' | 'department'>(
+    lab?.labelSequenceBy ?? 'tube_type',
+  );
   const [downloadingPDF, setDownloadingPDF] = useState<string | null>(null);
   const [nextOrderNumber, setNextOrderNumber] = useState<string | null>(null);
   const [updatingPayment, setUpdatingPayment] = useState(false);
@@ -313,6 +318,16 @@ export function OrdersPage() {
       }
     }
     load();
+  }, []);
+
+  useEffect(() => {
+    getLabSettings()
+      .then((settings) => {
+        setPrintLabelSequenceBy(settings.labelSequenceBy ?? 'tube_type');
+      })
+      .catch(() => {
+        // keep fallback from auth lab state
+      });
   }, []);
 
   useEffect(() => {
@@ -577,7 +592,13 @@ export function OrdersPage() {
     setListPage(1);
   };
 
-  const openPrint = (order: OrderDto, type: 'receipt' | 'labels') => {
+  const openPrint = async (order: OrderDto, type: 'receipt' | 'labels') => {
+    try {
+      const settings = await getLabSettings();
+      setPrintLabelSequenceBy(settings.labelSequenceBy ?? 'tube_type');
+    } catch {
+      // keep last known setting
+    }
     setPrintType(type);
     setPrintOrder(order);
     setPrintModalOpen(true);
@@ -668,6 +689,36 @@ export function OrdersPage() {
                 </Space>
               </Space>
 
+              {patientList.length > 0 ? (
+                <div
+                  style={{
+                    marginTop: 10,
+                    padding: '4px 8px 6px',
+                    borderBottom: styles.border,
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <div style={{ width: 14 }} />
+                    <div
+                      style={{
+                        minWidth: 0,
+                        flex: 1,
+                        display: 'grid',
+                        gridTemplateColumns: orderHistoryGridTemplate,
+                        columnGap: 6,
+                      }}
+                    >
+                      <Text type="secondary" style={{ fontSize: 11, fontWeight: 600 }}>Patient</Text>
+                      <Text type="secondary" style={{ fontSize: 11, fontWeight: 600 }}>Status</Text>
+                      <Text type="secondary" style={{ fontSize: 11, fontWeight: 600 }}>Order</Text>
+                      <Text type="secondary" style={{ fontSize: 11, fontWeight: 600 }}>Shift</Text>
+                      <Text type="secondary" style={{ fontSize: 11, fontWeight: 600 }}>Time</Text>
+                    </div>
+                    <div style={{ width: 24 }} />
+                  </div>
+                </div>
+              ) : null}
+
               <List
                 size="small"
                 dataSource={patientList}
@@ -704,7 +755,7 @@ export function OrdersPage() {
                               minWidth: 0,
                               flex: 1,
                               display: 'grid',
-                              gridTemplateColumns: 'minmax(220px, 1.8fr) 108px 88px 84px 120px',
+                              gridTemplateColumns: orderHistoryGridTemplate,
                               alignItems: 'center',
                               columnGap: 6,
                             }}
@@ -1307,6 +1358,8 @@ export function OrdersPage() {
         order={printOrder}
         type={printType}
         labName={lab?.name}
+        labelSequenceBy={printLabelSequenceBy}
+        departments={departments}
       />
     </div>
   );

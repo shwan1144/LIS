@@ -54,6 +54,25 @@ const reasonLabels: Record<string, string> = {
   DUPLICATE_RESULT: 'Duplicate',
 };
 
+const getFlagTagColor = (flag: string): string => {
+  switch (flag) {
+    case 'N':
+    case 'NEG':
+      return 'green';
+    case 'HH':
+    case 'POS':
+      return 'red';
+    case 'H':
+    case 'ABN':
+      return 'orange';
+    case 'L':
+    case 'LL':
+      return 'blue';
+    default:
+      return 'default';
+  }
+};
+
 export function UnmatchedResultsPage() {
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState<UnmatchedResultDto[]>([]);
@@ -194,7 +213,7 @@ export function UnmatchedResultsPage() {
         <Space>
           <Text>{formatValue(record)}</Text>
           {record.flag && (
-            <Tag color={record.flag === 'N' ? 'green' : record.flag.includes('H') ? 'red' : 'blue'}>
+            <Tag color={getFlagTagColor(record.flag)}>
               {record.flag}
             </Tag>
           )}
@@ -355,7 +374,7 @@ export function UnmatchedResultsPage() {
               <Space>
                 <Text>{formatValue(selectedItem)}</Text>
                 {selectedItem.flag && (
-                  <Tag color={selectedItem.flag === 'N' ? 'green' : selectedItem.flag.includes('H') ? 'red' : 'blue'}>
+                  <Tag color={getFlagTagColor(selectedItem.flag)}>
                     {selectedItem.flag}
                   </Tag>
                 )}

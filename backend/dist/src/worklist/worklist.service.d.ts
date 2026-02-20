@@ -74,6 +74,12 @@ export declare class WorklistService {
         failed: number;
     }>;
     rejectResult(orderTestId: string, labId: string, actor: LabActorContext, reason: string): Promise<OrderTest>;
+    private normalizeResultEntryType;
+    private normalizeResultText;
+    private normalizeResultTextOptions;
+    private findMatchingResultTextOption;
+    private resolveFlagFromResultText;
+    private toResultFlag;
     private calculateFlag;
     private computePatientAgeYears;
     getWorklistStats(labId: string): Promise<{

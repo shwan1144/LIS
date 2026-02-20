@@ -51,6 +51,9 @@ const flagColors: Record<string, string> = {
   [ResultFlag.LOW]: 'blue',
   [ResultFlag.CRITICAL_HIGH]: 'red',
   [ResultFlag.CRITICAL_LOW]: 'red',
+  [ResultFlag.POSITIVE]: 'red',
+  [ResultFlag.NEGATIVE]: 'green',
+  [ResultFlag.ABNORMAL]: 'purple',
 };
 
 const flagLabels: Record<string, string> = {
@@ -59,6 +62,9 @@ const flagLabels: Record<string, string> = {
   [ResultFlag.LOW]: 'Low',
   [ResultFlag.CRITICAL_HIGH]: 'Critical High',
   [ResultFlag.CRITICAL_LOW]: 'Critical Low',
+  [ResultFlag.POSITIVE]: 'Positive',
+  [ResultFlag.NEGATIVE]: 'Negative',
+  [ResultFlag.ABNORMAL]: 'Abnormal',
 };
 
 interface VerificationOrderGroup {
@@ -212,6 +218,19 @@ export function VerificationPage() {
     }
   };
 
+  const handleVerifyGroup = async (group: VerificationOrderGroup) => {
+    try {
+      const result = await verifyMultipleResults(group.items.map((item) => item.id));
+      message.success(
+        `Verified ${result.verified} result(s)${result.failed > 0 ? `, ${result.failed} failed` : ''}`,
+      );
+      loadData();
+      loadStats();
+    } catch {
+      message.error('Failed to verify results');
+    }
+  };
+
   const handleReject = async () => {
     if (!rejectingItem || !rejectReason.trim()) return;
     try {
@@ -267,93 +286,106 @@ export function VerificationPage() {
 
   const columns: ColumnsType<VerificationOrderGroup> = [
     {
-      title: 'Queue',
-      key: 'queue',
-      render: (_, group) => {
+      title: 'Patient',
+      key: 'patient',
+      width: 280,
+      render: (_: unknown, group) => {
+        const firstItem = group.items[0];
+        return (
+          <Space size={8} style={{ minWidth: 0 }}>
+            <UserOutlined style={{ fontSize: 14, color: '#1677ff' }} />
+            <div style={{ minWidth: 0 }}>
+              <Text strong ellipsis style={{ display: 'block', fontSize: 13, lineHeight: '16px' }}>
+                {group.patientName}
+              </Text>
+              <Space size={4} style={{ flexWrap: 'wrap' }}>
+                <Button
+                  type="link"
+                  size="small"
+                  style={{ padding: 0, height: 'auto' }}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    if (firstItem) openDetailModal(firstItem);
+                  }}
+                >
+                  {group.orderNumber}
+                </Button>
+                <Text type="secondary" style={{ fontSize: 11 }}>
+                  {group.patientAge ? `${group.patientAge}y` : '-'} {group.patientSex || '-'}
+                </Text>
+              </Space>
+            </div>
+          </Space>
+        );
+      },
+    },
+    {
+      title: 'Summary',
+      key: 'summary',
+      width: 250,
+      render: (_: unknown, group) => {
         const critical = group.items.filter(
           (item) => item.flag === ResultFlag.CRITICAL_HIGH || item.flag === ResultFlag.CRITICAL_LOW,
         ).length;
-        const highLow = group.items.filter(
-          (item) => item.flag === ResultFlag.HIGH || item.flag === ResultFlag.LOW,
+        const abnormal = group.items.filter(
+          (item) =>
+            item.flag === ResultFlag.HIGH ||
+            item.flag === ResultFlag.LOW ||
+            item.flag === ResultFlag.POSITIVE ||
+            item.flag === ResultFlag.ABNORMAL,
         ).length;
-        const firstItem = group.items[0];
-
         return (
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: 'minmax(220px, 1.8fr) minmax(220px, 1.2fr) minmax(180px, 1fr) minmax(150px, 0.8fr)',
-              alignItems: 'center',
-              columnGap: 8,
-            }}
-          >
-            <Space size={8} style={{ minWidth: 0 }}>
-              <UserOutlined style={{ fontSize: 14, color: '#1677ff' }} />
-              <div style={{ minWidth: 0 }}>
-                <Text strong ellipsis style={{ display: 'block', fontSize: 13, lineHeight: '16px' }}>
-                  {group.patientName}
-                </Text>
-                <Space size={4} style={{ flexWrap: 'wrap' }}>
-                  <Button
-                    type="link"
-                    size="small"
-                    style={{ padding: 0, height: 'auto' }}
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      if (firstItem) openDetailModal(firstItem);
-                    }}
-                  >
-                    {group.orderNumber}
-                  </Button>
-                  <Text type="secondary" style={{ fontSize: 11 }}>
-                    {group.patientAge ? `${group.patientAge}y` : '-'} {group.patientSex || '-'}
-                  </Text>
-                </Space>
-              </div>
-            </Space>
-
-            <Space size={[4, 4]} wrap>
-              <Tag style={{ margin: 0 }}>{group.items.length} tests</Tag>
-              {critical > 0 && <Tag color="red" style={{ margin: 0 }}>Critical {critical}</Tag>}
-              {highLow > 0 && <Tag color="orange" style={{ margin: 0 }}>High/Low {highLow}</Tag>}
-              {critical === 0 && highLow === 0 && <Tag color="green" style={{ margin: 0 }}>Normal</Tag>}
-            </Space>
-
-            <div style={{ minWidth: 0 }}>
-              <Text type="secondary" style={{ display: 'block', fontSize: 11 }}>
-                Order: {group.orderNumber}
-              </Text>
-              <Text type="secondary" style={{ display: 'block', fontSize: 10 }}>
-                {dayjs(group.registeredAt).format('YYYY-MM-DD HH:mm')}
-              </Text>
-            </div>
-
-            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-              <Tooltip title="Verify all tests in this order">
-                <Button
-                  type="primary"
-                  size="small"
-                  icon={<CheckCircleOutlined />}
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    verifyMultipleResults(group.items.map((item) => item.id))
-                      .then((result) => {
-                        message.success(
-                          `Verified ${result.verified} result(s)${result.failed > 0 ? `, ${result.failed} failed` : ''}`,
-                        );
-                        loadData();
-                        loadStats();
-                      })
-                      .catch(() => message.error('Failed to verify results'));
-                  }}
-                >
-                  Verify all
-                </Button>
-              </Tooltip>
-            </div>
-          </div>
+          <Space size={[4, 4]} wrap>
+            <Tag style={{ margin: 0 }}>{group.items.length} tests</Tag>
+            {critical > 0 && <Tag color="red" style={{ margin: 0 }}>Critical {critical}</Tag>}
+            {abnormal > 0 && <Tag color="orange" style={{ margin: 0 }}>Abnormal {abnormal}</Tag>}
+            {critical === 0 && abnormal === 0 && <Tag color="green" style={{ margin: 0 }}>Normal</Tag>}
+          </Space>
         );
       },
+    },
+    {
+      title: 'Order',
+      key: 'order',
+      width: 180,
+      render: (_: unknown, group) => (
+        <Text type="secondary" style={{ fontSize: 11 }}>
+          {group.orderNumber}
+        </Text>
+      ),
+    },
+    {
+      title: 'Time',
+      key: 'time',
+      width: 170,
+      render: (_: unknown, group) => (
+        <Text type="secondary" style={{ fontSize: 11 }}>
+          {dayjs(group.registeredAt).format('YYYY-MM-DD HH:mm')}
+        </Text>
+      ),
+    },
+    {
+      title: 'Actions',
+      key: 'actions',
+      width: 150,
+      align: 'right',
+      render: (_: unknown, group) => (
+        <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+          <Tooltip title="Verify all tests in this order">
+            <Button
+              type="primary"
+              size="small"
+              icon={<CheckCircleOutlined />}
+              onClick={(event) => {
+                event.stopPropagation();
+                void handleVerifyGroup(group);
+              }}
+            >
+              Verify all
+            </Button>
+          </Tooltip>
+        </div>
+      ),
     },
   ];
 
@@ -620,7 +652,6 @@ export function VerificationPage() {
           dataSource={groupedData}
           rowKey="orderId"
           loading={loading}
-          showHeader={false}
           rowClassName={(record) => (expandedRowIds.includes(record.orderId) ? 'verification-order-row-expanded' : '')}
           rowSelection={rowSelection}
           expandable={{
@@ -640,7 +671,7 @@ export function VerificationPage() {
             showSizeChanger: false,
             showTotal: (t) => `${t} result(s) awaiting verification`,
           }}
-          scroll={{ x: 980 }}
+          scroll={{ x: 1100 }}
           size="small"
         />
       </Card>
@@ -724,7 +755,10 @@ export function VerificationPage() {
                 status={
                   detailItem.flag === ResultFlag.CRITICAL_HIGH || detailItem.flag === ResultFlag.CRITICAL_LOW
                     ? 'error'
-                    : detailItem.flag === ResultFlag.HIGH || detailItem.flag === ResultFlag.LOW
+                    : detailItem.flag === ResultFlag.HIGH ||
+                      detailItem.flag === ResultFlag.LOW ||
+                      detailItem.flag === ResultFlag.POSITIVE ||
+                      detailItem.flag === ResultFlag.ABNORMAL
                     ? 'warning'
                     : 'success'
                 }

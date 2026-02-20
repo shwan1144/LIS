@@ -15,7 +15,7 @@ import { Test, TestType } from '../entities/test.entity';
 import { Pricing } from '../entities/pricing.entity';
 import { TestComponent } from '../entities/test-component.entity';
 import { LabOrdersWorklist } from '../entities/lab-orders-worklist.entity';
-import { CreateOrderDto } from './dto/create-order.dto';
+import { CreateOrderDto, CreateSampleDto } from './dto/create-order.dto';
 
 export interface WorklistItemStored {
   rowId: string;
@@ -92,7 +92,6 @@ export class OrdersService {
     let totalAmount = 0;
 
     // Get pricing for each test
-    const pricingMap = new Map<string, number>();
     for (const testId of uniqueTestIds) {
       const pricing = await this.findPricing(
         labId,
@@ -100,7 +99,6 @@ export class OrdersService {
         dto.shiftId || null,
         patientType,
       );
-      pricingMap.set(testId, pricing);
       totalAmount += pricing;
     }
 
@@ -111,6 +109,10 @@ export class OrdersService {
     const sequenceResetBy = lab.sequenceResetBy === 'shift' ? 'shift' : 'day';
     const effectiveShiftId =
       sequenceResetBy === 'shift' ? dto.shiftId || null : null;
+    const samplesToCreate =
+      labelSequenceBy === 'department'
+        ? this.splitSamplesForDepartmentLabels(dto.samples, testMap)
+        : dto.samples;
 
     // Generate order number (sequential per lab, per day, per shift; restarts when shift or day changes)
     const orderNumber = await this.generateOrderNumber(labId, dto.shiftId || null);
@@ -135,12 +137,12 @@ export class OrdersService {
     // Create samples and order tests (compact barcode: YYMMDD + 3-digit sequence per sample)
     const datePart = orderNumber.slice(0, 6);
     let seq = parseInt(orderNumber.slice(-3), 10);
-    for (let i = 0; i < dto.samples.length; i++) {
-      const sampleDto = dto.samples[i];
+    for (let i = 0; i < samplesToCreate.length; i++) {
+      const sampleDto = samplesToCreate[i];
       const sampleBarcode = `${datePart}${String(seq + i).padStart(3, '0')}`;
       const scopeKey =
         labelSequenceBy === 'department'
-          ? (sampleDto.tests[0] && testMap.get(sampleDto.tests[0].testId)?.departmentId) ?? null
+          ? this.resolveSampleDepartmentScope(sampleDto.tests, testMap)
           : (sampleDto.tubeType ?? null);
       const sequenceNumber = await this.getNextSequenceForScope(
         labId,
@@ -166,55 +168,14 @@ export class OrdersService {
           // Should not happen due to earlier validation
           continue;
         }
-
-        // If this is a panel, create parent OrderTest + child OrderTests
-        if (test.type === TestType.PANEL) {
-          // 1. Create parent OrderTest for the panel
-          const parentOrderTest = this.orderRepo.manager.create(OrderTest, {
-            labId,
-            sampleId: savedSample.id,
-            testId: test.id,
-            parentOrderTestId: null,
-            status: OrderTestStatus.PENDING,
-            price: pricingMap.get(test.id) || null,
-          });
-          const savedParent = await this.orderRepo.manager.save(parentOrderTest);
-
-          // 2. Get child components from TestComponent table
-          const components = await this.testComponentRepo
-            .createQueryBuilder('component')
-            .innerJoinAndSelect('component.childTest', 'childTest')
-            .where('component.panelTestId = :panelTestId', { panelTestId: test.id })
-            .andWhere('childTest.labId = :labId', { labId })
-            // TODO: Filter by effectiveFrom/effectiveTo if versioning is used
-            .orderBy('component.sortOrder', 'ASC')
-            .getMany();
-
-          // 3. Create child OrderTests for each component
-          for (const component of components) {
-            const childOrderTest = this.orderRepo.manager.create(OrderTest, {
-              labId,
-              sampleId: savedSample.id,
-              testId: component.childTestId,
-              parentOrderTestId: savedParent.id,
-              status: OrderTestStatus.PENDING,
-              // Children don't carry price; parent panel does
-              price: null,
-            });
-            await this.orderRepo.manager.save(childOrderTest);
-          }
-        } else {
-          // Regular single test
-          const orderTest = this.orderRepo.manager.create(OrderTest, {
-            labId,
-            sampleId: savedSample.id,
-            testId: testDto.testId,
-            parentOrderTestId: null,
-            status: OrderTestStatus.PENDING,
-            price: pricingMap.get(testDto.testId) || null,
-          });
-          await this.orderRepo.manager.save(orderTest);
-        }
+        await this.createOrderTestsForSample(
+          this.orderRepo.manager,
+          labId,
+          savedSample.id,
+          test,
+          dto.shiftId ?? null,
+          patientType,
+        );
       }
     }
 
@@ -513,11 +474,22 @@ export class OrdersService {
         order: { createdAt: 'ASC' },
       });
 
-      const sampleByTubeType = new Map<string, Sample>();
+      const labelSequenceBy = order.lab?.labelSequenceBy === 'department' ? 'department' : 'tube_type';
+      const sequenceResetBy = order.lab?.sequenceResetBy === 'shift' ? 'shift' : 'day';
+      const effectiveShiftId = sequenceResetBy === 'shift' ? order.shiftId ?? null : null;
+      const sampleByScope = new Map<string, Sample>();
       for (const sample of refreshedSamples) {
-        const tubeKey = sample.tubeType ?? 'OTHER';
-        if (!sampleByTubeType.has(tubeKey)) {
-          sampleByTubeType.set(tubeKey, sample);
+        const departmentIds = Array.from(
+          new Set((sample.orderTests ?? []).map((orderTest) => orderTest.test?.departmentId ?? null)),
+        );
+        const sampleDepartmentId = departmentIds.length === 1 ? departmentIds[0] : null;
+        const scopeMapKey = this.buildSampleGroupingKey(
+          labelSequenceBy,
+          (sample.tubeType as SampleTubeType | null) ?? null,
+          sampleDepartmentId,
+        );
+        if (!sampleByScope.has(scopeMapKey)) {
+          sampleByScope.set(scopeMapKey, sample);
         }
       }
 
@@ -525,10 +497,6 @@ export class OrdersService {
         order.orderNumber,
         refreshedSamples.map((sample) => sample.barcode),
       );
-
-      const labelSequenceBy = order.lab?.labelSequenceBy === 'department' ? 'department' : 'tube_type';
-      const sequenceResetBy = order.lab?.sequenceResetBy === 'shift' ? 'shift' : 'day';
-      const effectiveShiftId = sequenceResetBy === 'shift' ? order.shiftId ?? null : null;
 
       for (const testId of uniqueTestIds) {
         if (existingRootByTestId.has(testId)) {
@@ -540,8 +508,14 @@ export class OrdersService {
           continue;
         }
 
-        const tubeKey = test.tubeType ?? 'OTHER';
-        let targetSample = sampleByTubeType.get(tubeKey);
+        const testTubeType = (test.tubeType as unknown as SampleTubeType) ?? null;
+        const testDepartmentId = labelSequenceBy === 'department' ? test.departmentId ?? null : null;
+        const sampleScopeKey = this.buildSampleGroupingKey(
+          labelSequenceBy,
+          testTubeType,
+          testDepartmentId,
+        );
+        let targetSample = sampleByScope.get(sampleScopeKey);
 
         if (!targetSample) {
           const scopeKey =
@@ -560,13 +534,13 @@ export class OrdersService {
             labId,
             orderId: order.id,
             sampleId: null,
-            tubeType: (test.tubeType as unknown as SampleTubeType) ?? null,
+            tubeType: testTubeType,
             barcode: nextBarcode(),
             sequenceNumber,
             qrCode: null,
           });
           targetSample = await sampleRepo.save(createdSample);
-          sampleByTubeType.set(tubeKey, targetSample);
+          sampleByScope.set(sampleScopeKey, targetSample);
         }
 
         await this.createOrderTestsForSample(
@@ -624,6 +598,69 @@ export class OrdersService {
         relations: ['patient', 'lab', 'shift', 'samples', 'samples.orderTests', 'samples.orderTests.test'],
       })) as Order;
     });
+  }
+
+  private splitSamplesForDepartmentLabels(
+    samples: CreateSampleDto[],
+    testMap: Map<string, Test>,
+  ): CreateSampleDto[] {
+    const groupedSamples = new Map<
+      string,
+      {
+        sampleId?: string;
+        tubeType?: SampleTubeType;
+        tests: Array<{ testId: string }>;
+      }
+    >();
+
+    for (const sample of samples) {
+      for (const selectedTest of sample.tests ?? []) {
+        const test = testMap.get(selectedTest.testId);
+        if (!test) continue;
+
+        const departmentId = test.departmentId ?? '__none__';
+        const tubeType = ((test.tubeType as unknown as SampleTubeType) ?? sample.tubeType ?? null);
+        const groupKey = `${departmentId}::${tubeType ?? '__none__'}`;
+
+        let groupedSample = groupedSamples.get(groupKey);
+        if (!groupedSample) {
+          groupedSample = {
+            sampleId: sample.sampleId ?? undefined,
+            tubeType: tubeType ?? undefined,
+            tests: [],
+          };
+          groupedSamples.set(groupKey, groupedSample);
+        }
+
+        if (!groupedSample.tests.some((entry) => entry.testId === selectedTest.testId)) {
+          groupedSample.tests.push({ testId: selectedTest.testId });
+        }
+      }
+    }
+
+    return Array.from(groupedSamples.values()).filter((sample) => sample.tests.length > 0);
+  }
+
+  private resolveSampleDepartmentScope(
+    tests: CreateSampleDto['tests'],
+    testMap: Map<string, Test>,
+  ): string | null {
+    for (const selectedTest of tests ?? []) {
+      const departmentId = testMap.get(selectedTest.testId)?.departmentId ?? null;
+      if (departmentId) return departmentId;
+    }
+    return null;
+  }
+
+  private buildSampleGroupingKey(
+    labelSequenceBy: 'tube_type' | 'department',
+    tubeType: SampleTubeType | null,
+    departmentId: string | null,
+  ): string {
+    if (labelSequenceBy === 'department') {
+      return `department:${departmentId ?? 'none'}|tube:${tubeType ?? 'none'}`;
+    }
+    return `tube:${tubeType ?? 'none'}`;
   }
 
   private async createOrderTestsForSample(

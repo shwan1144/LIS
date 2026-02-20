@@ -40,11 +40,13 @@ import {
   logReportDelivery,
   searchOrders,
   updateOrderPayment,
+  verifyResult,
   type OrderDto,
   type OrderStatus,
   type OrderTestDto,
   type TestParameterDefinition,
 } from '../api/client';
+import { useTheme } from '../contexts/ThemeContext';
 
 const { RangePicker } = DatePicker;
 const { Title, Text } = Typography;
@@ -54,6 +56,7 @@ type DeliveryChannel = 'WHATSAPP' | 'VIBER';
 
 type EditResultContext = {
   orderTestId: string;
+  orderNumber: string;
   patientName: string;
   testCode: string;
   testName: string;
@@ -61,6 +64,9 @@ type EditResultContext = {
   normalMin: number | null;
   normalMax: number | null;
   normalText: string | null;
+  resultEntryType: 'NUMERIC' | 'QUALITATIVE' | 'TEXT';
+  resultTextOptions: { value: string; flag?: string | null; isDefault?: boolean }[] | null;
+  allowCustomResultText: boolean;
   parameterDefinitions: TestParameterDefinition[];
   wasVerified: boolean;
 };
@@ -100,6 +106,9 @@ const RESULT_FLAG_META: Record<string, { color: string; label: string }> = {
   L: { color: 'blue', label: 'Low' },
   HH: { color: 'red', label: 'Critical High' },
   LL: { color: 'volcano', label: 'Critical Low' },
+  POS: { color: 'red', label: 'Positive' },
+  NEG: { color: 'green', label: 'Negative' },
+  ABN: { color: 'purple', label: 'Abnormal' },
 };
 
 function cleanPhoneNumber(phone: string): string {
@@ -174,6 +183,7 @@ function getOrderTestRows(order: OrderDto): ExpandedOrderTestRow[] {
 export function ReportsPage() {
   const screens = useBreakpoint();
   const isCompactActions = !screens.lg;
+  const { isDark } = useTheme();
 
   const [loading, setLoading] = useState(false);
   const [orders, setOrders] = useState<OrderDto[]>([]);
@@ -198,6 +208,7 @@ export function ReportsPage() {
   const [editResultForm] = Form.useForm<{
     resultValue?: number | null;
     resultText?: string;
+    customResultText?: string;
     resultParameters?: Record<string, string>;
   }>();
   const compactCellStyle = { paddingTop: 6, paddingBottom: 6, fontSize: 12 };
@@ -478,6 +489,15 @@ export function ReportsPage() {
         ? Number(orderTest.resultValue)
         : undefined;
     const parameterDefinitions = orderTest.test?.parameterDefinitions ?? [];
+    const resultEntryType = orderTest.test?.resultEntryType ?? 'NUMERIC';
+    const resultTextOptions = orderTest.test?.resultTextOptions ?? [];
+    const defaultQualitativeOption =
+      resultTextOptions.find((option) => option.isDefault)?.value ??
+      resultTextOptions[0]?.value;
+    const knownOptionValues = new Set(
+      resultTextOptions.map((option) => option.value.trim().toLowerCase()),
+    );
+    const allowCustomResultText = Boolean(orderTest.test?.allowCustomResultText);
     const existingParams = orderTest.resultParameters ?? {};
     const defaults: Record<string, string> = {};
     parameterDefinitions.forEach((def) => {
@@ -490,8 +510,26 @@ export function ReportsPage() {
       }
     });
 
+    let initialResultText = orderTest.resultText ?? undefined;
+    let customResultText: string | undefined;
+
+    if (resultEntryType === 'QUALITATIVE') {
+      if (!initialResultText && defaultQualitativeOption) {
+        initialResultText = defaultQualitativeOption;
+      }
+      if (
+        initialResultText &&
+        allowCustomResultText &&
+        !knownOptionValues.has(initialResultText.trim().toLowerCase())
+      ) {
+        customResultText = initialResultText;
+        initialResultText = '__other__';
+      }
+    }
+
     setEditResultContext({
       orderTestId: orderTest.id,
+      orderNumber: order.orderNumber || order.id.substring(0, 8),
       patientName: order.patient?.fullName || '-',
       testCode: orderTest.test?.code || '-',
       testName: orderTest.test?.name || '-',
@@ -499,13 +537,20 @@ export function ReportsPage() {
       normalMin: orderTest.test?.normalMin ?? null,
       normalMax: orderTest.test?.normalMax ?? null,
       normalText: orderTest.test?.normalText ?? null,
+      resultEntryType,
+      resultTextOptions,
+      allowCustomResultText,
       parameterDefinitions,
       wasVerified: orderTest.status === 'VERIFIED',
     });
 
     editResultForm.setFieldsValue({
-      resultValue: Number.isFinite(valueCandidate) ? valueCandidate : undefined,
-      resultText: orderTest.resultText || undefined,
+      resultValue:
+        resultEntryType === 'QUALITATIVE' || resultEntryType === 'TEXT'
+          ? undefined
+          : (Number.isFinite(valueCandidate) ? valueCandidate : undefined),
+      resultText: initialResultText,
+      customResultText,
       resultParameters: { ...defaults, ...existingParams },
     });
 
@@ -516,8 +561,8 @@ export function ReportsPage() {
     if (!editResultContext) return;
 
     const values = await editResultForm.validateFields();
-    const resultValue = values.resultValue ?? null;
-    const resultText = values.resultText?.trim() || null;
+    let resultValue = values.resultValue ?? null;
+    let resultText = values.resultText?.trim() || null;
     const rawParams = values.resultParameters ?? {};
     const resultParameters = Object.fromEntries(
       Object.entries(rawParams).filter(([, value]) => {
@@ -526,6 +571,15 @@ export function ReportsPage() {
       }),
     );
     const hasResultParameters = Object.keys(resultParameters).length > 0;
+
+    if (editResultContext.resultEntryType === 'QUALITATIVE') {
+      if (resultText === '__other__') {
+        resultText = values.customResultText?.trim() || null;
+      }
+      resultValue = null;
+    } else if (editResultContext.resultEntryType === 'TEXT') {
+      resultValue = null;
+    }
 
     if (resultValue === null && !resultText && !hasResultParameters) {
       message.warning('Enter numeric result, text result, or parameter values.');
@@ -541,10 +595,21 @@ export function ReportsPage() {
         forceEditVerified: editResultContext.wasVerified,
       });
 
+      let verifiedNow = editResultContext.wasVerified;
+      if (!editResultContext.wasVerified) {
+        try {
+          await verifyResult(editResultContext.orderTestId);
+          verifiedNow = true;
+        } catch (verifyError) {
+          console.error('Result saved but verify failed', verifyError);
+          message.warning('Result saved, but verification failed. Verify manually before print.');
+        }
+      }
+
       message.success(
         editResultContext.wasVerified
           ? 'Verified result updated by admin'
-          : 'Result updated',
+          : (verifiedNow ? 'Result updated and verified' : 'Result updated'),
       );
 
       setEditResultModalOpen(false);
@@ -781,8 +846,22 @@ export function ReportsPage() {
 
   const columns = [
     {
-      title: 'Reports',
-      key: 'reports',
+      title: 'Patient',
+      key: 'patient',
+      width: 260,
+      render: (_: unknown, record: OrderDto) => (
+        <Space size={8} style={{ minWidth: 0 }}>
+          <UserOutlined style={{ fontSize: 14, color: '#1677ff' }} />
+          <Text strong ellipsis style={{ fontSize: 13 }}>
+            {record.patient?.fullName?.trim() || '-'}
+          </Text>
+        </Space>
+      ),
+    },
+    {
+      title: 'Status',
+      key: 'statusSummary',
+      width: 260,
       render: (_: unknown, record: OrderDto) => {
         const availability = getResultAvailability(record);
         const testsCount =
@@ -791,57 +870,56 @@ export function ReportsPage() {
             : (record.samples ?? []).reduce((sum, sample) => sum + (sample.orderTests?.length || 0), 0);
 
         return (
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: 'minmax(180px, 240px) max-content minmax(130px, 170px) minmax(260px, 1fr)',
-              alignItems: 'center',
-              columnGap: 6,
-            }}
-          >
-            <Space size={8} style={{ minWidth: 0 }}>
-              <UserOutlined style={{ fontSize: 14, color: '#1677ff' }} />
-              <div style={{ minWidth: 0 }}>
-                <Text strong ellipsis style={{ display: 'block', fontSize: 12, lineHeight: '15px' }}>
-                  {record.patient?.fullName?.trim() || '-'}
-                </Text>
-                <Text type="secondary" style={{ display: 'block', fontSize: 10 }}>
-                  {dayjs(record.registeredAt).format('YYYY-MM-DD HH:mm')}
-                </Text>
-              </div>
-            </Space>
-
-            <Space size={[4, 4]} wrap>
-              <Tag color={ORDER_STATUS_COLORS[record.status] || 'default'} style={{ margin: 0 }}>
-                {record.status.replace('_', ' ')}
+          <Space size={[4, 4]} wrap>
+            <Tag color={ORDER_STATUS_COLORS[record.status] || 'default'} style={{ margin: 0 }}>
+              {record.status.replace('_', ' ')}
+            </Tag>
+            <Tag style={{ margin: 0 }}>{testsCount} tests</Tag>
+            {availability.ready ? (
+              <Tag color="green" style={{ margin: 0 }}>
+                Ready {availability.completed}/{availability.total}
               </Tag>
-              <Tag style={{ margin: 0 }}>{testsCount} tests</Tag>
-              {availability.ready ? (
-                <Tag color="green" style={{ margin: 0 }}>
-                  Ready {availability.completed}/{availability.total}
-                </Tag>
-              ) : (
-                <Tag color="default" style={{ margin: 0 }}>
-                  Pending {availability.completed}/{availability.total}
-                </Tag>
-              )}
-            </Space>
-
-            <div style={{ minWidth: 0 }}>
-              <Text type="secondary" style={{ display: 'block', fontSize: 11 }}>
-                Order: {record.orderNumber || record.id.substring(0, 8)}
-              </Text>
-              <Text type="secondary" style={{ display: 'block', fontSize: 10 }}>
-                Phone: {record.patient?.phone || '-'}
-              </Text>
-            </div>
-
-            <div style={{ minWidth: 0, display: 'flex', justifyContent: 'flex-end' }}>
-              {renderOrderActions(record)}
-            </div>
-          </div>
+            ) : (
+              <Tag color="default" style={{ margin: 0 }}>
+                Pending {availability.completed}/{availability.total}
+              </Tag>
+            )}
+          </Space>
         );
       },
+    },
+    {
+      title: 'Order',
+      key: 'order',
+      width: 210,
+      render: (_: unknown, record: OrderDto) => (
+        <div style={{ minWidth: 0 }}>
+          <Text type="secondary" style={{ display: 'block', fontSize: 11 }}>
+            Order: {record.orderNumber || record.id.substring(0, 8)}
+          </Text>
+          <Text type="secondary" style={{ display: 'block', fontSize: 10 }}>
+            Phone: {record.patient?.phone || '-'}
+          </Text>
+        </div>
+      ),
+    },
+    {
+      title: 'Time',
+      key: 'registeredAt',
+      width: 165,
+      render: (_: unknown, record: OrderDto) => (
+        <Text style={{ fontSize: 12 }}>{dayjs(record.registeredAt).format('YYYY-MM-DD HH:mm')}</Text>
+      ),
+    },
+    {
+      title: 'Actions',
+      key: 'actions',
+      width: isCompactActions ? 80 : 360,
+      render: (_: unknown, record: OrderDto) => (
+        <div style={{ minWidth: 0, display: 'flex', justifyContent: 'flex-end' }}>
+          {renderOrderActions(record)}
+        </div>
+      ),
     },
   ];
 
@@ -982,124 +1060,249 @@ export function ReportsPage() {
       </Modal>
 
       <Modal
-        title="Edit report result"
+        title={(
+          <Space size="middle">
+            <span style={{ fontWeight: 600, fontSize: 16 }}>Enter Result</span>
+            {editResultContext && (
+              <Tag color="blue" style={{ margin: 0 }}>
+                {editResultContext.testCode} - {editResultContext.testName}
+              </Tag>
+            )}
+          </Space>
+        )}
         open={editResultModalOpen}
         onCancel={() => {
           setEditResultModalOpen(false);
           setEditResultContext(null);
           editResultForm.resetFields();
         }}
-        onOk={handleEditResultSave}
-        okText="Save result"
-        confirmLoading={savingResult}
+        footer={null}
+        width={720}
+        styles={{
+          body: { paddingTop: 8 },
+          header: { borderBottom: isDark ? '1px solid rgba(255,255,255,0.08)' : '1px solid #f0f0f0' },
+        }}
         destroyOnClose
       >
-        <Space direction="vertical" style={{ width: '100%' }} size="small">
-          {editResultContext && (
-            <>
-              <Text strong>{editResultContext.patientName}</Text>
-              <Text type="secondary">
-                {editResultContext.testCode} - {editResultContext.testName}
-              </Text>
-              {editResultContext.wasVerified ? (
-                <Tag color="gold">Verified result correction (admin only)</Tag>
-              ) : null}
-              {(editResultContext.normalMin !== null ||
-                editResultContext.normalMax !== null ||
-                editResultContext.normalText) && (
-                <Text type="secondary" style={{ fontSize: 12 }}>
-                  Normal range:{' '}
-                  {editResultContext.normalText ||
-                    `${editResultContext.normalMin ?? '-'} - ${editResultContext.normalMax ?? '-'} ${editResultContext.testUnit || ''}`}
-                </Text>
-              )}
-            </>
-          )}
-
-          <Form form={editResultForm} layout="vertical">
-            {(editResultContext?.parameterDefinitions.length ?? 0) === 0 ? (
-              <Row gutter={16}>
-                <Col xs={24} md={12}>
-                  <Form.Item
-                    name="resultValue"
-                    label={`Numeric result${editResultContext?.testUnit ? ` (${editResultContext.testUnit})` : ''}`}
-                  >
-                    <InputNumber
-                      style={{ width: '100%' }}
-                      placeholder="e.g. 7.2"
-                      controls={false}
-                    />
-                  </Form.Item>
+        {editResultContext && (
+          <div style={{ padding: '4px 0' }}>
+            <div
+              style={{
+                marginBottom: 24,
+                padding: 16,
+                backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : '#fafafa',
+                border: isDark ? '1px solid rgba(255,255,255,0.08)' : '1px solid #f0f0f0',
+                borderRadius: 10,
+              }}
+            >
+              <Row gutter={[24, 8]}>
+                <Col xs={24} sm={12}>
+                  <Text type="secondary" style={{ fontSize: 12 }}>Patient</Text>
+                  <div style={{ marginTop: 2 }}><Text strong>{editResultContext.patientName}</Text></div>
                 </Col>
-                <Col xs={24} md={12}>
-                  <Form.Item name="resultText" label="Text result">
-                    <Input.TextArea rows={3} placeholder="Optional text result" />
-                  </Form.Item>
+                <Col xs={24} sm={12}>
+                  <Text type="secondary" style={{ fontSize: 12 }}>Order</Text>
+                  <div style={{ marginTop: 2 }}><Text strong>{editResultContext.orderNumber}</Text></div>
                 </Col>
               </Row>
-            ) : (
-              <Space direction="vertical" style={{ width: '100%' }} size="small">
-                <Text strong style={{ fontSize: 14 }}>Parameters</Text>
-                <Row gutter={[16, 0]}>
-                  {editResultContext?.parameterDefinitions.map((def) => (
-                    <Form.Item
-                      noStyle
-                      key={def.code}
-                      shouldUpdate={(prev, curr) => prev?.resultParameters?.[def.code] !== curr?.resultParameters?.[def.code]}
-                    >
-                      {() => {
-                        const params = editResultForm.getFieldValue('resultParameters') ?? {};
-                        const value = params[def.code];
-                        const isAbnormal =
-                          (def.normalOptions?.length ?? 0) > 0 &&
-                          value != null &&
-                          String(value).trim() !== '' &&
-                          !def.normalOptions!.includes(String(value).trim());
-                        const labelNode = isAbnormal ? (
-                          <Space size={6}>
-                            <span>{def.label}</span>
-                            <Tag color="orange">Abnormal</Tag>
-                          </Space>
-                        ) : (
-                          def.label
-                        );
 
-                        return (
-                          <Col xs={24} md={12}>
-                            <Form.Item
-                              name={['resultParameters', def.code]}
-                              label={labelNode}
-                              style={{ marginBottom: 12 }}
-                            >
-                              {def.type === 'select' ? (
-                                <Select
-                                  allowClear
-                                  placeholder={`Select ${def.label}`}
-                                  options={(def.options ?? []).map((option) => ({
-                                    label: option,
-                                    value: option,
-                                  }))}
-                                  showSearch
-                                  optionFilterProp="label"
-                                />
-                              ) : (
-                                <Input placeholder={`Enter ${def.label}`} />
-                              )}
-                            </Form.Item>
-                          </Col>
-                        );
-                      }}
-                    </Form.Item>
-                  ))}
-                </Row>
-              </Space>
-            )}
-          </Form>
+              {editResultContext.wasVerified ? (
+                <div style={{ marginTop: 12 }}>
+                  <Tag color="gold">Verified result correction (admin only)</Tag>
+                </div>
+              ) : null}
 
-          <Text type="secondary" style={{ fontSize: 12 }}>
-            Use Edit to enter detailed values. Admin can also correct verified results from this tab.
-          </Text>
-        </Space>
+              {(editResultContext.normalMin !== null || editResultContext.normalMax !== null || editResultContext.normalText) && (
+                <div style={{ marginTop: 12, paddingTop: 12, borderTop: isDark ? '1px solid rgba(255,255,255,0.06)' : '1px solid #f0f0f0' }}>
+                  <Text type="secondary" style={{ fontSize: 12 }}>Normal range</Text>
+                  <div style={{ marginTop: 2 }}>
+                    <Text>
+                      {editResultContext.normalText ||
+                        `${editResultContext.normalMin ?? '-'} - ${editResultContext.normalMax ?? '-'} ${editResultContext.testUnit || ''}`}
+                    </Text>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <Form form={editResultForm} layout="vertical" onFinish={handleEditResultSave}>
+              {(editResultContext.parameterDefinitions?.length ?? 0) === 0 && (
+                <>
+                  {editResultContext.resultEntryType === 'QUALITATIVE' || editResultContext.resultEntryType === 'TEXT' ? (
+                    <Row gutter={16}>
+                      <Col xs={24} md={16}>
+                        <Form.Item
+                          name="resultText"
+                          label={editResultContext.resultEntryType === 'QUALITATIVE' ? 'Result text (select)' : 'Result text'}
+                          rules={
+                            editResultContext.resultEntryType === 'QUALITATIVE'
+                              ? [{ required: true, message: 'Select or enter a result text value' }]
+                              : undefined
+                          }
+                        >
+                          {editResultContext.resultEntryType === 'QUALITATIVE' &&
+                          (editResultContext.resultTextOptions?.length ?? 0) > 0 ? (
+                            <Select
+                              allowClear
+                              showSearch
+                              size="large"
+                              placeholder="Select result text"
+                              options={[
+                                ...(editResultContext.resultTextOptions ?? []).map((option) => ({
+                                  label: option.flag ? `${option.value} (${option.flag})` : option.value,
+                                  value: option.value,
+                                })),
+                                ...(editResultContext.allowCustomResultText
+                                  ? [{ label: 'Other (type manually)', value: '__other__' }]
+                                  : []),
+                              ]}
+                            />
+                          ) : (
+                            <Input
+                              placeholder="e.g. Positive, Negative, Reactive"
+                              size="large"
+                            />
+                          )}
+                        </Form.Item>
+                      </Col>
+                    </Row>
+                  ) : (
+                    <Row gutter={16}>
+                      <Col xs={24} md={12}>
+                        <Form.Item
+                          name="resultValue"
+                          label={`Result value${editResultContext.testUnit ? ` (${editResultContext.testUnit})` : ''}`}
+                        >
+                          <InputNumber
+                            style={{ width: '100%' }}
+                            placeholder="Enter numeric result"
+                            precision={4}
+                            size="large"
+                          />
+                        </Form.Item>
+                      </Col>
+                      <Col xs={24} md={12}>
+                        <Form.Item
+                          name="resultText"
+                          label="Result text (optional)"
+                        >
+                          <Input placeholder="Optional qualitative text" size="large" />
+                        </Form.Item>
+                      </Col>
+                    </Row>
+                  )}
+
+                  {editResultContext.resultEntryType === 'QUALITATIVE' &&
+                    editResultContext.allowCustomResultText && (
+                      <Form.Item noStyle shouldUpdate>
+                        {() =>
+                          editResultForm.getFieldValue('resultText') === '__other__' ? (
+                            <Row gutter={16}>
+                              <Col xs={24} md={16}>
+                                <Form.Item
+                                  name="customResultText"
+                                  label="Custom result text"
+                                  rules={[{ required: true, message: 'Enter custom result text' }]}
+                                >
+                                  <Input placeholder="Type custom result value" size="large" />
+                                </Form.Item>
+                              </Col>
+                            </Row>
+                          ) : null
+                        }
+                      </Form.Item>
+                    )}
+                </>
+              )}
+
+              {(editResultContext.parameterDefinitions?.length ?? 0) > 0 && (
+                <>
+                  <div style={{ marginBottom: 16 }}>
+                    <Text strong style={{ fontSize: 14 }}>Parameters</Text>
+                    <Text type="secondary" style={{ fontSize: 12, marginLeft: 8 }}>Enter result parameters for this test</Text>
+                  </div>
+                  <Row gutter={[20, 0]}>
+                    {editResultContext.parameterDefinitions.map((def) => (
+                      <Form.Item
+                        noStyle
+                        key={def.code}
+                        shouldUpdate={(prev, curr) => prev?.resultParameters?.[def.code] !== curr?.resultParameters?.[def.code]}
+                      >
+                        {() => {
+                          const params = editResultForm.getFieldValue('resultParameters') ?? {};
+                          const value = params[def.code];
+                          const isAbnormal =
+                            (def.normalOptions?.length ?? 0) > 0 &&
+                            value != null &&
+                            String(value).trim() !== '' &&
+                            value !== '__other__' &&
+                            !def.normalOptions!.includes(String(value).trim());
+                          const labelNode = isAbnormal ? (
+                            <Space size={6}>
+                              <span>{def.label}</span>
+                              <Tag color="orange">Abnormal</Tag>
+                            </Space>
+                          ) : (
+                            def.label
+                          );
+
+                          return (
+                            <Col xs={24} md={12}>
+                              <Form.Item
+                                name={['resultParameters', def.code]}
+                                label={labelNode}
+                                style={{ marginBottom: 16 }}
+                              >
+                                {def.type === 'select' ? (
+                                  <Select
+                                    allowClear
+                                    placeholder={`Select ${def.label} or Other to type`}
+                                    size="large"
+                                    options={[
+                                      ...(def.options ?? []).map((option) => ({ label: option, value: option })),
+                                      { label: 'Other (enter manually)', value: '__other__' },
+                                    ]}
+                                    showSearch
+                                    optionFilterProp="label"
+                                    onChange={(nextValue) => {
+                                      if (nextValue === '__other__') {
+                                        editResultForm.setFieldValue(['resultParameters', def.code], '');
+                                      }
+                                    }}
+                                  />
+                                ) : (
+                                  <Input placeholder={`Enter ${def.label}`} size="large" />
+                                )}
+                              </Form.Item>
+                            </Col>
+                          );
+                        }}
+                      </Form.Item>
+                    ))}
+                  </Row>
+                </>
+              )}
+
+              <Form.Item style={{ marginBottom: 0, marginTop: 24 }}>
+                <Space style={{ width: '100%', justifyContent: 'flex-end' }} size="middle">
+                  <Button
+                    onClick={() => {
+                      setEditResultModalOpen(false);
+                      setEditResultContext(null);
+                      editResultForm.resetFields();
+                    }}
+                    size="large"
+                  >
+                    Cancel
+                  </Button>
+                  <Button type="primary" htmlType="submit" loading={savingResult} size="large">
+                    Save Result
+                  </Button>
+                </Space>
+              </Form.Item>
+            </Form>
+          </div>
+        )}
       </Modal>
 
       <Title level={2}>Reports</Title>
@@ -1184,7 +1387,6 @@ export function ReportsPage() {
               dataSource={orders}
               rowKey="id"
               rowClassName={(record) => (expandedOrderIds.includes(record.id) ? 'reports-order-row-expanded' : '')}
-              showHeader={false}
               rowSelection={{
                 selectedRowKeys: selectedOrderIds,
                 onChange: (keys) => setSelectedOrderIds(keys as string[]),
@@ -1199,7 +1401,7 @@ export function ReportsPage() {
                   setExpandedOrderIds(expanded ? [record.id] : []);
                 },
               }}
-              scroll={{ x: 980 }}
+              scroll={{ x: 1260 }}
               pagination={{ pageSize: 20 }}
             />
           )}

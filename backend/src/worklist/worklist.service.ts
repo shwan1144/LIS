@@ -365,9 +365,18 @@ export class WorklistService {
       orderTest.resultText = matchedOption?.value ?? candidateText;
       orderTest.resultValue = null;
       orderTest.flag = this.toResultFlag(matchedOption?.flag ?? null);
+    } else if (resultEntryType === 'TEXT') {
+      if (data.resultText !== undefined) {
+        orderTest.resultText = normalizedResultTextInput ?? null;
+      }
+      orderTest.resultValue = null;
+      orderTest.flag = this.resolveFlagFromResultText(
+        orderTest.resultText,
+        resultTextOptions,
+      );
     } else {
       if (data.resultText !== undefined) {
-        orderTest.resultText = normalizedResultTextInput;
+        orderTest.resultText = normalizedResultTextInput ?? null;
       }
 
       const optionFlag = this.resolveFlagFromResultText(

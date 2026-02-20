@@ -68,10 +68,8 @@ let OrdersService = class OrdersService {
         const testMap = new Map(tests.map((t) => [t.id, t]));
         const patientType = dto.patientType || order_entity_1.PatientType.WALK_IN;
         let totalAmount = 0;
-        const pricingMap = new Map();
         for (const testId of uniqueTestIds) {
             const pricing = await this.findPricing(labId, testId, dto.shiftId || null, patientType);
-            pricingMap.set(testId, pricing);
             totalAmount += pricing;
         }
         const discountPercent = Math.min(100, Math.max(0, dto.discountPercent ?? 0));
@@ -79,6 +77,9 @@ let OrdersService = class OrdersService {
         const labelSequenceBy = lab.labelSequenceBy === 'department' ? 'department' : 'tube_type';
         const sequenceResetBy = lab.sequenceResetBy === 'shift' ? 'shift' : 'day';
         const effectiveShiftId = sequenceResetBy === 'shift' ? dto.shiftId || null : null;
+        const samplesToCreate = labelSequenceBy === 'department'
+            ? this.splitSamplesForDepartmentLabels(dto.samples, testMap)
+            : dto.samples;
         const orderNumber = await this.generateOrderNumber(labId, dto.shiftId || null);
         const order = this.orderRepo.create({
             patientId: dto.patientId,
@@ -96,11 +97,11 @@ let OrdersService = class OrdersService {
         const savedOrder = await this.orderRepo.save(order);
         const datePart = orderNumber.slice(0, 6);
         let seq = parseInt(orderNumber.slice(-3), 10);
-        for (let i = 0; i < dto.samples.length; i++) {
-            const sampleDto = dto.samples[i];
+        for (let i = 0; i < samplesToCreate.length; i++) {
+            const sampleDto = samplesToCreate[i];
             const sampleBarcode = `${datePart}${String(seq + i).padStart(3, '0')}`;
             const scopeKey = labelSequenceBy === 'department'
-                ? (sampleDto.tests[0] && testMap.get(sampleDto.tests[0].testId)?.departmentId) ?? null
+                ? this.resolveSampleDepartmentScope(sampleDto.tests, testMap)
                 : (sampleDto.tubeType ?? null);
             const sequenceNumber = await this.getNextSequenceForScope(labId, sequenceResetBy, effectiveShiftId, scopeKey, labelSequenceBy);
             const sample = this.orderRepo.manager.create(sample_entity_1.Sample, {
@@ -118,46 +119,7 @@ let OrdersService = class OrdersService {
                 if (!test) {
                     continue;
                 }
-                if (test.type === test_entity_1.TestType.PANEL) {
-                    const parentOrderTest = this.orderRepo.manager.create(order_test_entity_1.OrderTest, {
-                        labId,
-                        sampleId: savedSample.id,
-                        testId: test.id,
-                        parentOrderTestId: null,
-                        status: order_test_entity_1.OrderTestStatus.PENDING,
-                        price: pricingMap.get(test.id) || null,
-                    });
-                    const savedParent = await this.orderRepo.manager.save(parentOrderTest);
-                    const components = await this.testComponentRepo
-                        .createQueryBuilder('component')
-                        .innerJoinAndSelect('component.childTest', 'childTest')
-                        .where('component.panelTestId = :panelTestId', { panelTestId: test.id })
-                        .andWhere('childTest.labId = :labId', { labId })
-                        .orderBy('component.sortOrder', 'ASC')
-                        .getMany();
-                    for (const component of components) {
-                        const childOrderTest = this.orderRepo.manager.create(order_test_entity_1.OrderTest, {
-                            labId,
-                            sampleId: savedSample.id,
-                            testId: component.childTestId,
-                            parentOrderTestId: savedParent.id,
-                            status: order_test_entity_1.OrderTestStatus.PENDING,
-                            price: null,
-                        });
-                        await this.orderRepo.manager.save(childOrderTest);
-                    }
-                }
-                else {
-                    const orderTest = this.orderRepo.manager.create(order_test_entity_1.OrderTest, {
-                        labId,
-                        sampleId: savedSample.id,
-                        testId: testDto.testId,
-                        parentOrderTestId: null,
-                        status: order_test_entity_1.OrderTestStatus.PENDING,
-                        price: pricingMap.get(testDto.testId) || null,
-                    });
-                    await this.orderRepo.manager.save(orderTest);
-                }
+                await this.createOrderTestsForSample(this.orderRepo.manager, labId, savedSample.id, test, dto.shiftId ?? null, patientType);
             }
         }
         return this.orderRepo.findOne({
@@ -393,17 +355,19 @@ let OrdersService = class OrdersService {
                 relations: ['orderTests', 'orderTests.test'],
                 order: { createdAt: 'ASC' },
             });
-            const sampleByTubeType = new Map();
-            for (const sample of refreshedSamples) {
-                const tubeKey = sample.tubeType ?? 'OTHER';
-                if (!sampleByTubeType.has(tubeKey)) {
-                    sampleByTubeType.set(tubeKey, sample);
-                }
-            }
-            const nextBarcode = this.createOrderSampleBarcodeAllocator(order.orderNumber, refreshedSamples.map((sample) => sample.barcode));
             const labelSequenceBy = order.lab?.labelSequenceBy === 'department' ? 'department' : 'tube_type';
             const sequenceResetBy = order.lab?.sequenceResetBy === 'shift' ? 'shift' : 'day';
             const effectiveShiftId = sequenceResetBy === 'shift' ? order.shiftId ?? null : null;
+            const sampleByScope = new Map();
+            for (const sample of refreshedSamples) {
+                const departmentIds = Array.from(new Set((sample.orderTests ?? []).map((orderTest) => orderTest.test?.departmentId ?? null)));
+                const sampleDepartmentId = departmentIds.length === 1 ? departmentIds[0] : null;
+                const scopeMapKey = this.buildSampleGroupingKey(labelSequenceBy, sample.tubeType ?? null, sampleDepartmentId);
+                if (!sampleByScope.has(scopeMapKey)) {
+                    sampleByScope.set(scopeMapKey, sample);
+                }
+            }
+            const nextBarcode = this.createOrderSampleBarcodeAllocator(order.orderNumber, refreshedSamples.map((sample) => sample.barcode));
             for (const testId of uniqueTestIds) {
                 if (existingRootByTestId.has(testId)) {
                     continue;
@@ -412,8 +376,10 @@ let OrdersService = class OrdersService {
                 if (!test) {
                     continue;
                 }
-                const tubeKey = test.tubeType ?? 'OTHER';
-                let targetSample = sampleByTubeType.get(tubeKey);
+                const testTubeType = test.tubeType ?? null;
+                const testDepartmentId = labelSequenceBy === 'department' ? test.departmentId ?? null : null;
+                const sampleScopeKey = this.buildSampleGroupingKey(labelSequenceBy, testTubeType, testDepartmentId);
+                let targetSample = sampleByScope.get(sampleScopeKey);
                 if (!targetSample) {
                     const scopeKey = labelSequenceBy === 'department'
                         ? (test.departmentId ?? null)
@@ -423,13 +389,13 @@ let OrdersService = class OrdersService {
                         labId,
                         orderId: order.id,
                         sampleId: null,
-                        tubeType: test.tubeType ?? null,
+                        tubeType: testTubeType,
                         barcode: nextBarcode(),
                         sequenceNumber,
                         qrCode: null,
                     });
                     targetSample = await sampleRepo.save(createdSample);
-                    sampleByTubeType.set(tubeKey, targetSample);
+                    sampleByScope.set(sampleScopeKey, targetSample);
                 }
                 await this.createOrderTestsForSample(manager, labId, targetSample.id, test, order.shiftId ?? null, order.patientType);
             }
@@ -467,6 +433,46 @@ let OrdersService = class OrdersService {
                 relations: ['patient', 'lab', 'shift', 'samples', 'samples.orderTests', 'samples.orderTests.test'],
             }));
         });
+    }
+    splitSamplesForDepartmentLabels(samples, testMap) {
+        const groupedSamples = new Map();
+        for (const sample of samples) {
+            for (const selectedTest of sample.tests ?? []) {
+                const test = testMap.get(selectedTest.testId);
+                if (!test)
+                    continue;
+                const departmentId = test.departmentId ?? '__none__';
+                const tubeType = (test.tubeType ?? sample.tubeType ?? null);
+                const groupKey = `${departmentId}::${tubeType ?? '__none__'}`;
+                let groupedSample = groupedSamples.get(groupKey);
+                if (!groupedSample) {
+                    groupedSample = {
+                        sampleId: sample.sampleId ?? undefined,
+                        tubeType: tubeType ?? undefined,
+                        tests: [],
+                    };
+                    groupedSamples.set(groupKey, groupedSample);
+                }
+                if (!groupedSample.tests.some((entry) => entry.testId === selectedTest.testId)) {
+                    groupedSample.tests.push({ testId: selectedTest.testId });
+                }
+            }
+        }
+        return Array.from(groupedSamples.values()).filter((sample) => sample.tests.length > 0);
+    }
+    resolveSampleDepartmentScope(tests, testMap) {
+        for (const selectedTest of tests ?? []) {
+            const departmentId = testMap.get(selectedTest.testId)?.departmentId ?? null;
+            if (departmentId)
+                return departmentId;
+        }
+        return null;
+    }
+    buildSampleGroupingKey(labelSequenceBy, tubeType, departmentId) {
+        if (labelSequenceBy === 'department') {
+            return `department:${departmentId ?? 'none'}|tube:${tubeType ?? 'none'}`;
+        }
+        return `tube:${tubeType ?? 'none'}`;
     }
     async createOrderTestsForSample(manager, labId, sampleId, test, shiftId, patientType) {
         const orderTestRepo = manager.getRepository(order_test_entity_1.OrderTest);

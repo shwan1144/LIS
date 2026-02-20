@@ -175,7 +175,7 @@
   display: flex;
   flex-direction: row;
   flex-wrap: wrap;
-  gap: 4mm;
+  gap: 2mm;
   align-items: flex-start;
   justify-content: flex-start;
 }
@@ -189,7 +189,7 @@
   max-height: 25mm;
   padding: 0;
   border: 1px solid #000;
-  border-radius: 2px;
+  border-radius: 0;
   font-family: Arial, sans-serif;
   font-size: 7px;
   background: white;
@@ -201,29 +201,31 @@
   align-items: stretch;
 }
 
-/* Left vertical strip: Sequence number */
+/* Left vertical strip: Tube/Department + Sequence */
 .label-sequence-strip {
-  flex: 0 0 5mm;
-  width: 5mm;
-  min-width: 5mm;
+  flex: 0 0 5.2mm;
+  width: 5.2mm;
+  min-width: 5.2mm;
   background: white;
-  border-right: 1px solid #ccc;
+  border-right: 1px solid #000;
   display: flex;
   align-items: center;
   justify-content: center;
   overflow: hidden;
+  padding: 1px 0;
 }
 
 .label-sequence-text {
   writing-mode: vertical-rl;
   transform: rotate(180deg);
-  font-size: 6px;
+  font-size: 4.4px;
   font-weight: 600;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  text-overflow: clip;
+  white-space: normal;
   max-height: 100%;
-  line-height: 1.2;
+  line-height: 1;
+  text-align: center;
 }
 
 /* Center main area */
@@ -240,16 +242,17 @@
   display: flex;
   flex-direction: row;
   flex: 0 0 auto;
-  min-height: 6mm;
+  min-height: 4.6mm;
+  border-bottom: none;
 }
 
 .label-name-cell {
   flex: 3;
   min-width: 0;
-  padding: 2px 3px;
-  background: #e8e8e8;
+  padding: 1px 2px;
+  background: #d8d8d8;
   font-weight: bold;
-  font-size: 9px;
+  font-size: 6.2px;
   line-height: 1.15;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -261,7 +264,7 @@
 .label-sex-cell {
   flex: 1;
   min-width: 0;
-  padding: 1px 2px;
+  padding: 0 1px;
   background: white;
   font-size: 6px;
   overflow: hidden;
@@ -270,7 +273,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  border-left: 1px solid #ddd;
+  border-left: none;
 }
 
 /* Body: thin left margin + barcode row + test row */
@@ -282,9 +285,10 @@
 }
 
 .label-left-margin {
-  flex: 0 0 1.5mm;
-  min-width: 1.5mm;
+  flex: 0 0 0.7mm;
+  min-width: 0.7mm;
   background: transparent;
+  border-right: none;
 }
 
 .label-content {
@@ -296,12 +300,14 @@
 }
 
 .label-barcode-row {
-  flex: 0 0 auto;
+  flex: 0 0 12mm;
   min-height: 0;
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: center;
   overflow: hidden;
+  border-bottom: none;
+  padding: 0;
 }
 
 .label-barcode {
@@ -316,51 +322,53 @@
 }
 
 .label-barcode svg {
+  width: 100%;
   max-width: 100%;
-  max-height: 12mm;
-  width: auto;
-  height: auto;
+  height: 11.4mm;
   display: block;
 }
 
 .label-test-row {
   flex: 1;
-  min-height: 8mm;
-  font-size: 5px;
-  padding: 2px 3px;
+  min-height: 4mm;
+  font-size: 6px;
+  padding: 0.8px 1.6px;
   overflow: hidden;
-  display: -webkit-box;
-  -webkit-line-clamp: 5;
-  -webkit-box-orient: vertical;
-  line-clamp: 5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   word-break: break-word;
-  white-space: normal;
-  border-top: 1px solid #eee;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  text-align: center;
+  border-top: none;
 }
 
-/* Right vertical strip: Patient number */
+/* Right vertical strip: Patient/Order number */
 .label-patient-number-strip {
-  flex: 0 0 6mm;
-  width: 6mm;
-  min-width: 6mm;
+  flex: 0 0 2.5mm;
+  width: 2.5mm;
+  min-width: 2.5mm;
   background: white;
-  border-left: 1px solid #ccc;
+  border-left: 1px solid #000;
   display: flex;
   align-items: center;
   justify-content: center;
   overflow: hidden;
+  padding: 1px 0;
 }
 
 .label-patient-number-text {
   writing-mode: vertical-rl;
   transform: rotate(180deg);
-  font-size: 5px;
-  font-weight: 500;
+  font-size: 4.3px;
+  font-weight: 600;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  text-overflow: clip;
+  white-space: normal;
   max-height: 100%;
-  line-height: 1.2;
+  line-height: 0.95;
+  text-align: center;
 }
 
 /* =====================================================
@@ -397,13 +405,13 @@
   .sample-label {
     width: 50mm !important;
     height: 25mm !important;
-    margin: 2mm;
-    padding: 3px;
+    margin: 0 !important;
+    padding: 0 !important;
     page-break-inside: avoid;
     display: flex !important;
     flex-direction: row !important;
     box-sizing: border-box !important;
-    gap: 4px;
+    gap: 0 !important;
   }
 
   .all-labels-container {

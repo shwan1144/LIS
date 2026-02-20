@@ -4,7 +4,7 @@ import { PrinterOutlined } from '@ant-design/icons';
 import { useReactToPrint } from 'react-to-print';
 import { OrderReceipt } from './OrderReceipt';
 import { AllSampleLabels } from './SampleLabel';
-import type { OrderDto } from '../../api/client';
+import type { DepartmentDto, OrderDto } from '../../api/client';
 import './print.css';
 
 interface PrintPreviewModalProps {
@@ -13,6 +13,8 @@ interface PrintPreviewModalProps {
   order: OrderDto | null;
   type: 'receipt' | 'labels';
   labName?: string;
+  labelSequenceBy?: 'tube_type' | 'department';
+  departments?: DepartmentDto[];
 }
 
 export function PrintPreviewModal({
@@ -21,6 +23,8 @@ export function PrintPreviewModal({
   order,
   type,
   labName,
+  labelSequenceBy,
+  departments,
 }: PrintPreviewModalProps) {
   const printRef = useRef<HTMLDivElement>(null);
 
@@ -59,7 +63,11 @@ export function PrintPreviewModal({
             {type === 'receipt' ? (
               <OrderReceipt order={order} labName={labName} />
             ) : (
-              <AllSampleLabels order={order} />
+              <AllSampleLabels
+                order={order}
+                labelSequenceBy={labelSequenceBy}
+                departments={departments}
+              />
             )}
           </div>
         </div>

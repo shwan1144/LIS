@@ -144,6 +144,17 @@ export function TestsPage() {
     loadTests();
   }, [showAll]);
 
+  useEffect(() => {
+    getDepartments()
+      .then((data) => setDepartments(data))
+      .catch(() => undefined);
+  }, []);
+
+  const departmentsById = useMemo(
+    () => new Map(departments.map((department) => [department.id, department])),
+    [departments],
+  );
+
   const handleOpenModal = async (test?: TestDto) => {
     const [shiftList, deptList] = await Promise.all([
       getShifts().catch(() => []),
@@ -295,6 +306,13 @@ export function TestsPage() {
         defaultValue?: string;
       }[];
       numericAgeRanges?: TestNumericAgeRange[];
+      resultEntryType?: TestResultEntryType;
+      allowCustomResultText?: boolean;
+      resultTextOptions?: {
+        value: string;
+        flag?: TestResultTextOption['flag'];
+        isDefault?: boolean;
+      }[];
       type?: TestType;
     },
   ) => {
@@ -335,6 +353,30 @@ export function TestsPage() {
               : Number(range.normalMax),
         }))
         .filter((range) => range.normalMin !== null || range.normalMax !== null) ?? [];
+    const normalizedResultTextOptions =
+      (values.resultTextOptions ?? [])
+        .map((option) => ({
+          value: option.value?.trim() ?? '',
+          flag: option.flag ?? null,
+          isDefault: Boolean(option.isDefault),
+        }))
+        .filter((option) => option.value.length > 0);
+    const resultEntryType = values.resultEntryType ?? 'NUMERIC';
+
+    if (
+      normalizedResultTextOptions.filter((option) => option.isDefault).length > 1
+    ) {
+      message.error('Only one qualitative option can be marked as default');
+      setSubmitting(false);
+      return;
+    }
+
+    if (resultEntryType === 'QUALITATIVE' && normalizedResultTextOptions.length === 0) {
+      message.error('Add at least one result text option for qualitative tests');
+      setSubmitting(false);
+      return;
+    }
+
     const payload: CreateTestDto = {
       ...values,
       category: categoryValue ? categoryValue.trim() || null : null,
@@ -342,6 +384,13 @@ export function TestsPage() {
       numericAgeRanges: normalizedNumericAgeRanges.length
         ? normalizedNumericAgeRanges
         : null,
+      resultEntryType: isPanel ? 'NUMERIC' : resultEntryType,
+      allowCustomResultText: isPanel ? false : Boolean(values.allowCustomResultText),
+      resultTextOptions: isPanel
+        ? null
+        : normalizedResultTextOptions.length
+          ? normalizedResultTextOptions
+          : null,
     };
     try {
       let testId: string;
@@ -486,6 +535,23 @@ export function TestsPage() {
       render: (type: TestType) => (
         <Tag color={type === 'PANEL' ? 'blue' : 'default'}>{type}</Tag>
       ),
+    },
+    {
+      title: 'Department',
+      dataIndex: 'departmentId',
+      key: 'departmentId',
+      width: 190,
+      filters: departments.map((department) => ({
+        text: `${department.code} - ${department.name}`,
+        value: department.id,
+      })),
+      onFilter: (value, record) => (record.departmentId || '') === value,
+      render: (departmentId: string | null) => {
+        if (!departmentId) return <Text type="secondary">â€”</Text>;
+        const department = departmentsById.get(departmentId);
+        if (!department) return <Text type="secondary">â€”</Text>;
+        return <Tag color="cyan">{department.code} - {department.name}</Tag>;
+      },
     },
     {
       title: 'Tube',
@@ -670,7 +736,7 @@ export function TestsPage() {
           dataSource={tests}
           loading={loading}
           tableLayout="fixed"
-          scroll={{ x: 1320 }}
+          scroll={{ x: 1500 }}
           pagination={{
             pageSize: 20,
             showSizeChanger: false,
@@ -700,6 +766,9 @@ export function TestsPage() {
             tubeType: 'SERUM',
             isActive: true,
             sortOrder: 0,
+            resultEntryType: 'NUMERIC',
+            allowCustomResultText: false,
+            resultTextOptions: [],
           }}
         >
           <Form.Item noStyle shouldUpdate={(prev, curr) => prev?.type !== curr?.type}>
@@ -766,6 +835,112 @@ export function TestsPage() {
                       </Form.Item>
                     </Col>
                   </Row>
+                </div>
+              );
+            }}
+          </Form.Item>
+
+          <Form.Item
+            noStyle
+            shouldUpdate={(prev, curr) =>
+              prev?.type !== curr?.type ||
+              prev?.resultEntryType !== curr?.resultEntryType
+            }
+          >
+            {() => {
+              if (form.getFieldValue('type') === 'PANEL') return null;
+              const resultEntryType: TestResultEntryType =
+                form.getFieldValue('resultEntryType') || 'NUMERIC';
+              const showTextOptions =
+                resultEntryType === 'QUALITATIVE' || resultEntryType === 'TEXT';
+
+              return (
+                <div className="tests-editor-panel">
+                  <Text strong style={{ display: 'block', marginBottom: 8 }}>
+                    Result Entry
+                  </Text>
+                  <Row gutter={16}>
+                    <Col span={10}>
+                      <Form.Item name="resultEntryType" label="Entry mode">
+                        <Select options={RESULT_ENTRY_TYPES} />
+                      </Form.Item>
+                    </Col>
+                    <Col span={8}>
+                      <Form.Item
+                        name="allowCustomResultText"
+                        label="Allow custom text"
+                        valuePropName="checked"
+                      >
+                        <Switch disabled={resultEntryType === 'NUMERIC'} />
+                      </Form.Item>
+                    </Col>
+                  </Row>
+
+                  {showTextOptions && (
+                    <Form.List name="resultTextOptions">
+                      {(fields, { add, remove }) => (
+                        <>
+                          {fields.map(({ key, name, ...restField }) => (
+                            <Row
+                              key={key}
+                              gutter={12}
+                              align="bottom"
+                              style={{
+                                border: panelCardStyle.border,
+                                borderRadius: 8,
+                                padding: 10,
+                                marginBottom: 8,
+                                background: panelCardStyle.background,
+                              }}
+                            >
+                              <Col span={10}>
+                                <Form.Item
+                                  {...restField}
+                                  name={[name, 'value']}
+                                  label="Option value"
+                                  rules={[{ required: true, message: 'Value is required' }]}
+                                >
+                                  <Input placeholder="e.g. Positive, Negative, Reactive" />
+                                </Form.Item>
+                              </Col>
+                              <Col span={7}>
+                                <Form.Item {...restField} name={[name, 'flag']} label="Flag">
+                                  <Select
+                                    allowClear
+                                    placeholder="Auto flag"
+                                    options={RESULT_FLAG_OPTIONS}
+                                  />
+                                </Form.Item>
+                              </Col>
+                              <Col span={4}>
+                                <Form.Item
+                                  {...restField}
+                                  name={[name, 'isDefault']}
+                                  label="Default"
+                                  valuePropName="checked"
+                                >
+                                  <Switch size="small" />
+                                </Form.Item>
+                              </Col>
+                              <Col span={3}>
+                                <Button danger type="text" onClick={() => remove(name)}>
+                                  Remove
+                                </Button>
+                              </Col>
+                            </Row>
+                          ))}
+
+                          <Button
+                            type="dashed"
+                            block
+                            onClick={() => add({ value: '', flag: null, isDefault: false })}
+                          >
+                            + Add text option
+                          </Button>
+                        </>
+                      )}
+                    </Form.List>
+                  )}
                 </div>
               );
             }}

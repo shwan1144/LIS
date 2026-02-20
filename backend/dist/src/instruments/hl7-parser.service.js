@@ -286,9 +286,19 @@ let HL7ParserService = class HL7ParserService {
             case 'PL':
             case '<':
                 return 'LL';
+            case 'POS':
+            case 'POSITIVE':
+            case 'REACTIVE':
+                return 'POS';
+            case 'NEG':
+            case 'NEGATIVE':
+            case 'NONREACTIVE':
+            case 'NON-REACTIVE':
+                return 'NEG';
             case 'A':
             case 'AA':
-                return 'H';
+            case 'ABN':
+                return 'ABN';
             default:
                 return null;
         }

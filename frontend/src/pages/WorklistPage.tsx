@@ -68,6 +68,12 @@ const getFlagColor = (flag: ResultFlag | null): string => {
       return '#1890ff';
     case 'N':
       return '#52c41a';
+    case 'POS':
+      return '#ff4d4f';
+    case 'NEG':
+      return '#52c41a';
+    case 'ABN':
+      return '#722ed1';
     default:
       return '#d9d9d9';
   }
@@ -85,6 +91,12 @@ const getFlagLabel = (flag: ResultFlag | null): string => {
       return 'Low';
     case 'N':
       return 'Normal';
+    case 'POS':
+      return 'Positive';
+    case 'NEG':
+      return 'Negative';
+    case 'ABN':
+      return 'Abnormal';
     default:
       return '';
   }
@@ -215,9 +227,37 @@ export function WorklistPage() {
         defaults[def.code] = def.defaultValue.trim();
       }
     });
+    const qualitativeOptions = item.resultTextOptions ?? [];
+    const defaultQualitativeOption =
+      qualitativeOptions.find((option) => option.isDefault)?.value ??
+      qualitativeOptions[0]?.value;
+    const knownOptionValues = new Set(
+      qualitativeOptions.map((option) => option.value.trim().toLowerCase()),
+    );
+
+    let initialResultText = item.resultText ?? undefined;
+    let customResultText: string | undefined;
+
+    if (item.resultEntryType === 'QUALITATIVE') {
+      if (!initialResultText && defaultQualitativeOption) {
+        initialResultText = defaultQualitativeOption;
+      }
+      if (
+        initialResultText &&
+        item.allowCustomResultText &&
+        !knownOptionValues.has(initialResultText.trim().toLowerCase())
+      ) {
+        customResultText = initialResultText;
+        initialResultText = '__other__';
+      }
+    }
+
     resultForm.setFieldsValue({
-      resultValue: item.resultValue,
-      resultText: item.resultText,
+      resultValue: item.resultEntryType === 'QUALITATIVE' || item.resultEntryType === 'TEXT'
+        ? undefined
+        : item.resultValue,
+      resultText: initialResultText,
+      customResultText,
       resultParameters: { ...defaults, ...existingParams },
     });
     setResultModalOpen(true);
@@ -232,6 +272,7 @@ export function WorklistPage() {
   const handleSubmitResult = async (values: {
     resultValue?: number;
     resultText?: string;
+    customResultText?: string;
     resultParameters?: Record<string, string>;
   }) => {
     if (!editingItem) return;
@@ -243,12 +284,19 @@ export function WorklistPage() {
         return s !== '' && s !== '__other__';
       })
     );
+    const selectedResultText = values.resultText?.trim() || '';
+    const finalResultText =
+      selectedResultText === '__other__'
+        ? values.customResultText?.trim() || ''
+        : selectedResultText;
+    const isQualitative = editingItem.resultEntryType === 'QUALITATIVE';
+    const isTextOnly = editingItem.resultEntryType === 'TEXT';
 
     setSubmitting(true);
     try {
       await enterResult(editingItem.id, {
-        resultValue: values.resultValue ?? null,
-        resultText: values.resultText || null,
+        resultValue: isQualitative || isTextOnly ? null : values.resultValue ?? null,
+        resultText: finalResultText || null,
         resultParameters: Object.keys(resultParams).length > 0 ? resultParams : null,
       });
       message.success('Result saved');
@@ -411,7 +459,18 @@ export function WorklistPage() {
                 </Space>
               );
             }
-            if (r.resultText) return <Text>{r.resultText}</Text>;
+            if (r.resultText) {
+              return (
+                <Space size={6}>
+                  <Text>{r.resultText}</Text>
+                  {r.flag && (
+                    <Tag color={getFlagColor(r.flag)} style={{ margin: 0 }}>
+                      {getFlagLabel(r.flag) || r.flag}
+                    </Tag>
+                  )}
+                </Space>
+              );
+            }
             return <Text type="secondary">—</Text>;
           },
         },
@@ -755,29 +814,97 @@ export function WorklistPage() {
               onFinish={handleSubmitResult}
             >
               {(editingItem.parameterDefinitions?.length ?? 0) === 0 && (
-                <Row gutter={16}>
-                  <Col xs={24} md={12}>
-                    <Form.Item
-                      name="resultValue"
-                      label={`Result value${editingItem.testUnit ? ` (${editingItem.testUnit})` : ''}`}
-                    >
-                      <InputNumber
-                        style={{ width: '100%' }}
-                        placeholder="Enter numeric result"
-                        precision={4}
-                        size="large"
-                      />
-                    </Form.Item>
-                  </Col>
-                  <Col xs={24} md={12}>
-                    <Form.Item
-                      name="resultText"
-                      label="Result text (qualitative)"
-                    >
-                      <Input placeholder='e.g. Positive, Negative, Reactive' size="large" />
-                    </Form.Item>
-                  </Col>
-                </Row>
+                <>
+                  {editingItem.resultEntryType === 'QUALITATIVE' ||
+                  editingItem.resultEntryType === 'TEXT' ? (
+                    <Row gutter={16}>
+                      <Col xs={24} md={16}>
+                        <Form.Item
+                          name="resultText"
+                          label={
+                            editingItem.resultEntryType === 'QUALITATIVE'
+                              ? 'Result text (select)'
+                              : 'Result text'
+                          }
+                          rules={
+                            editingItem.resultEntryType === 'QUALITATIVE'
+                              ? [{ required: true, message: 'Select or enter a result text value' }]
+                              : undefined
+                          }
+                        >
+                          {(editingItem.resultEntryType === 'QUALITATIVE' &&
+                            (editingItem.resultTextOptions?.length ?? 0) > 0) ? (
+                            <Select
+                              allowClear
+                              showSearch
+                              size="large"
+                              placeholder="Select result text"
+                              options={[
+                                ...(editingItem.resultTextOptions ?? []).map((option) => ({
+                                  label: option.flag ? `${option.value} (${option.flag})` : option.value,
+                                  value: option.value,
+                                })),
+                                ...(editingItem.allowCustomResultText
+                                  ? [{ label: 'Other (type manually)', value: '__other__' }]
+                                  : []),
+                              ]}
+                            />
+                          ) : (
+                            <Input
+                              placeholder="e.g. Positive, Negative, Reactive"
+                              size="large"
+                            />
+                          )}
+                        </Form.Item>
+                      </Col>
+                    </Row>
+                  ) : (
+                    <Row gutter={16}>
+                      <Col xs={24} md={12}>
+                        <Form.Item
+                          name="resultValue"
+                          label={`Result value${editingItem.testUnit ? ` (${editingItem.testUnit})` : ''}`}
+                        >
+                          <InputNumber
+                            style={{ width: '100%' }}
+                            placeholder="Enter numeric result"
+                            precision={4}
+                            size="large"
+                          />
+                        </Form.Item>
+                      </Col>
+                      <Col xs={24} md={12}>
+                        <Form.Item
+                          name="resultText"
+                          label="Result text (optional)"
+                        >
+                          <Input placeholder="Optional qualitative text" size="large" />
+                        </Form.Item>
+                      </Col>
+                    </Row>
+                  )}
+
+                  {editingItem.resultEntryType === 'QUALITATIVE' &&
+                    editingItem.allowCustomResultText && (
+                      <Form.Item noStyle shouldUpdate>
+                        {() =>
+                          resultForm.getFieldValue('resultText') === '__other__' ? (
+                            <Row gutter={16}>
+                              <Col xs={24} md={16}>
+                                <Form.Item
+                                  name="customResultText"
+                                  label="Custom result text"
+                                  rules={[{ required: true, message: 'Enter custom result text' }]}
+                                >
+                                  <Input placeholder="Type custom result value" size="large" />
+                                </Form.Item>
+                              </Col>
+                            </Row>
+                          ) : null
+                        }
+                      </Form.Item>
+                    )}
+                </>
               )}
 
               {(editingItem.parameterDefinitions?.length ?? 0) > 0 && (

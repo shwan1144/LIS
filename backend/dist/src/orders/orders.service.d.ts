@@ -50,6 +50,9 @@ export declare class OrdersService {
         paidAmount?: number;
     }): Promise<Order>;
     updateOrderTests(id: string, labId: string, testIds: string[]): Promise<Order>;
+    private splitSamplesForDepartmentLabels;
+    private resolveSampleDepartmentScope;
+    private buildSampleGroupingKey;
     private createOrderTestsForSample;
     private createOrderSampleBarcodeAllocator;
     private isOrderTestProcessed;
