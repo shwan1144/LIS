@@ -13,11 +13,13 @@ import {
 import { WorklistService } from './worklist.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { OrderTestStatus } from '../entities/order-test.entity';
+import { buildLabActorContext } from '../types/lab-actor-context';
 
 interface RequestWithUser {
   user: {
     userId?: string | null;
     platformUserId?: string | null;
+    isImpersonation?: boolean;
     username: string;
     labId: string;
   };
@@ -39,7 +41,7 @@ export class WorklistController {
     @Query('size') size?: string,
   ) {
     const labId = req.user?.labId;
-    const userId = req.user?.userId;
+    const actor = buildLabActorContext(req.user);
     if (!labId) {
       throw new Error('Lab ID not found in token');
     }
@@ -62,7 +64,7 @@ export class WorklistController {
         page: page ? parseInt(page, 10) : undefined,
         size: size ? parseInt(size, 10) : undefined,
       },
-      userId ?? undefined,
+      actor.userId ?? undefined,
     );
   }
 
@@ -88,11 +90,11 @@ export class WorklistController {
     },
   ) {
     const labId = req.user?.labId;
-    const userId = req.user?.userId ?? null;
+    const actor = buildLabActorContext(req.user);
     if (!labId) {
       throw new Error('Lab ID not found in token');
     }
-    return this.worklistService.enterResult(id, labId, userId, body);
+    return this.worklistService.enterResult(id, labId, actor, body);
   }
 
   @Patch(':id/verify')
@@ -101,11 +103,11 @@ export class WorklistController {
     @Param('id', ParseUUIDPipe) id: string,
   ) {
     const labId = req.user?.labId;
-    const userId = req.user?.userId ?? null;
+    const actor = buildLabActorContext(req.user);
     if (!labId) {
       throw new Error('Lab ID not found in token');
     }
-    return this.worklistService.verifyResult(id, labId, userId);
+    return this.worklistService.verifyResult(id, labId, actor);
   }
 
   @Post('verify-multiple')
@@ -114,11 +116,11 @@ export class WorklistController {
     @Body() body: { ids: string[] },
   ) {
     const labId = req.user?.labId;
-    const userId = req.user?.userId ?? null;
+    const actor = buildLabActorContext(req.user);
     if (!labId) {
       throw new Error('Lab ID not found in token');
     }
-    return this.worklistService.verifyMultiple(body.ids, labId, userId);
+    return this.worklistService.verifyMultiple(body.ids, labId, actor);
   }
 
   @Patch(':id/reject')
@@ -128,10 +130,10 @@ export class WorklistController {
     @Body() body: { reason: string },
   ) {
     const labId = req.user?.labId;
-    const userId = req.user?.userId ?? null;
+    const actor = buildLabActorContext(req.user);
     if (!labId) {
       throw new Error('Lab ID not found in token');
     }
-    return this.worklistService.rejectResult(id, labId, userId, body.reason);
+    return this.worklistService.rejectResult(id, labId, actor, body.reason);
   }
 }

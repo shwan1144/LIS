@@ -11,11 +11,13 @@ import {
 } from '@nestjs/common';
 import { UnmatchedResultsService, ResolveUnmatchedDto } from './unmatched-results.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { buildLabActorContext } from '../types/lab-actor-context';
 
 interface RequestWithUser {
   user: {
     userId?: string | null;
     platformUserId?: string | null;
+    isImpersonation?: boolean;
     username: string;
     labId: string;
   };
@@ -68,8 +70,8 @@ export class UnmatchedResultsController {
     @Body() dto: ResolveUnmatchedDto,
   ) {
     const labId = req.user?.labId;
-    const userId = req.user?.userId ?? null;
+    const actor = buildLabActorContext(req.user);
     if (!labId) throw new Error('Lab ID not found');
-    return this.unmatchedService.resolve(id, labId, userId, dto);
+    return this.unmatchedService.resolve(id, labId, actor, dto);
   }
 }

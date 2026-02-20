@@ -11,6 +11,7 @@ export declare class UserDto {
     username: string;
     fullName: string | null;
     role: string;
+    isImpersonation?: boolean;
 }
 export declare class LoginResponseDto {
     accessToken: string;

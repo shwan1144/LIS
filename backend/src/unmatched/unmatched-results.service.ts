@@ -6,6 +6,7 @@ import { OrderTest, OrderTestStatus } from '../entities/order-test.entity';
 import { PanelStatusService } from '../panels/panel-status.service';
 import { AuditService } from '../audit/audit.service';
 import { AuditAction } from '../entities/audit-log.entity';
+import { LabActorContext } from '../types/lab-actor-context';
 
 export interface UnmatchedResultDto {
   id: string;
@@ -105,7 +106,7 @@ export class UnmatchedResultsService {
   async resolve(
     id: string,
     labId: string,
-    userId: string | null,
+    actor: LabActorContext,
     dto: ResolveUnmatchedDto,
   ): Promise<UnmatchedInstrumentResult> {
     const unmatched = await this.findOne(id, labId);
@@ -140,7 +141,7 @@ export class UnmatchedResultsService {
       orderTest.resultText = unmatched.resultText;
       orderTest.flag = unmatched.flag;
       orderTest.resultedAt = unmatched.receivedAt;
-      orderTest.resultedBy = userId ?? null;
+      orderTest.resultedBy = actor.userId;
       orderTest.status = OrderTestStatus.COMPLETED;
 
       if (unmatched.unit) {
@@ -156,9 +157,21 @@ export class UnmatchedResultsService {
       }
 
       // Audit log
+      const impersonationAudit =
+        actor.isImpersonation && actor.platformUserId
+          ? {
+              impersonation: {
+                active: true,
+                platformUserId: actor.platformUserId,
+              },
+            }
+          : {};
+
       await this.auditService.log({
+        actorType: actor.actorType,
+        actorId: actor.actorId,
         labId,
-        userId: userId ?? null,
+        userId: actor.userId,
         action: AuditAction.RESULT_ENTER,
         entityType: 'order_test',
         entityId: orderTest.id,
@@ -171,18 +184,19 @@ export class UnmatchedResultsService {
           flag: unmatched.flag,
           source: 'unmatched_inbox',
           unmatchedResultId: unmatched.id,
+          ...impersonationAudit,
         },
         description: `Result attached from unmatched inbox`,
       });
 
       unmatched.status = 'RESOLVED';
       unmatched.resolvedOrderTestId = orderTest.id;
-      unmatched.resolvedBy = userId ?? null;
+      unmatched.resolvedBy = actor.userId;
       unmatched.resolvedAt = new Date();
       unmatched.resolutionNotes = dto.notes || null;
     } else if (dto.action === 'DISCARD') {
       unmatched.status = 'DISCARDED';
-      unmatched.resolvedBy = userId ?? null;
+      unmatched.resolvedBy = actor.userId;
       unmatched.resolvedAt = new Date();
       unmatched.resolutionNotes = dto.notes || 'Discarded by user';
     }

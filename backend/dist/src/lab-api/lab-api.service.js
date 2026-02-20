@@ -47,7 +47,7 @@ let LabApiService = class LabApiService {
             };
         });
     }
-    async upsertPatient(labId, dto, userId) {
+    async upsertPatient(labId, dto, actor) {
         return this.rlsSessionService.withLabContext(labId, async (manager) => {
             const patientRepo = manager.getRepository(patient_entity_1.Patient);
             const existing = await this.findExistingPatient(patientRepo.manager, dto);
@@ -65,20 +65,29 @@ let LabApiService = class LabApiService {
                 address: dto.address?.trim() || null,
             });
             const saved = await patientRepo.save(patient);
+            const impersonationAudit = actor?.isImpersonation && actor.platformUserId
+                ? {
+                    impersonation: {
+                        active: true,
+                        platformUserId: actor.platformUserId,
+                    },
+                }
+                : {};
             await this.auditService.log({
-                actorType: audit_log_entity_1.AuditActorType.LAB_USER,
-                actorId: userId ?? null,
-                userId: userId ?? null,
+                actorType: actor?.actorType ?? audit_log_entity_1.AuditActorType.LAB_USER,
+                actorId: actor?.actorId ?? null,
+                userId: actor?.userId ?? null,
                 labId,
                 action: audit_log_entity_1.AuditAction.PATIENT_CREATE,
                 entityType: 'patient',
                 entityId: saved.id,
                 description: `Patient created via /api by lab ${labId}`,
+                newValues: impersonationAudit,
             });
             return { patient: saved, reused: false };
         });
     }
-    async createOrder(labId, dto, userId) {
+    async createOrder(labId, dto, actor) {
         return this.rlsSessionService.withLabContext(labId, async (manager) => {
             const lab = await manager.getRepository(lab_entity_1.Lab).findOne({ where: { id: labId, isActive: true } });
             if (!lab) {
@@ -128,15 +137,24 @@ let LabApiService = class LabApiService {
                 price: null,
             }));
             await manager.getRepository(order_test_entity_1.OrderTest).save(orderTests);
+            const impersonationAudit = actor?.isImpersonation && actor.platformUserId
+                ? {
+                    impersonation: {
+                        active: true,
+                        platformUserId: actor.platformUserId,
+                    },
+                }
+                : {};
             await this.auditService.log({
-                actorType: audit_log_entity_1.AuditActorType.LAB_USER,
-                actorId: userId ?? null,
-                userId: userId ?? null,
+                actorType: actor?.actorType ?? audit_log_entity_1.AuditActorType.LAB_USER,
+                actorId: actor?.actorId ?? null,
+                userId: actor?.userId ?? null,
                 labId,
                 action: audit_log_entity_1.AuditAction.ORDER_CREATE,
                 entityType: 'order',
                 entityId: savedOrder.id,
                 description: `Order ${savedOrder.orderNumber ?? savedOrder.id} created via /api`,
+                newValues: impersonationAudit,
             });
             const fullOrder = await manager.getRepository(order_entity_1.Order).findOne({
                 where: { id: savedOrder.id, labId },
@@ -170,7 +188,7 @@ let LabApiService = class LabApiService {
             };
         });
     }
-    async enterResult(labId, dto, userId) {
+    async enterResult(labId, dto, actor) {
         return this.rlsSessionService.withLabContext(labId, async (manager) => {
             const orderTestRepo = manager.getRepository(order_test_entity_1.OrderTest);
             const orderTest = await orderTestRepo.findOne({
@@ -185,7 +203,7 @@ let LabApiService = class LabApiService {
             orderTest.resultValue = Number.isFinite(numericValue) ? numericValue : null;
             orderTest.flag = this.toResultFlag(dto.flags);
             orderTest.resultedAt = now;
-            orderTest.resultedBy = userId ?? null;
+            orderTest.resultedBy = actor?.userId ?? null;
             if (orderTest.status !== order_test_entity_1.OrderTestStatus.VERIFIED) {
                 orderTest.status = order_test_entity_1.OrderTestStatus.COMPLETED;
             }
@@ -198,24 +216,33 @@ let LabApiService = class LabApiService {
                 unit: dto.unit?.trim() || null,
                 flags: dto.flags?.trim() || null,
                 enteredAt: now,
-                enteredByUserId: userId ?? null,
+                enteredByUserId: actor?.userId ?? null,
             });
             await manager.getRepository(result_entity_1.Result).save(result);
             await this.updateOrderStatusAfterResult(manager, labId, orderTest.sampleId);
+            const impersonationAudit = actor?.isImpersonation && actor.platformUserId
+                ? {
+                    impersonation: {
+                        active: true,
+                        platformUserId: actor.platformUserId,
+                    },
+                }
+                : {};
             await this.auditService.log({
-                actorType: audit_log_entity_1.AuditActorType.LAB_USER,
-                actorId: userId ?? null,
-                userId: userId ?? null,
+                actorType: actor?.actorType ?? audit_log_entity_1.AuditActorType.LAB_USER,
+                actorId: actor?.actorId ?? null,
+                userId: actor?.userId ?? null,
                 labId,
                 action: audit_log_entity_1.AuditAction.RESULT_ENTER,
                 entityType: 'order_test',
                 entityId: orderTest.id,
                 description: `Result entered for order test ${orderTest.id}`,
+                newValues: impersonationAudit,
             });
             return orderTest;
         });
     }
-    async exportOrderResultStub(labId, orderId, userId) {
+    async exportOrderResultStub(labId, orderId, actor) {
         return this.rlsSessionService.withLabContext(labId, async (manager) => {
             const order = await manager.getRepository(order_entity_1.Order).findOne({
                 where: { id: orderId, labId },
@@ -223,15 +250,24 @@ let LabApiService = class LabApiService {
             if (!order) {
                 throw new common_1.NotFoundException('Order not found');
             }
+            const impersonationAudit = actor?.isImpersonation && actor.platformUserId
+                ? {
+                    impersonation: {
+                        active: true,
+                        platformUserId: actor.platformUserId,
+                    },
+                }
+                : {};
             await this.auditService.log({
-                actorType: audit_log_entity_1.AuditActorType.LAB_USER,
-                actorId: userId ?? null,
-                userId: userId ?? null,
+                actorType: actor?.actorType ?? audit_log_entity_1.AuditActorType.LAB_USER,
+                actorId: actor?.actorId ?? null,
+                userId: actor?.userId ?? null,
                 labId,
                 action: audit_log_entity_1.AuditAction.REPORT_EXPORT,
                 entityType: 'order',
                 entityId: orderId,
                 description: `Report export requested for order ${orderId}`,
+                newValues: impersonationAudit,
             });
             return {
                 status: 'stub',

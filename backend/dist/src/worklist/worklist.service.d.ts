@@ -7,6 +7,7 @@ import { Department } from '../entities/department.entity';
 import type { TestParameterDefinition } from '../entities/test.entity';
 import { AuditService } from '../audit/audit.service';
 import { PanelStatusService } from '../panels/panel-status.service';
+import { LabActorContext } from '../types/lab-actor-context';
 export interface WorklistItem {
     id: string;
     orderNumber: string;
@@ -57,18 +58,18 @@ export declare class WorklistService {
         items: WorklistItem[];
         total: number;
     }>;
-    enterResult(orderTestId: string, labId: string, userId: string | null, data: {
+    enterResult(orderTestId: string, labId: string, actor: LabActorContext, data: {
         resultValue?: number | null;
         resultText?: string | null;
         comments?: string | null;
         resultParameters?: Record<string, string> | null;
     }): Promise<OrderTest>;
-    verifyResult(orderTestId: string, labId: string, userId: string | null): Promise<OrderTest>;
-    verifyMultiple(orderTestIds: string[], labId: string, userId: string | null): Promise<{
+    verifyResult(orderTestId: string, labId: string, actor: LabActorContext): Promise<OrderTest>;
+    verifyMultiple(orderTestIds: string[], labId: string, actor: LabActorContext): Promise<{
         verified: number;
         failed: number;
     }>;
-    rejectResult(orderTestId: string, labId: string, userId: string | null, reason: string): Promise<OrderTest>;
+    rejectResult(orderTestId: string, labId: string, actor: LabActorContext, reason: string): Promise<OrderTest>;
     private calculateFlag;
     getWorklistStats(labId: string): Promise<{
         pending: number;

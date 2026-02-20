@@ -3,6 +3,7 @@ interface RequestWithUser {
     user: {
         userId?: string | null;
         platformUserId?: string | null;
+        isImpersonation?: boolean;
         username: string;
         labId: string;
     };

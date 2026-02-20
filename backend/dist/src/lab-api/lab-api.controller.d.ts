@@ -5,7 +5,9 @@ import { UpsertPatientDto } from './dto/upsert-patient.dto';
 import { LabApiService } from './lab-api.service';
 interface RequestWithUser {
     user: {
-        userId: string;
+        userId?: string | null;
+        platformUserId?: string | null;
+        isImpersonation?: boolean;
         labId: string;
         role: string;
     };

@@ -3,6 +3,7 @@ import { UnmatchedInstrumentResult, UnmatchedReason } from '../entities/unmatche
 import { OrderTest } from '../entities/order-test.entity';
 import { PanelStatusService } from '../panels/panel-status.service';
 import { AuditService } from '../audit/audit.service';
+import { LabActorContext } from '../types/lab-actor-context';
 export interface UnmatchedResultDto {
     id: string;
     instrumentId: string;
@@ -42,7 +43,7 @@ export declare class UnmatchedResultsService {
         total: number;
     }>;
     findOne(id: string, labId: string): Promise<UnmatchedInstrumentResult>;
-    resolve(id: string, labId: string, userId: string | null, dto: ResolveUnmatchedDto): Promise<UnmatchedInstrumentResult>;
+    resolve(id: string, labId: string, actor: LabActorContext, dto: ResolveUnmatchedDto): Promise<UnmatchedInstrumentResult>;
     getStats(labId: string): Promise<{
         pending: number;
         resolved: number;

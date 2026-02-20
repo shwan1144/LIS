@@ -60,7 +60,7 @@ let UnmatchedResultsService = class UnmatchedResultsService {
         }
         return result;
     }
-    async resolve(id, labId, userId, dto) {
+    async resolve(id, labId, actor, dto) {
         const unmatched = await this.findOne(id, labId);
         if (unmatched.status !== 'PENDING') {
             throw new Error(`Cannot resolve result with status: ${unmatched.status}`);
@@ -85,7 +85,7 @@ let UnmatchedResultsService = class UnmatchedResultsService {
             orderTest.resultText = unmatched.resultText;
             orderTest.flag = unmatched.flag;
             orderTest.resultedAt = unmatched.receivedAt;
-            orderTest.resultedBy = userId ?? null;
+            orderTest.resultedBy = actor.userId;
             orderTest.status = order_test_entity_1.OrderTestStatus.COMPLETED;
             if (unmatched.unit) {
             }
@@ -93,9 +93,19 @@ let UnmatchedResultsService = class UnmatchedResultsService {
             if (orderTest.parentOrderTestId) {
                 await this.panelStatusService.recomputeAfterChildUpdate(orderTest.id);
             }
+            const impersonationAudit = actor.isImpersonation && actor.platformUserId
+                ? {
+                    impersonation: {
+                        active: true,
+                        platformUserId: actor.platformUserId,
+                    },
+                }
+                : {};
             await this.auditService.log({
+                actorType: actor.actorType,
+                actorId: actor.actorId,
                 labId,
-                userId: userId ?? null,
+                userId: actor.userId,
                 action: audit_log_entity_1.AuditAction.RESULT_ENTER,
                 entityType: 'order_test',
                 entityId: orderTest.id,
@@ -108,18 +118,19 @@ let UnmatchedResultsService = class UnmatchedResultsService {
                     flag: unmatched.flag,
                     source: 'unmatched_inbox',
                     unmatchedResultId: unmatched.id,
+                    ...impersonationAudit,
                 },
                 description: `Result attached from unmatched inbox`,
             });
             unmatched.status = 'RESOLVED';
             unmatched.resolvedOrderTestId = orderTest.id;
-            unmatched.resolvedBy = userId ?? null;
+            unmatched.resolvedBy = actor.userId;
             unmatched.resolvedAt = new Date();
             unmatched.resolutionNotes = dto.notes || null;
         }
         else if (dto.action === 'DISCARD') {
             unmatched.status = 'DISCARDED';
-            unmatched.resolvedBy = userId ?? null;
+            unmatched.resolvedBy = actor.userId;
             unmatched.resolvedAt = new Date();
             unmatched.resolutionNotes = dto.notes || 'Discarded by user';
         }

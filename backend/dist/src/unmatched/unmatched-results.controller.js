@@ -16,6 +16,7 @@ exports.UnmatchedResultsController = void 0;
 const common_1 = require("@nestjs/common");
 const unmatched_results_service_1 = require("./unmatched-results.service");
 const jwt_auth_guard_1 = require("../auth/jwt-auth.guard");
+const lab_actor_context_1 = require("../types/lab-actor-context");
 let UnmatchedResultsController = class UnmatchedResultsController {
     constructor(unmatchedService) {
         this.unmatchedService = unmatchedService;
@@ -46,10 +47,10 @@ let UnmatchedResultsController = class UnmatchedResultsController {
     }
     async resolve(req, id, dto) {
         const labId = req.user?.labId;
-        const userId = req.user?.userId ?? null;
+        const actor = (0, lab_actor_context_1.buildLabActorContext)(req.user);
         if (!labId)
             throw new Error('Lab ID not found');
-        return this.unmatchedService.resolve(id, labId, userId, dto);
+        return this.unmatchedService.resolve(id, labId, actor, dto);
     }
 };
 exports.UnmatchedResultsController = UnmatchedResultsController;

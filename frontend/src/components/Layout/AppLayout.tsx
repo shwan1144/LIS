@@ -1,5 +1,5 @@
 import { Outlet, useNavigate, useLocation, Navigate } from 'react-router-dom';
-import { Layout as AntLayout, Typography, Space, Menu, Modal, Dropdown, Switch } from 'antd';
+import { Alert, Layout as AntLayout, Typography, Space, Menu, Modal, Dropdown, Switch } from 'antd';
 import { LogoutOutlined, DashboardOutlined, BarChartOutlined, UserOutlined, DownOutlined, FileTextOutlined, UnorderedListOutlined, SettingOutlined, FilePdfOutlined, CheckCircleOutlined, WarningOutlined, MoonOutlined, SunOutlined } from '@ant-design/icons';
 import { useEffect, useState } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
@@ -74,6 +74,7 @@ export function AppLayout() {
   const [shifts, setShifts] = useState<ShiftDto[]>([]);
   const menuItems = getMenuItems(user?.role);
   const isAdmin = user?.role && ADMIN_ROLES.includes(user.role);
+  const isImpersonationMode = Boolean(user?.isImpersonation);
 
   useEffect(() => {
     if (!lab) return;
@@ -179,6 +180,15 @@ export function AppLayout() {
           />
         </Sider>
         <Content style={{ padding: 24, background: isDark ? '#141414' : '#f0f2f5' }}>
+          {isImpersonationMode ? (
+            <Alert
+              type="warning"
+              showIcon
+              message="Impersonation Mode Active"
+              description="You are in lab panel as platform admin. All actions are explicitly tagged in audit logs."
+              style={{ marginBottom: 16 }}
+            />
+          ) : null}
           <Outlet />
         </Content>
       </AntLayout>

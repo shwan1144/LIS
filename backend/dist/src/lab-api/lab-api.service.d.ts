@@ -3,6 +3,7 @@ import { RlsSessionService } from '../database/rls-session.service';
 import { Order, OrderStatus } from '../entities/order.entity';
 import { OrderTest } from '../entities/order-test.entity';
 import { Patient } from '../entities/patient.entity';
+import { LabActorContext } from '../types/lab-actor-context';
 import { CreateLabOrderDto } from './dto/create-lab-order.dto';
 import { EnterResultDto } from './dto/enter-result.dto';
 import { UpsertPatientDto } from './dto/upsert-patient.dto';
@@ -21,11 +22,11 @@ export declare class LabApiService {
         size: number;
         totalPages: number;
     }>;
-    upsertPatient(labId: string, dto: UpsertPatientDto, userId?: string | null): Promise<{
+    upsertPatient(labId: string, dto: UpsertPatientDto, actor?: LabActorContext): Promise<{
         patient: Patient;
         reused: boolean;
     }>;
-    createOrder(labId: string, dto: CreateLabOrderDto, userId?: string | null): Promise<Order>;
+    createOrder(labId: string, dto: CreateLabOrderDto, actor?: LabActorContext): Promise<Order>;
     listOrders(labId: string, params: {
         page?: number;
         size?: number;
@@ -37,8 +38,8 @@ export declare class LabApiService {
         size: number;
         totalPages: number;
     }>;
-    enterResult(labId: string, dto: EnterResultDto, userId?: string | null): Promise<OrderTest>;
-    exportOrderResultStub(labId: string, orderId: string, userId?: string | null): Promise<{
+    enterResult(labId: string, dto: EnterResultDto, actor?: LabActorContext): Promise<OrderTest>;
+    exportOrderResultStub(labId: string, orderId: string, actor?: LabActorContext): Promise<{
         status: string;
         message: string;
         orderId: string;

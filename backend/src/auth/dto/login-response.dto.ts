@@ -12,6 +12,7 @@ export class UserDto {
   username: string;
   fullName: string | null;
   role: string;
+  isImpersonation?: boolean;
 }
 
 export class LoginResponseDto {

@@ -17,13 +17,14 @@ const common_1 = require("@nestjs/common");
 const worklist_service_1 = require("./worklist.service");
 const jwt_auth_guard_1 = require("../auth/jwt-auth.guard");
 const order_test_entity_1 = require("../entities/order-test.entity");
+const lab_actor_context_1 = require("../types/lab-actor-context");
 let WorklistController = class WorklistController {
     constructor(worklistService) {
         this.worklistService = worklistService;
     }
     async getWorklist(req, status, search, date, departmentId, page, size) {
         const labId = req.user?.labId;
-        const userId = req.user?.userId;
+        const actor = (0, lab_actor_context_1.buildLabActorContext)(req.user);
         if (!labId) {
             throw new Error('Lab ID not found in token');
         }
@@ -38,7 +39,7 @@ let WorklistController = class WorklistController {
             departmentId,
             page: page ? parseInt(page, 10) : undefined,
             size: size ? parseInt(size, 10) : undefined,
-        }, userId ?? undefined);
+        }, actor.userId ?? undefined);
     }
     async getStats(req) {
         const labId = req.user?.labId;
@@ -49,35 +50,35 @@ let WorklistController = class WorklistController {
     }
     async enterResult(req, id, body) {
         const labId = req.user?.labId;
-        const userId = req.user?.userId ?? null;
+        const actor = (0, lab_actor_context_1.buildLabActorContext)(req.user);
         if (!labId) {
             throw new Error('Lab ID not found in token');
         }
-        return this.worklistService.enterResult(id, labId, userId, body);
+        return this.worklistService.enterResult(id, labId, actor, body);
     }
     async verifyResult(req, id) {
         const labId = req.user?.labId;
-        const userId = req.user?.userId ?? null;
+        const actor = (0, lab_actor_context_1.buildLabActorContext)(req.user);
         if (!labId) {
             throw new Error('Lab ID not found in token');
         }
-        return this.worklistService.verifyResult(id, labId, userId);
+        return this.worklistService.verifyResult(id, labId, actor);
     }
     async verifyMultiple(req, body) {
         const labId = req.user?.labId;
-        const userId = req.user?.userId ?? null;
+        const actor = (0, lab_actor_context_1.buildLabActorContext)(req.user);
         if (!labId) {
             throw new Error('Lab ID not found in token');
         }
-        return this.worklistService.verifyMultiple(body.ids, labId, userId);
+        return this.worklistService.verifyMultiple(body.ids, labId, actor);
     }
     async rejectResult(req, id, body) {
         const labId = req.user?.labId;
-        const userId = req.user?.userId ?? null;
+        const actor = (0, lab_actor_context_1.buildLabActorContext)(req.user);
         if (!labId) {
             throw new Error('Lab ID not found in token');
         }
-        return this.worklistService.rejectResult(id, labId, userId, body.reason);
+        return this.worklistService.rejectResult(id, labId, actor, body.reason);
     }
 };
 exports.WorklistController = WorklistController;

@@ -343,6 +343,7 @@ export class AuthService {
         username: platformUser.email,
         fullName: null,
         role: 'SUPER_ADMIN',
+        isImpersonation: true,
       },
       lab: this.toLabDto(lab),
     };
@@ -470,6 +471,7 @@ export class AuthService {
       username: user.username,
       fullName: user.fullName,
       role: user.role,
+      isImpersonation: false,
     };
   }
 

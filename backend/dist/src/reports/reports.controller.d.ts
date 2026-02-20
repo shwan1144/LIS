@@ -3,7 +3,9 @@ import { ReportsService } from './reports.service';
 import { AuditService } from '../audit/audit.service';
 interface RequestWithUser {
     user: {
-        userId: string;
+        userId?: string | null;
+        platformUserId?: string | null;
+        isImpersonation?: boolean;
         username: string;
         labId: string;
     };

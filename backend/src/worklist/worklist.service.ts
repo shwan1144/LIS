@@ -15,6 +15,7 @@ import { AuditService } from '../audit/audit.service';
 import { AuditAction } from '../entities/audit-log.entity';
 import { OrderStatus } from '../entities/order.entity';
 import { PanelStatusService } from '../panels/panel-status.service';
+import { LabActorContext } from '../types/lab-actor-context';
 
 export interface WorklistItem {
   id: string;
@@ -260,7 +261,7 @@ export class WorklistService {
   async enterResult(
     orderTestId: string,
     labId: string,
-    userId: string | null,
+    actor: LabActorContext,
     data: {
       resultValue?: number | null;
       resultText?: string | null;
@@ -312,16 +313,28 @@ export class WorklistService {
     const isUpdate = orderTest.resultedAt !== null;
     orderTest.status = OrderTestStatus.COMPLETED;
     orderTest.resultedAt = new Date();
-    orderTest.resultedBy = userId ?? null;
+    orderTest.resultedBy = actor.userId;
 
     const saved = await this.orderTestRepo.save(orderTest);
     await this.panelStatusService.recomputeAfterChildUpdate(orderTest.id);
     await this.syncOrderStatus(orderTest.sample.orderId);
 
     // Audit log
+    const impersonationAudit =
+      actor.isImpersonation && actor.platformUserId
+        ? {
+            impersonation: {
+              active: true,
+              platformUserId: actor.platformUserId,
+            },
+          }
+        : {};
+
     await this.auditService.log({
+      actorType: actor.actorType,
+      actorId: actor.actorId,
       labId,
-      userId: userId ?? null,
+      userId: actor.userId,
       action: isUpdate ? AuditAction.RESULT_UPDATE : AuditAction.RESULT_ENTER,
       entityType: 'order_test',
       entityId: orderTestId,
@@ -329,6 +342,7 @@ export class WorklistService {
         resultValue: data.resultValue,
         resultText: data.resultText,
         flag: orderTest.flag,
+        ...impersonationAudit,
       },
       description: `${isUpdate ? 'Updated' : 'Entered'} result for test ${orderTest.test?.code || orderTestId}`,
     });
@@ -339,7 +353,7 @@ export class WorklistService {
   async verifyResult(
     orderTestId: string,
     labId: string,
-    userId: string | null,
+    actor: LabActorContext,
   ): Promise<OrderTest> {
     const orderTest = await this.orderTestRepo.findOne({
       where: { id: orderTestId },
@@ -364,16 +378,28 @@ export class WorklistService {
 
     orderTest.status = OrderTestStatus.VERIFIED;
     orderTest.verifiedAt = new Date();
-    orderTest.verifiedBy = userId ?? null;
+    orderTest.verifiedBy = actor.userId;
 
     const saved = await this.orderTestRepo.save(orderTest);
     await this.panelStatusService.recomputeAfterChildUpdate(orderTest.id);
     await this.syncOrderStatus(orderTest.sample.orderId);
 
     // Audit log
+    const impersonationAudit =
+      actor.isImpersonation && actor.platformUserId
+        ? {
+            impersonation: {
+              active: true,
+              platformUserId: actor.platformUserId,
+            },
+          }
+        : {};
+
     await this.auditService.log({
+      actorType: actor.actorType,
+      actorId: actor.actorId,
       labId,
-      userId: userId ?? null,
+      userId: actor.userId,
       action: AuditAction.RESULT_VERIFY,
       entityType: 'order_test',
       entityId: orderTestId,
@@ -382,6 +408,7 @@ export class WorklistService {
         resultText: orderTest.resultText,
         flag: orderTest.flag,
         status: OrderTestStatus.VERIFIED,
+        ...impersonationAudit,
       },
       description: `Verified result for test ${orderTest.test?.code || orderTestId}`,
     });
@@ -392,14 +419,14 @@ export class WorklistService {
   async verifyMultiple(
     orderTestIds: string[],
     labId: string,
-    userId: string | null,
+    actor: LabActorContext,
   ): Promise<{ verified: number; failed: number }> {
     let verified = 0;
     let failed = 0;
 
     for (const id of orderTestIds) {
       try {
-        await this.verifyResult(id, labId, userId);
+        await this.verifyResult(id, labId, actor);
         verified++;
       } catch {
         failed++;
@@ -412,7 +439,7 @@ export class WorklistService {
   async rejectResult(
     orderTestId: string,
     labId: string,
-    userId: string | null,
+    actor: LabActorContext,
     reason: string,
   ): Promise<OrderTest> {
     const orderTest = await this.orderTestRepo.findOne({
@@ -435,22 +462,35 @@ export class WorklistService {
     orderTest.status = OrderTestStatus.REJECTED;
     orderTest.rejectionReason = reason;
     orderTest.verifiedAt = new Date();
-    orderTest.verifiedBy = userId ?? null;
+    orderTest.verifiedBy = actor.userId;
 
     const saved = await this.orderTestRepo.save(orderTest);
     await this.panelStatusService.recomputeAfterChildUpdate(orderTest.id);
     await this.syncOrderStatus(orderTest.sample.orderId);
 
     // Audit log
+    const impersonationAudit =
+      actor.isImpersonation && actor.platformUserId
+        ? {
+            impersonation: {
+              active: true,
+              platformUserId: actor.platformUserId,
+            },
+          }
+        : {};
+
     await this.auditService.log({
+      actorType: actor.actorType,
+      actorId: actor.actorId,
       labId,
-      userId: userId ?? null,
+      userId: actor.userId,
       action: AuditAction.RESULT_REJECT,
       entityType: 'order_test',
       entityId: orderTestId,
       newValues: {
         status: OrderTestStatus.REJECTED,
         rejectionReason: reason,
+        ...impersonationAudit,
       },
       description: `Rejected result: ${reason}`,
     });

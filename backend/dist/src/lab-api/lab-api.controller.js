@@ -21,6 +21,7 @@ const create_lab_order_dto_1 = require("./dto/create-lab-order.dto");
 const enter_result_dto_1 = require("./dto/enter-result.dto");
 const upsert_patient_dto_1 = require("./dto/upsert-patient.dto");
 const lab_api_service_1 = require("./lab-api.service");
+const lab_actor_context_1 = require("../types/lab-actor-context");
 let LabApiController = class LabApiController {
     constructor(labApiService) {
         this.labApiService = labApiService;
@@ -33,10 +34,12 @@ let LabApiController = class LabApiController {
         });
     }
     async upsertPatient(req, dto) {
-        return this.labApiService.upsertPatient(req.user.labId, dto, req.user.userId);
+        const actor = (0, lab_actor_context_1.buildLabActorContext)(req.user);
+        return this.labApiService.upsertPatient(req.user.labId, dto, actor);
     }
     async createOrder(req, dto) {
-        return this.labApiService.createOrder(req.user.labId, dto, req.user.userId);
+        const actor = (0, lab_actor_context_1.buildLabActorContext)(req.user);
+        return this.labApiService.createOrder(req.user.labId, dto, actor);
     }
     async listOrders(req, page, size, status) {
         return this.labApiService.listOrders(req.user.labId, {
@@ -46,10 +49,12 @@ let LabApiController = class LabApiController {
         });
     }
     async enterResult(req, dto) {
-        return this.labApiService.enterResult(req.user.labId, dto, req.user.userId);
+        const actor = (0, lab_actor_context_1.buildLabActorContext)(req.user);
+        return this.labApiService.enterResult(req.user.labId, dto, actor);
     }
     async exportOrder(req, id) {
-        return this.labApiService.exportOrderResultStub(req.user.labId, id, req.user.userId);
+        const actor = (0, lab_actor_context_1.buildLabActorContext)(req.user);
+        return this.labApiService.exportOrderResultStub(req.user.labId, id, actor);
     }
 };
 exports.LabApiController = LabApiController;

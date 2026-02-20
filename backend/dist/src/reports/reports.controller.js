@@ -18,6 +18,7 @@ const reports_service_1 = require("./reports.service");
 const jwt_auth_guard_1 = require("../auth/jwt-auth.guard");
 const audit_service_1 = require("../audit/audit.service");
 const audit_log_entity_1 = require("../entities/audit-log.entity");
+const lab_actor_context_1 = require("../types/lab-actor-context");
 let ReportsController = class ReportsController {
     constructor(reportsService, auditService) {
         this.reportsService = reportsService;
@@ -25,18 +26,30 @@ let ReportsController = class ReportsController {
     }
     async getOrderReceiptPDF(req, orderId, res) {
         const labId = req.user?.labId;
+        const actor = (0, lab_actor_context_1.buildLabActorContext)(req.user);
         if (!labId) {
             return res.status(401).json({ message: 'Lab ID not found in token' });
         }
         try {
             const pdfBuffer = await this.reportsService.generateOrderReceiptPDF(orderId, labId);
+            const impersonationAudit = actor.isImpersonation && actor.platformUserId
+                ? {
+                    impersonation: {
+                        active: true,
+                        platformUserId: actor.platformUserId,
+                    },
+                }
+                : {};
             await this.auditService.log({
+                actorType: actor.actorType,
+                actorId: actor.actorId,
                 labId,
-                userId: req.user?.userId ?? null,
+                userId: actor.userId,
                 action: audit_log_entity_1.AuditAction.REPORT_GENERATE,
                 entityType: 'order',
                 entityId: orderId,
                 description: `Generated order receipt PDF for order ${orderId}`,
+                newValues: impersonationAudit,
             });
             res.setHeader('Content-Type', 'application/pdf');
             res.setHeader('Content-Disposition', `attachment; filename="receipt-${orderId.substring(0, 8)}.pdf"`);
@@ -58,18 +71,30 @@ let ReportsController = class ReportsController {
     }
     async getTestResultsPDF(req, orderId, res) {
         const labId = req.user?.labId;
+        const actor = (0, lab_actor_context_1.buildLabActorContext)(req.user);
         if (!labId) {
             return res.status(401).json({ message: 'Lab ID not found in token' });
         }
         try {
             const pdfBuffer = await this.reportsService.generateTestResultsPDF(orderId, labId);
+            const impersonationAudit = actor.isImpersonation && actor.platformUserId
+                ? {
+                    impersonation: {
+                        active: true,
+                        platformUserId: actor.platformUserId,
+                    },
+                }
+                : {};
             await this.auditService.log({
+                actorType: actor.actorType,
+                actorId: actor.actorId,
                 labId,
-                userId: req.user?.userId ?? null,
+                userId: actor.userId,
                 action: audit_log_entity_1.AuditAction.REPORT_GENERATE,
                 entityType: 'order',
                 entityId: orderId,
                 description: `Generated test results PDF for order ${orderId}`,
+                newValues: impersonationAudit,
             });
             res.setHeader('Content-Type', 'application/pdf');
             res.setHeader('Content-Disposition', `attachment; filename="results-${orderId.substring(0, 8)}.pdf"`);
@@ -95,20 +120,31 @@ let ReportsController = class ReportsController {
     }
     async logReportDelivery(req, orderId, body, res) {
         const labId = req.user?.labId;
+        const actor = (0, lab_actor_context_1.buildLabActorContext)(req.user);
         if (!labId) {
             return res.status(401).json({ message: 'Lab ID not found in token' });
         }
         if (!body?.channel || !['WHATSAPP', 'VIBER'].includes(body.channel)) {
             return res.status(400).json({ message: 'channel must be WHATSAPP or VIBER' });
         }
+        const impersonationAudit = actor.isImpersonation && actor.platformUserId
+            ? {
+                impersonation: {
+                    active: true,
+                    platformUserId: actor.platformUserId,
+                },
+            }
+            : {};
         await this.auditService.log({
+            actorType: actor.actorType,
+            actorId: actor.actorId,
             labId,
-            userId: req.user?.userId ?? null,
+            userId: actor.userId,
             action: audit_log_entity_1.AuditAction.REPORT_PRINT,
             entityType: 'order',
             entityId: orderId,
             description: `Shared report link via ${body.channel} for order ${orderId}`,
-            newValues: { channel: body.channel },
+            newValues: { channel: body.channel, ...impersonationAudit },
             ipAddress: req.ip ?? null,
             userAgent: req.headers?.['user-agent'] ?? null,
         });

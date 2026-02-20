@@ -72,6 +72,7 @@ export interface UserDto {
   username: string;
   fullName: string | null;
   role: string;
+  isImpersonation?: boolean;
 }
 
 export interface LoginResponse {

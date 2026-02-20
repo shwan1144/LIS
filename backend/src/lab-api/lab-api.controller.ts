@@ -19,9 +19,16 @@ import { CreateLabOrderDto } from './dto/create-lab-order.dto';
 import { EnterResultDto } from './dto/enter-result.dto';
 import { UpsertPatientDto } from './dto/upsert-patient.dto';
 import { LabApiService } from './lab-api.service';
+import { buildLabActorContext } from '../types/lab-actor-context';
 
 interface RequestWithUser {
-  user: { userId: string; labId: string; role: string };
+  user: {
+    userId?: string | null;
+    platformUserId?: string | null;
+    isImpersonation?: boolean;
+    labId: string;
+    role: string;
+  };
 }
 
 @Controller('api')
@@ -46,13 +53,15 @@ export class LabApiController {
   @Post('patients')
   @UsePipes(new ValidationPipe({ whitelist: true }))
   async upsertPatient(@Req() req: RequestWithUser, @Body() dto: UpsertPatientDto) {
-    return this.labApiService.upsertPatient(req.user.labId, dto, req.user.userId);
+    const actor = buildLabActorContext(req.user);
+    return this.labApiService.upsertPatient(req.user.labId, dto, actor);
   }
 
   @Post('orders')
   @UsePipes(new ValidationPipe({ whitelist: true }))
   async createOrder(@Req() req: RequestWithUser, @Body() dto: CreateLabOrderDto) {
-    return this.labApiService.createOrder(req.user.labId, dto, req.user.userId);
+    const actor = buildLabActorContext(req.user);
+    return this.labApiService.createOrder(req.user.labId, dto, actor);
   }
 
   @Get('orders')
@@ -72,7 +81,8 @@ export class LabApiController {
   @Post('results')
   @UsePipes(new ValidationPipe({ whitelist: true }))
   async enterResult(@Req() req: RequestWithUser, @Body() dto: EnterResultDto) {
-    return this.labApiService.enterResult(req.user.labId, dto, req.user.userId);
+    const actor = buildLabActorContext(req.user);
+    return this.labApiService.enterResult(req.user.labId, dto, actor);
   }
 
   @Post('orders/:id/export')
@@ -80,6 +90,7 @@ export class LabApiController {
     @Req() req: RequestWithUser,
     @Param('id', ParseUUIDPipe) id: string,
   ) {
-    return this.labApiService.exportOrderResultStub(req.user.labId, id, req.user.userId);
+    const actor = buildLabActorContext(req.user);
+    return this.labApiService.exportOrderResultStub(req.user.labId, id, actor);
   }
 }

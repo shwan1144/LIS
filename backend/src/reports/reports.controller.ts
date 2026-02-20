@@ -15,9 +15,16 @@ import { ReportsService } from './reports.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { AuditService } from '../audit/audit.service';
 import { AuditAction } from '../entities/audit-log.entity';
+import { buildLabActorContext } from '../types/lab-actor-context';
 
 interface RequestWithUser {
-  user: { userId: string; username: string; labId: string };
+  user: {
+    userId?: string | null;
+    platformUserId?: string | null;
+    isImpersonation?: boolean;
+    username: string;
+    labId: string;
+  };
 }
 
 @Controller('reports')
@@ -35,19 +42,33 @@ export class ReportsController {
     @Res() res: Response,
   ) {
     const labId = req.user?.labId;
+    const actor = buildLabActorContext(req.user);
     if (!labId) {
       return res.status(401).json({ message: 'Lab ID not found in token' });
     }
 
     try {
       const pdfBuffer = await this.reportsService.generateOrderReceiptPDF(orderId, labId);
+      const impersonationAudit =
+        actor.isImpersonation && actor.platformUserId
+          ? {
+              impersonation: {
+                active: true,
+                platformUserId: actor.platformUserId,
+              },
+            }
+          : {};
+
       await this.auditService.log({
+        actorType: actor.actorType,
+        actorId: actor.actorId,
         labId,
-        userId: req.user?.userId ?? null,
+        userId: actor.userId,
         action: AuditAction.REPORT_GENERATE,
         entityType: 'order',
         entityId: orderId,
         description: `Generated order receipt PDF for order ${orderId}`,
+        newValues: impersonationAudit,
       });
       res.setHeader('Content-Type', 'application/pdf');
       res.setHeader(
@@ -78,19 +99,33 @@ export class ReportsController {
     @Res() res: Response,
   ) {
     const labId = req.user?.labId;
+    const actor = buildLabActorContext(req.user);
     if (!labId) {
       return res.status(401).json({ message: 'Lab ID not found in token' });
     }
 
     try {
       const pdfBuffer = await this.reportsService.generateTestResultsPDF(orderId, labId);
+      const impersonationAudit =
+        actor.isImpersonation && actor.platformUserId
+          ? {
+              impersonation: {
+                active: true,
+                platformUserId: actor.platformUserId,
+              },
+            }
+          : {};
+
       await this.auditService.log({
+        actorType: actor.actorType,
+        actorId: actor.actorId,
         labId,
-        userId: req.user?.userId ?? null,
+        userId: actor.userId,
         action: AuditAction.REPORT_GENERATE,
         entityType: 'order',
         entityId: orderId,
         description: `Generated test results PDF for order ${orderId}`,
+        newValues: impersonationAudit,
       });
       res.setHeader('Content-Type', 'application/pdf');
       res.setHeader(
@@ -126,6 +161,7 @@ export class ReportsController {
     @Res() res: Response,
   ) {
     const labId = req.user?.labId;
+    const actor = buildLabActorContext(req.user);
     if (!labId) {
       return res.status(401).json({ message: 'Lab ID not found in token' });
     }
@@ -134,14 +170,26 @@ export class ReportsController {
       return res.status(400).json({ message: 'channel must be WHATSAPP or VIBER' });
     }
 
+    const impersonationAudit =
+      actor.isImpersonation && actor.platformUserId
+        ? {
+            impersonation: {
+              active: true,
+              platformUserId: actor.platformUserId,
+            },
+          }
+        : {};
+
     await this.auditService.log({
+      actorType: actor.actorType,
+      actorId: actor.actorId,
       labId,
-      userId: req.user?.userId ?? null,
+      userId: actor.userId,
       action: AuditAction.REPORT_PRINT,
       entityType: 'order',
       entityId: orderId,
       description: `Shared report link via ${body.channel} for order ${orderId}`,
-      newValues: { channel: body.channel },
+      newValues: { channel: body.channel, ...impersonationAudit },
       ipAddress: req.ip ?? null,
       userAgent: (req.headers?.['user-agent'] as string | undefined) ?? null,
     });

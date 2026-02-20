@@ -22,6 +22,7 @@ import { Patient } from '../entities/patient.entity';
 import { Result } from '../entities/result.entity';
 import { Sample } from '../entities/sample.entity';
 import { Test } from '../entities/test.entity';
+import { LabActorContext } from '../types/lab-actor-context';
 import { CreateLabOrderDto } from './dto/create-lab-order.dto';
 import { EnterResultDto } from './dto/enter-result.dto';
 import { UpsertPatientDto } from './dto/upsert-patient.dto';
@@ -66,7 +67,7 @@ export class LabApiService {
   async upsertPatient(
     labId: string,
     dto: UpsertPatientDto,
-    userId?: string | null,
+    actor?: LabActorContext,
   ): Promise<{ patient: Patient; reused: boolean }> {
     return this.rlsSessionService.withLabContext(labId, async (manager) => {
       const patientRepo = manager.getRepository(Patient);
@@ -87,15 +88,26 @@ export class LabApiService {
       });
       const saved = await patientRepo.save(patient);
 
+      const impersonationAudit =
+        actor?.isImpersonation && actor.platformUserId
+          ? {
+              impersonation: {
+                active: true,
+                platformUserId: actor.platformUserId,
+              },
+            }
+          : {};
+
       await this.auditService.log({
-        actorType: AuditActorType.LAB_USER,
-        actorId: userId ?? null,
-        userId: userId ?? null,
+        actorType: actor?.actorType ?? AuditActorType.LAB_USER,
+        actorId: actor?.actorId ?? null,
+        userId: actor?.userId ?? null,
         labId,
         action: AuditAction.PATIENT_CREATE,
         entityType: 'patient',
         entityId: saved.id,
         description: `Patient created via /api by lab ${labId}`,
+        newValues: impersonationAudit,
       });
 
       return { patient: saved, reused: false };
@@ -105,7 +117,7 @@ export class LabApiService {
   async createOrder(
     labId: string,
     dto: CreateLabOrderDto,
-    userId?: string | null,
+    actor?: LabActorContext,
   ): Promise<Order> {
     return this.rlsSessionService.withLabContext(labId, async (manager) => {
       const lab = await manager.getRepository(Lab).findOne({ where: { id: labId, isActive: true } });
@@ -164,15 +176,26 @@ export class LabApiService {
       );
       await manager.getRepository(OrderTest).save(orderTests);
 
+      const impersonationAudit =
+        actor?.isImpersonation && actor.platformUserId
+          ? {
+              impersonation: {
+                active: true,
+                platformUserId: actor.platformUserId,
+              },
+            }
+          : {};
+
       await this.auditService.log({
-        actorType: AuditActorType.LAB_USER,
-        actorId: userId ?? null,
-        userId: userId ?? null,
+        actorType: actor?.actorType ?? AuditActorType.LAB_USER,
+        actorId: actor?.actorId ?? null,
+        userId: actor?.userId ?? null,
         labId,
         action: AuditAction.ORDER_CREATE,
         entityType: 'order',
         entityId: savedOrder.id,
         description: `Order ${savedOrder.orderNumber ?? savedOrder.id} created via /api`,
+        newValues: impersonationAudit,
       });
 
       const fullOrder = await manager.getRepository(Order).findOne({
@@ -217,7 +240,7 @@ export class LabApiService {
   async enterResult(
     labId: string,
     dto: EnterResultDto,
-    userId?: string | null,
+    actor?: LabActorContext,
   ): Promise<OrderTest> {
     return this.rlsSessionService.withLabContext(labId, async (manager) => {
       const orderTestRepo = manager.getRepository(OrderTest);
@@ -234,7 +257,7 @@ export class LabApiService {
       orderTest.resultValue = Number.isFinite(numericValue) ? numericValue : null;
       orderTest.flag = this.toResultFlag(dto.flags);
       orderTest.resultedAt = now;
-      orderTest.resultedBy = userId ?? null;
+      orderTest.resultedBy = actor?.userId ?? null;
       if (orderTest.status !== OrderTestStatus.VERIFIED) {
         orderTest.status = OrderTestStatus.COMPLETED;
       }
@@ -248,21 +271,32 @@ export class LabApiService {
         unit: dto.unit?.trim() || null,
         flags: dto.flags?.trim() || null,
         enteredAt: now,
-        enteredByUserId: userId ?? null,
+        enteredByUserId: actor?.userId ?? null,
       });
       await manager.getRepository(Result).save(result);
 
       await this.updateOrderStatusAfterResult(manager, labId, orderTest.sampleId);
 
+      const impersonationAudit =
+        actor?.isImpersonation && actor.platformUserId
+          ? {
+              impersonation: {
+                active: true,
+                platformUserId: actor.platformUserId,
+              },
+            }
+          : {};
+
       await this.auditService.log({
-        actorType: AuditActorType.LAB_USER,
-        actorId: userId ?? null,
-        userId: userId ?? null,
+        actorType: actor?.actorType ?? AuditActorType.LAB_USER,
+        actorId: actor?.actorId ?? null,
+        userId: actor?.userId ?? null,
         labId,
         action: AuditAction.RESULT_ENTER,
         entityType: 'order_test',
         entityId: orderTest.id,
         description: `Result entered for order test ${orderTest.id}`,
+        newValues: impersonationAudit,
       });
 
       return orderTest;
@@ -272,7 +306,7 @@ export class LabApiService {
   async exportOrderResultStub(
     labId: string,
     orderId: string,
-    userId?: string | null,
+    actor?: LabActorContext,
   ): Promise<{ status: string; message: string; orderId: string }> {
     return this.rlsSessionService.withLabContext(labId, async (manager) => {
       const order = await manager.getRepository(Order).findOne({
@@ -282,15 +316,26 @@ export class LabApiService {
         throw new NotFoundException('Order not found');
       }
 
+      const impersonationAudit =
+        actor?.isImpersonation && actor.platformUserId
+          ? {
+              impersonation: {
+                active: true,
+                platformUserId: actor.platformUserId,
+              },
+            }
+          : {};
+
       await this.auditService.log({
-        actorType: AuditActorType.LAB_USER,
-        actorId: userId ?? null,
-        userId: userId ?? null,
+        actorType: actor?.actorType ?? AuditActorType.LAB_USER,
+        actorId: actor?.actorId ?? null,
+        userId: actor?.userId ?? null,
         labId,
         action: AuditAction.REPORT_EXPORT,
         entityType: 'order',
         entityId: orderId,
         description: `Report export requested for order ${orderId}`,
+        newValues: impersonationAudit,
       });
 
       return {
