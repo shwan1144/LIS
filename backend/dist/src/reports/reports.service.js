@@ -26,6 +26,7 @@ const lab_entity_1 = require("../entities/lab.entity");
 const user_entity_1 = require("../entities/user.entity");
 const test_entity_1 = require("../entities/test.entity");
 const results_report_template_1 = require("./html/results-report.template");
+const normal_range_util_1 = require("../tests/normal-range.util");
 const REPORT_BANNER_WIDTH = 2480;
 const REPORT_BANNER_HEIGHT = 220;
 function formatDateTime(value) {
@@ -44,22 +45,8 @@ function computeAgeYears(dateOfBirth) {
         return null;
     return Math.floor((Date.now() - dob.getTime()) / (365.25 * 24 * 60 * 60 * 1000));
 }
-function getNormalRange(test, sex) {
-    const sexNorm = (sex || '').toUpperCase();
-    let min = test.normalMin;
-    let max = test.normalMax;
-    if (sexNorm === 'M') {
-        if (test.normalMinMale !== null)
-            min = test.normalMinMale;
-        if (test.normalMaxMale !== null)
-            max = test.normalMaxMale;
-    }
-    else if (sexNorm === 'F') {
-        if (test.normalMinFemale !== null)
-            min = test.normalMinFemale;
-        if (test.normalMaxFemale !== null)
-            max = test.normalMaxFemale;
-    }
+function getNormalRange(test, sex, ageYears) {
+    const { normalMin: min, normalMax: max } = (0, normal_range_util_1.resolveNumericRange)(test, sex, ageYears);
     if (test.normalText?.trim())
         return test.normalText.trim();
     if (min != null && max != null)
@@ -598,6 +585,7 @@ let ReportsService = class ReportsService {
     async renderTestResultsFallbackPDF(input) {
         const { order, orderTests, verifiers, latestVerifiedAt, comments } = input;
         const patient = order.patient;
+        const patientAgeYears = computeAgeYears(patient?.dateOfBirth ?? null);
         const labBranding = order.lab;
         const bannerImage = this.decodeImageDataUrl(labBranding?.reportBannerDataUrl);
         const footerImage = this.decodeImageDataUrl(labBranding?.reportFooterDataUrl);
@@ -648,7 +636,7 @@ let ReportsService = class ReportsService {
             drawTwoColumnInfo(doc, [
                 ['Patient Name', patient?.fullName || '-'],
                 ['Patient ID', patient?.patientNumber || '-'],
-                ['Age', computeAgeYears(patient?.dateOfBirth ?? null)?.toString() || '-'],
+                ['Age', patientAgeYears?.toString() || '-'],
                 ['Sex', patient?.sex || '-'],
             ], [
                 ['Order Number', order.orderNumber || order.id.substring(0, 8)],
@@ -689,7 +677,9 @@ let ReportsService = class ReportsService {
                 const testCode = t?.code ? ` (${t.code})` : '';
                 const result = formatResultValue(ot);
                 const unit = t?.unit || '-';
-                const reference = t ? getNormalRange(t, patient?.sex ?? null) : '-';
+                const reference = t
+                    ? getNormalRange(t, patient?.sex ?? null, patientAgeYears)
+                    : '-';
                 const params = formatResultParameters(ot.resultParameters);
                 ensureSpace(doc, params.length > 0 ? 48 : 28, drawTableHeader);
                 const rowY = doc.y;

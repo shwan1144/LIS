@@ -14,6 +14,7 @@ import { User } from '../entities/user.entity';
 import { TestType, type Test } from '../entities/test.entity';
 import { buildResultsReportHtml } from './html/results-report.template';
 import type { Browser } from 'playwright';
+import { resolveNumericRange } from '../tests/normal-range.util';
 
 type PdfKitDocument = InstanceType<typeof PDFDocument>;
 const REPORT_BANNER_WIDTH = 2480;
@@ -63,18 +64,16 @@ function computeAgeYears(dateOfBirth: string | null): number | null {
   return Math.floor((Date.now() - dob.getTime()) / (365.25 * 24 * 60 * 60 * 1000));
 }
 
-function getNormalRange(test: Test, sex: string | null): string {
-  const sexNorm = (sex || '').toUpperCase();
-  let min = test.normalMin;
-  let max = test.normalMax;
-  if (sexNorm === 'M') {
-    if (test.normalMinMale !== null) min = test.normalMinMale;
-    if (test.normalMaxMale !== null) max = test.normalMaxMale;
-  } else if (sexNorm === 'F') {
-    if (test.normalMinFemale !== null) min = test.normalMinFemale;
-    if (test.normalMaxFemale !== null) max = test.normalMaxFemale;
-  }
-
+function getNormalRange(
+  test: Test,
+  sex: string | null,
+  ageYears: number | null,
+): string {
+  const { normalMin: min, normalMax: max } = resolveNumericRange(
+    test,
+    sex,
+    ageYears,
+  );
   if (test.normalText?.trim()) return test.normalText.trim();
   if (min != null && max != null) return `${min}-${max}`;
   if (min != null) return `>= ${min}`;
@@ -758,6 +757,7 @@ export class ReportsService implements OnModuleDestroy {
   }): Promise<Buffer> {
     const { order, orderTests, verifiers, latestVerifiedAt, comments } = input;
     const patient = order.patient;
+    const patientAgeYears = computeAgeYears(patient?.dateOfBirth ?? null);
     const labBranding = order.lab as unknown as {
       reportBannerDataUrl?: string | null;
       reportFooterDataUrl?: string | null;
@@ -822,7 +822,7 @@ export class ReportsService implements OnModuleDestroy {
         [
           ['Patient Name', patient?.fullName || '-'],
           ['Patient ID', patient?.patientNumber || '-'],
-          ['Age', computeAgeYears(patient?.dateOfBirth ?? null)?.toString() || '-'],
+          ['Age', patientAgeYears?.toString() || '-'],
           ['Sex', patient?.sex || '-'],
         ],
         [
@@ -873,7 +873,9 @@ export class ReportsService implements OnModuleDestroy {
         const testCode = t?.code ? ` (${t.code})` : '';
         const result = formatResultValue(ot);
         const unit = t?.unit || '-';
-        const reference = t ? getNormalRange(t, patient?.sex ?? null) : '-';
+        const reference = t
+          ? getNormalRange(t, patient?.sex ?? null, patientAgeYears)
+          : '-';
         const params = formatResultParameters(ot.resultParameters);
 
         ensureSpace(doc, params.length > 0 ? 48 : 28, drawTableHeader);

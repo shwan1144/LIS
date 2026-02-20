@@ -4,7 +4,7 @@ import { Order } from '../entities/order.entity';
 import { Test } from '../entities/test.entity';
 import { UserDepartmentAssignment } from '../entities/user-department-assignment.entity';
 import { Department } from '../entities/department.entity';
-import type { TestParameterDefinition } from '../entities/test.entity';
+import type { TestParameterDefinition, TestResultEntryType, TestResultTextOption } from '../entities/test.entity';
 import { AuditService } from '../audit/audit.service';
 import { PanelStatusService } from '../panels/panel-status.service';
 import { LabActorContext } from '../types/lab-actor-context';
@@ -20,6 +20,9 @@ export interface WorklistItem {
     normalMin: number | null;
     normalMax: number | null;
     normalText: string | null;
+    resultEntryType: TestResultEntryType;
+    resultTextOptions: TestResultTextOption[] | null;
+    allowCustomResultText: boolean;
     tubeType: string | null;
     status: OrderTestStatus;
     resultValue: number | null;
@@ -63,7 +66,8 @@ export declare class WorklistService {
         resultText?: string | null;
         comments?: string | null;
         resultParameters?: Record<string, string> | null;
-    }): Promise<OrderTest>;
+        forceEditVerified?: boolean;
+    }, actorRole?: string): Promise<OrderTest>;
     verifyResult(orderTestId: string, labId: string, actor: LabActorContext): Promise<OrderTest>;
     verifyMultiple(orderTestIds: string[], labId: string, actor: LabActorContext): Promise<{
         verified: number;
@@ -71,6 +75,7 @@ export declare class WorklistService {
     }>;
     rejectResult(orderTestId: string, labId: string, actor: LabActorContext, reason: string): Promise<OrderTest>;
     private calculateFlag;
+    private computePatientAgeYears;
     getWorklistStats(labId: string): Promise<{
         pending: number;
         completed: number;

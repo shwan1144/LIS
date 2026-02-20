@@ -7,6 +7,7 @@ import {
   ManyToOne,
   JoinColumn,
   OneToMany,
+  Unique,
 } from 'typeorm';
 import { Lab } from './lab.entity';
 
@@ -32,6 +33,7 @@ export enum InstrumentStatus {
 }
 
 @Entity('instruments')
+@Unique(['labId', 'code'])
 export class Instrument {
   @PrimaryGeneratedColumn('uuid')
   id: string;
@@ -158,6 +160,7 @@ export class Instrument {
 }
 
 @Entity('instrument_test_mappings')
+@Unique(['instrumentId', 'instrumentTestCode'])
 export class InstrumentTestMapping {
   @PrimaryGeneratedColumn('uuid')
   id: string;

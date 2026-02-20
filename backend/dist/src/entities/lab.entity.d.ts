@@ -1,6 +1,7 @@
 import { UserLabAssignment } from './user-lab-assignment.entity';
 import { Shift } from './shift.entity';
 import { Department } from './department.entity';
+import { Test } from './test.entity';
 export declare class Lab {
     id: string;
     code: string;
@@ -22,4 +23,5 @@ export declare class Lab {
     userAssignments: UserLabAssignment[];
     shifts: Shift[];
     departments: Department[];
+    tests: Test[];
 }

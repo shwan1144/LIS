@@ -4,9 +4,9 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, Between, IsNull } from 'typeorm';
+import { Repository, Between, EntityManager } from 'typeorm';
 import { Order, OrderStatus, PatientType } from '../entities/order.entity';
-import { Sample } from '../entities/sample.entity';
+import { Sample, TubeType as SampleTubeType } from '../entities/sample.entity';
 import { OrderTest, OrderTestStatus } from '../entities/order-test.entity';
 import { Patient } from '../entities/patient.entity';
 import { Lab } from '../entities/lab.entity';
@@ -80,7 +80,7 @@ export class OrdersService {
     const testIds = dto.samples.flatMap((s) => s.tests.map((t) => t.testId));
     const uniqueTestIds = [...new Set(testIds)];
     const tests = await this.testRepo.find({
-      where: uniqueTestIds.map((id) => ({ id })),
+      where: uniqueTestIds.map((id) => ({ id, labId })),
     });
     if (tests.length !== uniqueTestIds.length) {
       throw new NotFoundException('One or more tests not found');
@@ -181,14 +181,14 @@ export class OrdersService {
           const savedParent = await this.orderRepo.manager.save(parentOrderTest);
 
           // 2. Get child components from TestComponent table
-          const components = await this.testComponentRepo.find({
-            where: {
-              panelTestId: test.id,
-              // TODO: Filter by effectiveFrom/effectiveTo if versioning is used
-            },
-            relations: ['childTest'],
-            order: { sortOrder: 'ASC' },
-          });
+          const components = await this.testComponentRepo
+            .createQueryBuilder('component')
+            .innerJoinAndSelect('component.childTest', 'childTest')
+            .where('component.panelTestId = :panelTestId', { panelTestId: test.id })
+            .andWhere('childTest.labId = :labId', { labId })
+            // TODO: Filter by effectiveFrom/effectiveTo if versioning is used
+            .orderBy('component.sortOrder', 'ASC')
+            .getMany();
 
           // 3. Create child OrderTests for each component
           for (const component of components) {
@@ -417,6 +417,312 @@ export class OrdersService {
     }
     await this.orderRepo.save(order);
     return this.findOne(id, labId);
+  }
+
+  async updateOrderTests(
+    id: string,
+    labId: string,
+    testIds: string[],
+  ): Promise<Order> {
+    const uniqueTestIds = [...new Set((testIds ?? []).map((testId) => testId?.trim()).filter(Boolean))];
+    if (uniqueTestIds.length === 0) {
+      throw new BadRequestException('At least one test is required');
+    }
+
+    return this.orderRepo.manager.transaction(async (manager) => {
+      const orderRepo = manager.getRepository(Order);
+      const sampleRepo = manager.getRepository(Sample);
+      const orderTestRepo = manager.getRepository(OrderTest);
+      const testRepo = manager.getRepository(Test);
+
+      const order = await orderRepo.findOne({
+        where: { id, labId },
+        relations: ['samples', 'samples.orderTests', 'samples.orderTests.test', 'lab'],
+      });
+      if (!order) {
+        throw new NotFoundException('Order not found');
+      }
+      if (order.status === OrderStatus.CANCELLED) {
+        throw new BadRequestException('Cancelled order cannot be edited');
+      }
+
+      const allOrderTests = order.samples.flatMap((sample) => sample.orderTests ?? []);
+      const rootOrderTests = allOrderTests.filter((orderTest) => !orderTest.parentOrderTestId);
+      const existingRootTestIdSet = new Set(rootOrderTests.map((orderTest) => orderTest.testId));
+      const childOrderTestsByParent = new Map<string, OrderTest[]>();
+      for (const orderTest of allOrderTests) {
+        if (!orderTest.parentOrderTestId) continue;
+        const list = childOrderTestsByParent.get(orderTest.parentOrderTestId) ?? [];
+        list.push(orderTest);
+        childOrderTestsByParent.set(orderTest.parentOrderTestId, list);
+      }
+
+      const lockedRootIds = new Set<string>();
+      for (const rootOrderTest of rootOrderTests) {
+        const childOrderTests = childOrderTestsByParent.get(rootOrderTest.id) ?? [];
+        const isLocked =
+          this.isOrderTestProcessed(rootOrderTest) ||
+          childOrderTests.some((childOrderTest) => this.isOrderTestProcessed(childOrderTest));
+        if (isLocked) {
+          lockedRootIds.add(rootOrderTest.id);
+        }
+      }
+
+      const removedLockedRoots = rootOrderTests.filter(
+        (orderTest) => lockedRootIds.has(orderTest.id) && !new Set(uniqueTestIds).has(orderTest.testId),
+      );
+      if (removedLockedRoots.length > 0) {
+        const labels = removedLockedRoots
+          .map((orderTest) => orderTest.test?.code || orderTest.test?.name || orderTest.testId)
+          .join(', ');
+        throw new BadRequestException(
+          `Cannot remove completed/entered tests: ${labels}. You can remove only pending tests.`,
+        );
+      }
+
+      const tests = await testRepo.find({
+        where: uniqueTestIds.map((testId) => ({ id: testId, labId })),
+      });
+      if (tests.length !== uniqueTestIds.length) {
+        throw new NotFoundException('One or more selected tests not found');
+      }
+      const inactiveNewTests = tests.filter(
+        (test) => !test.isActive && !existingRootTestIdSet.has(test.id),
+      );
+      if (inactiveNewTests.length > 0) {
+        throw new BadRequestException('Cannot add inactive tests to an existing order');
+      }
+      const testMap = new Map<string, Test>(tests.map((test) => [test.id, test]));
+
+      const existingRootByTestId = new Map(
+        rootOrderTests.map((orderTest) => [orderTest.testId, orderTest]),
+      );
+      const desiredSet = new Set(uniqueTestIds);
+
+      const rootIdsToRemove = rootOrderTests
+        .filter((orderTest) => !desiredSet.has(orderTest.testId) && !lockedRootIds.has(orderTest.id))
+        .map((orderTest) => orderTest.id);
+
+      if (rootIdsToRemove.length > 0) {
+        await orderTestRepo.delete(rootIdsToRemove);
+      }
+
+      const refreshedSamples = await sampleRepo.find({
+        where: { orderId: order.id },
+        relations: ['orderTests', 'orderTests.test'],
+        order: { createdAt: 'ASC' },
+      });
+
+      const sampleByTubeType = new Map<string, Sample>();
+      for (const sample of refreshedSamples) {
+        const tubeKey = sample.tubeType ?? 'OTHER';
+        if (!sampleByTubeType.has(tubeKey)) {
+          sampleByTubeType.set(tubeKey, sample);
+        }
+      }
+
+      const nextBarcode = this.createOrderSampleBarcodeAllocator(
+        order.orderNumber,
+        refreshedSamples.map((sample) => sample.barcode),
+      );
+
+      const labelSequenceBy = order.lab?.labelSequenceBy === 'department' ? 'department' : 'tube_type';
+      const sequenceResetBy = order.lab?.sequenceResetBy === 'shift' ? 'shift' : 'day';
+      const effectiveShiftId = sequenceResetBy === 'shift' ? order.shiftId ?? null : null;
+
+      for (const testId of uniqueTestIds) {
+        if (existingRootByTestId.has(testId)) {
+          continue;
+        }
+
+        const test = testMap.get(testId);
+        if (!test) {
+          continue;
+        }
+
+        const tubeKey = test.tubeType ?? 'OTHER';
+        let targetSample = sampleByTubeType.get(tubeKey);
+
+        if (!targetSample) {
+          const scopeKey =
+            labelSequenceBy === 'department'
+              ? (test.departmentId ?? null)
+              : (test.tubeType ?? null);
+          const sequenceNumber = await this.getNextSequenceForScope(
+            labId,
+            sequenceResetBy,
+            effectiveShiftId,
+            scopeKey,
+            labelSequenceBy,
+          );
+
+          const createdSample = sampleRepo.create({
+            labId,
+            orderId: order.id,
+            sampleId: null,
+            tubeType: (test.tubeType as unknown as SampleTubeType) ?? null,
+            barcode: nextBarcode(),
+            sequenceNumber,
+            qrCode: null,
+          });
+          targetSample = await sampleRepo.save(createdSample);
+          sampleByTubeType.set(tubeKey, targetSample);
+        }
+
+        await this.createOrderTestsForSample(
+          manager,
+          labId,
+          targetSample.id,
+          test,
+          order.shiftId ?? null,
+          order.patientType,
+        );
+      }
+
+      await manager
+        .createQueryBuilder()
+        .delete()
+        .from(Sample)
+        .where(`"orderId" = :orderId`, { orderId: order.id })
+        .andWhere(
+          `NOT EXISTS (
+            SELECT 1
+            FROM "order_tests" ot
+            WHERE ot."sampleId" = "samples"."id"
+          )`,
+        )
+        .execute();
+
+      const subtotalRow = await orderTestRepo
+        .createQueryBuilder('ot')
+        .innerJoin('ot.sample', 'sample')
+        .select('COALESCE(SUM(ot.price), 0)', 'subtotal')
+        .where('sample.orderId = :orderId', { orderId: order.id })
+        .andWhere('ot.parentOrderTestId IS NULL')
+        .getRawOne<{ subtotal: string }>();
+
+      const subtotal = Number(subtotalRow?.subtotal ?? 0);
+      const normalizedDiscount = Math.min(100, Math.max(0, Number(order.discountPercent ?? 0)));
+      order.totalAmount = Math.round(subtotal * 100) / 100;
+      order.finalAmount =
+        Math.round(order.totalAmount * (1 - normalizedDiscount / 100) * 100) / 100;
+      order.status = OrderStatus.REGISTERED;
+      // Important: don't call save(order) here because this entity was loaded with nested
+      // relations (samples/orderTests). TypeORM can try to persist stale relation graph and
+      // produce invalid updates like setting order_tests.sampleId = NULL.
+      await orderRepo.update(
+        { id: order.id, labId },
+        {
+          totalAmount: order.totalAmount,
+          finalAmount: order.finalAmount,
+          status: order.status,
+        },
+      );
+
+      return (await orderRepo.findOne({
+        where: { id: order.id, labId },
+        relations: ['patient', 'lab', 'shift', 'samples', 'samples.orderTests', 'samples.orderTests.test'],
+      })) as Order;
+    });
+  }
+
+  private async createOrderTestsForSample(
+    manager: EntityManager,
+    labId: string,
+    sampleId: string,
+    test: Test,
+    shiftId: string | null,
+    patientType: PatientType,
+  ): Promise<void> {
+    const orderTestRepo = manager.getRepository(OrderTest);
+    const panelPrice = await this.findPricing(labId, test.id, shiftId, patientType);
+
+    if (test.type === TestType.PANEL) {
+      const parentOrderTest = orderTestRepo.create({
+        labId,
+        sampleId,
+        testId: test.id,
+        parentOrderTestId: null,
+        status: OrderTestStatus.PENDING,
+        price: panelPrice,
+      });
+      const savedParent = await orderTestRepo.save(parentOrderTest);
+
+      const components = await manager.getRepository(TestComponent)
+        .createQueryBuilder('component')
+        .innerJoinAndSelect('component.childTest', 'childTest')
+        .where('component.panelTestId = :panelTestId', { panelTestId: test.id })
+        .andWhere('childTest.labId = :labId', { labId })
+        .orderBy('component.sortOrder', 'ASC')
+        .getMany();
+
+      for (const component of components) {
+        const childOrderTest = orderTestRepo.create({
+          labId,
+          sampleId,
+          testId: component.childTestId,
+          parentOrderTestId: savedParent.id,
+          status: OrderTestStatus.PENDING,
+          price: null,
+        });
+        await orderTestRepo.save(childOrderTest);
+      }
+      return;
+    }
+
+    const orderTest = orderTestRepo.create({
+      labId,
+      sampleId,
+      testId: test.id,
+      parentOrderTestId: null,
+      status: OrderTestStatus.PENDING,
+      price: panelPrice,
+    });
+    await orderTestRepo.save(orderTest);
+  }
+
+  private createOrderSampleBarcodeAllocator(
+    orderNumber: string | null,
+    existingBarcodes: Array<string | null>,
+  ): () => string {
+    const normalizedOrderNumber = orderNumber?.trim() ?? '';
+    const normalizedBarcodes = existingBarcodes
+      .map((value) => (typeof value === 'string' ? value.trim() : ''))
+      .filter((value) => value.length > 0);
+
+    if (/^\d+$/.test(normalizedOrderNumber)) {
+      const width = normalizedOrderNumber.length;
+      let maxValue = Number(normalizedOrderNumber);
+      for (const barcode of normalizedBarcodes) {
+        if (!/^\d+$/.test(barcode)) continue;
+        const value = Number(barcode);
+        if (Number.isFinite(value) && value > maxValue) {
+          maxValue = value;
+        }
+      }
+      return () => {
+        maxValue += 1;
+        return String(maxValue).padStart(width, '0');
+      };
+    }
+
+    let fallbackSeq = normalizedBarcodes.length;
+    const prefix = normalizedOrderNumber || 'ORD';
+    return () => {
+      fallbackSeq += 1;
+      return `${prefix}-${String(fallbackSeq).padStart(2, '0')}`;
+    };
+  }
+
+  private isOrderTestProcessed(orderTest: OrderTest): boolean {
+    return (
+      orderTest.status !== OrderTestStatus.PENDING ||
+      orderTest.resultValue !== null ||
+      (orderTest.resultText?.trim()?.length ?? 0) > 0 ||
+      (orderTest.resultParameters != null && Object.keys(orderTest.resultParameters).length > 0) ||
+      orderTest.resultedAt !== null ||
+      orderTest.verifiedAt !== null
+    );
   }
 
   private async findPricing(

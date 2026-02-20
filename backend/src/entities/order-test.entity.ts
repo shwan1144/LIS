@@ -26,6 +26,9 @@ export enum ResultFlag {
   LOW = 'L',
   CRITICAL_HIGH = 'HH',
   CRITICAL_LOW = 'LL',
+  POSITIVE = 'POS',
+  NEGATIVE = 'NEG',
+  ABNORMAL = 'ABN',
 }
 
 @Entity('order_tests')

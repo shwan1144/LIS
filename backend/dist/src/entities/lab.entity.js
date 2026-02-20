@@ -14,6 +14,7 @@ const typeorm_1 = require("typeorm");
 const user_lab_assignment_entity_1 = require("./user-lab-assignment.entity");
 const shift_entity_1 = require("./shift.entity");
 const department_entity_1 = require("./department.entity");
+const test_entity_1 = require("./test.entity");
 let Lab = class Lab {
 };
 exports.Lab = Lab;
@@ -97,6 +98,10 @@ __decorate([
     (0, typeorm_1.OneToMany)(() => department_entity_1.Department, (dept) => dept.lab),
     __metadata("design:type", Array)
 ], Lab.prototype, "departments", void 0);
+__decorate([
+    (0, typeorm_1.OneToMany)(() => test_entity_1.Test, (test) => test.lab),
+    __metadata("design:type", Array)
+], Lab.prototype, "tests", void 0);
 exports.Lab = Lab = __decorate([
     (0, typeorm_1.Entity)('labs')
 ], Lab);

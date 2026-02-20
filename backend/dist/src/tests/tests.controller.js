@@ -22,24 +22,36 @@ let TestsController = class TestsController {
     constructor(testsService) {
         this.testsService = testsService;
     }
-    async findAll(active) {
+    async findAll(req, active) {
+        const labId = req.user?.labId;
+        if (!labId)
+            throw new Error('Lab ID not found in token');
         const activeOnly = active === 'true';
-        return this.testsService.findAll(activeOnly);
+        return this.testsService.findAll(labId, activeOnly);
     }
-    async seedAll() {
-        const cbc = await this.testsService.seedCBCTests();
-        const chem = await this.testsService.seedChemistryTests();
+    async seedAll(req) {
+        const labId = req.user?.labId;
+        if (!labId)
+            throw new Error('Lab ID not found in token');
+        const cbc = await this.testsService.seedCBCTests(labId);
+        const chem = await this.testsService.seedChemistryTests(labId);
         return {
             cbc,
             chemistry: chem,
             total: { created: cbc.created + chem.created, skipped: cbc.skipped + chem.skipped },
         };
     }
-    async seedCBC() {
-        return this.testsService.seedCBCTests();
+    async seedCBC(req) {
+        const labId = req.user?.labId;
+        if (!labId)
+            throw new Error('Lab ID not found in token');
+        return this.testsService.seedCBCTests(labId);
     }
-    async seedChemistry() {
-        return this.testsService.seedChemistryTests();
+    async seedChemistry(req) {
+        const labId = req.user?.labId;
+        if (!labId)
+            throw new Error('Lab ID not found in token');
+        return this.testsService.seedChemistryTests(labId);
     }
     async getPricing(req, id) {
         const labId = req.user?.labId;
@@ -54,47 +66,66 @@ let TestsController = class TestsController {
         await this.testsService.setPricingForTest(id, labId, body.prices ?? []);
         return { success: true };
     }
-    async findOne(id) {
-        return this.testsService.findOne(id);
+    async findOne(req, id) {
+        const labId = req.user?.labId;
+        if (!labId)
+            throw new Error('Lab ID not found in token');
+        return this.testsService.findOne(id, labId);
     }
-    async create(dto) {
-        return this.testsService.create(dto);
+    async create(req, dto) {
+        const labId = req.user?.labId;
+        if (!labId)
+            throw new Error('Lab ID not found in token');
+        return this.testsService.create(labId, dto);
     }
-    async update(id, dto) {
-        return this.testsService.update(id, dto);
+    async update(req, id, dto) {
+        const labId = req.user?.labId;
+        if (!labId)
+            throw new Error('Lab ID not found in token');
+        return this.testsService.update(id, labId, dto);
     }
-    async delete(id) {
-        await this.testsService.delete(id);
+    async delete(req, id) {
+        const labId = req.user?.labId;
+        if (!labId)
+            throw new Error('Lab ID not found in token');
+        await this.testsService.delete(id, labId);
         return { success: true };
     }
-    async toggleActive(id) {
-        return this.testsService.toggleActive(id);
+    async toggleActive(req, id) {
+        const labId = req.user?.labId;
+        if (!labId)
+            throw new Error('Lab ID not found in token');
+        return this.testsService.toggleActive(id, labId);
     }
 };
 exports.TestsController = TestsController;
 __decorate([
     (0, common_1.Get)(),
-    __param(0, (0, common_1.Query)('active')),
+    __param(0, (0, common_1.Req)()),
+    __param(1, (0, common_1.Query)('active')),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String]),
+    __metadata("design:paramtypes", [Object, String]),
     __metadata("design:returntype", Promise)
 ], TestsController.prototype, "findAll", null);
 __decorate([
     (0, common_1.Post)('seed/all'),
+    __param(0, (0, common_1.Req)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", []),
+    __metadata("design:paramtypes", [Object]),
     __metadata("design:returntype", Promise)
 ], TestsController.prototype, "seedAll", null);
 __decorate([
     (0, common_1.Post)('seed/cbc'),
+    __param(0, (0, common_1.Req)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", []),
+    __metadata("design:paramtypes", [Object]),
     __metadata("design:returntype", Promise)
 ], TestsController.prototype, "seedCBC", null);
 __decorate([
     (0, common_1.Post)('seed/chemistry'),
+    __param(0, (0, common_1.Req)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", []),
+    __metadata("design:paramtypes", [Object]),
     __metadata("design:returntype", Promise)
 ], TestsController.prototype, "seedChemistry", null);
 __decorate([
@@ -116,40 +147,45 @@ __decorate([
 ], TestsController.prototype, "setPricing", null);
 __decorate([
     (0, common_1.Get)(':id'),
-    __param(0, (0, common_1.Param)('id', common_1.ParseUUIDPipe)),
+    __param(0, (0, common_1.Req)()),
+    __param(1, (0, common_1.Param)('id', common_1.ParseUUIDPipe)),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String]),
+    __metadata("design:paramtypes", [Object, String]),
     __metadata("design:returntype", Promise)
 ], TestsController.prototype, "findOne", null);
 __decorate([
     (0, common_1.Post)(),
     (0, common_1.UsePipes)(new common_1.ValidationPipe({ whitelist: true, transform: true })),
-    __param(0, (0, common_1.Body)()),
+    __param(0, (0, common_1.Req)()),
+    __param(1, (0, common_1.Body)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [create_test_dto_1.CreateTestDto]),
+    __metadata("design:paramtypes", [Object, create_test_dto_1.CreateTestDto]),
     __metadata("design:returntype", Promise)
 ], TestsController.prototype, "create", null);
 __decorate([
     (0, common_1.Patch)(':id'),
     (0, common_1.UsePipes)(new common_1.ValidationPipe({ whitelist: true, transform: true })),
-    __param(0, (0, common_1.Param)('id', common_1.ParseUUIDPipe)),
-    __param(1, (0, common_1.Body)()),
+    __param(0, (0, common_1.Req)()),
+    __param(1, (0, common_1.Param)('id', common_1.ParseUUIDPipe)),
+    __param(2, (0, common_1.Body)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String, update_test_dto_1.UpdateTestDto]),
+    __metadata("design:paramtypes", [Object, String, update_test_dto_1.UpdateTestDto]),
     __metadata("design:returntype", Promise)
 ], TestsController.prototype, "update", null);
 __decorate([
     (0, common_1.Delete)(':id'),
-    __param(0, (0, common_1.Param)('id', common_1.ParseUUIDPipe)),
+    __param(0, (0, common_1.Req)()),
+    __param(1, (0, common_1.Param)('id', common_1.ParseUUIDPipe)),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String]),
+    __metadata("design:paramtypes", [Object, String]),
     __metadata("design:returntype", Promise)
 ], TestsController.prototype, "delete", null);
 __decorate([
     (0, common_1.Patch)(':id/toggle-active'),
-    __param(0, (0, common_1.Param)('id', common_1.ParseUUIDPipe)),
+    __param(0, (0, common_1.Req)()),
+    __param(1, (0, common_1.Param)('id', common_1.ParseUUIDPipe)),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String]),
+    __metadata("design:paramtypes", [Object, String]),
     __metadata("design:returntype", Promise)
 ], TestsController.prototype, "toggleActive", null);
 exports.TestsController = TestsController = __decorate([

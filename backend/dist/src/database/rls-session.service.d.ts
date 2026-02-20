@@ -4,6 +4,7 @@ export declare class RlsSessionService {
     private readonly logger;
     private readonly warnedMissingRoles;
     private readonly warnedMembershipRoles;
+    private readonly warnedMissingRolePrivileges;
     constructor(dataSource: DataSource);
     withLabContext<T>(labId: string, execute: (manager: EntityManager) => Promise<T>): Promise<T>;
     withPlatformAdminContext<T>(execute: (manager: EntityManager) => Promise<T>): Promise<T>;

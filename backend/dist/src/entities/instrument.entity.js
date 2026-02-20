@@ -190,7 +190,8 @@ __decorate([
     __metadata("design:type", Array)
 ], Instrument.prototype, "testMappings", void 0);
 exports.Instrument = Instrument = __decorate([
-    (0, typeorm_1.Entity)('instruments')
+    (0, typeorm_1.Entity)('instruments'),
+    (0, typeorm_1.Unique)(['labId', 'code'])
 ], Instrument);
 let InstrumentTestMapping = class InstrumentTestMapping {
 };
@@ -237,7 +238,8 @@ __decorate([
     __metadata("design:type", Instrument)
 ], InstrumentTestMapping.prototype, "instrument", void 0);
 exports.InstrumentTestMapping = InstrumentTestMapping = __decorate([
-    (0, typeorm_1.Entity)('instrument_test_mappings')
+    (0, typeorm_1.Entity)('instrument_test_mappings'),
+    (0, typeorm_1.Unique)(['instrumentId', 'instrumentTestCode'])
 ], InstrumentTestMapping);
 let InstrumentMessage = class InstrumentMessage {
 };

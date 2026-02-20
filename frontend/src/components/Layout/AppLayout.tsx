@@ -1,6 +1,6 @@
 import { Outlet, useNavigate, useLocation, Navigate } from 'react-router-dom';
 import { Alert, Layout as AntLayout, Typography, Space, Menu, Modal, Dropdown, Switch } from 'antd';
-import { LogoutOutlined, DashboardOutlined, BarChartOutlined, UserOutlined, DownOutlined, FileTextOutlined, UnorderedListOutlined, SettingOutlined, FilePdfOutlined, CheckCircleOutlined, WarningOutlined, MoonOutlined, SunOutlined } from '@ant-design/icons';
+import { LogoutOutlined, DashboardOutlined, BarChartOutlined, UserOutlined, DownOutlined, FileTextOutlined, UnorderedListOutlined, SettingOutlined, FilePdfOutlined, CheckCircleOutlined, MoonOutlined, SunOutlined } from '@ant-design/icons';
 import { useEffect, useState } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
@@ -45,7 +45,6 @@ function getMenuItems(role: string | undefined) {
     { key: '/worklist', icon: <UnorderedListOutlined />, label: 'Worklist' },
     { key: '/verification', icon: <CheckCircleOutlined />, label: 'Verification' },
     { key: '/reports', icon: <FilePdfOutlined />, label: 'Reports' },
-    { key: '/unmatched', icon: <WarningOutlined />, label: 'Unmatched Results' },
   ];
   if (role && ADMIN_ROLES.includes(role)) {
     items.push({ key: '/statistics', icon: <BarChartOutlined />, label: 'Statistics' });
@@ -59,6 +58,7 @@ function getMenuItems(role: string | undefined) {
         { key: '/settings/label', label: 'Label & sequence' },
         { key: '/settings/instruments', label: 'Instruments' },
         { key: '/settings/tests', label: 'Test management' },
+        { key: '/unmatched', label: 'Unmatched Results' },
         { key: '/settings/audit', label: 'Audit Log' },
       ],
     });
@@ -96,7 +96,12 @@ export function AppLayout() {
     return () => clearInterval(interval);
   }, [shifts, setCurrentShift]);
 
-  if ((location.pathname.startsWith('/settings') || location.pathname === '/statistics') && !isAdmin) {
+  if (
+    (location.pathname.startsWith('/settings') ||
+      location.pathname === '/statistics' ||
+      location.pathname === '/unmatched') &&
+    !isAdmin
+  ) {
     return <Navigate to="/" replace />;
   }
 
@@ -161,7 +166,7 @@ export function AppLayout() {
         </Space>
       </Header>
       <AntLayout>
-        <Sider width={200} style={{ background: isDark ? '#141414' : '#fff' }} theme={isDark ? 'dark' : 'light'}>
+        <Sider width={200} style={{ background: isDark ? '#141414' : '#e5edf7' }} theme={isDark ? 'dark' : 'light'}>
           <Menu
             mode="inline"
             selectedKeys={[
@@ -171,15 +176,20 @@ export function AppLayout() {
               location.pathname === '/statistics' ? '/statistics' :
               location.pathname === '/worklist' ? '/worklist' :
               location.pathname === '/verification' ? '/verification' :
+              location.pathname === '/unmatched' ? '/unmatched' :
               location.pathname === '/reports' ? '/reports' : '/'
             ]}
-            defaultOpenKeys={location.pathname.startsWith('/settings') ? ['settings'] : undefined}
+            defaultOpenKeys={
+              location.pathname.startsWith('/settings') || location.pathname === '/unmatched'
+                ? ['settings']
+                : undefined
+            }
             items={menuItems}
             onClick={({ key }) => { if (key.startsWith('/')) navigate(key); }}
             style={{ height: '100%', borderRight: 0 }}
           />
         </Sider>
-        <Content style={{ padding: 24, background: isDark ? '#141414' : '#f0f2f5' }}>
+        <Content style={{ padding: 24, background: isDark ? '#141414' : '#dce5f0' }}>
           {isImpersonationMode ? (
             <Alert
               type="warning"

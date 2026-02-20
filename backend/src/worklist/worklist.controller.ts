@@ -22,6 +22,7 @@ interface RequestWithUser {
     isImpersonation?: boolean;
     username: string;
     labId: string;
+    role?: string;
   };
 }
 
@@ -87,6 +88,7 @@ export class WorklistController {
       resultText?: string | null;
       comments?: string | null;
       resultParameters?: Record<string, string> | null;
+      forceEditVerified?: boolean;
     },
   ) {
     const labId = req.user?.labId;
@@ -94,7 +96,7 @@ export class WorklistController {
     if (!labId) {
       throw new Error('Lab ID not found in token');
     }
-    return this.worklistService.enterResult(id, labId, actor, body);
+    return this.worklistService.enterResult(id, labId, actor, body, req.user?.role);
   }
 
   @Patch(':id/verify')

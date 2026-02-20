@@ -9,6 +9,7 @@ import {
 import { UserLabAssignment } from './user-lab-assignment.entity';
 import { Shift } from './shift.entity';
 import { Department } from './department.entity';
+import { Test } from './test.entity';
 
 @Entity('labs')
 export class Lab {
@@ -80,4 +81,7 @@ export class Lab {
 
   @OneToMany(() => Department, (dept) => dept.lab)
   departments: Department[];
+
+  @OneToMany(() => Test, (test) => test.lab)
+  tests: Test[];
 }

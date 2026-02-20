@@ -42,15 +42,32 @@ function AppContent() {
   const { isDark } = useTheme();
   const authScope = getCurrentAuthScope();
   const isAdminHost = authScope === 'PLATFORM';
+  const darkThemeToken = {
+    colorPrimary: '#1677ff',
+    borderRadius: 6,
+  };
+  const lightThemeToken = {
+    colorPrimary: '#1677ff',
+    borderRadius: 8,
+    colorBgBase: '#dfe7f2',
+    colorBgLayout: '#d7e0ec',
+    colorBgContainer: '#edf2f8',
+    colorBgElevated: '#f2f6fb',
+    colorFillAlter: '#e3ebf4',
+    colorBorder: '#bfcddd',
+    colorBorderSecondary: '#ced8e5',
+    colorSplit: '#c8d4e2',
+    colorText: '#111827',
+    colorTextSecondary: '#334155',
+    colorTextTertiary: '#475569',
+    colorTextQuaternary: '#64748b',
+  };
 
   return (
     <ConfigProvider
       theme={{
         algorithm: isDark ? theme.darkAlgorithm : theme.defaultAlgorithm,
-        token: {
-          colorPrimary: '#1677ff',
-          borderRadius: 6,
-        },
+        token: isDark ? darkThemeToken : lightThemeToken,
       }}
     >
       <AuthProvider>

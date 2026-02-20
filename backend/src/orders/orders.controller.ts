@@ -16,6 +16,7 @@ import {
 import { OrdersService } from './orders.service';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { UpdateOrderPaymentDto } from './dto/update-payment.dto';
+import { UpdateOrderTestsDto } from './dto/update-order-tests.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { OrderStatus } from '../entities/order.entity';
 
@@ -144,5 +145,19 @@ export class OrdersController {
       paymentStatus: dto.paymentStatus,
       paidAmount: dto.paidAmount,
     });
+  }
+
+  @Patch(':id/tests')
+  @UsePipes(new ValidationPipe({ whitelist: true }))
+  async updateOrderTests(
+    @Req() req: RequestWithUser,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UpdateOrderTestsDto,
+  ) {
+    const labId = req.user?.labId;
+    if (!labId) {
+      throw new Error('Lab ID not found in token');
+    }
+    return this.ordersService.updateOrderTests(id, labId, dto.testIds);
   }
 }

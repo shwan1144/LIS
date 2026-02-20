@@ -49,6 +49,10 @@ export declare class OrdersService {
         paymentStatus: 'unpaid' | 'partial' | 'paid';
         paidAmount?: number;
     }): Promise<Order>;
+    updateOrderTests(id: string, labId: string, testIds: string[]): Promise<Order>;
+    private createOrderTestsForSample;
+    private createOrderSampleBarcodeAllocator;
+    private isOrderTestProcessed;
     private findPricing;
     getNextOrderNumber(labId: string, shiftId: string | null): Promise<string>;
     private generateOrderNumber;

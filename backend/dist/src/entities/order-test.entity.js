@@ -29,6 +29,9 @@ var ResultFlag;
     ResultFlag["LOW"] = "L";
     ResultFlag["CRITICAL_HIGH"] = "HH";
     ResultFlag["CRITICAL_LOW"] = "LL";
+    ResultFlag["POSITIVE"] = "POS";
+    ResultFlag["NEGATIVE"] = "NEG";
+    ResultFlag["ABNORMAL"] = "ABN";
 })(ResultFlag || (exports.ResultFlag = ResultFlag = {}));
 let OrderTest = class OrderTest {
 };

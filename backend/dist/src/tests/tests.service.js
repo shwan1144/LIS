@@ -20,37 +20,46 @@ const test_entity_1 = require("../entities/test.entity");
 const pricing_entity_1 = require("../entities/pricing.entity");
 const test_component_entity_1 = require("../entities/test-component.entity");
 const order_test_entity_1 = require("../entities/order-test.entity");
+const department_entity_1 = require("../entities/department.entity");
 let TestsService = class TestsService {
-    constructor(testRepo, pricingRepo, testComponentRepo, orderTestRepo) {
+    constructor(testRepo, pricingRepo, testComponentRepo, orderTestRepo, departmentRepo) {
         this.testRepo = testRepo;
         this.pricingRepo = pricingRepo;
         this.testComponentRepo = testComponentRepo;
         this.orderTestRepo = orderTestRepo;
+        this.departmentRepo = departmentRepo;
     }
-    async findAll(activeOnly = true) {
-        const where = activeOnly ? { isActive: true } : {};
+    async findAll(labId, activeOnly = true) {
+        const where = activeOnly ? { labId, isActive: true } : { labId };
         return this.testRepo.find({
             where,
             order: { sortOrder: 'ASC', code: 'ASC' },
         });
     }
-    async findOne(id) {
-        const test = await this.testRepo.findOne({ where: { id } });
+    async findOne(id, labId) {
+        const test = await this.testRepo.findOne({ where: { id, labId } });
         if (!test) {
             throw new common_1.NotFoundException('Test not found');
         }
         return test;
     }
-    async findByCode(code) {
-        return this.testRepo.findOne({ where: { code } });
+    async findByCode(code, labId) {
+        return this.testRepo.findOne({ where: { code, labId } });
     }
-    async create(dto) {
-        const existing = await this.findByCode(dto.code);
+    async create(labId, dto) {
+        const normalizedCode = dto.code.toUpperCase().trim();
+        const existing = await this.findByCode(normalizedCode, labId);
         if (existing) {
-            throw new common_1.ConflictException(`Test with code "${dto.code}" already exists`);
+            throw new common_1.ConflictException(`Test with code "${normalizedCode}" already exists`);
         }
+        await this.ensureDepartmentBelongsToLab(dto.departmentId ?? null, labId);
+        const resultEntryType = this.normalizeResultEntryType(dto.resultEntryType);
+        const resultTextOptions = this.normalizeResultTextOptions(dto.resultTextOptions);
+        const allowCustomResultText = dto.allowCustomResultText ?? false;
+        this.validateResultEntryConfig(resultEntryType, resultTextOptions, allowCustomResultText);
         const test = this.testRepo.create({
-            code: dto.code.toUpperCase().trim(),
+            labId,
+            code: normalizedCode,
             name: dto.name.trim(),
             type: dto.type || test_entity_1.TestType.SINGLE,
             tubeType: dto.tubeType || test_entity_1.TubeType.SERUM,
@@ -62,6 +71,10 @@ let TestsService = class TestsService {
             normalMinFemale: dto.normalMinFemale ?? null,
             normalMaxFemale: dto.normalMaxFemale ?? null,
             normalText: dto.normalText?.trim() || null,
+            resultEntryType,
+            resultTextOptions,
+            allowCustomResultText,
+            numericAgeRanges: this.normalizeNumericAgeRanges(dto.numericAgeRanges),
             description: dto.description?.trim() || null,
             childTestIds: dto.childTestIds?.trim() || null,
             parameterDefinitions: dto.parameterDefinitions ?? null,
@@ -73,12 +86,13 @@ let TestsService = class TestsService {
         });
         return this.testRepo.save(test);
     }
-    async update(id, dto) {
-        const test = await this.findOne(id);
+    async update(id, labId, dto) {
+        const test = await this.findOne(id, labId);
         if (dto.code && dto.code !== test.code) {
-            const existing = await this.findByCode(dto.code);
+            const normalizedCode = dto.code.toUpperCase().trim();
+            const existing = await this.findByCode(normalizedCode, labId);
             if (existing) {
-                throw new common_1.ConflictException(`Test with code "${dto.code}" already exists`);
+                throw new common_1.ConflictException(`Test with code "${normalizedCode}" already exists`);
             }
         }
         if (dto.code !== undefined)
@@ -105,14 +119,19 @@ let TestsService = class TestsService {
             test.normalMaxFemale = dto.normalMaxFemale;
         if (dto.normalText !== undefined)
             test.normalText = dto.normalText?.trim() || null;
+        if (dto.numericAgeRanges !== undefined) {
+            test.numericAgeRanges = this.normalizeNumericAgeRanges(dto.numericAgeRanges);
+        }
         if (dto.description !== undefined)
             test.description = dto.description?.trim() || null;
         if (dto.childTestIds !== undefined)
             test.childTestIds = dto.childTestIds?.trim() || null;
         if (dto.parameterDefinitions !== undefined)
             test.parameterDefinitions = dto.parameterDefinitions ?? null;
-        if (dto.departmentId !== undefined)
+        if (dto.departmentId !== undefined) {
+            await this.ensureDepartmentBelongsToLab(dto.departmentId ?? null, labId);
             test.departmentId = dto.departmentId ?? null;
+        }
         if (dto.category !== undefined)
             test.category = dto.category?.trim() || null;
         if (dto.isActive !== undefined)
@@ -121,11 +140,136 @@ let TestsService = class TestsService {
             test.sortOrder = dto.sortOrder;
         if (dto.expectedCompletionMinutes !== undefined)
             test.expectedCompletionMinutes = dto.expectedCompletionMinutes ?? null;
+        const nextResultEntryType = dto.resultEntryType !== undefined
+            ? this.normalizeResultEntryType(dto.resultEntryType)
+            : (test.resultEntryType ?? 'NUMERIC');
+        const nextResultTextOptions = dto.resultTextOptions !== undefined
+            ? this.normalizeResultTextOptions(dto.resultTextOptions)
+            : (test.resultTextOptions ?? null);
+        const nextAllowCustomResultText = dto.allowCustomResultText !== undefined
+            ? dto.allowCustomResultText
+            : (test.allowCustomResultText ?? false);
+        this.validateResultEntryConfig(nextResultEntryType, nextResultTextOptions, nextAllowCustomResultText);
+        test.resultEntryType = nextResultEntryType;
+        test.resultTextOptions = nextResultTextOptions;
+        test.allowCustomResultText = nextAllowCustomResultText;
         return this.testRepo.save(test);
     }
-    async delete(id) {
-        const test = await this.findOne(id);
-        const orderTestCount = await this.orderTestRepo.count({ where: { testId: id } });
+    normalizeNumericAgeRanges(ranges) {
+        if (!ranges || !Array.isArray(ranges))
+            return null;
+        const normalized = ranges
+            .map((range) => {
+            const sex = (range.sex || 'ANY').toUpperCase();
+            const normalizedSex = sex === 'M' || sex === 'F' ? sex : 'ANY';
+            const minAgeYears = range.minAgeYears === undefined || range.minAgeYears === null
+                ? null
+                : Number(range.minAgeYears);
+            const maxAgeYears = range.maxAgeYears === undefined || range.maxAgeYears === null
+                ? null
+                : Number(range.maxAgeYears);
+            const normalMin = range.normalMin === undefined || range.normalMin === null
+                ? null
+                : Number(range.normalMin);
+            const normalMax = range.normalMax === undefined || range.normalMax === null
+                ? null
+                : Number(range.normalMax);
+            if (minAgeYears !== null &&
+                maxAgeYears !== null &&
+                minAgeYears > maxAgeYears) {
+                throw new common_1.BadRequestException('Invalid numeric age range: min age cannot be greater than max age');
+            }
+            if (normalMin !== null &&
+                normalMax !== null &&
+                normalMin > normalMax) {
+                throw new common_1.BadRequestException('Invalid numeric age range: normal min cannot be greater than normal max');
+            }
+            return {
+                sex: normalizedSex,
+                minAgeYears,
+                maxAgeYears,
+                normalMin,
+                normalMax,
+            };
+        })
+            .filter((range) => range.normalMin !== null || range.normalMax !== null);
+        if (!normalized.length)
+            return null;
+        normalized.sort((a, b) => {
+            const weight = (sex) => sex === 'ANY' ? 1 : 0;
+            const weightDiff = weight(a.sex) - weight(b.sex);
+            if (weightDiff !== 0)
+                return weightDiff;
+            const minA = a.minAgeYears ?? Number.NEGATIVE_INFINITY;
+            const minB = b.minAgeYears ?? Number.NEGATIVE_INFINITY;
+            if (minA !== minB)
+                return minA - minB;
+            const maxA = a.maxAgeYears ?? Number.POSITIVE_INFINITY;
+            const maxB = b.maxAgeYears ?? Number.POSITIVE_INFINITY;
+            return maxA - maxB;
+        });
+        return normalized;
+    }
+    normalizeResultEntryType(value) {
+        const normalized = (value || 'NUMERIC').toUpperCase();
+        if (normalized === 'NUMERIC' ||
+            normalized === 'QUALITATIVE' ||
+            normalized === 'TEXT') {
+            return normalized;
+        }
+        throw new common_1.BadRequestException('Invalid resultEntryType. Allowed values: NUMERIC, QUALITATIVE, TEXT');
+    }
+    normalizeResultTextOptions(options) {
+        if (!options || !Array.isArray(options))
+            return null;
+        const seen = new Set();
+        let defaultAssigned = false;
+        const normalized = [];
+        for (const option of options) {
+            const value = option?.value?.trim();
+            if (!value)
+                continue;
+            const dedupeKey = value.toLowerCase();
+            if (seen.has(dedupeKey))
+                continue;
+            seen.add(dedupeKey);
+            const normalizedFlag = this.normalizeResultFlag(option?.flag);
+            const isDefault = Boolean(option?.isDefault) && !defaultAssigned;
+            if (isDefault)
+                defaultAssigned = true;
+            normalized.push({
+                value,
+                flag: normalizedFlag,
+                isDefault,
+            });
+        }
+        return normalized.length ? normalized : null;
+    }
+    normalizeResultFlag(flag) {
+        if (flag === null || flag === undefined || String(flag).trim() === '') {
+            return null;
+        }
+        const normalized = String(flag).trim().toUpperCase();
+        const allowed = ['N', 'H', 'L', 'HH', 'LL', 'POS', 'NEG', 'ABN'];
+        if (!allowed.includes(normalized)) {
+            throw new common_1.BadRequestException(`Invalid result option flag "${flag}". Allowed: ${allowed.join(', ')}`);
+        }
+        return normalized;
+    }
+    validateResultEntryConfig(resultEntryType, resultTextOptions, allowCustomResultText) {
+        if (resultEntryType === 'NUMERIC' && resultTextOptions?.length) {
+            throw new common_1.BadRequestException('resultTextOptions are only valid for QUALITATIVE or TEXT result entry type');
+        }
+        if (resultEntryType === 'QUALITATIVE' && !resultTextOptions?.length) {
+            throw new common_1.BadRequestException('QUALITATIVE result entry type requires at least one result text option');
+        }
+        if (resultEntryType === 'NUMERIC' && allowCustomResultText) {
+            throw new common_1.BadRequestException('allowCustomResultText can only be enabled for QUALITATIVE or TEXT tests');
+        }
+    }
+    async delete(id, labId) {
+        const test = await this.findOne(id, labId);
+        const orderTestCount = await this.orderTestRepo.count({ where: { testId: id, labId } });
         if (orderTestCount > 0) {
             throw new common_1.ConflictException(`Cannot delete test "${test.code}" because it is used in ${orderTestCount} order(s). ` +
                 'Deactivate the test instead (toggle Active off) to hide it from new orders while preserving history.');
@@ -139,13 +283,13 @@ let TestsService = class TestsService {
         }
         await this.testRepo.remove(test);
     }
-    async toggleActive(id) {
-        const test = await this.findOne(id);
+    async toggleActive(id, labId) {
+        const test = await this.findOne(id, labId);
         test.isActive = !test.isActive;
         return this.testRepo.save(test);
     }
     async getPricingForTest(testId, labId) {
-        await this.findOne(testId);
+        await this.findOne(testId, labId);
         const rows = await this.pricingRepo.find({
             where: { testId, labId, patientType: (0, typeorm_2.IsNull)() },
             relations: ['shift'],
@@ -157,7 +301,7 @@ let TestsService = class TestsService {
         }));
     }
     async setPricingForTest(testId, labId, prices) {
-        await this.findOne(testId);
+        await this.findOne(testId, labId);
         await this.pricingRepo.delete({ testId, labId, patientType: (0, typeorm_2.IsNull)() });
         for (const p of prices) {
             if (p.price < 0)
@@ -173,7 +317,18 @@ let TestsService = class TestsService {
             await this.pricingRepo.save(pricing);
         }
     }
-    async seedCBCTests() {
+    async ensureDepartmentBelongsToLab(departmentId, labId) {
+        if (!departmentId)
+            return;
+        const department = await this.departmentRepo.findOne({
+            where: { id: departmentId, labId },
+            select: ['id'],
+        });
+        if (!department) {
+            throw new common_1.BadRequestException('Selected department does not belong to this lab');
+        }
+    }
+    async seedCBCTests(labId) {
         const subtests = [
             { code: 'WBC', name: 'White Blood Cell Count', unit: '10^9/L', normalMin: 4.0, normalMax: 11.0, normalMinMale: 4.5, normalMaxMale: 11.0, normalMinFemale: 4.0, normalMaxFemale: 10.0, sortOrder: 10 },
             { code: 'RBC', name: 'Red Blood Cell Count', unit: '10^12/L', normalMin: 4.0, normalMax: 5.5, normalMinMale: 4.5, normalMaxMale: 5.5, normalMinFemale: 4.0, normalMaxFemale: 5.0, sortOrder: 11 },
@@ -205,7 +360,7 @@ let TestsService = class TestsService {
         const childIds = [];
         for (const data of subtests) {
             try {
-                let test = await this.findByCode(data.code);
+                let test = await this.findByCode(data.code, labId);
                 if (test) {
                     skipped++;
                     test.name = data.name;
@@ -220,11 +375,13 @@ let TestsService = class TestsService {
                     test.sortOrder = data.sortOrder ?? test.sortOrder;
                     test.type = test_entity_1.TestType.SINGLE;
                     test.tubeType = test_entity_1.TubeType.WHOLE_BLOOD;
+                    test.labId = labId;
                     test.isActive = false;
                     test = await this.testRepo.save(test);
                 }
                 else {
                     test = this.testRepo.create({
+                        labId,
                         code: data.code,
                         name: data.name,
                         unit: data.unit ?? null,
@@ -252,10 +409,11 @@ let TestsService = class TestsService {
             }
         }
         try {
-            let panel = await this.findByCode('CBC');
+            let panel = await this.findByCode('CBC', labId);
             if (panel) {
                 panel.type = test_entity_1.TestType.PANEL;
                 panel.tubeType = test_entity_1.TubeType.WHOLE_BLOOD;
+                panel.labId = labId;
                 panel.isActive = true;
                 panel.sortOrder = 1;
                 panel.description =
@@ -265,6 +423,7 @@ let TestsService = class TestsService {
             }
             else {
                 panel = this.testRepo.create({
+                    labId,
                     code: 'CBC',
                     name: 'Complete Blood Count',
                     type: test_entity_1.TestType.PANEL,
@@ -331,7 +490,7 @@ let TestsService = class TestsService {
         }
         return null;
     }
-    async seedChemistryTests() {
+    async seedChemistryTests(labId) {
         const chemTests = [
             { code: 'GLU', name: 'Glucose', unit: 'mg/dL', normalMin: 70, normalMax: 100, sortOrder: 100 },
             { code: 'BUN', name: 'Blood Urea Nitrogen', unit: 'mg/dL', normalMin: 7, normalMax: 20, sortOrder: 101 },
@@ -371,12 +530,13 @@ let TestsService = class TestsService {
         const createdTests = [];
         for (const testData of chemTests) {
             try {
-                const existing = await this.findByCode(testData.code);
+                const existing = await this.findByCode(testData.code, labId);
                 if (existing) {
                     skipped++;
                     continue;
                 }
                 const test = this.testRepo.create({
+                    labId,
                     code: testData.code,
                     name: testData.name,
                     unit: testData.unit ?? null,
@@ -411,7 +571,9 @@ exports.TestsService = TestsService = __decorate([
     __param(1, (0, typeorm_1.InjectRepository)(pricing_entity_1.Pricing)),
     __param(2, (0, typeorm_1.InjectRepository)(test_component_entity_1.TestComponent)),
     __param(3, (0, typeorm_1.InjectRepository)(order_test_entity_1.OrderTest)),
+    __param(4, (0, typeorm_1.InjectRepository)(department_entity_1.Department)),
     __metadata("design:paramtypes", [typeorm_2.Repository,
+        typeorm_2.Repository,
         typeorm_2.Repository,
         typeorm_2.Repository,
         typeorm_2.Repository])

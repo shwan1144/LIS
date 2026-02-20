@@ -89,18 +89,21 @@ export class InstrumentsService {
   }
 
   async create(labId: string, dto: CreateInstrumentDto): Promise<Instrument> {
+    const normalizedCode = dto.code.trim().toUpperCase();
+
     // Check for duplicate code
     const existing = await this.instrumentRepo.findOne({
-      where: { labId, code: dto.code },
+      where: { labId, code: normalizedCode },
     });
 
     if (existing) {
-      throw new BadRequestException(`Instrument with code ${dto.code} already exists`);
+      throw new BadRequestException(`Instrument with code ${normalizedCode} already exists`);
     }
 
     const instrument = this.instrumentRepo.create({
       labId,
       ...dto,
+      code: normalizedCode,
       status: InstrumentStatus.OFFLINE,
     });
 
@@ -123,12 +126,14 @@ export class InstrumentsService {
 
     // Check for duplicate code
     if (dto.code && dto.code !== instrument.code) {
+      const normalizedCode = dto.code.trim().toUpperCase();
       const existing = await this.instrumentRepo.findOne({
-        where: { labId, code: dto.code },
+        where: { labId, code: normalizedCode },
       });
       if (existing) {
-        throw new BadRequestException(`Instrument with code ${dto.code} already exists`);
+        throw new BadRequestException(`Instrument with code ${normalizedCode} already exists`);
       }
+      dto.code = normalizedCode;
     }
 
     Object.assign(instrument, dto);
@@ -180,7 +185,7 @@ export class InstrumentsService {
 
   /** Mappings for a given test (so Test management can show "this test receives from these instruments"). */
   async getMappingsByTestId(testId: string, labId: string): Promise<(InstrumentTestMapping & { instrument: Instrument })[]> {
-    const test = await this.testRepo.findOne({ where: { id: testId } });
+    const test = await this.testRepo.findOne({ where: { id: testId, labId } });
     if (!test) throw new NotFoundException('Test not found');
 
     const mappings = await this.mappingRepo.find({
@@ -196,7 +201,7 @@ export class InstrumentsService {
     await this.findOne(instrumentId, labId); // Verify access
 
     // Verify test exists
-    const test = await this.testRepo.findOne({ where: { id: dto.testId } });
+    const test = await this.testRepo.findOne({ where: { id: dto.testId, labId } });
     if (!test) {
       throw new NotFoundException('Test not found');
     }
@@ -237,7 +242,7 @@ export class InstrumentsService {
     }
 
     if (dto.testId) {
-      const test = await this.testRepo.findOne({ where: { id: dto.testId } });
+      const test = await this.testRepo.findOne({ where: { id: dto.testId, labId } });
       if (!test) {
         throw new NotFoundException('Test not found');
       }

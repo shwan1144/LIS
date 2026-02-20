@@ -3,7 +3,7 @@ import { CreateTestDto } from './dto/create-test.dto';
 import { UpdateTestDto } from './dto/update-test.dto';
 interface RequestWithUser {
     user: {
-        userId: string;
+        userId: string | null;
         username: string;
         labId: string;
     };
@@ -11,8 +11,8 @@ interface RequestWithUser {
 export declare class TestsController {
     private readonly testsService;
     constructor(testsService: TestsService);
-    findAll(active?: string): Promise<import("../entities/test.entity").Test[]>;
-    seedAll(): Promise<{
+    findAll(req: RequestWithUser, active?: string): Promise<import("../entities/test.entity").Test[]>;
+    seedAll(req: RequestWithUser): Promise<{
         cbc: {
             created: number;
             skipped: number;
@@ -28,12 +28,12 @@ export declare class TestsController {
             skipped: number;
         };
     }>;
-    seedCBC(): Promise<{
+    seedCBC(req: RequestWithUser): Promise<{
         created: number;
         skipped: number;
         tests: string[];
     }>;
-    seedChemistry(): Promise<{
+    seedChemistry(req: RequestWithUser): Promise<{
         created: number;
         skipped: number;
         tests: string[];
@@ -51,12 +51,12 @@ export declare class TestsController {
     }): Promise<{
         success: boolean;
     }>;
-    findOne(id: string): Promise<import("../entities/test.entity").Test>;
-    create(dto: CreateTestDto): Promise<import("../entities/test.entity").Test>;
-    update(id: string, dto: UpdateTestDto): Promise<import("../entities/test.entity").Test>;
-    delete(id: string): Promise<{
+    findOne(req: RequestWithUser, id: string): Promise<import("../entities/test.entity").Test>;
+    create(req: RequestWithUser, dto: CreateTestDto): Promise<import("../entities/test.entity").Test>;
+    update(req: RequestWithUser, id: string, dto: UpdateTestDto): Promise<import("../entities/test.entity").Test>;
+    delete(req: RequestWithUser, id: string): Promise<{
         success: boolean;
     }>;
-    toggleActive(id: string): Promise<import("../entities/test.entity").Test>;
+    toggleActive(req: RequestWithUser, id: string): Promise<import("../entities/test.entity").Test>;
 }
 export {};

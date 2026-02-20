@@ -54,7 +54,7 @@ let WorklistController = class WorklistController {
         if (!labId) {
             throw new Error('Lab ID not found in token');
         }
-        return this.worklistService.enterResult(id, labId, actor, body);
+        return this.worklistService.enterResult(id, labId, actor, body, req.user?.role);
     }
     async verifyResult(req, id) {
         const labId = req.user?.labId;

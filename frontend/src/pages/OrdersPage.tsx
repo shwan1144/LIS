@@ -1,10 +1,12 @@
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   Card,
   Button,
   Space,
   message,
   Select,
+  Input,
+  Pagination,
   Typography,
   InputNumber,
   Empty,
@@ -24,6 +26,8 @@ import {
   CheckCircleOutlined,
   LockOutlined,
   PlusOutlined,
+  ReloadOutlined,
+  SearchOutlined,
 } from '@ant-design/icons';
 import { useNavigate, useLocation } from 'react-router-dom';
 import dayjs from 'dayjs';
@@ -31,24 +35,22 @@ import {
   createOrder,
   getTests,
   getPatient,
-  getOrder,
   getDepartments,
-  getOrdersWorklist,
-  saveOrdersWorklist,
+  searchOrders,
   getNextOrderNumber,
   getOrderPriceEstimate,
   downloadOrderReceiptPDF,
-  downloadTestResultsPDF,
   updateOrderPayment,
+  updateOrderTests,
   type CreateOrderDto,
   type PatientDto,
   type TestDto,
   type OrderDto,
+  type OrderStatus,
   type DepartmentDto,
 } from '../api/client';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
-import { useOrdersWorklist, type PatientRow } from '../contexts/OrdersWorklistContext';
 import { PrintPreviewModal } from '../components/Print';
 
 const { Title, Text } = Typography;
@@ -58,14 +60,58 @@ interface SelectedTest {
   testCode: string;
   testName: string;
   tubeType: string;
-}
-
-function generateRowId(): string {
-  return `row-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+  locked?: boolean;
 }
 
 function getPatientName(p: PatientDto) {
   return p.fullName?.trim() || '';
+}
+
+interface OrderListRow {
+  rowId: string;
+  patient: PatientDto;
+  createdOrder: OrderDto | null;
+}
+
+const ORDER_PAGE_SIZE = 25;
+const ORDER_STATUS_FILTERS: Array<{ label: string; value: 'ALL' | OrderStatus }> = [
+  { label: 'All statuses', value: 'ALL' },
+  { label: 'Registered', value: 'REGISTERED' },
+  { label: 'Collected', value: 'COLLECTED' },
+  { label: 'In progress', value: 'IN_PROGRESS' },
+  { label: 'Completed', value: 'COMPLETED' },
+  { label: 'Cancelled', value: 'CANCELLED' },
+];
+const ORDER_STATUS_TAG_COLORS: Record<OrderStatus, string> = {
+  REGISTERED: 'blue',
+  COLLECTED: 'purple',
+  IN_PROGRESS: 'cyan',
+  COMPLETED: 'green',
+  CANCELLED: 'red',
+};
+const SHIFT_COLOR_PALETTE = [
+  'magenta',
+  'volcano',
+  'orange',
+  'gold',
+  'lime',
+  'green',
+  'cyan',
+  'blue',
+  'geekblue',
+  'purple',
+] as const;
+
+function getShiftLabel(order: OrderDto): string {
+  return order.shift?.name?.trim() || order.shift?.code?.trim() || 'No shift';
+}
+
+function getShiftTagColor(shiftLabel: string): (typeof SHIFT_COLOR_PALETTE)[number] {
+  let hash = 0;
+  for (let i = 0; i < shiftLabel.length; i += 1) {
+    hash = (hash * 31 + shiftLabel.charCodeAt(i)) | 0;
+  }
+  return SHIFT_COLOR_PALETTE[Math.abs(hash) % SHIFT_COLOR_PALETTE.length];
 }
 
 export function OrdersPage() {
@@ -73,7 +119,6 @@ export function OrdersPage() {
   const location = useLocation();
   const { isDark } = useTheme();
   const { lab, currentShiftId, currentShiftLabel } = useAuth();
-  const worklistContext = useOrdersWorklist();
   const [submitting, setSubmitting] = useState(false);
 
   const styles = useMemo(
@@ -88,10 +133,16 @@ export function OrdersPage() {
     [isDark]
   );
 
-  const [patientList, setPatientList] = useState<PatientRow[]>([]);
+  const [patientList, setPatientList] = useState<OrderListRow[]>([]);
   const [selectedRowId, setSelectedRowId] = useState<string | null>(null);
   const [worklistLoading, setWorklistLoading] = useState(true);
   const [patientLoading, setPatientLoading] = useState(false);
+  const [listPage, setListPage] = useState(1);
+  const [listTotal, setListTotal] = useState(0);
+  const [listQueryInput, setListQueryInput] = useState('');
+  const [listQuery, setListQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'ALL' | OrderStatus>('ALL');
+  const [draftPatient, setDraftPatient] = useState<PatientDto | null>(null);
 
   const [departments, setDepartments] = useState<DepartmentDto[]>([]);
   const [testOptions, setTestOptions] = useState<TestDto[]>([]);
@@ -108,11 +159,13 @@ export function OrdersPage() {
   const [printType, setPrintType] = useState<'receipt' | 'labels'>('receipt');
   const [printOrder, setPrintOrder] = useState<OrderDto | null>(null);
   const [downloadingPDF, setDownloadingPDF] = useState<string | null>(null);
-  const [savingBeforeNavigate, setSavingBeforeNavigate] = useState(false);
   const [nextOrderNumber, setNextOrderNumber] = useState<string | null>(null);
   const [updatingPayment, setUpdatingPayment] = useState(false);
   const [partialPaymentModalOpen, setPartialPaymentModalOpen] = useState(false);
   const [partialPaymentAmount, setPartialPaymentAmount] = useState<number>(0);
+  const [editTestsModalOpen, setEditTestsModalOpen] = useState(false);
+  const [editingTests, setEditingTests] = useState<SelectedTest[]>([]);
+  const [savingEditedTests, setSavingEditedTests] = useState(false);
 
   const selectedRow = useMemo(
     () => patientList.find((r) => r.rowId === selectedRowId) ?? null,
@@ -122,111 +175,129 @@ export function OrdersPage() {
   const selectedCreatedOrder = selectedRow?.createdOrder ?? null;
   const isSelectedLocked = selectedRow != null && selectedRow.createdOrder != null;
 
-  // Day key so worklist reloads when calendar day changes (count restarts, list can be empty).
-  const [dayKey, setDayKey] = useState(() => dayjs().format('YYYY-MM-DD'));
-  useEffect(() => {
-    const interval = setInterval(() => {
-      const next = dayjs().format('YYYY-MM-DD');
-      setDayKey((prev) => (next !== prev ? next : prev));
-    }, 60_000);
-    return () => clearInterval(interval);
-  }, []);
+  const loadOrderHistory = useCallback(
+    async (options?: {
+      focusOrderId?: string;
+      pageOverride?: number;
+      draftPatientOverride?: PatientDto | null;
+    }) => {
+      const effectivePage = options?.pageOverride ?? listPage;
+      const effectiveDraft =
+        options?.draftPatientOverride !== undefined
+          ? options.draftPatientOverride
+          : draftPatient;
 
-  // Single effect: load worklist for current shift/day and merge "Go to order" patient if present.
-  // Reload when shift or day changes so order box count restarts from 1 and list is fresh/empty.
-  const pendingPatientIdRef = useRef<string | null>(null);
-  useEffect(() => {
-    const patientIdFromState = (location.state as { patientId?: string })?.patientId ?? null;
-    if (patientIdFromState) pendingPatientIdRef.current = patientIdFromState;
+      setWorklistLoading(true);
+      try {
+        const result = await searchOrders({
+          page: effectivePage,
+          size: ORDER_PAGE_SIZE,
+          search: listQuery.trim() || undefined,
+          status: statusFilter === 'ALL' ? undefined : statusFilter,
+        });
 
-    // Empty the list when shift or day changes so order box count restarts and UI is fresh.
-    setPatientList([]);
-    setSelectedRowId(null);
-    setWorklistLoading(true);
-    let cancelled = false;
+        const maxPages = Math.max(1, Math.ceil((result.total ?? 0) / ORDER_PAGE_SIZE));
+        if ((result.items?.length ?? 0) === 0 && effectivePage > maxPages) {
+          setListPage(maxPages);
+          return;
+        }
 
-    getOrdersWorklist(currentShiftId)
-      .then((items) => {
-        if (cancelled) return;
-        const serverList: PatientRow[] = items.map((item) => ({
-          rowId: item.rowId,
-          patient: item.patient,
-          createdOrder: item.createdOrder,
+        const historyRows: OrderListRow[] = (result.items ?? []).map((order) => ({
+          rowId: `order-${order.id}`,
+          patient: order.patient,
+          createdOrder: order,
         }));
 
-        const toAdd = pendingPatientIdRef.current;
-        pendingPatientIdRef.current = null;
-        if (toAdd) {
-          window.history.replaceState({}, document.title, location.pathname);
-          const contextList = worklistContext?.getList(currentShiftId) ?? [];
-          const list = contextList.length > 0 ? contextList : serverList;
-          return getPatient(toAdd)
-            .then((p) => {
-              if (cancelled) return { list, selectId: list[0]?.rowId ?? null };
-              const existingPending = list.find((r) => r.patient.id === p.id && r.createdOrder === null);
-              if (existingPending) {
-                return { list, selectId: existingPending.rowId };
-              }
-              const newRow: PatientRow = {
-                rowId: generateRowId(),
-                patient: p,
+        const rows = effectiveDraft
+          ? [
+              {
+                rowId: `draft-${effectiveDraft.id}`,
+                patient: effectiveDraft,
                 createdOrder: null,
-              };
-              return { list: [newRow, ...list], selectId: newRow.rowId };
-            })
-            .catch(() => {
-              if (!cancelled) message.error('Patient not found');
-              return { list, selectId: list.length > 0 ? list[0].rowId : null };
-            });
+              },
+              ...historyRows,
+            ]
+          : historyRows;
+
+        setPatientList(rows);
+        setListTotal(result.total ?? 0);
+        setSelectedRowId((current) => {
+          if (options?.focusOrderId) {
+            const focusedRow = rows.find(
+              (row) => row.createdOrder?.id === options.focusOrderId,
+            );
+            if (focusedRow) {
+              return focusedRow.rowId;
+            }
+          }
+          if (current && rows.some((row) => row.rowId === current)) {
+            return current;
+          }
+          if (effectiveDraft) {
+            return `draft-${effectiveDraft.id}`;
+          }
+          return rows[0]?.rowId ?? null;
+        });
+      } catch {
+        message.error('Failed to load order history');
+        if (effectiveDraft) {
+          setPatientList([
+            {
+              rowId: `draft-${effectiveDraft.id}`,
+              patient: effectiveDraft,
+              createdOrder: null,
+            },
+          ]);
+          setSelectedRowId(`draft-${effectiveDraft.id}`);
+        } else {
+          setPatientList([]);
+          setSelectedRowId(null);
         }
-        return Promise.resolve({ list: serverList, selectId: serverList.length > 0 ? serverList[0].rowId : null });
-      })
-      .then((result) => {
-        if (cancelled || !result) return;
-        const { list, selectId } = result;
-        setPatientList(list);
-        worklistContext?.setList(currentShiftId, list);
-        setSelectedRowId(selectId);
+        setListTotal(0);
+      } finally {
+        setWorklistLoading(false);
+      }
+    },
+    [draftPatient, listPage, listQuery, statusFilter],
+  );
+
+  useEffect(() => {
+    const patientIdFromState =
+      (location.state as { patientId?: string } | null)?.patientId ?? null;
+    if (!patientIdFromState) {
+      return;
+    }
+
+    let cancelled = false;
+    setPatientLoading(true);
+    getPatient(patientIdFromState)
+      .then((patient) => {
+        if (cancelled) return;
+        setDraftPatient(patient);
         setSelectedTests([]);
         setDiscountPercent(0);
-        // Persist list so other browsers/devices see it (including pending patients from "Go to order").
-        const items = list.map((r) => ({
-          rowId: r.rowId,
-          patientId: r.patient.id,
-          orderId: r.createdOrder?.id,
-        }));
-        saveOrdersWorklist(currentShiftId, items).catch(() => message.error('Failed to save order list'));
+        setListPage(1);
       })
-      .catch((err) => {
-        if (!cancelled) message.error(err?.message?.includes('Patient') ? 'Patient not found' : 'Failed to load order list');
+      .catch(() => {
+        if (!cancelled) {
+          message.error('Patient not found');
+        }
       })
       .finally(() => {
-        if (!cancelled) setWorklistLoading(false);
+        if (!cancelled) {
+          setPatientLoading(false);
+        }
       });
 
-    return () => { cancelled = true; };
-  }, [currentShiftId, dayKey]);
-
-  // Keep context in sync so when we navigate away and back we still have the list (multiple pending)
-  useEffect(() => {
-    worklistContext?.setList(currentShiftId, patientList);
-  }, [patientList, currentShiftId]);
-
-  // Save worklist to server when it changes (scoped to current shift)
-  const hasLoadedWorklist = useRef(false);
-  useEffect(() => {
-    if (!hasLoadedWorklist.current) return;
-    const items = patientList.map((r) => ({
-      rowId: r.rowId,
-      patientId: r.patient.id,
-      orderId: r.createdOrder?.id,
-    }));
-    saveOrdersWorklist(currentShiftId, items).catch(() => message.error('Failed to save order list'));
-  }, [patientList, currentShiftId]);
+    window.history.replaceState({}, document.title, location.pathname);
+    return () => {
+      cancelled = true;
+    };
+  }, [location.key, location.pathname, location.state]);
 
   useEffect(() => {
-    if (!worklistLoading) hasLoadedWorklist.current = true;
-  }, [worklistLoading]);
+    void loadOrderHistory();
+  }, [loadOrderHistory]);
 
   useEffect(() => {
     async function load() {
@@ -323,6 +394,98 @@ export function OrdersPage() {
     setSelectedTests(selectedTests.filter((t) => t.testId !== testId));
   };
 
+  const getRootOrderTests = (order: OrderDto): SelectedTest[] => {
+    const all = (order.samples ?? []).flatMap((sample) => sample.orderTests ?? []);
+    const root = all.filter((orderTest) => !orderTest.parentOrderTestId);
+    const childrenByParent = new Map<string, typeof all>();
+    all.forEach((orderTest) => {
+      if (!orderTest.parentOrderTestId) return;
+      const current = childrenByParent.get(orderTest.parentOrderTestId) ?? [];
+      current.push(orderTest);
+      childrenByParent.set(orderTest.parentOrderTestId, current);
+    });
+
+    return root.map((orderTest) => {
+      const childTests = childrenByParent.get(orderTest.id) ?? [];
+      const hasProcessedChild = childTests.some((child) => child.status !== 'PENDING');
+      return {
+        locked: orderTest.status !== 'PENDING' || hasProcessedChild,
+        testId: orderTest.testId,
+        testCode: orderTest.test?.code ?? '-',
+        testName: orderTest.test?.name ?? 'Unknown',
+        tubeType: orderTest.test?.tubeType ?? 'OTHER',
+      };
+    });
+  };
+
+  const applyUpdatedOrderToList = (updatedOrder: OrderDto) => {
+    setPatientList((prev) =>
+      prev.map((row) =>
+        row.createdOrder?.id === updatedOrder.id ? { ...row, createdOrder: updatedOrder } : row
+      )
+    );
+  };
+
+  const openEditTestsModal = () => {
+    if (!selectedCreatedOrder) return;
+    const currentRootTests = getRootOrderTests(selectedCreatedOrder);
+    setEditingTests(currentRootTests);
+    setEditTestsModalOpen(true);
+  };
+
+  const handleAddEditingTest = (testId: string) => {
+    const test = testOptions.find((item) => item.id === testId);
+    if (!test) return;
+    if (editingTests.some((item) => item.testId === testId)) {
+      message.warning('Test already in order');
+      return;
+    }
+    setEditingTests((prev) => [
+      ...prev,
+      {
+        testId: test.id,
+        testCode: test.code,
+        testName: test.name,
+        tubeType: test.tubeType,
+      },
+    ]);
+  };
+
+  const handleRemoveEditingTest = (testId: string) => {
+    const target = editingTests.find((item) => item.testId === testId);
+    if (target?.locked) {
+      message.warning('Completed/entered test is locked and cannot be removed.');
+      return;
+    }
+    setEditingTests((prev) => prev.filter((item) => item.testId !== testId));
+  };
+
+  const handleSaveEditedTests = async () => {
+    if (!selectedCreatedOrder?.id) return;
+    if (editingTests.length === 0) {
+      message.error('At least one test is required');
+      return;
+    }
+
+    setSavingEditedTests(true);
+    try {
+      const updated = await updateOrderTests(selectedCreatedOrder.id, {
+        testIds: editingTests.map((test) => test.testId),
+      });
+      applyUpdatedOrderToList(updated);
+      setEditTestsModalOpen(false);
+      message.success('Order tests updated. Order number and sequence stay unchanged.');
+    } catch (error: unknown) {
+      const msg =
+        error && typeof error === 'object' && 'response' in error
+          ? (error as { response?: { data?: { message?: string } } }).response?.data?.message
+          : null;
+      message.error(msg || 'Failed to update order tests');
+    } finally {
+      setSavingEditedTests(false);
+    }
+  };
+
   const handleSubmit = async () => {
     if (!selectedPatient) {
       message.error('Please select a patient');
@@ -360,16 +523,17 @@ export function OrdersPage() {
         })),
       };
 
-      const newOrder = await createOrder(orderData);
-      const fullOrder = await getOrder(newOrder.id);
+      const createdOrder = await createOrder(orderData);
 
-      setPatientList((prev) =>
-        prev.map((r) =>
-          r.rowId === selectedRow?.rowId ? { ...r, createdOrder: fullOrder } : r
-        )
-      );
+      setDraftPatient(null);
       setSelectedTests([]);
       setDiscountPercent(0);
+      setListPage(1);
+      await loadOrderHistory({
+        focusOrderId: createdOrder.id,
+        pageOverride: 1,
+        draftPatientOverride: null,
+      });
       message.success('Order created successfully');
     } catch (err: unknown) {
       const msg =
@@ -385,28 +549,32 @@ export function OrdersPage() {
 
   const removePatientFromList = (rowId: string) => {
     const row = patientList.find((r) => r.rowId === rowId);
-    if (row?.createdOrder) {
-      message.warning('Cannot remove a patient with a completed order');
+    if (!row) return;
+    if (row.createdOrder) {
+      message.warning('History orders cannot be removed from this screen');
       return;
     }
-    const remaining = patientList.filter((r) => r.rowId !== rowId);
-    setPatientList(remaining);
-    if (selectedRowId === rowId) {
-      setSelectedRowId(remaining[0]?.rowId ?? null);
-      setSelectedTests([]);
-    }
+    setDraftPatient(null);
+    setPatientList((prev) => {
+      const remaining = prev.filter((item) => item.rowId !== rowId);
+      setSelectedRowId((current) => (current === rowId ? (remaining[0]?.rowId ?? null) : current));
+      return remaining;
+    });
+    setSelectedTests([]);
+    setDiscountPercent(0);
   };
 
   const addNewOrderForPatient = (patient: PatientDto) => {
-    const newRow: PatientRow = {
-      rowId: generateRowId(),
-      patient,
-      createdOrder: null,
-    };
-    setPatientList((prev) => [newRow, ...prev]);
-    setSelectedRowId(newRow.rowId);
+    setDraftPatient(patient);
+    const draftRowId = `draft-${patient.id}`;
+    setPatientList((prev) => {
+      const withoutDraft = prev.filter((row) => !row.rowId.startsWith('draft-'));
+      return [{ rowId: draftRowId, patient, createdOrder: null }, ...withoutDraft];
+    });
+    setSelectedRowId(draftRowId);
     setSelectedTests([]);
     setDiscountPercent(0);
+    setListPage(1);
   };
 
   const openPrint = (order: OrderDto, type: 'receipt' | 'labels') => {
@@ -415,149 +583,235 @@ export function OrdersPage() {
     setPrintModalOpen(true);
   };
 
-  const goToPatients = () => {
-    const items = patientList.map((r) => ({
-      rowId: r.rowId,
-      patientId: r.patient.id,
-      orderId: r.createdOrder?.id,
-    }));
-    setSavingBeforeNavigate(true);
-    saveOrdersWorklist(currentShiftId, items)
-      .then(() => navigate('/patients'))
-      .catch(() => {
-        message.error('Failed to save list');
-      })
-      .finally(() => setSavingBeforeNavigate(false));
+  const openNewPatientInPatientsTab = () => {
+    navigate('/patients', { state: { openNewPatient: true } });
   };
 
   const totalTests = selectedTests.length;
   const totalAfterDiscount = Math.round(subtotal * (1 - discountPercent / 100) * 100) / 100;
+  const totalPages = Math.max(1, Math.ceil(listTotal / ORDER_PAGE_SIZE));
+
+  const handleApplyHistorySearch = () => {
+    const nextQuery = listQueryInput.trim();
+    if (listPage !== 1) {
+      setListPage(1);
+    }
+    if (listQuery !== nextQuery) {
+      setListQuery(nextQuery);
+      return;
+    }
+    void loadOrderHistory({ pageOverride: 1 });
+  };
+
+  const handleRefreshHistory = () => {
+    void loadOrderHistory();
+  };
 
   return (
     <div>
       <Title level={4} style={{ marginBottom: 16 }}>
-        Orders {patientList.length > 0 && (
-          <Text type="secondary" style={{ fontWeight: 'normal', fontSize: 14 }}>({patientList.length} total)</Text>
+        Orders {listTotal > 0 && (
+          <Text type="secondary" style={{ fontWeight: 'normal', fontSize: 14 }}>({listTotal} total)</Text>
         )}
       </Title>
 
       {patientLoading || worklistLoading ? (
         <Card>
-          <Spin tip={worklistLoading ? 'Loading order list...' : 'Loading patient...'} />
-        </Card>
-      ) : patientList.length === 0 ? (
-        <Card>
-          <Empty
-            image={Empty.PRESENTED_IMAGE_SIMPLE}
-            description={
-              <span>
-                Go to <strong>Patients</strong> and click <strong>Go to order</strong> on a patient to add them here.
-              </span>
-            }
-            style={{ padding: 48 }}
-          >
-            <Button type="primary" icon={<PlusOutlined />} onClick={goToPatients} loading={savingBeforeNavigate}>
-              Go to Patients
-            </Button>
-          </Empty>
+          <Spin tip={patientLoading ? 'Loading patient...' : 'Loading order history...'} />
         </Card>
       ) : (
         <Row gutter={16}>
-          {/* Left: Patient list */}
-          <Col xs={24} md={10} lg={8}>
+          {/* Left: Order history */}
+          <Col xs={24} md={12} lg={10}>
             <Card
               style={{ minWidth: 260 }}
-              title="Patients"
+              title="Order History"
               extra={
-                <Button
-                  type="dashed"
-                  size="small"
-                  icon={<PlusOutlined />}
-                  onClick={goToPatients}
-                  loading={savingBeforeNavigate}
-                >
-                  Add
-                </Button>
+                <Space>
+                  <Button
+                    type="dashed"
+                    size="small"
+                    icon={<PlusOutlined />}
+                    onClick={openNewPatientInPatientsTab}
+                  >
+                    New
+                  </Button>
+                  <Button size="small" icon={<ReloadOutlined />} onClick={handleRefreshHistory}>
+                    Refresh
+                  </Button>
+                </Space>
               }
-              bodyStyle={{ padding: 0 }}
+              bodyStyle={{ padding: 12 }}
             >
+              <Space direction="vertical" style={{ width: '100%' }} size={12}>
+                <Input
+                  placeholder="Search order #, patient, phone"
+                  value={listQueryInput}
+                  allowClear
+                  prefix={<SearchOutlined />}
+                  onChange={(e) => setListQueryInput(e.target.value)}
+                  onPressEnter={handleApplyHistorySearch}
+                />
+                <Space style={{ width: '100%', justifyContent: 'space-between' }} wrap>
+                  <Select<'ALL' | OrderStatus>
+                    style={{ minWidth: 170 }}
+                    value={statusFilter}
+                    options={ORDER_STATUS_FILTERS}
+                    onChange={(value) => {
+                      setStatusFilter(value);
+                      setListPage(1);
+                    }}
+                  />
+                  <Button type="primary" onClick={handleApplyHistorySearch}>
+                    Apply
+                  </Button>
+                </Space>
+              </Space>
+
               <List
+                size="small"
                 dataSource={patientList}
-                renderItem={(row, index) => {
+                renderItem={(row) => {
                   const isLocked = row.createdOrder != null;
                   const isSelected = selectedRowId === row.rowId;
                   const name = getPatientName(row.patient);
+                  const shiftLabel = row.createdOrder ? getShiftLabel(row.createdOrder) : null;
+                  const shiftTagColor = shiftLabel ? getShiftTagColor(shiftLabel) : null;
                   return (
                     <List.Item
                       key={row.rowId}
                       style={{
-                        padding: '12px 16px',
+                        padding: '6px 8px',
                         cursor: 'pointer',
                         backgroundColor: isSelected ? 'rgba(22, 119, 255, 0.08)' : undefined,
                         borderLeft: isSelected ? '3px solid #1677ff' : undefined,
                       }}
                       onClick={() => setSelectedRowId(row.rowId)}
-                      actions={
-                        !isLocked
-                          ? [
-                              <Button
-                                type="text"
-                                danger
-                                size="small"
-                                icon={<DeleteOutlined />}
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  removePatientFromList(row.rowId);
-                                }}
-                              />,
-                            ]
-                          : undefined
-                      }
                     >
-                      <List.Item.Meta
-                        avatar={<UserOutlined style={{ fontSize: 20, color: '#1677ff' }} />}
-                        title={
-                          <Space>
-                            <Text strong={isSelected}>{name || '—'}</Text>
-                            {isLocked && (
-                              <Tag color="success" icon={<LockOutlined />}>
-                                Ordered
+                      <div
+                        style={{
+                          width: '100%',
+                          display: 'flex',
+                          alignItems: 'flex-start',
+                          justifyContent: 'space-between',
+                          gap: 8,
+                        }}
+                      >
+                        <Space size={8} align="start" style={{ minWidth: 0, flex: 1 }}>
+                          <UserOutlined style={{ fontSize: 14, color: '#1677ff', marginTop: 2 }} />
+                          <div
+                            style={{
+                              minWidth: 0,
+                              flex: 1,
+                              display: 'grid',
+                              gridTemplateColumns: 'minmax(220px, 1.8fr) 108px 88px 84px 120px',
+                              alignItems: 'center',
+                              columnGap: 6,
+                            }}
+                          >
+                            <Text
+                              strong={isSelected}
+                              style={{
+                                fontSize: 13,
+                                lineHeight: '16px',
+                                wordBreak: 'break-word',
+                                margin: 0,
+                              }}
+                            >
+                              {name || '-'}
+                            </Text>
+
+                            {isLocked ? (
+                              <Tag
+                                color={ORDER_STATUS_TAG_COLORS[row.createdOrder?.status ?? 'REGISTERED']}
+                                style={{ margin: 0, fontSize: 10, lineHeight: '14px', paddingInline: 4 }}
+                              >
+                                {row.createdOrder?.status ?? 'REGISTERED'}
+                              </Tag>
+                            ) : (
+                              <Tag
+                                color="gold"
+                                icon={<PlusOutlined />}
+                                style={{ margin: 0, fontSize: 10, lineHeight: '14px', paddingInline: 4 }}
+                              >
+                                New
                               </Tag>
                             )}
-                          </Space>
-                        }
-                        description={
-                          isLocked && row.createdOrder ? (
-                            <Space direction="vertical" size={0}>
-                              <Text type="secondary" style={{ fontSize: 12 }}>
-                                {row.createdOrder.orderNumber || row.createdOrder.id.substring(0, 8)}
-                              </Text>
-                              <Text type="secondary" style={{ fontSize: 12 }}>
-                                {row.createdOrder.shift?.name || row.createdOrder.shift?.code || '—'} ·{' '}
-                                {dayjs(row.createdOrder.registeredAt).format('HH:mm')}
-                              </Text>
-                            </Space>
-                          ) : !isLocked ? (
-                            <Text type="secondary" style={{ fontSize: 12 }}>
-                              Order # (pending): {nextOrderNumber ?? '…'}
+
+                            <Text type="secondary" style={{ fontSize: 10, lineHeight: '14px' }}>
+                              {isLocked && row.createdOrder
+                                ? (row.createdOrder.orderNumber || row.createdOrder.id.substring(0, 8))
+                                : (nextOrderNumber ?? '-')}
                             </Text>
-                          ) : null
-                        }
-                      />
+
+                            {isLocked ? (
+                              <Tag
+                                color={shiftTagColor ?? 'default'}
+                                style={{ margin: 0, fontSize: 10, lineHeight: '14px', paddingInline: 4 }}
+                              >
+                                {shiftLabel}
+                              </Tag>
+                            ) : (
+                              <Text type="secondary" style={{ fontSize: 10, lineHeight: '14px' }}>
+                                -
+                              </Text>
+                            )}
+
+                            <Text type="secondary" style={{ fontSize: 10, lineHeight: '14px' }}>
+                              {isLocked && row.createdOrder
+                                ? dayjs(row.createdOrder.registeredAt).format('YYYY-MM-DD HH:mm')
+                                : '-'}
+                            </Text>
+                          </div>
+                        </Space>
+
+                        {!isLocked ? (
+                          <Button
+                            type="text"
+                            danger
+                            size="small"
+                            icon={<DeleteOutlined />}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              removePatientFromList(row.rowId);
+                            }}
+                          />
+                        ) : null}
+                      </div>
                     </List.Item>
                   );
                 }}
               />
+              {patientList.length === 0 ? (
+                <Empty
+                  image={Empty.PRESENTED_IMAGE_SIMPLE}
+                  description="No orders found"
+                  style={{ padding: 24 }}
+                />
+              ) : null}
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 8 }}>
+                <Text type="secondary">
+                  Page {listPage} of {totalPages}
+                </Text>
+                <Pagination
+                  size="small"
+                  current={listPage}
+                  total={listTotal}
+                  pageSize={ORDER_PAGE_SIZE}
+                  showSizeChanger={false}
+                  onChange={(page) => setListPage(page)}
+                />
+              </div>
             </Card>
           </Col>
 
           {/* Right: Test selection or order success */}
-          <Col xs={24} md={14} lg={16}>
+          <Col xs={24} md={12} lg={14}>
             <Card bodyStyle={{ minHeight: 'calc(100vh - 200px)' }}>
               {!selectedPatient ? (
                 <Empty
                   image={Empty.PRESENTED_IMAGE_SIMPLE}
-                  description="Select a patient from the list to create an order"
+                  description="Select an order from history, or go to Patients to create a new order"
                   style={{ padding: 60 }}
                 />
               ) : isSelectedLocked && selectedCreatedOrder ? (
@@ -565,7 +819,7 @@ export function OrdersPage() {
                   <Result
                     status="success"
                     icon={<CheckCircleOutlined style={{ color: '#52c41a' }} />}
-                    title="Order created"
+                    title="Order details"
                     subTitle={
                       <Space direction="vertical" size={8} style={{ marginTop: 16, textAlign: 'left' }}>
                         <div>
@@ -580,12 +834,15 @@ export function OrdersPage() {
                         </div>
                         <div>
                           <Text type="secondary">Shift: </Text>
-                          <Text strong>
+                          <Tag
+                            color={getShiftTagColor(getShiftLabel(selectedCreatedOrder))}
+                            style={{ margin: 0, fontSize: 12, lineHeight: '18px', paddingInline: 8 }}
+                          >
                             {selectedCreatedOrder.shift?.name ||
                               selectedCreatedOrder.shift?.code ||
                               currentShiftLabel ||
-                              '—'}
-                          </Text>
+                              '-'}
+                          </Tag>
                         </div>
                         <div>
                           <Text type="secondary">Time: </Text>
@@ -595,7 +852,7 @@ export function OrdersPage() {
                         </div>
                         <div>
                           <Tag color="success" icon={<LockOutlined />}>
-                            Locked — cannot be edited or deleted
+                            Locked for delete - test list can still be edited
                           </Tag>
                         </div>
                       </Space>
@@ -604,12 +861,10 @@ export function OrdersPage() {
                   {/* Read-only list of tests in this order */}
                   <Card type="inner" title="Tests in this order" style={{ marginTop: 16 }}>
                     <Text type="secondary" style={{ display: 'block', marginBottom: 8 }}>
-                      You cannot add, remove, or edit tests. Reprint receipt or labels below.
+                      You can update tests for this order without changing order number or existing label sequence numbers.
                     </Text>
                     {(() => {
-                      const orderTests = (selectedCreatedOrder.samples ?? []).flatMap(
-                        (s) => s.orderTests ?? []
-                      );
+                      const orderTests = getRootOrderTests(selectedCreatedOrder);
                       if (orderTests.length === 0) {
                         return <Text type="secondary">No tests in this order.</Text>;
                       }
@@ -624,9 +879,9 @@ export function OrdersPage() {
                         >
                           <Space wrap size={[8, 8]}>
                             {orderTests.map((ot) => (
-                              <Tag key={ot.id} style={{ margin: 0 }}>
-                                {ot.test?.code ?? ot.test?.name ?? '—'}
-                                {ot.test?.name && ot.test?.code ? ` · ${ot.test.name}` : ''}
+                              <Tag key={ot.testId} style={{ margin: 0 }}>
+                                {ot.testCode ?? ot.testName ?? '-'}
+                                {ot.testName && ot.testCode ? ` - ${ot.testName}` : ''}
                               </Tag>
                             ))}
                           </Space>
@@ -637,19 +892,26 @@ export function OrdersPage() {
                   <div style={{ marginTop: 16 }}>
                     <Space wrap>
                       <Button
+                        icon={<PlusOutlined />}
+                        onClick={openEditTestsModal}
+                        size="large"
+                      >
+                        Edit tests
+                      </Button>
+                      <Button
                         type="primary"
                         icon={<PrinterOutlined />}
                         onClick={() => openPrint(selectedCreatedOrder, 'receipt')}
                         size="large"
                       >
-                        Reprint Receipt
+                        Receipt
                       </Button>
                       <Button
                         icon={<PrinterOutlined />}
                         onClick={() => openPrint(selectedCreatedOrder, 'labels')}
                         size="large"
                       >
-                        Reprint Labels
+                        Labels
                       </Button>
                       <Button
                         icon={<PrinterOutlined />}
@@ -683,20 +945,14 @@ export function OrdersPage() {
                             type="primary"
                             loading={updatingPayment}
                             onClick={async () => {
-                              if (!selectedCreatedOrder?.id || !worklistContext) return;
+                              if (!selectedCreatedOrder?.id) return;
                               setUpdatingPayment(true);
                               try {
                                 const updated = await updateOrderPayment(selectedCreatedOrder.id, {
                                   paymentStatus: 'paid',
                                 });
                                 message.success('Marked as paid');
-                                const list = worklistContext.getList(currentShiftId ?? null);
-                                const newList = list.map((r) =>
-                                  r.createdOrder?.id === selectedCreatedOrder.id
-                                    ? { ...r, createdOrder: updated }
-                                    : r
-                                );
-                                worklistContext.setList(currentShiftId ?? null, newList);
+                                applyUpdatedOrderToList(updated);
                               } catch {
                                 message.error('Failed to update payment');
                               } finally {
@@ -896,8 +1152,8 @@ export function OrdersPage() {
                     </Row>
                   </Card>
 
-                  <Button type="link" onClick={goToPatients} loading={savingBeforeNavigate}>
-                    ← Back to Patients
+                  <Button type="link" icon={<PlusOutlined />} onClick={openNewPatientInPatientsTab}>
+                    New patient
                   </Button>
                 </Space>
               )}
@@ -911,7 +1167,7 @@ export function OrdersPage() {
         open={partialPaymentModalOpen}
         onCancel={() => setPartialPaymentModalOpen(false)}
         onOk={async () => {
-          if (!selectedCreatedOrder?.id || !worklistContext) return;
+          if (!selectedCreatedOrder?.id) return;
           const final = Number(selectedCreatedOrder.finalAmount ?? 0);
           const amount = Number(partialPaymentAmount) || 0;
           if (amount <= 0) {
@@ -919,7 +1175,7 @@ export function OrdersPage() {
             return;
           }
           if (amount >= final) {
-            message.info('Amount is full — use "Mark as paid" instead.');
+            message.info('Amount is full - use "Mark as paid" instead.');
             return;
           }
           setUpdatingPayment(true);
@@ -929,11 +1185,7 @@ export function OrdersPage() {
               paidAmount: Math.round(amount * 100) / 100,
             });
             message.success('Marked as partially paid');
-            const list = worklistContext.getList(currentShiftId ?? null);
-            const newList = list.map((r) =>
-              r.createdOrder?.id === selectedCreatedOrder.id ? { ...r, createdOrder: updated } : r
-            );
-            worklistContext.setList(currentShiftId ?? null, newList);
+            applyUpdatedOrderToList(updated);
             setPartialPaymentModalOpen(false);
           } catch {
             message.error('Failed to update payment');
@@ -967,6 +1219,81 @@ export function OrdersPage() {
                 Total due: {Number(selectedCreatedOrder.finalAmount ?? 0).toLocaleString()} IQD
               </Text>
             </>
+          )}
+        </Space>
+      </Modal>
+
+      <Modal
+        title="Edit tests in order"
+        open={editTestsModalOpen}
+        onCancel={() => {
+          if (!savingEditedTests) {
+            setEditTestsModalOpen(false);
+          }
+        }}
+        onOk={handleSaveEditedTests}
+        okText="Save tests"
+        okButtonProps={{ loading: savingEditedTests }}
+        cancelButtonProps={{ disabled: savingEditedTests }}
+        destroyOnClose
+      >
+        <Space direction="vertical" style={{ width: '100%' }} size={12}>
+          <Text type="secondary">
+            Add/remove pending tests only. Completed or entered tests stay locked. Order number and sample sequence numbers stay unchanged.
+          </Text>
+          <Select
+            showSearch
+            placeholder="Add test by code or name"
+            value={null}
+            onChange={handleAddEditingTest}
+            optionFilterProp="label"
+            options={testOptions.map((test) => ({
+              value: test.id,
+              label: `${test.code} - ${test.name} (${test.tubeType})`,
+            }))}
+          />
+          {editingTests.length === 0 ? (
+            <Text type="secondary">No tests selected.</Text>
+          ) : (
+            <div
+              style={{
+                border: styles.border,
+                borderRadius: 8,
+                padding: 12,
+                maxHeight: 260,
+                overflow: 'auto',
+              }}
+            >
+              <Space direction="vertical" style={{ width: '100%' }} size={8}>
+                {editingTests.map((test) => (
+                  <div
+                    key={test.testId}
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      padding: '8px 12px',
+                      backgroundColor: styles.bgSubtle,
+                      borderRadius: 6,
+                    }}
+                  >
+                    <Space>
+                      <Text strong>{test.testCode}</Text>
+                      <Text>{test.testName}</Text>
+                      <Text type="secondary">({test.tubeType})</Text>
+                      {test.locked ? <Tag color="gold">Locked</Tag> : null}
+                    </Space>
+                    <Button
+                      type="text"
+                      danger
+                      icon={<DeleteOutlined />}
+                      disabled={test.locked}
+                      onClick={() => handleRemoveEditingTest(test.testId)}
+                    />
+                  </div>
+                ))}
+              </Space>
+            </div>
           )}
         </Space>
       </Modal>

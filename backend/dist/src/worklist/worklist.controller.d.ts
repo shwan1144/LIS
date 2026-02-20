@@ -6,6 +6,7 @@ interface RequestWithUser {
         isImpersonation?: boolean;
         username: string;
         labId: string;
+        role?: string;
     };
 }
 export declare class WorklistController {
@@ -26,6 +27,7 @@ export declare class WorklistController {
         resultText?: string | null;
         comments?: string | null;
         resultParameters?: Record<string, string> | null;
+        forceEditVerified?: boolean;
     }): Promise<import("../entities/order-test.entity").OrderTest>;
     verifyResult(req: RequestWithUser, id: string): Promise<import("../entities/order-test.entity").OrderTest>;
     verifyMultiple(req: RequestWithUser, body: {

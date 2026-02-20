@@ -1,6 +1,7 @@
 ﻿import type { Order } from '../../entities/order.entity';
 import type { OrderTest } from '../../entities/order-test.entity';
 import { TestType } from '../../entities/test.entity';
+import { resolveNumericRange } from '../../tests/normal-range.util';
 
 // Fallback logo (from provided template)
 const TEMPLATE_LOGO_BASE64 =
@@ -48,20 +49,18 @@ function formatResultValue(ot: OrderTest): string {
   return 'Pending';
 }
 
-function formatRange(ot: OrderTest, patientSex: string | null): string {
+function formatRange(
+  ot: OrderTest,
+  patientSex: string | null,
+  patientAgeYears: number | null,
+): string {
   const test: any = ot.test;
   if (!test) return '-';
-  const sex = (patientSex || '').toUpperCase();
-  let min = test.normalMin ?? null;
-  let max = test.normalMax ?? null;
-
-  if (sex === 'M') {
-    if (test.normalMinMale != null) min = test.normalMinMale;
-    if (test.normalMaxMale != null) max = test.normalMaxMale;
-  } else if (sex === 'F') {
-    if (test.normalMinFemale != null) min = test.normalMinFemale;
-    if (test.normalMaxFemale != null) max = test.normalMaxFemale;
-  }
+  const { normalMin: min, normalMax: max } = resolveNumericRange(
+    test,
+    patientSex,
+    patientAgeYears,
+  );
 
   if (test.normalText) return String(test.normalText);
   if (min != null && max != null) return `${min}-${max}`;
@@ -274,7 +273,7 @@ export function buildResultsReportHtml(input: {
           <td class="c-result">${escapeHtml(formatResultValue(ot))}${extra}</td>
           <td class="c-unit">${escapeHtml(t?.unit || '-')}</td>
           <td class="c-status">${escapeHtml(statusText)}</td>
-          <td class="c-range">${escapeHtml(formatRange(ot, order.patient?.sex ?? null))}</td>
+          <td class="c-range">${escapeHtml(formatRange(ot, order.patient?.sex ?? null, age))}</td>
         </tr>
         <tr class="dotted-row"><td colspan="5"></td></tr>
       `;
@@ -396,7 +395,7 @@ export function buildResultsReportHtml(input: {
             <td style="width:14%;" class="nowrap">${escapeHtml(formatResultValue(child))}</td>
             <td style="width:14%;" class="nowrap">${escapeHtml(ct?.unit || '-')}</td>
             <td style="width:14%;" class="${statusClass}">${escapeHtml(statusText)}</td>
-            <td style="width:30%;" class="nowrap">${escapeHtml(formatRange(child, order.patient?.sex ?? null))}</td>
+            <td style="width:30%;" class="nowrap">${escapeHtml(formatRange(child, order.patient?.sex ?? null, age))}</td>
           </tr>`;
         })
         .join('');
@@ -442,7 +441,7 @@ export function buildResultsReportHtml(input: {
           <td style="width:14%;" class="nowrap">${escapeHtml(formatResultValue(ot))}</td>
           <td style="width:14%;" class="nowrap">${escapeHtml(t?.unit || '-')}</td>
           <td style="width:14%;" class="${statusClass}">${escapeHtml(statusText)}</td>
-          <td style="width:30%;" class="nowrap">${escapeHtml(formatRange(ot, order.patient?.sex ?? null))}</td>
+          <td style="width:30%;" class="nowrap">${escapeHtml(formatRange(ot, order.patient?.sex ?? null, age))}</td>
         </tr>`;
         })
         .join('');

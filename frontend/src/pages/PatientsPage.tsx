@@ -11,10 +11,11 @@ import {
   Typography,
   Tag,
   Radio,
+  InputNumber,
 } from 'antd';
 import { SearchOutlined, PlusOutlined, ShoppingCartOutlined, EditOutlined } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import {
   searchPatients,
   createPatient,
@@ -24,9 +25,11 @@ import {
 } from '../api/client';
 
 const { Title, Text } = Typography;
+const CURRENT_YEAR = new Date().getFullYear();
 
 export function PatientsPage() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [data, setData] = useState<PatientDto[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(false);
@@ -61,12 +64,28 @@ export function PatientsPage() {
     load();
   }, [load]);
 
+  useEffect(() => {
+    const state = location.state as { openNewPatient?: boolean } | null;
+    if (!state?.openNewPatient) return;
+    setModalOpen(true);
+    navigate(location.pathname, { replace: true, state: null });
+  }, [location.pathname, location.state, navigate]);
+
   const onSearch = () => load();
 
-  const handleCreate = async (values: CreatePatientDto) => {
+  const handleCreate = async (values: CreatePatientDto & { birthYear?: number }) => {
+    const birthYear = values.birthYear ? Number(values.birthYear) : undefined;
+    const payload: CreatePatientDto = {
+      fullName: values.fullName,
+      nationalId: values.nationalId || undefined,
+      phone: values.phone || undefined,
+      sex: values.sex || undefined,
+      address: values.address || undefined,
+      dateOfBirth: birthYear ? `${birthYear}-01-01` : undefined,
+    };
     setSubmitting(true);
     try {
-      await createPatient(values);
+      await createPatient(payload);
       message.success('Patient registered');
       setModalOpen(false);
       form.resetFields();
@@ -280,7 +299,7 @@ export function PatientsPage() {
           form={form}
           layout="vertical"
           onFinish={handleCreate}
-          initialValues={{ sex: undefined }}
+          initialValues={{ sex: undefined, birthYear: undefined }}
         >
           <Form.Item
             name="fullName"
@@ -295,8 +314,20 @@ export function PatientsPage() {
           <Form.Item name="phone" label="Phone">
             <Input placeholder="Phone" />
           </Form.Item>
-          <Form.Item name="dateOfBirth" label="Date of birth">
-            <Input type="date" />
+          <Form.Item
+            name="birthYear"
+            label="Year of birth"
+            rules={[
+              { type: 'number', min: 1900, max: CURRENT_YEAR, message: `Enter year between 1900 and ${CURRENT_YEAR}` },
+            ]}
+          >
+            <InputNumber
+              min={1900}
+              max={CURRENT_YEAR}
+              precision={0}
+              style={{ width: '100%' }}
+              placeholder="e.g. 1992"
+            />
           </Form.Item>
           <Form.Item name="sex" label="Sex">
             <Radio.Group buttonStyle="solid">

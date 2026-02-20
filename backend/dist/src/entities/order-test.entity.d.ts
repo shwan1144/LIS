@@ -13,7 +13,10 @@ export declare enum ResultFlag {
     HIGH = "H",
     LOW = "L",
     CRITICAL_HIGH = "HH",
-    CRITICAL_LOW = "LL"
+    CRITICAL_LOW = "LL",
+    POSITIVE = "POS",
+    NEGATIVE = "NEG",
+    ABNORMAL = "ABN"
 }
 export declare class OrderTest {
     id: string;

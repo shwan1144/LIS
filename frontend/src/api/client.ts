@@ -249,7 +249,7 @@ export interface AdminOrderListItem {
 export interface AdminOrderTestDetail {
   id: string;
   status: 'PENDING' | 'IN_PROGRESS' | 'COMPLETED' | 'VERIFIED' | 'REJECTED';
-  flag: 'N' | 'H' | 'L' | 'HH' | 'LL' | null;
+  flag: 'N' | 'H' | 'L' | 'HH' | 'LL' | 'POS' | 'NEG' | 'ABN' | null;
   resultValue: number | null;
   resultText: string | null;
   verifiedAt: string | null;
@@ -825,11 +825,19 @@ export interface OrderTestDto {
   id: string;
   sampleId: string;
   testId: string;
+  parentOrderTestId: string | null;
   status: OrderTestStatus;
   price: number | null;
+  resultValue?: number | null;
+  resultText?: string | null;
+  resultParameters?: Record<string, string> | null;
+  flag?: ResultFlag | null;
+  resultedAt?: string | null;
+  resultedBy?: string | null;
   verifiedAt: string | null;
   verifiedBy: string | null;
   rejectionReason: string | null;
+  comments?: string | null;
   test: TestDto;
 }
 
@@ -945,6 +953,14 @@ export async function updateOrderPayment(
   return res.data;
 }
 
+export async function updateOrderTests(
+  orderId: string,
+  data: { testIds: string[] },
+): Promise<OrderDto> {
+  const res = await api.patch<OrderDto>(`/orders/${orderId}/tests`, data);
+  return res.data;
+}
+
 /** Lab-scoped orders worklist: shared for all users with access to the lab */
 export interface OrdersWorklistItem {
   rowId: string;
@@ -1022,6 +1038,22 @@ export interface TestParameterDefinition {
   defaultValue?: string;
 }
 
+export interface TestNumericAgeRange {
+  sex: 'ANY' | 'M' | 'F';
+  minAgeYears?: number | null;
+  maxAgeYears?: number | null;
+  normalMin?: number | null;
+  normalMax?: number | null;
+}
+
+export type TestResultEntryType = 'NUMERIC' | 'QUALITATIVE' | 'TEXT';
+
+export interface TestResultTextOption {
+  value: string;
+  flag?: ResultFlag | null;
+  isDefault?: boolean;
+}
+
 export interface TestDto {
   id: string;
   code: string;
@@ -1037,6 +1069,10 @@ export interface TestDto {
   normalMinFemale: number | null;
   normalMaxFemale: number | null;
   normalText: string | null;
+  numericAgeRanges: TestNumericAgeRange[] | null;
+  resultEntryType: TestResultEntryType;
+  resultTextOptions: TestResultTextOption[] | null;
+  allowCustomResultText: boolean;
   description: string | null;
   childTestIds: string | null;
   parameterDefinitions: TestParameterDefinition[] | null;
@@ -1062,6 +1098,10 @@ export interface CreateTestDto {
   normalMinFemale?: number | null;
   normalMaxFemale?: number | null;
   normalText?: string;
+  numericAgeRanges?: TestNumericAgeRange[] | null;
+  resultEntryType?: TestResultEntryType;
+  resultTextOptions?: TestResultTextOption[] | null;
+  allowCustomResultText?: boolean;
   description?: string;
   childTestIds?: string;
   parameterDefinitions?: TestParameterDefinition[] | null;
@@ -1124,7 +1164,7 @@ export async function seedAllTests(): Promise<{ cbc: SeedResult; chemistry: Seed
 }
 
 // Worklist
-export type ResultFlag = 'N' | 'H' | 'L' | 'HH' | 'LL';
+export type ResultFlag = 'N' | 'H' | 'L' | 'HH' | 'LL' | 'POS' | 'NEG' | 'ABN';
 
 export const ResultFlag = {
   NORMAL: 'N' as const,
@@ -1132,6 +1172,9 @@ export const ResultFlag = {
   LOW: 'L' as const,
   CRITICAL_HIGH: 'HH' as const,
   CRITICAL_LOW: 'LL' as const,
+  POSITIVE: 'POS' as const,
+  NEGATIVE: 'NEG' as const,
+  ABNORMAL: 'ABN' as const,
 };
 
 export interface WorklistItem {
@@ -1148,6 +1191,9 @@ export interface WorklistItem {
   normalMin: number | null;
   normalMax: number | null;
   normalText: string | null;
+  resultEntryType: TestResultEntryType;
+  resultTextOptions: TestResultTextOption[] | null;
+  allowCustomResultText: boolean;
   tubeType: string | null;
   status: OrderTestStatus;
   resultValue: number | null;
@@ -1172,6 +1218,7 @@ export async function enterResult(
     resultText?: string | null;
     comments?: string | null;
     resultParameters?: Record<string, string> | null;
+    forceEditVerified?: boolean;
   }
 ): Promise<void> {
   await api.patch(`/worklist/${id}/result`, data);

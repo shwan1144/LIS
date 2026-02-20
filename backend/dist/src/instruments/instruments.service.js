@@ -51,15 +51,17 @@ let InstrumentsService = class InstrumentsService {
         return instrument;
     }
     async create(labId, dto) {
+        const normalizedCode = dto.code.trim().toUpperCase();
         const existing = await this.instrumentRepo.findOne({
-            where: { labId, code: dto.code },
+            where: { labId, code: normalizedCode },
         });
         if (existing) {
-            throw new common_1.BadRequestException(`Instrument with code ${dto.code} already exists`);
+            throw new common_1.BadRequestException(`Instrument with code ${normalizedCode} already exists`);
         }
         const instrument = this.instrumentRepo.create({
             labId,
             ...dto,
+            code: normalizedCode,
             status: instrument_entity_1.InstrumentStatus.OFFLINE,
         });
         const saved = await this.instrumentRepo.save(instrument);
@@ -76,12 +78,14 @@ let InstrumentsService = class InstrumentsService {
     async update(id, labId, dto) {
         const instrument = await this.findOne(id, labId);
         if (dto.code && dto.code !== instrument.code) {
+            const normalizedCode = dto.code.trim().toUpperCase();
             const existing = await this.instrumentRepo.findOne({
-                where: { labId, code: dto.code },
+                where: { labId, code: normalizedCode },
             });
             if (existing) {
-                throw new common_1.BadRequestException(`Instrument with code ${dto.code} already exists`);
+                throw new common_1.BadRequestException(`Instrument with code ${normalizedCode} already exists`);
             }
+            dto.code = normalizedCode;
         }
         Object.assign(instrument, dto);
         const saved = await this.instrumentRepo.save(instrument);
@@ -116,7 +120,7 @@ let InstrumentsService = class InstrumentsService {
         });
     }
     async getMappingsByTestId(testId, labId) {
-        const test = await this.testRepo.findOne({ where: { id: testId } });
+        const test = await this.testRepo.findOne({ where: { id: testId, labId } });
         if (!test)
             throw new common_1.NotFoundException('Test not found');
         const mappings = await this.mappingRepo.find({
@@ -128,7 +132,7 @@ let InstrumentsService = class InstrumentsService {
     }
     async createMapping(instrumentId, labId, dto) {
         await this.findOne(instrumentId, labId);
-        const test = await this.testRepo.findOne({ where: { id: dto.testId } });
+        const test = await this.testRepo.findOne({ where: { id: dto.testId, labId } });
         if (!test) {
             throw new common_1.NotFoundException('Test not found');
         }
@@ -156,7 +160,7 @@ let InstrumentsService = class InstrumentsService {
             throw new common_1.NotFoundException('Mapping not found');
         }
         if (dto.testId) {
-            const test = await this.testRepo.findOne({ where: { id: dto.testId } });
+            const test = await this.testRepo.findOne({ where: { id: dto.testId, labId } });
             if (!test) {
                 throw new common_1.NotFoundException('Test not found');
             }

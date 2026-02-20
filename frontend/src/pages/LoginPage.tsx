@@ -122,7 +122,7 @@ export function LoginPage() {
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        background: '#f0f2f5',
+        background: '#dce5f0',
         padding: 32,
         boxSizing: 'border-box',
       }}

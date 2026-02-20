@@ -426,7 +426,7 @@ export function AdminLayout() {
         </div>
       </Header>
       <Layout>
-        <Sider width={220} style={{ background: '#fff' }}>
+        <Sider width={220} style={{ background: '#e5edf7' }}>
           <Menu
             mode="inline"
             selectedKeys={[selectedMenuKey]}
@@ -444,7 +444,7 @@ export function AdminLayout() {
             style={{ height: '100%', borderRight: 0 }}
           />
         </Sider>
-        <Content style={{ padding: 24, background: '#f3f4f6' }}>
+        <Content style={{ padding: 24, background: '#dce5f0' }}>
           <div style={{ marginBottom: 12 }}>
             <Space size={12} wrap>
               <Badge status={selectedLabId ? 'processing' : 'default'} text={<Text strong>{scopeLabel}</Text>} />

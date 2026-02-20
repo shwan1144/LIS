@@ -25,6 +25,7 @@ const audit_service_1 = require("../audit/audit.service");
 const audit_log_entity_1 = require("../entities/audit-log.entity");
 const order_entity_2 = require("../entities/order.entity");
 const panel_status_service_1 = require("../panels/panel-status.service");
+const normal_range_util_1 = require("../tests/normal-range.util");
 function parseJsonField(val) {
     if (val == null)
         return null;
@@ -125,7 +126,11 @@ let WorklistService = class WorklistService {
             'test.normalMaxMale AS "normalMaxMale"',
             'test.normalMinFemale AS "normalMinFemale"',
             'test.normalMaxFemale AS "normalMaxFemale"',
+            'test.numericAgeRanges AS "numericAgeRanges"',
             'test.normalText AS "normalText"',
+            'test.resultEntryType AS "resultEntryType"',
+            'test.resultTextOptions AS "resultTextOptions"',
+            'test.allowCustomResultText AS "allowCustomResultText"',
             'ot.status AS status',
             'ot.resultValue AS "resultValue"',
             'ot.resultText AS "resultText"',
@@ -137,36 +142,24 @@ let WorklistService = class WorklistService {
             'ot.verifiedBy AS "verifiedBy"',
             'test.parameterDefinitions AS "parameterDefinitions"',
         ])
-            .orderBy('order.registeredAt', 'ASC')
+            .orderBy('order.registeredAt', 'DESC')
             .addOrderBy('test.sortOrder', 'ASC')
             .addOrderBy('test.code', 'ASC');
         const total = await qb.getCount();
         const rawItems = await qb.offset(skip).limit(size).getRawMany();
         const items = rawItems.map((item) => {
-            let normalMin = item.normalMin ? parseFloat(item.normalMin) : null;
-            let normalMax = item.normalMax ? parseFloat(item.normalMax) : null;
-            if (item.patientSex === 'M') {
-                if (item.normalMinMale !== null)
-                    normalMin = parseFloat(item.normalMinMale);
-                if (item.normalMaxMale !== null)
-                    normalMax = parseFloat(item.normalMaxMale);
-            }
-            else if (item.patientSex === 'F') {
-                if (item.normalMinFemale !== null)
-                    normalMin = parseFloat(item.normalMinFemale);
-                if (item.normalMaxFemale !== null)
-                    normalMax = parseFloat(item.normalMaxFemale);
-            }
-            let patientAge = null;
-            if (item.patientDob) {
-                const dob = new Date(item.patientDob);
-                const today = new Date();
-                patientAge = today.getFullYear() - dob.getFullYear();
-                const monthDiff = today.getMonth() - dob.getMonth();
-                if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < dob.getDate())) {
-                    patientAge--;
-                }
-            }
+            const patientAge = this.computePatientAgeYears(item.patientDob);
+            const numericAgeRanges = parseJsonField(item.numericAgeRanges) ??
+                null;
+            const resolvedRange = (0, normal_range_util_1.resolveNumericRange)({
+                normalMin: item.normalMin,
+                normalMax: item.normalMax,
+                normalMinMale: item.normalMinMale,
+                normalMaxMale: item.normalMaxMale,
+                normalMinFemale: item.normalMinFemale,
+                normalMaxFemale: item.normalMaxFemale,
+                numericAgeRanges,
+            }, item.patientSex, patientAge);
             return {
                 id: item.id,
                 orderNumber: item.orderNumber,
@@ -178,12 +171,18 @@ let WorklistService = class WorklistService {
                 testCode: item.testCode,
                 testName: item.testName,
                 testUnit: item.testUnit,
-                normalMin,
-                normalMax,
+                normalMin: resolvedRange.normalMin,
+                normalMax: resolvedRange.normalMax,
                 normalText: item.normalText,
+                resultEntryType: this.normalizeResultEntryType(item.resultEntryType),
+                resultTextOptions: parseJsonField(item.resultTextOptions) ??
+                    null,
+                allowCustomResultText: Boolean(item.allowCustomResultText),
                 tubeType: item.tubeType,
                 status: item.status,
-                resultValue: item.resultValue ? parseFloat(item.resultValue) : null,
+                resultValue: item.resultValue !== null && item.resultValue !== undefined
+                    ? parseFloat(item.resultValue)
+                    : null,
                 resultText: item.resultText,
                 flag: item.flag,
                 resultedAt: item.resultedAt,
@@ -200,10 +199,10 @@ let WorklistService = class WorklistService {
         });
         return { items, total };
     }
-    async enterResult(orderTestId, labId, actor, data) {
+    async enterResult(orderTestId, labId, actor, data, actorRole) {
         const orderTest = await this.orderTestRepo.findOne({
             where: { id: orderTestId },
-            relations: ['sample', 'sample.order', 'test'],
+            relations: ['sample', 'sample.order', 'sample.order.patient', 'test'],
         });
         if (!orderTest) {
             throw new common_1.NotFoundException('Order test not found');
@@ -211,14 +210,18 @@ let WorklistService = class WorklistService {
         if (orderTest.sample.order.labId !== labId) {
             throw new common_1.NotFoundException('Order test not found');
         }
-        if (orderTest.status === order_test_entity_1.OrderTestStatus.VERIFIED) {
+        const forceEditVerified = data.forceEditVerified === true;
+        const canForceEditVerified = actor.isImpersonation ||
+            actorRole === 'LAB_ADMIN' ||
+            actorRole === 'SUPER_ADMIN';
+        const isVerifiedOverride = orderTest.status === order_test_entity_1.OrderTestStatus.VERIFIED &&
+            forceEditVerified &&
+            canForceEditVerified;
+        if (orderTest.status === order_test_entity_1.OrderTestStatus.VERIFIED && !isVerifiedOverride) {
             throw new common_1.BadRequestException('Cannot modify a verified result');
         }
         if (data.resultValue !== undefined) {
             orderTest.resultValue = data.resultValue;
-        }
-        if (data.resultText !== undefined) {
-            orderTest.resultText = data.resultText || null;
         }
         if (data.comments !== undefined) {
             orderTest.comments = data.comments || null;
@@ -228,11 +231,52 @@ let WorklistService = class WorklistService {
                 ? data.resultParameters
                 : null;
         }
-        orderTest.flag = this.calculateFlag(orderTest.resultValue, orderTest.test, orderTest.sample.order.patient?.sex || null);
+        const resultEntryType = this.normalizeResultEntryType(orderTest.test.resultEntryType);
+        const resultTextOptions = this.normalizeResultTextOptions(orderTest.test.resultTextOptions);
+        const normalizedResultTextInput = data.resultText !== undefined
+            ? this.normalizeResultText(data.resultText)
+            : undefined;
+        if (resultEntryType === 'QUALITATIVE') {
+            const candidateText = normalizedResultTextInput ?? this.normalizeResultText(orderTest.resultText);
+            if (!candidateText) {
+                throw new common_1.BadRequestException('Result text is required for qualitative tests');
+            }
+            const matchedOption = this.findMatchingResultTextOption(candidateText, resultTextOptions);
+            if (!matchedOption && !orderTest.test.allowCustomResultText) {
+                const allowedValues = (resultTextOptions ?? [])
+                    .map((option) => option.value)
+                    .join(', ');
+                throw new common_1.BadRequestException(allowedValues.length
+                    ? `Result must be one of: ${allowedValues}`
+                    : 'No qualitative options are configured for this test');
+            }
+            orderTest.resultText = matchedOption?.value ?? candidateText;
+            orderTest.resultValue = null;
+            orderTest.flag = this.toResultFlag(matchedOption?.flag ?? null);
+        }
+        else {
+            if (data.resultText !== undefined) {
+                orderTest.resultText = normalizedResultTextInput;
+            }
+            const optionFlag = this.resolveFlagFromResultText(orderTest.resultText, resultTextOptions);
+            if (optionFlag) {
+                orderTest.flag = optionFlag;
+            }
+            else {
+                const patientAgeYears = this.computePatientAgeYears(orderTest.sample.order.patient?.dateOfBirth ?? null);
+                orderTest.flag = this.calculateFlag(orderTest.resultValue, orderTest.test, orderTest.sample.order.patient?.sex || null, patientAgeYears);
+            }
+        }
         const isUpdate = orderTest.resultedAt !== null;
-        orderTest.status = order_test_entity_1.OrderTestStatus.COMPLETED;
+        orderTest.status = isVerifiedOverride
+            ? order_test_entity_1.OrderTestStatus.VERIFIED
+            : order_test_entity_1.OrderTestStatus.COMPLETED;
         orderTest.resultedAt = new Date();
-        orderTest.resultedBy = actor.userId;
+        orderTest.resultedBy = actor.userId ?? orderTest.resultedBy;
+        if (isVerifiedOverride) {
+            orderTest.verifiedAt = new Date();
+            orderTest.verifiedBy = actor.userId ?? orderTest.verifiedBy;
+        }
         const saved = await this.orderTestRepo.save(orderTest);
         await this.panelStatusService.recomputeAfterChildUpdate(orderTest.id);
         await this.syncOrderStatus(orderTest.sample.orderId);
@@ -256,9 +300,12 @@ let WorklistService = class WorklistService {
                 resultValue: data.resultValue,
                 resultText: data.resultText,
                 flag: orderTest.flag,
+                forceEditVerified: isVerifiedOverride,
                 ...impersonationAudit,
             },
-            description: `${isUpdate ? 'Updated' : 'Entered'} result for test ${orderTest.test?.code || orderTestId}`,
+            description: isVerifiedOverride
+                ? `Corrected verified result for test ${orderTest.test?.code || orderTestId}`
+                : `${isUpdate ? 'Updated' : 'Entered'} result for test ${orderTest.test?.code || orderTestId}`,
         });
         return saved;
     }
@@ -372,23 +419,10 @@ let WorklistService = class WorklistService {
         });
         return saved;
     }
-    calculateFlag(resultValue, test, patientSex) {
+    calculateFlag(resultValue, test, patientSex, patientAgeYears) {
         if (resultValue === null)
             return null;
-        let normalMin = test.normalMin;
-        let normalMax = test.normalMax;
-        if (patientSex === 'M') {
-            if (test.normalMinMale !== null)
-                normalMin = test.normalMinMale;
-            if (test.normalMaxMale !== null)
-                normalMax = test.normalMaxMale;
-        }
-        else if (patientSex === 'F') {
-            if (test.normalMinFemale !== null)
-                normalMin = test.normalMinFemale;
-            if (test.normalMaxFemale !== null)
-                normalMax = test.normalMaxFemale;
-        }
+        const { normalMin, normalMax } = (0, normal_range_util_1.resolveNumericRange)(test, patientSex, patientAgeYears);
         if (normalMin === null && normalMax === null) {
             return null;
         }
@@ -407,6 +441,20 @@ let WorklistService = class WorklistService {
             return order_test_entity_1.ResultFlag.LOW;
         }
         return order_test_entity_1.ResultFlag.NORMAL;
+    }
+    computePatientAgeYears(dateOfBirth) {
+        if (!dateOfBirth)
+            return null;
+        const dob = new Date(dateOfBirth);
+        if (Number.isNaN(dob.getTime()))
+            return null;
+        const today = new Date();
+        let age = today.getFullYear() - dob.getFullYear();
+        const monthDiff = today.getMonth() - dob.getMonth();
+        if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < dob.getDate())) {
+            age--;
+        }
+        return age < 0 ? null : age;
     }
     async getWorklistStats(labId) {
         const today = new Date();

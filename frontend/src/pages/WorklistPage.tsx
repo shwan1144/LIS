@@ -27,6 +27,7 @@ import {
   ExclamationCircleOutlined,
   ReloadOutlined,
   CheckOutlined,
+  UserOutlined,
 } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import dayjs from 'dayjs';
@@ -139,6 +140,7 @@ export function WorklistPage() {
 
   // Selection for batch verify
   const [selectedRowKeys, setSelectedRowKeys] = useState<string[]>([]);
+  const [expandedOrderIds, setExpandedOrderIds] = useState<string[]>([]);
 
   // Result entry modal
   const [resultModalOpen, setResultModalOpen] = useState(false);
@@ -190,6 +192,14 @@ export function WorklistPage() {
     loadData();
     loadStats();
   }, [loadData, loadStats]);
+
+  useEffect(() => {
+    if (expandedOrderIds.length === 0) return;
+    const expandedId = expandedOrderIds[0];
+    if (!groupedData.some((group) => group.orderId === expandedId)) {
+      setExpandedOrderIds([]);
+    }
+  }, [expandedOrderIds, groupedData]);
 
   const handleSearch = () => {
     setPage(1);
@@ -309,56 +319,51 @@ export function WorklistPage() {
 
   const orderColumns: ColumnsType<WorklistOrderGroup> = [
     {
-      title: 'Patient',
-      key: 'patient',
-      width: 180,
-      fixed: 'left',
-      render: (_, g) => (
-        <div>
-          <Text strong>{g.patientName}</Text>
-          <div>
-            <Text type="secondary" style={{ fontSize: 12 }}>
-              {g.patientAge !== null ? `${g.patientAge}y` : ''} {g.patientSex || ''}
-            </Text>
-          </div>
-        </div>
-      ),
-    },
-    {
-      title: 'Order #',
-      dataIndex: 'orderNumber',
-      key: 'orderNumber',
-      width: 140,
-      render: (v: string) => <Text strong>{v}</Text>,
-    },
-    {
-      title: 'Date',
-      key: 'registeredAt',
-      width: 150,
-      render: (_, g) => <Text type="secondary">{dayjs(g.registeredAt).format('YYYY-MM-DD HH:mm')}</Text>,
-    },
-    {
-      title: 'Tests',
-      key: 'testsCount',
-      width: 100,
-      render: (_, g) => <Text>{g.items.length} test{g.items.length !== 1 ? 's' : ''}</Text>,
-    },
-    {
-      title: 'Status summary',
-      key: 'statusSummary',
-      width: 180,
+      title: 'Queue',
+      key: 'queue',
       render: (_, g) => {
         const pending = g.items.filter((i) => i.status === 'PENDING' || i.status === 'IN_PROGRESS').length;
         const completed = g.items.filter((i) => i.status === 'COMPLETED').length;
         const verified = g.items.filter((i) => i.status === 'VERIFIED').length;
         const rejected = g.items.filter((i) => i.status === 'REJECTED').length;
+
         return (
-          <Space size="small" wrap>
-            {pending > 0 && <Tag color="default">Pending {pending}</Tag>}
-            {completed > 0 && <Tag color="processing">Completed {completed}</Tag>}
-            {verified > 0 && <Tag color="success">Verified {verified}</Tag>}
-            {rejected > 0 && <Tag color="error">Rejected {rejected}</Tag>}
-          </Space>
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'minmax(220px, 1.8fr) minmax(180px, 1.4fr) 120px 140px',
+              alignItems: 'center',
+              columnGap: 8,
+            }}
+          >
+            <Space size={8} style={{ minWidth: 0 }}>
+              <UserOutlined style={{ fontSize: 14, color: '#1677ff' }} />
+              <div style={{ minWidth: 0 }}>
+                <Text strong ellipsis style={{ display: 'block', fontSize: 13, lineHeight: '16px' }}>
+                  {g.patientName}
+                </Text>
+                <Text type="secondary" style={{ fontSize: 11, lineHeight: '14px' }}>
+                  {g.patientAge !== null ? `${g.patientAge}y` : '-'} {g.patientSex || '-'}
+                </Text>
+              </div>
+            </Space>
+
+            <Space size={[4, 4]} wrap>
+              <Tag style={{ margin: 0 }}>{g.items.length} test{g.items.length !== 1 ? 's' : ''}</Tag>
+              {pending > 0 && <Tag color="default" style={{ margin: 0 }}>Pending {pending}</Tag>}
+              {completed > 0 && <Tag color="processing" style={{ margin: 0 }}>Completed {completed}</Tag>}
+              {verified > 0 && <Tag color="success" style={{ margin: 0 }}>Verified {verified}</Tag>}
+              {rejected > 0 && <Tag color="error" style={{ margin: 0 }}>Rejected {rejected}</Tag>}
+            </Space>
+
+            <Text type="secondary" style={{ fontSize: 12 }}>
+              {g.orderNumber}
+            </Text>
+
+            <Text type="secondary" style={{ fontSize: 12 }}>
+              {dayjs(g.registeredAt).format('YYYY-MM-DD HH:mm')}
+            </Text>
+          </div>
         );
       },
     },
@@ -373,12 +378,14 @@ export function WorklistPage() {
   };
 
   const renderExpandedTests = (group: WorklistOrderGroup) => (
-    <Table
-      size="small"
-      rowKey="id"
-      dataSource={group.items}
-      pagination={false}
-      columns={[
+    <div className="worklist-expanded-panel">
+      <Table
+        className="worklist-subtests-table"
+        size="small"
+        rowKey="id"
+        dataSource={group.items}
+        pagination={false}
+        columns={[
         {
           title: 'Test',
           key: 'test',
@@ -488,12 +495,78 @@ export function WorklistPage() {
             </Space>
           ),
         },
-      ]}
-    />
+        ]}
+      />
+    </div>
   );
 
   return (
     <div>
+      <style>{`
+        .worklist-orders-table .ant-table-thead > tr > th {
+          padding-top: 5px !important;
+          padding-bottom: 5px !important;
+        }
+        .worklist-orders-table .ant-table-tbody > tr > td {
+          padding-top: 5px !important;
+          padding-bottom: 5px !important;
+        }
+        .worklist-orders-table .worklist-order-row-expanded > td {
+          background: #f7fbff !important;
+          border-top: 1px solid #91caff !important;
+          border-bottom: 0 !important;
+        }
+        .worklist-orders-table .worklist-order-row-expanded > td:first-child {
+          border-left: 2px solid #1677ff !important;
+          border-top-left-radius: 8px !important;
+        }
+        .worklist-orders-table .worklist-order-row-expanded > td:last-child {
+          border-right: 1px solid #91caff !important;
+          border-top-right-radius: 8px !important;
+        }
+        .worklist-orders-table .ant-table-expanded-row > td {
+          padding: 4px 10px 8px !important;
+          background: transparent !important;
+          border-left: 2px solid #1677ff !important;
+          border-right: 1px solid #91caff !important;
+          border-bottom: 1px solid #91caff !important;
+          border-bottom-left-radius: 8px !important;
+          border-bottom-right-radius: 8px !important;
+        }
+        .worklist-expanded-panel {
+          border: 0;
+          border-radius: 0;
+          overflow: hidden;
+          background: transparent;
+        }
+        .worklist-expanded-panel .ant-table-container {
+          border-radius: 0;
+        }
+        html[data-theme='dark'] .worklist-orders-table .worklist-order-row-expanded > td {
+          background: rgba(255, 255, 255, 0.04) !important;
+          border-top-color: rgba(100, 168, 255, 0.55) !important;
+        }
+        html[data-theme='dark'] .worklist-orders-table .worklist-order-row-expanded > td:first-child {
+          border-left-color: #3c89e8 !important;
+        }
+        html[data-theme='dark'] .worklist-orders-table .worklist-order-row-expanded > td:last-child {
+          border-right-color: rgba(100, 168, 255, 0.55) !important;
+        }
+        html[data-theme='dark'] .worklist-orders-table .ant-table-expanded-row > td {
+          border-left-color: #3c89e8 !important;
+          border-right-color: rgba(100, 168, 255, 0.55) !important;
+          border-bottom-color: rgba(100, 168, 255, 0.55) !important;
+        }
+        .worklist-subtests-table .ant-table-thead > tr > th {
+          padding-top: 3px !important;
+          padding-bottom: 3px !important;
+          font-size: 11px;
+        }
+        .worklist-subtests-table .ant-table-tbody > tr > td {
+          padding-top: 3px !important;
+          padding-bottom: 3px !important;
+        }
+      `}</style>
       <Title level={4} style={{ marginBottom: 16 }}>Worklist</Title>
 
       {/* Stats */}
@@ -593,13 +666,22 @@ export function WorklistPage() {
         </Space>
 
         <Table<WorklistOrderGroup>
+          className="worklist-orders-table"
           rowKey="orderId"
           columns={orderColumns}
           dataSource={groupedData}
           loading={loading}
+          showHeader={false}
+          rowClassName={(record) => (expandedOrderIds.includes(record.orderId) ? 'worklist-order-row-expanded' : '')}
           rowSelection={rowSelection}
           expandable={{
             expandedRowRender: (record) => renderExpandedTests(record),
+            expandRowByClick: true,
+            showExpandColumn: false,
+            expandedRowKeys: expandedOrderIds,
+            onExpand: (expanded, record) => {
+              setExpandedOrderIds(expanded ? [record.orderId] : []);
+            },
           }}
           pagination={{
             current: page,
@@ -609,8 +691,8 @@ export function WorklistPage() {
             showTotal: (t) => `Total ${t} tests`,
             onChange: (p) => setPage(p),
           }}
-          scroll={{ x: 900 }}
-          size="middle"
+          scroll={{ x: 820 }}
+          size="small"
         />
       </Card>
 

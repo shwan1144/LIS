@@ -19,7 +19,7 @@ import { UpdateTestDto } from './dto/update-test.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 
 interface RequestWithUser {
-  user: { userId: string; username: string; labId: string };
+  user: { userId: string | null; username: string; labId: string };
 }
 
 @Controller('tests')
@@ -28,16 +28,20 @@ export class TestsController {
   constructor(private readonly testsService: TestsService) {}
 
   @Get()
-  async findAll(@Query('active') active?: string) {
+  async findAll(@Req() req: RequestWithUser, @Query('active') active?: string) {
+    const labId = req.user?.labId;
+    if (!labId) throw new Error('Lab ID not found in token');
     const activeOnly = active === 'true';
-    return this.testsService.findAll(activeOnly);
+    return this.testsService.findAll(labId, activeOnly);
   }
 
   // Seed routes must be before :id routes so "seed" is not captured as id
   @Post('seed/all')
-  async seedAll() {
-    const cbc = await this.testsService.seedCBCTests();
-    const chem = await this.testsService.seedChemistryTests();
+  async seedAll(@Req() req: RequestWithUser) {
+    const labId = req.user?.labId;
+    if (!labId) throw new Error('Lab ID not found in token');
+    const cbc = await this.testsService.seedCBCTests(labId);
+    const chem = await this.testsService.seedChemistryTests(labId);
     return {
       cbc,
       chemistry: chem,
@@ -46,13 +50,17 @@ export class TestsController {
   }
 
   @Post('seed/cbc')
-  async seedCBC() {
-    return this.testsService.seedCBCTests();
+  async seedCBC(@Req() req: RequestWithUser) {
+    const labId = req.user?.labId;
+    if (!labId) throw new Error('Lab ID not found in token');
+    return this.testsService.seedCBCTests(labId);
   }
 
   @Post('seed/chemistry')
-  async seedChemistry() {
-    return this.testsService.seedChemistryTests();
+  async seedChemistry(@Req() req: RequestWithUser) {
+    const labId = req.user?.labId;
+    if (!labId) throw new Error('Lab ID not found in token');
+    return this.testsService.seedChemistryTests(labId);
   }
 
   @Get(':id/pricing')
@@ -75,33 +83,44 @@ export class TestsController {
   }
 
   @Get(':id')
-  async findOne(@Param('id', ParseUUIDPipe) id: string) {
-    return this.testsService.findOne(id);
+  async findOne(@Req() req: RequestWithUser, @Param('id', ParseUUIDPipe) id: string) {
+    const labId = req.user?.labId;
+    if (!labId) throw new Error('Lab ID not found in token');
+    return this.testsService.findOne(id, labId);
   }
 
   @Post()
   @UsePipes(new ValidationPipe({ whitelist: true, transform: true }))
-  async create(@Body() dto: CreateTestDto) {
-    return this.testsService.create(dto);
+  async create(@Req() req: RequestWithUser, @Body() dto: CreateTestDto) {
+    const labId = req.user?.labId;
+    if (!labId) throw new Error('Lab ID not found in token');
+    return this.testsService.create(labId, dto);
   }
 
   @Patch(':id')
   @UsePipes(new ValidationPipe({ whitelist: true, transform: true }))
   async update(
+    @Req() req: RequestWithUser,
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateTestDto,
   ) {
-    return this.testsService.update(id, dto);
+    const labId = req.user?.labId;
+    if (!labId) throw new Error('Lab ID not found in token');
+    return this.testsService.update(id, labId, dto);
   }
 
   @Delete(':id')
-  async delete(@Param('id', ParseUUIDPipe) id: string) {
-    await this.testsService.delete(id);
+  async delete(@Req() req: RequestWithUser, @Param('id', ParseUUIDPipe) id: string) {
+    const labId = req.user?.labId;
+    if (!labId) throw new Error('Lab ID not found in token');
+    await this.testsService.delete(id, labId);
     return { success: true };
   }
 
   @Patch(':id/toggle-active')
-  async toggleActive(@Param('id', ParseUUIDPipe) id: string) {
-    return this.testsService.toggleActive(id);
+  async toggleActive(@Req() req: RequestWithUser, @Param('id', ParseUUIDPipe) id: string) {
+    const labId = req.user?.labId;
+    if (!labId) throw new Error('Lab ID not found in token');
+    return this.testsService.toggleActive(id, labId);
   }
 }

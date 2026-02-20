@@ -19,6 +19,7 @@ let RlsSessionService = RlsSessionService_1 = class RlsSessionService {
         this.logger = new common_1.Logger(RlsSessionService_1.name);
         this.warnedMissingRoles = new Set();
         this.warnedMembershipRoles = new Set();
+        this.warnedMissingRolePrivileges = new Set();
     }
     async withLabContext(labId, execute) {
         const runner = this.dataSource.createQueryRunner();
@@ -89,7 +90,37 @@ let RlsSessionService = RlsSessionService_1 = class RlsSessionService {
             }
             return;
         }
-        await runner.query(`SET LOCAL ROLE ${safeRole}`);
+        if (safeRole === 'app_platform_admin') {
+            const hasPrivilegeRows = await runner.query(`
+        SELECT
+          CASE
+            WHEN to_regclass('public.labs') IS NULL THEN true
+            ELSE has_table_privilege($1, 'public.labs', 'SELECT')
+          END AS "hasLabsSelect"
+        `, [safeRole]);
+            const hasLabsSelect = Boolean(hasPrivilegeRows?.[0]?.hasLabsSelect);
+            if (!hasLabsSelect) {
+                if (!this.warnedMissingRolePrivileges.has(safeRole)) {
+                    this.logger.warn(`Skipped SET LOCAL ROLE ${safeRole}: role lacks SELECT privilege on public.labs.`);
+                    this.warnedMissingRolePrivileges.add(safeRole);
+                }
+                return;
+            }
+        }
+        try {
+            await runner.query(`SET LOCAL ROLE ${safeRole}`);
+        }
+        catch (error) {
+            if (safeRole === 'app_platform_admin') {
+                const message = error instanceof Error ? error.message : String(error);
+                if (!this.warnedMissingRolePrivileges.has(`${safeRole}:set-role`)) {
+                    this.logger.warn(`Skipped SET LOCAL ROLE ${safeRole}: ${message}`);
+                    this.warnedMissingRolePrivileges.add(`${safeRole}:set-role`);
+                }
+                return;
+            }
+            throw error;
+        }
     }
 };
 exports.RlsSessionService = RlsSessionService;

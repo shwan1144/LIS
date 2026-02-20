@@ -6,6 +6,7 @@ export class RlsSessionService {
   private readonly logger = new Logger(RlsSessionService.name);
   private readonly warnedMissingRoles = new Set<string>();
   private readonly warnedMembershipRoles = new Set<string>();
+  private readonly warnedMissingRolePrivileges = new Set<string>();
 
   constructor(private readonly dataSource: DataSource) {}
 
@@ -91,7 +92,43 @@ export class RlsSessionService {
       return;
     }
 
-    await runner.query(`SET LOCAL ROLE ${safeRole}`);
+    if (safeRole === 'app_platform_admin') {
+      const hasPrivilegeRows = await runner.query(
+        `
+        SELECT
+          CASE
+            WHEN to_regclass('public.labs') IS NULL THEN true
+            ELSE has_table_privilege($1, 'public.labs', 'SELECT')
+          END AS "hasLabsSelect"
+        `,
+        [safeRole],
+      ) as Array<{ hasLabsSelect: boolean }>;
+
+      const hasLabsSelect = Boolean(hasPrivilegeRows?.[0]?.hasLabsSelect);
+      if (!hasLabsSelect) {
+        if (!this.warnedMissingRolePrivileges.has(safeRole)) {
+          this.logger.warn(
+            `Skipped SET LOCAL ROLE ${safeRole}: role lacks SELECT privilege on public.labs.`,
+          );
+          this.warnedMissingRolePrivileges.add(safeRole);
+        }
+        return;
+      }
+    }
+
+    try {
+      await runner.query(`SET LOCAL ROLE ${safeRole}`);
+    } catch (error) {
+      if (safeRole === 'app_platform_admin') {
+        const message = error instanceof Error ? error.message : String(error);
+        if (!this.warnedMissingRolePrivileges.has(`${safeRole}:set-role`)) {
+          this.logger.warn(`Skipped SET LOCAL ROLE ${safeRole}: ${message}`);
+          this.warnedMissingRolePrivileges.add(`${safeRole}:set-role`);
+        }
+        return;
+      }
+      throw error;
+    }
   }
 
 }

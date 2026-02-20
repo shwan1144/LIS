@@ -1,5 +1,6 @@
 import { OrderTest } from './order-test.entity';
 import { Department } from './department.entity';
+import { Lab } from './lab.entity';
 export interface TestParameterDefinition {
     code: string;
     label: string;
@@ -7,6 +8,21 @@ export interface TestParameterDefinition {
     options?: string[];
     normalOptions?: string[];
     defaultValue?: string;
+}
+export type NumericAgeRangeSex = 'ANY' | 'M' | 'F';
+export interface TestNumericAgeRange {
+    sex: NumericAgeRangeSex;
+    minAgeYears?: number | null;
+    maxAgeYears?: number | null;
+    normalMin?: number | null;
+    normalMax?: number | null;
+}
+export type TestResultEntryType = 'NUMERIC' | 'QUALITATIVE' | 'TEXT';
+export type TestResultFlag = 'N' | 'H' | 'L' | 'HH' | 'LL' | 'POS' | 'NEG' | 'ABN';
+export interface TestResultTextOption {
+    value: string;
+    flag?: TestResultFlag | null;
+    isDefault?: boolean;
 }
 export declare enum TestType {
     SINGLE = "SINGLE",
@@ -24,6 +40,8 @@ export declare enum TubeType {
 }
 export declare class Test {
     id: string;
+    labId: string;
+    lab: Lab;
     code: string;
     name: string;
     type: TestType;
@@ -39,6 +57,10 @@ export declare class Test {
     normalMinFemale: number | null;
     normalMaxFemale: number | null;
     normalText: string | null;
+    resultEntryType: TestResultEntryType;
+    resultTextOptions: TestResultTextOption[] | null;
+    allowCustomResultText: boolean;
+    numericAgeRanges: TestNumericAgeRange[] | null;
     description: string | null;
     childTestIds: string | null;
     parameterDefinitions: TestParameterDefinition[] | null;

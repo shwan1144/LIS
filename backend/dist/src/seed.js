@@ -149,9 +149,10 @@ async function runSeed(options = {}) {
         ];
         const createdTests = [];
         for (const testData of tests) {
-            let test = await testRepo.findOne({ where: { code: testData.code } });
+            let test = await testRepo.findOne({ where: { code: testData.code, labId: lab.id } });
             if (!test) {
                 test = testRepo.create({
+                    labId: lab.id,
                     code: testData.code,
                     name: testData.name,
                     type: testData.type,

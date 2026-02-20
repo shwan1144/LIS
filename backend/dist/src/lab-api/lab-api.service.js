@@ -99,7 +99,7 @@ let LabApiService = class LabApiService {
             }
             const uniqueTestIds = [...new Set(dto.testIds)];
             const tests = await manager.getRepository(test_entity_1.Test).find({
-                where: uniqueTestIds.map((id) => ({ id, isActive: true })),
+                where: uniqueTestIds.map((id) => ({ id, labId, isActive: true })),
             });
             if (tests.length !== uniqueTestIds.length) {
                 throw new common_1.BadRequestException('One or more tests are invalid');

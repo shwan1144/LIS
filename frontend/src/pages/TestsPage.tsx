@@ -17,7 +17,6 @@ import {
   Tabs,
   Row,
   Col,
-  Divider,
 } from 'antd';
 import {
   PlusOutlined,
@@ -48,6 +47,9 @@ import {
   type TestType,
   type TestTubeType,
   type TestParameterDefinition,
+  type TestNumericAgeRange,
+  type TestResultEntryType,
+  type TestResultTextOption,
   type ShiftDto,
   type DepartmentDto,
   type InstrumentDto,
@@ -70,6 +72,23 @@ const TUBE_TYPES: { label: string; value: TestTubeType }[] = [
   { label: 'Swab', value: 'SWAB' },
   { label: 'CSF', value: 'CSF' },
   { label: 'Other', value: 'OTHER' },
+];
+
+const RESULT_ENTRY_TYPES: { label: string; value: TestResultEntryType }[] = [
+  { label: 'Numeric', value: 'NUMERIC' },
+  { label: 'Qualitative (dropdown)', value: 'QUALITATIVE' },
+  { label: 'Text', value: 'TEXT' },
+];
+
+const RESULT_FLAG_OPTIONS: { label: string; value: NonNullable<TestResultTextOption['flag']> }[] = [
+  { label: 'Normal (N)', value: 'N' },
+  { label: 'High (H)', value: 'H' },
+  { label: 'Low (L)', value: 'L' },
+  { label: 'Critical High (HH)', value: 'HH' },
+  { label: 'Critical Low (LL)', value: 'LL' },
+  { label: 'Positive (POS)', value: 'POS' },
+  { label: 'Negative (NEG)', value: 'NEG' },
+  { label: 'Abnormal (ABN)', value: 'ABN' },
 ];
 
 export function TestsPage() {
@@ -96,10 +115,11 @@ export function TestsPage() {
 
   const panelCardStyle = useMemo(
     () => ({
-      border: isDark ? '1px solid rgba(255,255,255,0.12)' : '1px solid #f0f0f0',
+      border: isDark ? '1px solid rgba(100,168,255,0.45)' : '1px solid #91caff',
+      borderLeft: isDark ? '2px solid #3c89e8' : '2px solid #1677ff',
       borderRadius: 8,
-      padding: 12,
-      background: isDark ? 'rgba(255,255,255,0.04)' : '#fafafa',
+      padding: 10,
+      background: isDark ? 'rgba(255,255,255,0.03)' : '#f7fbff',
       height: '100%' as const,
     }),
     [isDark]
@@ -144,8 +164,22 @@ export function TestsPage() {
         normalMaxMale: test.normalMaxMale ?? undefined,
         normalMinFemale: test.normalMinFemale ?? undefined,
         normalMaxFemale: test.normalMaxFemale ?? undefined,
+        numericAgeRanges: (test.numericAgeRanges ?? []).map((range) => ({
+          sex: range.sex ?? 'ANY',
+          minAgeYears: range.minAgeYears ?? undefined,
+          maxAgeYears: range.maxAgeYears ?? undefined,
+          normalMin: range.normalMin ?? undefined,
+          normalMax: range.normalMax ?? undefined,
+        })),
         departmentId: test.departmentId ?? undefined,
         expectedCompletionMinutes: test.expectedCompletionMinutes ?? undefined,
+        resultEntryType: test.resultEntryType ?? 'NUMERIC',
+        allowCustomResultText: Boolean(test.allowCustomResultText),
+        resultTextOptions: (test.resultTextOptions ?? []).map((option) => ({
+          value: option.value,
+          flag: option.flag ?? undefined,
+          isDefault: Boolean(option.isDefault),
+        })),
         parameterDefinitions: (test.parameterDefinitions ?? []).map((p) => ({
           code: p.code,
           label: p.label,
@@ -171,6 +205,10 @@ export function TestsPage() {
         departmentId: undefined,
         category: undefined,
         parameterDefinitions: [],
+        numericAgeRanges: [],
+        resultEntryType: 'NUMERIC',
+        allowCustomResultText: false,
+        resultTextOptions: [],
       });
     }
     setPricesByShift(initialPrices);
@@ -245,7 +283,21 @@ export function TestsPage() {
     }
   };
 
-  const handleSubmit = async (values: CreateTestDto & { category?: string | string[] | null; parameterDefinitions?: { code: string; label: string; type: 'select' | 'text'; options?: string; normalOptions?: string[]; defaultValue?: string }[]; type?: TestType }) => {
+  const handleSubmit = async (
+    values: CreateTestDto & {
+      category?: string | string[] | null;
+      parameterDefinitions?: {
+        code: string;
+        label: string;
+        type: 'select' | 'text';
+        options?: string;
+        normalOptions?: string[];
+        defaultValue?: string;
+      }[];
+      numericAgeRanges?: TestNumericAgeRange[];
+      type?: TestType;
+    },
+  ) => {
     setSubmitting(true);
     const isPanel = values.type === 'PANEL';
     const paramDefs: TestParameterDefinition[] | null = isPanel && (values.parameterDefinitions ?? []).length > 0
@@ -261,10 +313,35 @@ export function TestsPage() {
         }))
       : null;
     const categoryValue = Array.isArray(values.category) ? values.category[0] : values.category;
+    const normalizedNumericAgeRanges =
+      (values.numericAgeRanges ?? [])
+        .map((range) => ({
+          sex: (range.sex || 'ANY') as 'ANY' | 'M' | 'F',
+          minAgeYears:
+            range.minAgeYears === null || range.minAgeYears === undefined
+              ? null
+              : Number(range.minAgeYears),
+          maxAgeYears:
+            range.maxAgeYears === null || range.maxAgeYears === undefined
+              ? null
+              : Number(range.maxAgeYears),
+          normalMin:
+            range.normalMin === null || range.normalMin === undefined
+              ? null
+              : Number(range.normalMin),
+          normalMax:
+            range.normalMax === null || range.normalMax === undefined
+              ? null
+              : Number(range.normalMax),
+        }))
+        .filter((range) => range.normalMin !== null || range.normalMax !== null) ?? [];
     const payload: CreateTestDto = {
       ...values,
       category: categoryValue ? categoryValue.trim() || null : null,
       parameterDefinitions: paramDefs,
+      numericAgeRanges: normalizedNumericAgeRanges.length
+        ? normalizedNumericAgeRanges
+        : null,
     };
     try {
       let testId: string;
@@ -302,8 +379,18 @@ export function TestsPage() {
       await deleteTest(id);
       message.success('Test deleted successfully');
       loadTests();
-    } catch {
-      message.error('Failed to delete test');
+    } catch (err: unknown) {
+      const backendMessage =
+        err && typeof err === 'object' && 'response' in err
+          ? (err as { response?: { data?: { message?: string | string[] } } }).response?.data?.message
+          : undefined;
+
+      const text =
+        Array.isArray(backendMessage)
+          ? backendMessage.join(', ')
+          : backendMessage;
+
+      message.error(text || 'Failed to delete test');
     }
   };
 
@@ -354,12 +441,15 @@ export function TestsPage() {
   };
 
   const formatNormalRange = (test: TestDto) => {
+    const ageRulesCount = test.numericAgeRanges?.length ?? 0;
     if (test.normalText) return test.normalText;
     if (test.normalMin !== null || test.normalMax !== null) {
       const min = test.normalMin !== null ? test.normalMin : '-';
       const max = test.normalMax !== null ? test.normalMax : '-';
-      return `${min} - ${max}${test.unit ? ` ${test.unit}` : ''}`;
+      const base = `${min} - ${max}${test.unit ? ` ${test.unit}` : ''}`;
+      return ageRulesCount > 0 ? `${base} (+${ageRulesCount} age rule${ageRulesCount > 1 ? 's' : ''})` : base;
     }
+    if (ageRulesCount > 0) return `Age-based (${ageRulesCount} rule${ageRulesCount > 1 ? 's' : ''})`;
     return '-';
   };
 
@@ -375,13 +465,14 @@ export function TestsPage() {
       title: 'Name',
       dataIndex: 'name',
       key: 'name',
+      width: 320,
       ellipsis: true,
     },
     {
       title: 'Category',
       dataIndex: 'category',
       key: 'category',
-      width: 150,
+      width: 160,
       filters: categories.map((c) => ({ text: c, value: c })),
       onFilter: (value, record) => (record.category || '') === value,
       render: (c: string | null) =>
@@ -415,7 +506,7 @@ export function TestsPage() {
     {
       title: 'Normal Range',
       key: 'normalRange',
-      width: 150,
+      width: 190,
       render: (_, record) => formatNormalRange(record),
     },
     {
@@ -434,7 +525,7 @@ export function TestsPage() {
     {
       title: 'Actions',
       key: 'actions',
-      width: 120,
+      width: 150,
       render: (_, record) => (
         <Space>
           <Button
@@ -463,6 +554,86 @@ export function TestsPage() {
 
   return (
     <div>
+      <style>{`
+        .tests-editor-modal .ant-modal-content {
+          border: 1px solid #91caff;
+          border-radius: 10px;
+          overflow: hidden;
+        }
+        .tests-editor-modal .ant-modal-header {
+          border-bottom: 1px solid #91caff;
+          padding: 10px 14px !important;
+        }
+        .tests-editor-modal .ant-modal-body {
+          padding: 10px 14px 12px !important;
+        }
+        .tests-editor-modal .ant-form-item {
+          margin-bottom: 10px !important;
+        }
+        .tests-editor-modal .ant-form-item-label > label {
+          font-size: 12px;
+          line-height: 1.2;
+        }
+        .tests-editor-modal .ant-divider {
+          margin: 10px 0 !important;
+          font-size: 12px !important;
+        }
+        .tests-editor-modal .ant-tabs-nav {
+          margin-bottom: 8px !important;
+        }
+        .tests-editor-modal .ant-tabs-tab {
+          padding: 4px 0 !important;
+        }
+        .tests-editor-modal .tests-editor-panel {
+          border: 1px solid #91caff;
+          border-left: 2px solid #1677ff;
+          border-radius: 8px;
+          background: #f7fbff;
+          padding: 10px;
+          margin-bottom: 10px;
+        }
+        .tests-editor-modal .tests-editor-params-scroll {
+          max-height: 62vh;
+          overflow-y: auto;
+          overflow-x: hidden;
+          padding-right: 6px;
+        }
+        .tests-editor-modal .tests-editor-param-grid .ant-form-item,
+        .tests-editor-modal .tests-editor-param-meta .ant-form-item {
+          margin-bottom: 0 !important;
+        }
+        .tests-editor-modal .tests-editor-param-meta {
+          margin-top: 6px;
+        }
+        .tests-editor-modal .tests-editor-params-scroll::-webkit-scrollbar {
+          width: 8px;
+        }
+        .tests-editor-modal .tests-editor-params-scroll::-webkit-scrollbar-thumb {
+          background: #91caff;
+          border-radius: 6px;
+        }
+        .tests-editor-modal .tests-editor-params-scroll::-webkit-scrollbar-track {
+          background: rgba(22, 119, 255, 0.08);
+          border-radius: 6px;
+        }
+        html[data-theme='dark'] .tests-editor-modal .ant-modal-content {
+          border-color: rgba(100, 168, 255, 0.55);
+        }
+        html[data-theme='dark'] .tests-editor-modal .ant-modal-header {
+          border-bottom-color: rgba(100, 168, 255, 0.55);
+        }
+        html[data-theme='dark'] .tests-editor-modal .tests-editor-panel {
+          border-color: rgba(100, 168, 255, 0.55);
+          border-left-color: #3c89e8;
+          background: rgba(255, 255, 255, 0.03);
+        }
+        html[data-theme='dark'] .tests-editor-modal .tests-editor-params-scroll::-webkit-scrollbar-thumb {
+          background: rgba(100, 168, 255, 0.65);
+        }
+        html[data-theme='dark'] .tests-editor-modal .tests-editor-params-scroll::-webkit-scrollbar-track {
+          background: rgba(100, 168, 255, 0.16);
+        }
+      `}</style>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
         <Title level={4} style={{ margin: 0 }}>
           <ExperimentOutlined style={{ marginRight: 8 }} />
@@ -498,6 +669,8 @@ export function TestsPage() {
           columns={columns}
           dataSource={tests}
           loading={loading}
+          tableLayout="fixed"
+          scroll={{ x: 1320 }}
           pagination={{
             pageSize: 20,
             showSizeChanger: false,
@@ -512,7 +685,10 @@ export function TestsPage() {
         open={modalOpen}
         onCancel={handleCloseModal}
         footer={null}
-        width={1100}
+        className="tests-editor-modal"
+        width={1240}
+        style={{ top: 14 }}
+        styles={{ body: { paddingTop: 8, paddingBottom: 10, maxHeight: '88vh', overflowY: 'auto' } }}
         destroyOnClose
       >
         <Form
@@ -531,7 +707,7 @@ export function TestsPage() {
               const isPanel = form.getFieldValue('type') === 'PANEL';
               if (isPanel) return null;
               return (
-                <>
+                <div className="tests-editor-panel">
                   <Row gutter={16}>
                     <Col span={6}>
                       <Form.Item
@@ -590,7 +766,7 @@ export function TestsPage() {
                       </Form.Item>
                     </Col>
                   </Row>
-                </>
+                </div>
               );
             }}
           </Form.Item>
@@ -599,9 +775,10 @@ export function TestsPage() {
             {() => {
               if (form.getFieldValue('type') === 'PANEL') return null;
               return (
-                <>
-                  <Divider orientation="left">Normal Range</Divider>
+                <div className="tests-editor-panel">
+                  <Text strong style={{ display: 'block', marginBottom: 8 }}>Normal Range</Text>
                   <Tabs
+                    size="small"
                     items={[
                       {
                         key: 'general',
@@ -660,6 +837,100 @@ export function TestsPage() {
                         ),
                       },
                       {
+                        key: 'age-sex',
+                        label: 'By Age + Sex',
+                        children: (
+                          <>
+                            <Text type="secondary" style={{ display: 'block', marginBottom: 12 }}>
+                              Optional overrides. If age + sex match, this range is used before general/gender range.
+                            </Text>
+                            <Form.List name="numericAgeRanges">
+                              {(fields, { add, remove }) => (
+                                <>
+                                  {fields.map(({ key, name, ...restField }) => (
+                                    <div
+                                      key={key}
+                                      style={{
+                                        border: panelCardStyle.border,
+                                        borderRadius: 8,
+                                        padding: 10,
+                                        marginBottom: 10,
+                                        background: panelCardStyle.background,
+                                      }}
+                                    >
+                                      <Row gutter={12} align="bottom">
+                                        <Col span={4}>
+                                          <Form.Item
+                                            {...restField}
+                                            name={[name, 'sex']}
+                                            label="Sex"
+                                            rules={[{ required: true, message: 'Required' }]}
+                                            initialValue="ANY"
+                                          >
+                                            <Select
+                                              options={[
+                                                { label: 'Any', value: 'ANY' },
+                                                { label: 'Male', value: 'M' },
+                                                { label: 'Female', value: 'F' },
+                                              ]}
+                                            />
+                                          </Form.Item>
+                                        </Col>
+                                        <Col span={4}>
+                                          <Form.Item {...restField} name={[name, 'minAgeYears']} label="Min age (y)">
+                                            <InputNumber style={{ width: '100%' }} min={0} placeholder="0" />
+                                          </Form.Item>
+                                        </Col>
+                                        <Col span={4}>
+                                          <Form.Item {...restField} name={[name, 'maxAgeYears']} label="Max age (y)">
+                                            <InputNumber style={{ width: '100%' }} min={0} placeholder="120" />
+                                          </Form.Item>
+                                        </Col>
+                                        <Col span={5}>
+                                          <Form.Item {...restField} name={[name, 'normalMin']} label="Normal min">
+                                            <InputNumber style={{ width: '100%' }} placeholder="Min value" />
+                                          </Form.Item>
+                                        </Col>
+                                        <Col span={5}>
+                                          <Form.Item {...restField} name={[name, 'normalMax']} label="Normal max">
+                                            <InputNumber style={{ width: '100%' }} placeholder="Max value" />
+                                          </Form.Item>
+                                        </Col>
+                                        <Col span={2}>
+                                          <Button
+                                            danger
+                                            type="text"
+                                            onClick={() => remove(name)}
+                                            style={{ marginBottom: 8 }}
+                                          >
+                                            Remove
+                                          </Button>
+                                        </Col>
+                                      </Row>
+                                    </div>
+                                  ))}
+                                  <Button
+                                    type="dashed"
+                                    block
+                                    onClick={() =>
+                                      add({
+                                        sex: 'ANY',
+                                        minAgeYears: null,
+                                        maxAgeYears: null,
+                                        normalMin: null,
+                                        normalMax: null,
+                                      })
+                                    }
+                                  >
+                                    + Add age rule
+                                  </Button>
+                                </>
+                              )}
+                            </Form.List>
+                          </>
+                        ),
+                      },
+                      {
                         key: 'text',
                         label: 'Text Value',
                         children: (
@@ -670,7 +941,7 @@ export function TestsPage() {
                       },
                     ]}
                   />
-                </>
+                </div>
               );
             }}
           </Form.Item>
@@ -680,15 +951,17 @@ export function TestsPage() {
               const isPanel = form.getFieldValue('type') === 'PANEL';
               if (!isPanel) {
                 return (
-                  <Form.Item name="description" label="Description">
-                    <Input.TextArea rows={2} placeholder="Optional description or notes" />
-                  </Form.Item>
+                  <div className="tests-editor-panel">
+                    <Form.Item name="description" label="Description" style={{ marginBottom: 0 }}>
+                      <Input.TextArea rows={2} placeholder="Optional description or notes" />
+                    </Form.Item>
+                  </div>
                 );
               }
 
               return (
                 <Row gutter={16} align="stretch">
-                  <Col span={12}>
+                  <Col span={10}>
                     <div style={panelCardStyle}>
                       <Text strong style={{ display: 'block', marginBottom: 12 }}>Test information</Text>
                       <Form.Item name="code" label="Test Code" rules={[{ required: true, message: 'Code is required' }]} style={{ marginBottom: 12 }}>
@@ -723,31 +996,40 @@ export function TestsPage() {
                       </Form.Item>
                     </div>
                   </Col>
-                  <Col span={12}>
+                  <Col span={14}>
                     <div style={panelCardStyle}>
                       <Text strong style={{ display: 'block', marginBottom: 4 }}>Result parameters (for panel tests)</Text>
                       <Text style={{ marginBottom: 8, display: 'block' }}>
                         Define dropdown or text fields shown when entering results in the worklist (e.g. color: yellow, red, dark).
                       </Text>
-                      <Form.List name="parameterDefinitions">
-                        {(fields, { add, remove }) => (
-                          <>
+                      <div className="tests-editor-params-scroll">
+                        <Form.List name="parameterDefinitions">
+                          {(fields, { add, remove }) => (
+                            <>
                             {fields.map(({ key, name, ...rest }) => (
                               <div
                                 key={key}
                                 style={{
-                                  marginBottom: 12,
-                                  padding: '10px 0',
+                                  marginBottom: 10,
+                                  padding: '8px 0',
                                   borderBottom: panelCardStyle.border,
                                 }}
                               >
-                                <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+                                <div
+                                  className="tests-editor-param-grid"
+                                  style={{
+                                    display: 'grid',
+                                    gridTemplateColumns: '96px minmax(120px, 1fr) 128px minmax(200px, 1.6fr) auto',
+                                    gap: 8,
+                                    alignItems: 'start',
+                                  }}
+                                >
                                   <Form.Item
                                     {...rest}
                                     name={[name, 'code']}
                                     label="Code"
                                     rules={[{ required: true }]}
-                                    style={{ marginBottom: 0, minWidth: 90, flex: '0 0 100px' }}
+                                    style={{ minWidth: 90 }}
                                   >
                                     <Input placeholder="e.g. color" />
                                   </Form.Item>
@@ -756,7 +1038,7 @@ export function TestsPage() {
                                     name={[name, 'label']}
                                     label="Label"
                                     rules={[{ required: true }]}
-                                    style={{ marginBottom: 0, minWidth: 120, flex: '1 1 140px' }}
+                                    style={{ minWidth: 120 }}
                                   >
                                     <Input placeholder="e.g. Color" />
                                   </Form.Item>
@@ -764,7 +1046,7 @@ export function TestsPage() {
                                     {...rest}
                                     name={[name, 'type']}
                                     label="Type"
-                                    style={{ marginBottom: 0, minWidth: 110, flex: '0 0 130px' }}
+                                    style={{ minWidth: 110 }}
                                   >
                                     <Select options={[{ label: 'Dropdown', value: 'select' }, { label: 'Text', value: 'text' }]} />
                                   </Form.Item>
@@ -772,11 +1054,16 @@ export function TestsPage() {
                                     {...rest}
                                     name={[name, 'options']}
                                     label="Options (for dropdown)"
-                                    style={{ marginBottom: 0, flex: '1 1 200px' }}
+                                    style={{ minWidth: 200 }}
                                   >
                                     <Input placeholder="Comma-separated, e.g. yellow, red, dark" />
                                   </Form.Item>
-                                  <Button type="text" danger onClick={() => remove(name)} style={{ marginTop: 30 }}>
+                                  <Button
+                                    type="text"
+                                    danger
+                                    onClick={() => remove(name)}
+                                    style={{ marginTop: 24, paddingInline: 4, alignSelf: 'start' }}
+                                  >
                                     Remove
                                   </Button>
                                 </div>
@@ -787,13 +1074,21 @@ export function TestsPage() {
                                     const paramType = form.getFieldValue(['parameterDefinitions', name, 'type']);
                                     const isSelect = paramType === 'select';
                                     return (
-                                      <div style={{ marginTop: 8, display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'flex-start' }}>
+                                      <div
+                                        className="tests-editor-param-meta"
+                                        style={{
+                                          display: 'grid',
+                                          gridTemplateColumns: 'minmax(220px, 1fr) minmax(190px, 1fr)',
+                                          gap: 12,
+                                          alignItems: 'start',
+                                        }}
+                                      >
                                         {isSelect && optionList.length > 0 && (
                                           <Form.Item
                                             {...rest}
                                             name={[name, 'normalOptions']}
                                             label="Normal range"
-                                            style={{ marginBottom: 0, minWidth: 200 }}
+                                            style={{ minWidth: 200 }}
                                           >
                                             <Select
                                               mode="multiple"
@@ -807,7 +1102,7 @@ export function TestsPage() {
                                           {...rest}
                                           name={[name, 'defaultValue']}
                                           label="Default value"
-                                          style={{ marginBottom: 0, minWidth: 180 }}
+                                          style={{ minWidth: 180 }}
                                         >
                                           {isSelect && optionList.length > 0 ? (
                                             <Select
@@ -831,9 +1126,10 @@ export function TestsPage() {
                                 + Add parameter
                               </Button>
                             </Form.Item>
-                          </>
-                        )}
-                      </Form.List>
+                            </>
+                          )}
+                        </Form.List>
+                      </div>
                     </div>
                   </Col>
                 </Row>
@@ -841,80 +1137,82 @@ export function TestsPage() {
             }}
           </Form.Item>
 
-          <Row gutter={16}>
-            <Col span={8}>
-              <Form.Item name="sortOrder" label="Sort Order">
-                <InputNumber style={{ width: '100%' }} min={0} />
-              </Form.Item>
-            </Col>
-            <Col span={8}>
-              <Form.Item name="expectedCompletionMinutes" label="Expected Completion Time (minutes)">
-                <InputNumber
-                  style={{ width: '100%' }}
-                  min={1}
-                  placeholder="e.g., 60"
-                  tooltip="Time from order registration to test completion"
-                />
-              </Form.Item>
-            </Col>
-            <Col span={8}>
-              <Form.Item name="isActive" label="Active" valuePropName="checked">
-                <Switch />
-              </Form.Item>
-            </Col>
-          </Row>
-
-          <Divider orientation="left">Price per shift</Divider>
-          <Row gutter={16}>
-            <Col span={12}>
-              <Text type="secondary">Default price</Text>
-              <InputNumber
-                style={{ width: '100%', marginTop: 4 }}
-                min={0}
-                step={0.01}
-                value={pricesByShift.default}
-                onChange={(v) => setPricesByShift((prev) => ({ ...prev, default: Number(v) || 0 }))}
-                prefix="$"
-              />
-            </Col>
-          </Row>
-          {shifts.length > 0 && (
-            <Row gutter={16} style={{ marginTop: 12 }}>
-              {shifts.map((shift) => (
-                <Col span={12} key={shift.id}>
-                  <Text type="secondary">{shift.name || shift.code}{shift.startTime && shift.endTime ? ` (${shift.startTime}-${shift.endTime})` : ''}</Text>
+          <div className="tests-editor-panel">
+            <Row gutter={16}>
+              <Col span={8}>
+                <Form.Item name="sortOrder" label="Sort Order">
+                  <InputNumber style={{ width: '100%' }} min={0} />
+                </Form.Item>
+              </Col>
+              <Col span={8}>
+                <Form.Item name="expectedCompletionMinutes" label="Expected Completion Time (minutes)">
                   <InputNumber
-                    style={{ width: '100%', marginTop: 4 }}
-                    min={0}
-                    step={0.01}
-                    value={pricesByShift[shift.id]}
-                    onChange={(v) => setPricesByShift((prev) => ({ ...prev, [shift.id]: Number(v) || 0 }))}
-                    prefix="$"
+                    style={{ width: '100%' }}
+                    min={1}
+                    placeholder="e.g., 60"
+                    tooltip="Time from order registration to test completion"
                   />
-                </Col>
-              ))}
+                </Form.Item>
+              </Col>
+              <Col span={8}>
+                <Form.Item name="isActive" label="Active" valuePropName="checked">
+                  <Switch />
+                </Form.Item>
+              </Col>
             </Row>
-          )}
+          </div>
+
+          <div className="tests-editor-panel">
+            <Text strong style={{ display: 'block', marginBottom: 8 }}>Price per shift</Text>
+            <Row gutter={16}>
+              <Col span={12}>
+                <Text type="secondary">Default price</Text>
+                <InputNumber
+                  style={{ width: '100%', marginTop: 4 }}
+                  min={0}
+                  step={0.01}
+                  value={pricesByShift.default}
+                  onChange={(v) => setPricesByShift((prev) => ({ ...prev, default: Number(v) || 0 }))}
+                  prefix="$"
+                />
+              </Col>
+            </Row>
+            {shifts.length > 0 && (
+              <Row gutter={16} style={{ marginTop: 8 }}>
+                {shifts.map((shift) => (
+                  <Col span={12} key={shift.id}>
+                    <Text type="secondary">{shift.name || shift.code}{shift.startTime && shift.endTime ? ` (${shift.startTime}-${shift.endTime})` : ''}</Text>
+                    <InputNumber
+                      style={{ width: '100%', marginTop: 4 }}
+                      min={0}
+                      step={0.01}
+                      value={pricesByShift[shift.id]}
+                      onChange={(v) => setPricesByShift((prev) => ({ ...prev, [shift.id]: Number(v) || 0 }))}
+                      prefix="$"
+                    />
+                  </Col>
+                ))}
+              </Row>
+            )}
+          </div>
 
           {editingTest && (
-            <>
-              <Divider orientation="left">
-                <Space>
-                  <ApiOutlined />
-                  Receive results from instruments
-                </Space>
-              </Divider>
+            <div className="tests-editor-panel">
+              <Text strong style={{ display: 'block', marginBottom: 6 }}>
+                <ApiOutlined style={{ marginRight: 6 }} />
+                Receive results from instruments
+              </Text>
               <Text type="secondary" style={{ display: 'block', marginBottom: 8 }}>
-                When an instrument sends a result with the code below, it will map to this test.
+                When an instrument sends a result with this code, it maps to this test.
               </Text>
               {loadingMappings ? (
-                <Text type="secondary">Loading mappings…</Text>
+                <Text type="secondary">Loading mappings...</Text>
               ) : testMappings.length > 0 ? (
-                <div style={{ marginBottom: 12, border: panelCardStyle.border, borderRadius: 8, padding: 12, background: panelCardStyle.background }}>
+                <div style={{ marginBottom: 10, border: panelCardStyle.border, borderRadius: 8, padding: 10, background: panelCardStyle.background }}>
                   {testMappings.map((m) => (
                     <div
                       key={m.id}
-                      style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 0', borderBottom: '1px solid transparent' }}
+                      style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '5px 0', borderBottom: '1px solid transparent' }}
                     >
                       <Space>
                         <Text strong>{m.instrument?.name ?? m.instrument?.code ?? 'Instrument'}</Text>
@@ -969,7 +1267,7 @@ export function TestsPage() {
                   </Button>
                 </Col>
               </Row>
-            </>
+            </div>
           )}
 
           <Form.Item style={{ marginBottom: 0, marginTop: 16 }}>
@@ -985,3 +1283,4 @@ export function TestsPage() {
     </div>
   );
 }
+

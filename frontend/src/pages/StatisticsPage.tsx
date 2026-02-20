@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { Navigate } from 'react-router-dom';
 import {
   Card,
   Row,
@@ -25,6 +26,7 @@ import {
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { getStatistics, type StatisticsDto } from '../api/client';
+import { useAuth } from '../contexts/AuthContext';
 
 const { Title, Text } = Typography;
 const { RangePicker } = DatePicker;
@@ -37,6 +39,8 @@ function formatRevenue(value: number): string {
 }
 
 export function StatisticsPage() {
+  const { user } = useAuth();
+  const canViewStatistics = user?.role === 'LAB_ADMIN' || user?.role === 'SUPER_ADMIN';
   const [data, setData] = useState<StatisticsDto | null>(null);
   const [loading, setLoading] = useState(true);
   const [testFilter, setTestFilter] = useState('');
@@ -115,6 +119,10 @@ export function StatisticsPage() {
     URL.revokeObjectURL(url);
     message.success('CSV downloaded');
   };
+
+  if (!canViewStatistics) {
+    return <Navigate to="/" replace />;
+  }
 
   if (loading && !data) {
     return (

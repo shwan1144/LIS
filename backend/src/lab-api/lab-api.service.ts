@@ -132,7 +132,7 @@ export class LabApiService {
 
       const uniqueTestIds = [...new Set(dto.testIds)];
       const tests = await manager.getRepository(Test).find({
-        where: uniqueTestIds.map((id) => ({ id, isActive: true })),
+        where: uniqueTestIds.map((id) => ({ id, labId, isActive: true })),
       });
       if (tests.length !== uniqueTestIds.length) {
         throw new BadRequestException('One or more tests are invalid');
@@ -425,6 +425,9 @@ export class LabApiService {
     if (value === ResultFlag.LOW) return ResultFlag.LOW;
     if (value === ResultFlag.CRITICAL_HIGH) return ResultFlag.CRITICAL_HIGH;
     if (value === ResultFlag.CRITICAL_LOW) return ResultFlag.CRITICAL_LOW;
+    if (value === ResultFlag.POSITIVE) return ResultFlag.POSITIVE;
+    if (value === ResultFlag.NEGATIVE) return ResultFlag.NEGATIVE;
+    if (value === ResultFlag.ABNORMAL) return ResultFlag.ABNORMAL;
     return null;
   }
 

@@ -1,6 +1,7 @@
 import { OrdersService } from './orders.service';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { UpdateOrderPaymentDto } from './dto/update-payment.dto';
+import { UpdateOrderTestsDto } from './dto/update-order-tests.dto';
 interface RequestWithUser {
     user: {
         userId: string;
@@ -43,5 +44,6 @@ export declare class OrdersController {
     }>;
     findOne(req: RequestWithUser, id: string): Promise<import("../entities/order.entity").Order>;
     updatePayment(req: RequestWithUser, id: string, dto: UpdateOrderPaymentDto): Promise<import("../entities/order.entity").Order>;
+    updateOrderTests(req: RequestWithUser, id: string, dto: UpdateOrderTestsDto): Promise<import("../entities/order.entity").Order>;
 }
 export {};

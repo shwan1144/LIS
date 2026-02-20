@@ -9,10 +9,14 @@ import {
   IsIn,
   MaxLength,
   MinLength,
+  Min,
   ValidateNested,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { TestType, TubeType } from '../../entities/test.entity';
+
+export const TEST_RESULT_ENTRY_TYPES = ['NUMERIC', 'QUALITATIVE', 'TEXT'] as const;
+export const TEST_RESULT_FLAGS = ['N', 'H', 'L', 'HH', 'LL', 'POS', 'NEG', 'ABN'] as const;
 
 export class TestParameterDefinitionDto {
   @IsString()
@@ -42,6 +46,48 @@ export class TestParameterDefinitionDto {
   @IsString()
   @MaxLength(255)
   defaultValue?: string;
+}
+
+export class TestNumericAgeRangeDto {
+  @IsIn(['ANY', 'M', 'F'])
+  sex: 'ANY' | 'M' | 'F';
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  minAgeYears?: number | null;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  maxAgeYears?: number | null;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  normalMin?: number | null;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  normalMax?: number | null;
+}
+
+export class TestResultTextOptionDto {
+  @IsString()
+  @MinLength(1)
+  @MaxLength(120)
+  value: string;
+
+  @IsOptional()
+  @IsIn(TEST_RESULT_FLAGS)
+  flag?: (typeof TEST_RESULT_FLAGS)[number] | null;
+
+  @IsOptional()
+  @IsBoolean()
+  isDefault?: boolean;
 }
 
 export class CreateTestDto {
@@ -96,6 +142,26 @@ export class CreateTestDto {
   @MaxLength(255)
   @IsOptional()
   normalText?: string;
+
+  @IsOptional()
+  @IsIn(TEST_RESULT_ENTRY_TYPES)
+  resultEntryType?: (typeof TEST_RESULT_ENTRY_TYPES)[number];
+
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => TestResultTextOptionDto)
+  resultTextOptions?: TestResultTextOptionDto[] | null;
+
+  @IsBoolean()
+  @IsOptional()
+  allowCustomResultText?: boolean;
+
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => TestNumericAgeRangeDto)
+  numericAgeRanges?: TestNumericAgeRangeDto[];
 
   @IsString()
   @IsOptional()

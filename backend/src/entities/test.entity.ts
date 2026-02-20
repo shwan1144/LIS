@@ -7,9 +7,11 @@ import {
   JoinColumn,
   CreateDateColumn,
   UpdateDateColumn,
+  Index,
 } from 'typeorm';
 import { OrderTest } from './order-test.entity';
 import { Department } from './department.entity';
+import { Lab } from './lab.entity';
 
 export interface TestParameterDefinition {
   code: string;
@@ -20,6 +22,25 @@ export interface TestParameterDefinition {
   normalOptions?: string[];
   /** Default value when entering result (e.g. 'nil' for Crystal to save time). */
   defaultValue?: string;
+}
+
+export type NumericAgeRangeSex = 'ANY' | 'M' | 'F';
+
+export interface TestNumericAgeRange {
+  sex: NumericAgeRangeSex;
+  minAgeYears?: number | null;
+  maxAgeYears?: number | null;
+  normalMin?: number | null;
+  normalMax?: number | null;
+}
+
+export type TestResultEntryType = 'NUMERIC' | 'QUALITATIVE' | 'TEXT';
+export type TestResultFlag = 'N' | 'H' | 'L' | 'HH' | 'LL' | 'POS' | 'NEG' | 'ABN';
+
+export interface TestResultTextOption {
+  value: string;
+  flag?: TestResultFlag | null;
+  isDefault?: boolean;
 }
 
 export enum TestType {
@@ -39,11 +60,19 @@ export enum TubeType {
 }
 
 @Entity('tests')
+@Index('UQ_tests_lab_code', ['labId', 'code'], { unique: true })
 export class Test {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @Column({ type: 'varchar', length: 64, unique: true })
+  @Column({ type: 'uuid' })
+  labId: string;
+
+  @ManyToOne(() => Lab, { onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'labId' })
+  lab: Lab;
+
+  @Column({ type: 'varchar', length: 64 })
   code: string;
 
   @Column({ type: 'varchar', length: 255 })
@@ -99,6 +128,25 @@ export class Test {
   // For text-based normal values (e.g., "Negative", "Non-reactive")
   @Column({ type: 'varchar', length: 255, nullable: true })
   normalText: string | null;
+
+  /** Result entry behavior: numeric input, qualitative dropdown, or free text */
+  @Column({ type: 'varchar', length: 16, default: 'NUMERIC' })
+  resultEntryType: TestResultEntryType;
+
+  /** Optional predefined text options for qualitative/text tests (e.g. Positive/Negative). */
+  @Column({ type: 'jsonb', nullable: true })
+  resultTextOptions: TestResultTextOption[] | null;
+
+  /** Allow custom text input in addition to predefined options. */
+  @Column({ type: 'boolean', default: false })
+  allowCustomResultText: boolean;
+
+  /**
+   * Optional age/sex-specific numeric ranges.
+   * Example: [{ sex: 'F', minAgeYears: 18, maxAgeYears: 45, normalMin: 0.6, normalMax: 1.1 }]
+   */
+  @Column({ type: 'jsonb', nullable: true })
+  numericAgeRanges: TestNumericAgeRange[] | null;
 
   @Column({ type: 'text', nullable: true })
   description: string | null;

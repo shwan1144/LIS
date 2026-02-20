@@ -13,6 +13,7 @@ exports.Test = exports.TubeType = exports.TestType = void 0;
 const typeorm_1 = require("typeorm");
 const order_test_entity_1 = require("./order-test.entity");
 const department_entity_1 = require("./department.entity");
+const lab_entity_1 = require("./lab.entity");
 var TestType;
 (function (TestType) {
     TestType["SINGLE"] = "SINGLE";
@@ -37,7 +38,16 @@ __decorate([
     __metadata("design:type", String)
 ], Test.prototype, "id", void 0);
 __decorate([
-    (0, typeorm_1.Column)({ type: 'varchar', length: 64, unique: true }),
+    (0, typeorm_1.Column)({ type: 'uuid' }),
+    __metadata("design:type", String)
+], Test.prototype, "labId", void 0);
+__decorate([
+    (0, typeorm_1.ManyToOne)(() => lab_entity_1.Lab, { onDelete: 'CASCADE' }),
+    (0, typeorm_1.JoinColumn)({ name: 'labId' }),
+    __metadata("design:type", lab_entity_1.Lab)
+], Test.prototype, "lab", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ type: 'varchar', length: 64 }),
     __metadata("design:type", String)
 ], Test.prototype, "code", void 0);
 __decorate([
@@ -106,6 +116,22 @@ __decorate([
     __metadata("design:type", Object)
 ], Test.prototype, "normalText", void 0);
 __decorate([
+    (0, typeorm_1.Column)({ type: 'varchar', length: 16, default: 'NUMERIC' }),
+    __metadata("design:type", String)
+], Test.prototype, "resultEntryType", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ type: 'jsonb', nullable: true }),
+    __metadata("design:type", Object)
+], Test.prototype, "resultTextOptions", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ type: 'boolean', default: false }),
+    __metadata("design:type", Boolean)
+], Test.prototype, "allowCustomResultText", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ type: 'jsonb', nullable: true }),
+    __metadata("design:type", Object)
+], Test.prototype, "numericAgeRanges", void 0);
+__decorate([
     (0, typeorm_1.Column)({ type: 'text', nullable: true }),
     __metadata("design:type", Object)
 ], Test.prototype, "description", void 0);
@@ -142,6 +168,7 @@ __decorate([
     __metadata("design:type", Array)
 ], Test.prototype, "orderTests", void 0);
 exports.Test = Test = __decorate([
-    (0, typeorm_1.Entity)('tests')
+    (0, typeorm_1.Entity)('tests'),
+    (0, typeorm_1.Index)('UQ_tests_lab_code', ['labId', 'code'], { unique: true })
 ], Test);
 //# sourceMappingURL=test.entity.js.map
