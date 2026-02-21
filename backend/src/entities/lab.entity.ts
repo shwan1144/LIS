@@ -67,6 +67,22 @@ export class Lab {
   @Column({ type: 'varchar', length: 120, nullable: true })
   onlineResultWatermarkText: string | null;
 
+  /** Printing mode for this lab: browser popup or direct workstation print via QZ Tray. */
+  @Column({ type: 'varchar', length: 16, default: 'browser' })
+  printMethod: string;
+
+  /** Optional receipt printer name for this lab profile. */
+  @Column({ type: 'varchar', length: 128, nullable: true })
+  receiptPrinterName: string | null;
+
+  /** Optional label printer name for this lab profile. */
+  @Column({ type: 'varchar', length: 128, nullable: true })
+  labelsPrinterName: string | null;
+
+  /** Optional report printer name for this lab profile. */
+  @Column({ type: 'varchar', length: 128, nullable: true })
+  reportPrinterName: string | null;
+
   @CreateDateColumn()
   createdAt: Date;
 

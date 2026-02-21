@@ -12,6 +12,12 @@ type ReportBrandingUpdate = {
     logoDataUrl?: string | null;
     watermarkDataUrl?: string | null;
 };
+type LabPrintingUpdate = {
+    mode?: 'browser' | 'direct_qz' | string;
+    receiptPrinterName?: string | null;
+    labelsPrinterName?: string | null;
+    reportPrinterName?: string | null;
+};
 export declare class SettingsService {
     private readonly userRepo;
     private readonly labAssignmentRepo;
@@ -31,6 +37,12 @@ export declare class SettingsService {
         enableOnlineResults: boolean;
         onlineResultWatermarkDataUrl: string | null;
         onlineResultWatermarkText: string | null;
+        printing: {
+            mode: string;
+            receiptPrinterName: string | null;
+            labelsPrinterName: string | null;
+            reportPrinterName: string | null;
+        };
         reportBranding: {
             bannerDataUrl: string | null;
             footerDataUrl: string | null;
@@ -44,6 +56,7 @@ export declare class SettingsService {
         enableOnlineResults?: boolean;
         onlineResultWatermarkDataUrl?: string | null;
         onlineResultWatermarkText?: string | null;
+        printing?: LabPrintingUpdate;
         reportBranding?: ReportBrandingUpdate;
     }): Promise<{
         id: string;
@@ -54,6 +67,12 @@ export declare class SettingsService {
         enableOnlineResults: boolean;
         onlineResultWatermarkDataUrl: string | null;
         onlineResultWatermarkText: string | null;
+        printing: {
+            mode: string;
+            receiptPrinterName: string | null;
+            labelsPrinterName: string | null;
+            reportPrinterName: string | null;
+        };
         reportBranding: {
             bannerDataUrl: string | null;
             footerDataUrl: string | null;
@@ -63,6 +82,8 @@ export declare class SettingsService {
     }>;
     private normalizeReportImageDataUrl;
     private normalizeOnlineResultWatermarkText;
+    private normalizePrintMethod;
+    private normalizePrinterName;
     getUsersForLab(labId: string): Promise<User[]>;
     getShiftsForLab(labId: string): Promise<Shift[]>;
     getDepartmentsForLab(labId: string): Promise<Department[]>;

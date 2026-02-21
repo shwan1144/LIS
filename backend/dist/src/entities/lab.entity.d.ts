@@ -18,6 +18,10 @@ export declare class Lab {
     reportWatermarkDataUrl: string | null;
     onlineResultWatermarkDataUrl: string | null;
     onlineResultWatermarkText: string | null;
+    printMethod: string;
+    receiptPrinterName: string | null;
+    labelsPrinterName: string | null;
+    reportPrinterName: string | null;
     createdAt: Date;
     updatedAt: Date;
     userAssignments: UserLabAssignment[];

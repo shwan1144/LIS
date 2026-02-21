@@ -28,6 +28,7 @@ const ROLES = ['SUPER_ADMIN', 'LAB_ADMIN', 'RECEPTION', 'TECHNICIAN', 'VERIFIER'
 const MAX_REPORT_IMAGE_DATA_URL_LENGTH = 4 * 1024 * 1024;
 const REPORT_IMAGE_DATA_URL_PATTERN = /^data:image\/(png|jpeg|jpg|webp);base64,[a-zA-Z0-9+/=]+$/;
 const MAX_ONLINE_WATERMARK_TEXT_LENGTH = 120;
+const MAX_PRINTER_NAME_LENGTH = 128;
 let SettingsService = class SettingsService {
     constructor(userRepo, labAssignmentRepo, shiftAssignmentRepo, userDeptRepo, departmentRepo, labRepo, shiftRepo) {
         this.userRepo = userRepo;
@@ -54,6 +55,12 @@ let SettingsService = class SettingsService {
             enableOnlineResults: lab.enableOnlineResults !== false,
             onlineResultWatermarkDataUrl: lab.onlineResultWatermarkDataUrl ?? null,
             onlineResultWatermarkText: lab.onlineResultWatermarkText ?? null,
+            printing: {
+                mode: lab.printMethod === 'direct_qz' ? 'direct_qz' : 'browser',
+                receiptPrinterName: lab.receiptPrinterName ?? null,
+                labelsPrinterName: lab.labelsPrinterName ?? null,
+                reportPrinterName: lab.reportPrinterName ?? null,
+            },
             reportBranding: {
                 bannerDataUrl: lab.reportBannerDataUrl ?? null,
                 footerDataUrl: lab.reportFooterDataUrl ?? null,
@@ -89,6 +96,25 @@ let SettingsService = class SettingsService {
         }
         if (data.onlineResultWatermarkText !== undefined) {
             lab.onlineResultWatermarkText = this.normalizeOnlineResultWatermarkText(data.onlineResultWatermarkText);
+        }
+        if (data.printing !== undefined) {
+            if (!data.printing ||
+                typeof data.printing !== 'object' ||
+                Array.isArray(data.printing)) {
+                throw new common_1.BadRequestException('printing must be an object');
+            }
+            if ('mode' in data.printing) {
+                lab.printMethod = this.normalizePrintMethod(data.printing.mode);
+            }
+            if ('receiptPrinterName' in data.printing) {
+                lab.receiptPrinterName = this.normalizePrinterName(data.printing.receiptPrinterName, 'printing.receiptPrinterName');
+            }
+            if ('labelsPrinterName' in data.printing) {
+                lab.labelsPrinterName = this.normalizePrinterName(data.printing.labelsPrinterName, 'printing.labelsPrinterName');
+            }
+            if ('reportPrinterName' in data.printing) {
+                lab.reportPrinterName = this.normalizePrinterName(data.printing.reportPrinterName, 'printing.reportPrinterName');
+            }
         }
         if (data.reportBranding !== undefined) {
             if (!data.reportBranding ||
@@ -140,6 +166,28 @@ let SettingsService = class SettingsService {
             return null;
         if (trimmed.length > MAX_ONLINE_WATERMARK_TEXT_LENGTH) {
             throw new common_1.BadRequestException(`onlineResultWatermarkText must be at most ${MAX_ONLINE_WATERMARK_TEXT_LENGTH} characters`);
+        }
+        return trimmed;
+    }
+    normalizePrintMethod(value) {
+        if (value === undefined)
+            return 'browser';
+        if (value !== 'browser' && value !== 'direct_qz') {
+            throw new common_1.BadRequestException('printing.mode must be browser or direct_qz');
+        }
+        return value;
+    }
+    normalizePrinterName(value, fieldName) {
+        if (value === undefined || value === null)
+            return null;
+        if (typeof value !== 'string') {
+            throw new common_1.BadRequestException(`${fieldName} must be a string or null`);
+        }
+        const trimmed = value.trim();
+        if (!trimmed)
+            return null;
+        if (trimmed.length > MAX_PRINTER_NAME_LENGTH) {
+            throw new common_1.BadRequestException(`${fieldName} must be at most ${MAX_PRINTER_NAME_LENGTH} characters`);
         }
         return trimmed;
     }

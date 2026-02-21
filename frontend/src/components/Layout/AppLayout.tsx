@@ -56,6 +56,7 @@ function getMenuItems(role: string | undefined) {
         { key: '/settings/shifts', label: 'Shifts' },
         { key: '/settings/departments', label: 'Departments' },
         { key: '/settings/label', label: 'Label & sequence' },
+        { key: '/settings/printing', label: 'Printing' },
         { key: '/settings/instruments', label: 'Instruments' },
         { key: '/settings/tests', label: 'Test management' },
         { key: '/unmatched', label: 'Unmatched Results' },

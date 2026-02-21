@@ -47,6 +47,7 @@ let SettingsController = class SettingsController {
         return this.settingsService.updateLabSettings(labId, {
             labelSequenceBy: body.labelSequenceBy,
             sequenceResetBy: body.sequenceResetBy,
+            printing: body.printing,
         });
     }
     async getUsers(req) {

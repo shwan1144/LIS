@@ -592,6 +592,12 @@ export async function updateAdminLabSettings(
     enableOnlineResults?: boolean;
     onlineResultWatermarkDataUrl?: string | null;
     onlineResultWatermarkText?: string | null;
+    printing?: {
+      mode?: 'browser' | 'direct_qz';
+      receiptPrinterName?: string | null;
+      labelsPrinterName?: string | null;
+      reportPrinterName?: string | null;
+    };
     reportBranding?: Partial<ReportBrandingDto>;
   },
 ): Promise<LabSettingsDto> {
@@ -1486,6 +1492,12 @@ export interface LabSettingsDto {
   enableOnlineResults: boolean;
   onlineResultWatermarkDataUrl: string | null;
   onlineResultWatermarkText: string | null;
+  printing: {
+    mode: 'browser' | 'direct_qz';
+    receiptPrinterName: string | null;
+    labelsPrinterName: string | null;
+    reportPrinterName: string | null;
+  };
   reportBranding: ReportBrandingDto;
 }
 
@@ -1500,6 +1512,12 @@ export async function updateLabSettings(data: {
   enableOnlineResults?: boolean;
   onlineResultWatermarkDataUrl?: string | null;
   onlineResultWatermarkText?: string | null;
+  printing?: {
+    mode?: 'browser' | 'direct_qz';
+    receiptPrinterName?: string | null;
+    labelsPrinterName?: string | null;
+    reportPrinterName?: string | null;
+  };
   reportBranding?: Partial<ReportBrandingDto>;
 }): Promise<LabSettingsDto> {
   const res = await api.patch<LabSettingsDto>('/settings/lab', data);

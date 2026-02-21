@@ -79,6 +79,22 @@ __decorate([
     __metadata("design:type", Object)
 ], Lab.prototype, "onlineResultWatermarkText", void 0);
 __decorate([
+    (0, typeorm_1.Column)({ type: 'varchar', length: 16, default: 'browser' }),
+    __metadata("design:type", String)
+], Lab.prototype, "printMethod", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ type: 'varchar', length: 128, nullable: true }),
+    __metadata("design:type", Object)
+], Lab.prototype, "receiptPrinterName", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ type: 'varchar', length: 128, nullable: true }),
+    __metadata("design:type", Object)
+], Lab.prototype, "labelsPrinterName", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ type: 'varchar', length: 128, nullable: true }),
+    __metadata("design:type", Object)
+], Lab.prototype, "reportPrinterName", void 0);
+__decorate([
     (0, typeorm_1.CreateDateColumn)(),
     __metadata("design:type", Date)
 ], Lab.prototype, "createdAt", void 0);

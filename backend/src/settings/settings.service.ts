@@ -19,12 +19,20 @@ const ROLES = ['SUPER_ADMIN', 'LAB_ADMIN', 'RECEPTION', 'TECHNICIAN', 'VERIFIER'
 const MAX_REPORT_IMAGE_DATA_URL_LENGTH = 4 * 1024 * 1024;
 const REPORT_IMAGE_DATA_URL_PATTERN = /^data:image\/(png|jpeg|jpg|webp);base64,[a-zA-Z0-9+/=]+$/;
 const MAX_ONLINE_WATERMARK_TEXT_LENGTH = 120;
+const MAX_PRINTER_NAME_LENGTH = 128;
 
 type ReportBrandingUpdate = {
   bannerDataUrl?: string | null;
   footerDataUrl?: string | null;
   logoDataUrl?: string | null;
   watermarkDataUrl?: string | null;
+};
+
+type LabPrintingUpdate = {
+  mode?: 'browser' | 'direct_qz' | string;
+  receiptPrinterName?: string | null;
+  labelsPrinterName?: string | null;
+  reportPrinterName?: string | null;
 };
 
 @Injectable()
@@ -62,6 +70,12 @@ export class SettingsService {
       enableOnlineResults: lab.enableOnlineResults !== false,
       onlineResultWatermarkDataUrl: lab.onlineResultWatermarkDataUrl ?? null,
       onlineResultWatermarkText: lab.onlineResultWatermarkText ?? null,
+      printing: {
+        mode: lab.printMethod === 'direct_qz' ? 'direct_qz' : 'browser',
+        receiptPrinterName: lab.receiptPrinterName ?? null,
+        labelsPrinterName: lab.labelsPrinterName ?? null,
+        reportPrinterName: lab.reportPrinterName ?? null,
+      },
       reportBranding: {
         bannerDataUrl: lab.reportBannerDataUrl ?? null,
         footerDataUrl: lab.reportFooterDataUrl ?? null,
@@ -79,6 +93,7 @@ export class SettingsService {
       enableOnlineResults?: boolean;
       onlineResultWatermarkDataUrl?: string | null;
       onlineResultWatermarkText?: string | null;
+      printing?: LabPrintingUpdate;
       reportBranding?: ReportBrandingUpdate;
     },
   ) {
@@ -112,6 +127,37 @@ export class SettingsService {
       lab.onlineResultWatermarkText = this.normalizeOnlineResultWatermarkText(
         data.onlineResultWatermarkText,
       );
+    }
+    if (data.printing !== undefined) {
+      if (
+        !data.printing ||
+        typeof data.printing !== 'object' ||
+        Array.isArray(data.printing)
+      ) {
+        throw new BadRequestException('printing must be an object');
+      }
+
+      if ('mode' in data.printing) {
+        lab.printMethod = this.normalizePrintMethod(data.printing.mode);
+      }
+      if ('receiptPrinterName' in data.printing) {
+        lab.receiptPrinterName = this.normalizePrinterName(
+          data.printing.receiptPrinterName,
+          'printing.receiptPrinterName',
+        );
+      }
+      if ('labelsPrinterName' in data.printing) {
+        lab.labelsPrinterName = this.normalizePrinterName(
+          data.printing.labelsPrinterName,
+          'printing.labelsPrinterName',
+        );
+      }
+      if ('reportPrinterName' in data.printing) {
+        lab.reportPrinterName = this.normalizePrinterName(
+          data.printing.reportPrinterName,
+          'printing.reportPrinterName',
+        );
+      }
     }
     if (data.reportBranding !== undefined) {
       if (
@@ -181,6 +227,32 @@ export class SettingsService {
     if (trimmed.length > MAX_ONLINE_WATERMARK_TEXT_LENGTH) {
       throw new BadRequestException(
         `onlineResultWatermarkText must be at most ${MAX_ONLINE_WATERMARK_TEXT_LENGTH} characters`,
+      );
+    }
+    return trimmed;
+  }
+
+  private normalizePrintMethod(value: string | undefined): string {
+    if (value === undefined) return 'browser';
+    if (value !== 'browser' && value !== 'direct_qz') {
+      throw new BadRequestException('printing.mode must be browser or direct_qz');
+    }
+    return value;
+  }
+
+  private normalizePrinterName(
+    value: string | null | undefined,
+    fieldName: string,
+  ): string | null {
+    if (value === undefined || value === null) return null;
+    if (typeof value !== 'string') {
+      throw new BadRequestException(`${fieldName} must be a string or null`);
+    }
+    const trimmed = value.trim();
+    if (!trimmed) return null;
+    if (trimmed.length > MAX_PRINTER_NAME_LENGTH) {
+      throw new BadRequestException(
+        `${fieldName} must be at most ${MAX_PRINTER_NAME_LENGTH} characters`,
       );
     }
     return trimmed;

@@ -37,6 +37,7 @@ import dayjs from 'dayjs';
 import {
   downloadTestResultsPDF,
   enterResult,
+  getLabSettings,
   logReportDelivery,
   searchOrders,
   updateOrderPayment,
@@ -47,6 +48,10 @@ import {
   type TestParameterDefinition,
 } from '../api/client';
 import { useTheme } from '../contexts/ThemeContext';
+import {
+  directPrintReportPdf,
+  getDirectPrintErrorMessage,
+} from '../printing/direct-print';
 
 const { RangePicker } = DatePicker;
 const { Title, Text } = Typography;
@@ -327,6 +332,26 @@ export function ReportsPage() {
     setDownloading(`print-${orderId}`);
     try {
       const blob = await downloadTestResultsPDF(orderId);
+      try {
+        const settings = await getLabSettings();
+        const printerName = settings.printing?.reportPrinterName?.trim();
+        if (settings.printing?.mode === 'direct_qz' && printerName) {
+          try {
+            await directPrintReportPdf({
+              orderId,
+              blob,
+              printerName,
+            });
+            message.success(`Report sent to ${printerName}`);
+            return;
+          } catch (error) {
+            message.warning(`${getDirectPrintErrorMessage(error)} Falling back to browser print.`);
+          }
+        }
+      } catch {
+        // continue with browser print fallback
+      }
+
       const url = window.URL.createObjectURL(blob);
       const printWindow = window.open(url, '_blank');
 

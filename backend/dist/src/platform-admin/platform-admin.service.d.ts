@@ -281,6 +281,12 @@ export declare class PlatformAdminService {
         enableOnlineResults: boolean;
         onlineResultWatermarkDataUrl: string | null;
         onlineResultWatermarkText: string | null;
+        printing: {
+            mode: string;
+            receiptPrinterName: string | null;
+            labelsPrinterName: string | null;
+            reportPrinterName: string | null;
+        };
         reportBranding: {
             bannerDataUrl: string | null;
             footerDataUrl: string | null;
@@ -294,6 +300,12 @@ export declare class PlatformAdminService {
         enableOnlineResults?: boolean;
         onlineResultWatermarkDataUrl?: string | null;
         onlineResultWatermarkText?: string | null;
+        printing?: {
+            mode?: 'browser' | 'direct_qz';
+            receiptPrinterName?: string | null;
+            labelsPrinterName?: string | null;
+            reportPrinterName?: string | null;
+        };
         reportBranding?: {
             bannerDataUrl?: string | null;
             footerDataUrl?: string | null;
@@ -309,6 +321,12 @@ export declare class PlatformAdminService {
         enableOnlineResults: boolean;
         onlineResultWatermarkDataUrl: string | null;
         onlineResultWatermarkText: string | null;
+        printing: {
+            mode: string;
+            receiptPrinterName: string | null;
+            labelsPrinterName: string | null;
+            reportPrinterName: string | null;
+        };
         reportBranding: {
             bannerDataUrl: string | null;
             footerDataUrl: string | null;

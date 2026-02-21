@@ -53,6 +53,11 @@ import {
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { PrintPreviewModal } from '../components/Print';
+import {
+  directPrintLabels,
+  directPrintReceipt,
+  getDirectPrintErrorMessage,
+} from '../printing/direct-print';
 
 const { Title, Text } = Typography;
 
@@ -595,10 +600,39 @@ export function OrdersPage() {
   const openPrint = async (order: OrderDto, type: 'receipt' | 'labels') => {
     try {
       const settings = await getLabSettings();
-      setPrintLabelSequenceBy(settings.labelSequenceBy ?? 'tube_type');
+      const nextLabelSequenceBy = settings.labelSequenceBy ?? 'tube_type';
+      setPrintLabelSequenceBy(nextLabelSequenceBy);
+      const printing = settings.printing;
+      const printerName =
+        type === 'receipt'
+          ? printing?.receiptPrinterName?.trim()
+          : printing?.labelsPrinterName?.trim();
+      if (printing?.mode === 'direct_qz' && printerName) {
+        try {
+          if (type === 'receipt') {
+            await directPrintReceipt({
+              order,
+              labName: lab?.name,
+              printerName,
+            });
+          } else {
+            await directPrintLabels({
+              order,
+              printerName,
+              labelSequenceBy: nextLabelSequenceBy,
+              departments,
+            });
+          }
+          message.success(`${type === 'receipt' ? 'Receipt' : 'Labels'} sent to ${printerName}`);
+          return;
+        } catch (error) {
+          message.warning(`${getDirectPrintErrorMessage(error)} Falling back to print preview.`);
+        }
+      }
     } catch {
-      // keep last known setting
+      // if settings fail, continue with fallback preview
     }
+
     setPrintType(type);
     setPrintOrder(order);
     setPrintModalOpen(true);

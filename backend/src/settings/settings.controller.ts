@@ -51,6 +51,12 @@ export class SettingsController {
       enableOnlineResults?: boolean;
       onlineResultWatermarkDataUrl?: string | null;
       onlineResultWatermarkText?: string | null;
+      printing?: {
+        mode?: 'browser' | 'direct_qz';
+        receiptPrinterName?: string | null;
+        labelsPrinterName?: string | null;
+        reportPrinterName?: string | null;
+      };
       reportBranding?: {
         bannerDataUrl?: string | null;
         footerDataUrl?: string | null;
@@ -62,7 +68,7 @@ export class SettingsController {
     const labId = req.user?.labId;
     if (!labId) throw new Error('Lab ID not found in token');
 
-    // Lab panel can only update label/sequence settings.
+    // Lab panel can update label/sequence and printing settings.
     if (
       body.enableOnlineResults !== undefined ||
       body.onlineResultWatermarkDataUrl !== undefined ||
@@ -81,6 +87,7 @@ export class SettingsController {
     return this.settingsService.updateLabSettings(labId, {
       labelSequenceBy: body.labelSequenceBy,
       sequenceResetBy: body.sequenceResetBy,
+      printing: body.printing,
     });
   }
 
