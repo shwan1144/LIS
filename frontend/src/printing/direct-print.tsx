@@ -5,6 +5,9 @@ import { AllSampleLabels } from '../components/Print/SampleLabel';
 import printCss from '../components/Print/print.css?raw';
 
 const QZ_SCRIPT_URL = 'https://cdn.jsdelivr.net/npm/qz-tray@2.2.4/qz-tray.js';
+const QZ_SCRIPT_TIMEOUT_MS = 10000;
+const QZ_CONNECT_TIMEOUT_MS = 10000;
+const QZ_PRINTER_LOOKUP_TIMEOUT_MS = 7000;
 
 declare global {
   interface Window {
@@ -48,15 +51,48 @@ async function loadQz(): Promise<NonNullable<Window['qz']>> {
     qzLoadPromise = new Promise((resolve, reject) => {
       const existing = document.querySelector<HTMLScriptElement>('script[data-medilis-qz="1"]');
       if (existing) {
-        existing.addEventListener('load', () => {
+        let timeoutId: number | null = null;
+        const cleanup = () => {
+          existing.removeEventListener('load', onLoad);
+          existing.removeEventListener('error', onError);
+          if (timeoutId != null) {
+            window.clearTimeout(timeoutId);
+          }
+        };
+        const tryResolve = () => {
+          if (!window.qz) return false;
+          configureQz(window.qz);
+          resolve(window.qz);
+          return true;
+        };
+        const onLoad = () => {
           if (!window.qz) {
+            cleanup();
             reject(new Error('QZ Tray script loaded but qz object is missing.'));
             return;
           }
+          cleanup();
           configureQz(window.qz);
           resolve(window.qz);
-        });
-        existing.addEventListener('error', () => reject(new Error('Failed to load QZ Tray script.')));
+        };
+        const onError = () => {
+          cleanup();
+          reject(new Error('Failed to load QZ Tray script.'));
+        };
+        if (tryResolve()) {
+          cleanup();
+          return;
+        }
+        timeoutId = window.setTimeout(() => {
+          cleanup();
+          reject(
+            new Error(
+              'QZ Tray script load timed out. Check internet/firewall/ad-block and ensure CDN access.',
+            ),
+          );
+        }, QZ_SCRIPT_TIMEOUT_MS);
+        existing.addEventListener('load', onLoad);
+        existing.addEventListener('error', onError);
         return;
       }
 
@@ -65,7 +101,16 @@ async function loadQz(): Promise<NonNullable<Window['qz']>> {
       script.async = true;
       script.defer = true;
       script.setAttribute('data-medilis-qz', '1');
+      const timeoutId = window.setTimeout(() => {
+        script.remove();
+        reject(
+          new Error(
+            'QZ Tray script load timed out. Check internet/firewall/ad-block and ensure CDN access.',
+          ),
+        );
+      }, QZ_SCRIPT_TIMEOUT_MS);
       script.onload = () => {
+        window.clearTimeout(timeoutId);
         if (!window.qz) {
           reject(new Error('QZ Tray script loaded but qz object is missing.'));
           return;
@@ -73,7 +118,10 @@ async function loadQz(): Promise<NonNullable<Window['qz']>> {
         configureQz(window.qz);
         resolve(window.qz);
       };
-      script.onerror = () => reject(new Error('Failed to load QZ Tray script.'));
+      script.onerror = () => {
+        window.clearTimeout(timeoutId);
+        reject(new Error('Failed to load QZ Tray script.'));
+      };
       document.head.appendChild(script);
     }).catch((error) => {
       qzLoadPromise = null;
@@ -94,7 +142,11 @@ function configureQz(qz: NonNullable<Window['qz']>): void {
 
 async function ensureQzConnected(qz: NonNullable<Window['qz']>): Promise<void> {
   if (qz.websocket.isActive()) return;
-  await qz.websocket.connect({ retries: 1, delay: 0.5 });
+  await withTimeout(
+    qz.websocket.connect({ retries: 1, delay: 0.5 }),
+    QZ_CONNECT_TIMEOUT_MS,
+    'Connection to QZ Tray timed out. Open QZ Tray and allow the certificate/security prompt.',
+  );
 }
 
 async function ensurePrinter(qz: NonNullable<Window['qz']>, printerName: string): Promise<string> {
@@ -103,7 +155,11 @@ async function ensurePrinter(qz: NonNullable<Window['qz']>, printerName: string)
     throw new Error('Printer name is empty. Set printer name in Settings > Printing.');
   }
   try {
-    return await qz.printers.find(normalized);
+    return await withTimeout(
+      qz.printers.find(normalized),
+      QZ_PRINTER_LOOKUP_TIMEOUT_MS,
+      `Printer lookup timed out for "${normalized}".`,
+    );
   } catch {
     throw new Error(`Printer "${normalized}" was not found on this computer.`);
   }
@@ -248,6 +304,22 @@ export function getDirectPrintErrorMessage(error: unknown): string {
   return 'Direct print failed. Make sure QZ Tray is installed and running.';
 }
 
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number, timeoutMessage: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timeoutId = window.setTimeout(() => reject(new Error(timeoutMessage)), timeoutMs);
+    promise.then(
+      (value) => {
+        window.clearTimeout(timeoutId);
+        resolve(value);
+      },
+      (error) => {
+        window.clearTimeout(timeoutId);
+        reject(error);
+      },
+    );
+  });
+}
+
 function escapeHtml(value: string): string {
   return value
     .replace(/&/g, '&amp;')
@@ -256,4 +328,3 @@ function escapeHtml(value: string): string {
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
 }
-
