@@ -353,18 +353,27 @@ export function ReportsPage() {
       }
 
       const url = window.URL.createObjectURL(blob);
-      const printWindow = window.open(url, '_blank');
-
-      if (printWindow) {
-        const revoke = () => window.URL.revokeObjectURL(url);
-        printWindow.onload = () => {
-          printWindow.print();
-          setTimeout(revoke, 5000);
-        };
-        printWindow.onafterprint = revoke;
-      } else {
+      const iframe = document.createElement('iframe');
+      iframe.style.position = 'fixed';
+      iframe.style.right = '0';
+      iframe.style.bottom = '0';
+      iframe.style.width = '1px';
+      iframe.style.height = '1px';
+      iframe.style.border = '0';
+      iframe.src = url;
+      const cleanup = () => {
         window.URL.revokeObjectURL(url);
-      }
+        iframe.remove();
+      };
+      iframe.onload = () => {
+        try {
+          iframe.contentWindow?.focus();
+          iframe.contentWindow?.print();
+        } finally {
+          window.setTimeout(cleanup, 5000);
+        }
+      };
+      document.body.appendChild(iframe);
     } catch (error: unknown) {
       const is403 =
         error &&

@@ -24,7 +24,7 @@ declare global {
         setSignaturePromise?: (factory: () => (toSign: string) => Promise<string>) => void;
       };
       printers: {
-        find: (name: string) => Promise<string>;
+        find: (name?: string) => Promise<string | string[]>;
       };
       configs: {
         create: (printerName: string, options?: { jobName?: string }) => unknown;
@@ -154,6 +154,8 @@ async function ensurePrinter(qz: NonNullable<Window['qz']>, printerName: string)
   if (!normalized) {
     throw new Error('Printer name is empty. Set printer name in Settings > Printing.');
   }
+
+  const requestedLower = normalized.toLowerCase();
   try {
     return await withTimeout(
       qz.printers.find(normalized),
@@ -161,7 +163,51 @@ async function ensurePrinter(qz: NonNullable<Window['qz']>, printerName: string)
       `Printer lookup timed out for "${normalized}".`,
     );
   } catch {
-    throw new Error(`Printer "${normalized}" was not found on this computer.`);
+    const available = await listInstalledPrinters(qz);
+    if (available.length > 0) {
+      const exactInsensitive = available.find((name) => name.toLowerCase() === requestedLower);
+      if (exactInsensitive) {
+        return exactInsensitive;
+      }
+      const contains = available.find((name) => name.toLowerCase().includes(requestedLower));
+      if (contains) {
+        return contains;
+      }
+      const reverseContains = available.find((name) => requestedLower.includes(name.toLowerCase()));
+      if (reverseContains) {
+        return reverseContains;
+      }
+    }
+
+    if (available.length > 0) {
+      const preview = available.slice(0, 8).join(', ');
+      const more = available.length > 8 ? ', ...' : '';
+      throw new Error(
+        `Printer "${normalized}" was not found. Available printers: ${preview}${more}`,
+      );
+    }
+    throw new Error(
+      `Printer "${normalized}" was not found and QZ returned no installed printers.`,
+    );
+  }
+}
+
+async function listInstalledPrinters(qz: NonNullable<Window['qz']>): Promise<string[]> {
+  try {
+    const raw = await withTimeout(
+      qz.printers.find(),
+      QZ_PRINTER_LOOKUP_TIMEOUT_MS,
+      'Printer list request timed out.',
+    );
+    if (Array.isArray(raw)) {
+      return raw.filter((value): value is string => typeof value === 'string' && value.trim().length > 0);
+    }
+    if (typeof raw === 'string' && raw.trim()) {
+      return [raw.trim()];
+    }
+    return [];
+  } catch {
+    return [];
   }
 }
 
