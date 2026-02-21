@@ -18,10 +18,12 @@ const typeorm_1 = require("@nestjs/typeorm");
 const typeorm_2 = require("typeorm");
 const audit_log_entity_1 = require("../entities/audit-log.entity");
 const user_entity_1 = require("../entities/user.entity");
+const lab_entity_1 = require("../entities/lab.entity");
 let AuditService = class AuditService {
-    constructor(auditLogRepo, userRepo) {
+    constructor(auditLogRepo, userRepo, labRepo) {
         this.auditLogRepo = auditLogRepo;
         this.userRepo = userRepo;
+        this.labRepo = labRepo;
     }
     async log(dto) {
         let normalizedUserId = dto.userId ?? null;
@@ -31,10 +33,17 @@ let AuditService = class AuditService {
                 normalizedUserId = null;
             }
         }
+        let normalizedLabId = dto.labId ?? null;
+        if (normalizedLabId) {
+            const labExists = await this.labRepo.exist({ where: { id: normalizedLabId } });
+            if (!labExists) {
+                normalizedLabId = null;
+            }
+        }
         const auditLog = this.auditLogRepo.create({
             actorType: dto.actorType ?? (normalizedUserId ? audit_log_entity_1.AuditActorType.LAB_USER : null),
             actorId: dto.actorId ?? normalizedUserId ?? null,
-            labId: dto.labId ?? null,
+            labId: normalizedLabId,
             userId: normalizedUserId,
             action: dto.action,
             entityType: dto.entityType ?? null,
@@ -45,7 +54,35 @@ let AuditService = class AuditService {
             ipAddress: dto.ipAddress ?? null,
             userAgent: dto.userAgent ?? null,
         });
-        return this.auditLogRepo.save(auditLog);
+        try {
+            return await this.auditLogRepo.save(auditLog);
+        }
+        catch (error) {
+            if (this.isForeignKeyViolation(error)) {
+                const fallback = this.auditLogRepo.create({
+                    actorType: dto.actorType ?? (normalizedUserId ? audit_log_entity_1.AuditActorType.LAB_USER : null),
+                    actorId: dto.actorId ?? normalizedUserId ?? null,
+                    labId: null,
+                    userId: null,
+                    action: dto.action,
+                    entityType: dto.entityType ?? null,
+                    entityId: dto.entityId ?? null,
+                    oldValues: dto.oldValues ?? null,
+                    newValues: dto.newValues ?? null,
+                    description: dto.description ?? null,
+                    ipAddress: dto.ipAddress ?? null,
+                    userAgent: dto.userAgent ?? null,
+                });
+                return this.auditLogRepo.save(fallback);
+            }
+            throw error;
+        }
+    }
+    isForeignKeyViolation(error) {
+        if (!error || typeof error !== 'object')
+            return false;
+        const err = error;
+        return err.code === '23503';
     }
     async findAll(labId, params) {
         const page = params.page ?? 1;
@@ -118,7 +155,9 @@ exports.AuditService = AuditService = __decorate([
     (0, common_1.Injectable)(),
     __param(0, (0, typeorm_1.InjectRepository)(audit_log_entity_1.AuditLog)),
     __param(1, (0, typeorm_1.InjectRepository)(user_entity_1.User)),
+    __param(2, (0, typeorm_1.InjectRepository)(lab_entity_1.Lab)),
     __metadata("design:paramtypes", [typeorm_2.Repository,
+        typeorm_2.Repository,
         typeorm_2.Repository])
 ], AuditService);
 //# sourceMappingURL=audit.service.js.map
