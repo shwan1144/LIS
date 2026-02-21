@@ -19,6 +19,7 @@ export class LabResolverMiddleware implements NestMiddleware {
 
   async use(req: Request, _res: Response, next: NextFunction): Promise<void> {
     const host = this.normalizeHost(this.extractHost(req));
+    const originHost = this.normalizeHost(this.extractOriginHost(req));
     req.tenantHost = host;
     req.hostScope = HostScope.UNKNOWN;
     req.tenantSubdomain = null;
@@ -32,7 +33,21 @@ export class LabResolverMiddleware implements NestMiddleware {
       return;
     }
 
-    const subdomain = this.extractLabSubdomain(host);
+    let subdomain = this.extractLabSubdomain(host);
+    if (subdomain === 'api' && originHost) {
+      if (originHost === adminHost) {
+        req.hostScope = HostScope.ADMIN;
+        req.tenantHost = originHost;
+        next();
+        return;
+      }
+      const originSubdomain = this.extractLabSubdomain(originHost);
+      if (originSubdomain) {
+        subdomain = originSubdomain;
+        req.tenantHost = originHost;
+      }
+    }
+
     if (!subdomain) {
       next();
       return;
@@ -70,6 +85,26 @@ export class LabResolverMiddleware implements NestMiddleware {
     return host.toLowerCase().replace(/:\d+$/, '');
   }
 
+  private extractOriginHost(req: Request): string {
+    const origin = req.headers.origin;
+    if (typeof origin === 'string' && origin.trim()) {
+      try {
+        return new URL(origin).host;
+      } catch {
+        return '';
+      }
+    }
+    const referer = req.headers.referer;
+    if (typeof referer === 'string' && referer.trim()) {
+      try {
+        return new URL(referer).host;
+      } catch {
+        return '';
+      }
+    }
+    return '';
+  }
+
   private getAdminHost(): string {
     const explicit = (process.env.APP_ADMIN_HOST || '').trim().toLowerCase();
     if (explicit) return explicit;
@@ -98,4 +133,3 @@ export class LabResolverMiddleware implements NestMiddleware {
     return null;
   }
 }
-
