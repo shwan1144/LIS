@@ -74,9 +74,12 @@ WHERE "labId" IS NULL
 UPDATE "users" u
 SET "labId" = x."labId"
 FROM (
-  SELECT "userId", MIN("labId") AS "labId"
+  SELECT DISTINCT ON ("userId")
+    "userId",
+    "labId"
   FROM "user_lab_assignments"
-  GROUP BY "userId"
+  WHERE "labId" IS NOT NULL
+  ORDER BY "userId", "labId"
 ) x
 WHERE u.id = x."userId"
   AND u."labId" IS NULL;
