@@ -31,15 +31,18 @@ export function resolveApiBaseUrl(envBase?: string): string {
   try {
     const parsed = new URL(normalizedEnv);
     const isLocal = hostname === 'localhost' || hostname.endsWith('.localhost');
-    const isSubdomainHost = hostname.includes('.');
+    const isLocalApiHost = parsed.hostname === 'localhost' || parsed.hostname.endsWith('.localhost');
 
-    if (!isSubdomainHost) {
-      return normalizedEnv.replace(/\/+$/, '');
+    // Local multi-subdomain dev: keep current host (lab01.localhost, admin.localhost),
+    // but preserve API protocol/port/path from VITE_API_URL.
+    if (isLocal && isLocalApiHost) {
+      const port = parsed.port || '3000';
+      const pathname = parsed.pathname === '/' ? '' : parsed.pathname.replace(/\/+$/, '');
+      return `${parsed.protocol}//${hostname}:${port}${pathname}`;
     }
 
-    const port = parsed.port || (isLocal ? '3000' : '');
-    const pathname = parsed.pathname === '/' ? '' : parsed.pathname.replace(/\/+$/, '');
-    return `${parsed.protocol}//${hostname}${port ? `:${port}` : ''}${pathname}`;
+    // Production/staging: if VITE_API_URL is set, use it directly.
+    return normalizedEnv.replace(/\/+$/, '');
   } catch {
     return normalizedEnv.replace(/\/+$/, '');
   }

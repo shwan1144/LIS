@@ -753,15 +753,40 @@ export interface OrdersTrendPoint {
 }
 
 export async function getDashboardKpis(): Promise<DashboardKpis> {
-  const res = await api.get<DashboardKpis>('/dashboard/kpis');
-  return res.data;
+  const res = await api.get<Partial<DashboardKpis> | null>('/dashboard/kpis');
+  const raw = res.data ?? {};
+  return {
+    ordersToday: Number(raw.ordersToday ?? 0),
+    pendingVerification: Number(raw.pendingVerification ?? 0),
+    criticalAlerts: Number(raw.criticalAlerts ?? 0),
+    avgTatHours:
+      raw.avgTatHours === null || raw.avgTatHours === undefined
+        ? null
+        : Number(raw.avgTatHours),
+    totalPatients: Number(raw.totalPatients ?? 0),
+  };
 }
 
 export async function getOrdersTrend(days?: number): Promise<OrdersTrendPoint[]> {
-  const res = await api.get<{ data: OrdersTrendPoint[] }>('/dashboard/orders-trend', {
+  const res = await api.get<{ data?: OrdersTrendPoint[] } | OrdersTrendPoint[] | null>(
+    '/dashboard/orders-trend',
+    {
     params: days ? { days } : undefined,
-  });
-  return res.data.data;
+    },
+  );
+
+  const payload = Array.isArray(res.data)
+    ? res.data
+    : Array.isArray(res.data?.data)
+      ? res.data.data
+      : [];
+
+  return payload
+    .map((item) => ({
+      date: String(item?.date ?? ''),
+      count: Number(item?.count ?? 0),
+    }))
+    .filter((item) => item.date.length > 0);
 }
 
 // Statistics (date range)
