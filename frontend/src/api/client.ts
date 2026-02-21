@@ -719,8 +719,49 @@ export interface CreatePatientDto {
 }
 
 export async function searchPatients(params: PatientSearchParams): Promise<PatientSearchResult> {
-  const res = await api.get<PatientSearchResult>('/patients', { params });
-  return res.data;
+  const res = await api.get<
+    PatientSearchResult
+    | PatientDto[]
+    | { data?: PatientSearchResult | PatientDto[] }
+    | null
+  >('/patients', { params });
+
+  const payload = (res.data && typeof res.data === 'object' && 'data' in res.data)
+    ? (res.data.data as PatientSearchResult | PatientDto[] | undefined)
+    : res.data;
+
+  if (Array.isArray(payload)) {
+    return {
+      items: payload,
+      total: payload.length,
+      page: Number(params.page ?? 1),
+      size: Number(params.size ?? payload.length || 20),
+      totalPages: 1,
+    };
+  }
+
+  if (payload && typeof payload === 'object') {
+    const items = Array.isArray(payload.items) ? payload.items : [];
+    const page = Number((payload as PatientSearchResult).page ?? params.page ?? 1);
+    const size = Number((payload as PatientSearchResult).size ?? params.size ?? 20);
+    const total = Number((payload as PatientSearchResult).total ?? items.length);
+    const totalPages = Number((payload as PatientSearchResult).totalPages ?? Math.max(1, Math.ceil(total / Math.max(1, size))));
+    return {
+      items,
+      total,
+      page,
+      size,
+      totalPages,
+    };
+  }
+
+  return {
+    items: [],
+    total: 0,
+    page: Number(params.page ?? 1),
+    size: Number(params.size ?? 20),
+    totalPages: 0,
+  };
 }
 
 export async function getPatient(id: string): Promise<PatientDto> {

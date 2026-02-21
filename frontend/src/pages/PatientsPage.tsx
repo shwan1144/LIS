@@ -51,8 +51,8 @@ export function PatientsPage() {
         page,
         size,
       });
-      setData(res.items);
-      setTotal(res.total);
+      setData(Array.isArray(res.items) ? res.items : []);
+      setTotal(Number.isFinite(res.total) ? res.total : 0);
     } catch (e) {
       message.error('Failed to load patients');
     } finally {
