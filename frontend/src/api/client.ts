@@ -16,6 +16,14 @@ api.interceptors.request.use((config) => {
     // Don't add auth header if no token (e.g., login endpoint)
     delete config.headers.Authorization;
   }
+
+  if (typeof window !== 'undefined') {
+    // Preserve tenant context when frontend and backend are on different hosts.
+    // Backend middleware prefers x-forwarded-host for lab/admin subdomain resolution.
+    config.headers['x-forwarded-host'] = window.location.host;
+    config.headers['x-forwarded-proto'] = window.location.protocol.replace(':', '');
+  }
+
   return config;
 });
 
