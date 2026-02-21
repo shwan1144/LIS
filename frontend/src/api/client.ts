@@ -735,7 +735,7 @@ export async function searchPatients(params: PatientSearchParams): Promise<Patie
       items: payload,
       total: payload.length,
       page: Number(params.page ?? 1),
-      size: Number(params.size ?? payload.length || 20),
+      size: Number(params.size ?? (payload.length || 20)),
       totalPages: 1,
     };
   }
