@@ -18,12 +18,10 @@ const typeorm_1 = require("@nestjs/typeorm");
 const typeorm_2 = require("typeorm");
 const audit_log_entity_1 = require("../entities/audit-log.entity");
 const user_entity_1 = require("../entities/user.entity");
-const lab_entity_1 = require("../entities/lab.entity");
 let AuditService = class AuditService {
-    constructor(auditLogRepo, userRepo, labRepo) {
+    constructor(auditLogRepo, userRepo) {
         this.auditLogRepo = auditLogRepo;
         this.userRepo = userRepo;
-        this.labRepo = labRepo;
     }
     async log(dto) {
         let normalizedUserId = dto.userId ?? null;
@@ -33,17 +31,10 @@ let AuditService = class AuditService {
                 normalizedUserId = null;
             }
         }
-        let normalizedLabId = dto.labId ?? null;
-        if (normalizedLabId) {
-            const labExists = await this.labRepo.exist({ where: { id: normalizedLabId } });
-            if (!labExists) {
-                normalizedLabId = null;
-            }
-        }
         const auditLog = this.auditLogRepo.create({
             actorType: dto.actorType ?? (normalizedUserId ? audit_log_entity_1.AuditActorType.LAB_USER : null),
             actorId: dto.actorId ?? normalizedUserId ?? null,
-            labId: normalizedLabId,
+            labId: dto.labId ?? null,
             userId: normalizedUserId,
             action: dto.action,
             entityType: dto.entityType ?? null,
@@ -155,9 +146,7 @@ exports.AuditService = AuditService = __decorate([
     (0, common_1.Injectable)(),
     __param(0, (0, typeorm_1.InjectRepository)(audit_log_entity_1.AuditLog)),
     __param(1, (0, typeorm_1.InjectRepository)(user_entity_1.User)),
-    __param(2, (0, typeorm_1.InjectRepository)(lab_entity_1.Lab)),
     __metadata("design:paramtypes", [typeorm_2.Repository,
-        typeorm_2.Repository,
         typeorm_2.Repository])
 ], AuditService);
 //# sourceMappingURL=audit.service.js.map

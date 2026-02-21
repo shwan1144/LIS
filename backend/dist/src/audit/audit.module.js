@@ -11,7 +11,6 @@ const common_1 = require("@nestjs/common");
 const typeorm_1 = require("@nestjs/typeorm");
 const audit_log_entity_1 = require("../entities/audit-log.entity");
 const user_entity_1 = require("../entities/user.entity");
-const lab_entity_1 = require("../entities/lab.entity");
 const audit_service_1 = require("./audit.service");
 const audit_controller_1 = require("./audit.controller");
 let AuditModule = class AuditModule {
@@ -20,7 +19,7 @@ exports.AuditModule = AuditModule;
 exports.AuditModule = AuditModule = __decorate([
     (0, common_1.Global)(),
     (0, common_1.Module)({
-        imports: [typeorm_1.TypeOrmModule.forFeature([audit_log_entity_1.AuditLog, user_entity_1.User, lab_entity_1.Lab])],
+        imports: [typeorm_1.TypeOrmModule.forFeature([audit_log_entity_1.AuditLog, user_entity_1.User])],
         controllers: [audit_controller_1.AuditController],
         providers: [audit_service_1.AuditService],
         exports: [audit_service_1.AuditService],

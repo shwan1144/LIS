@@ -3,7 +3,6 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { AuditLog, AuditAction, AuditActorType } from '../entities/audit-log.entity';
 import { User } from '../entities/user.entity';
-import { Lab } from '../entities/lab.entity';
 
 export interface AuditLogParams {
   labId?: string;
@@ -40,8 +39,6 @@ export class AuditService {
     private readonly auditLogRepo: Repository<AuditLog>,
     @InjectRepository(User)
     private readonly userRepo: Repository<User>,
-    @InjectRepository(Lab)
-    private readonly labRepo: Repository<Lab>,
   ) {}
 
   async log(dto: CreateAuditLogDto): Promise<AuditLog> {
@@ -53,18 +50,10 @@ export class AuditService {
       }
     }
 
-    let normalizedLabId = dto.labId ?? null;
-    if (normalizedLabId) {
-      const labExists = await this.labRepo.exist({ where: { id: normalizedLabId } });
-      if (!labExists) {
-        normalizedLabId = null;
-      }
-    }
-
     const auditLog = this.auditLogRepo.create({
       actorType: dto.actorType ?? (normalizedUserId ? AuditActorType.LAB_USER : null),
       actorId: dto.actorId ?? normalizedUserId ?? null,
-      labId: normalizedLabId,
+      labId: dto.labId ?? null,
       userId: normalizedUserId,
       action: dto.action,
       entityType: dto.entityType ?? null,
