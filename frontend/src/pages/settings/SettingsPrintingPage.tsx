@@ -15,6 +15,7 @@ import { getLabSettings, updateLabSettings } from '../../api/client';
 import {
   checkDirectPrintConnection,
   getDirectPrintErrorMessage,
+  isVirtualSavePrinterName,
 } from '../../printing/direct-print';
 
 const { Title, Text } = Typography;
@@ -102,6 +103,15 @@ export function SettingsPrintingPage() {
         values.labelsPrinterName.trim() ||
         values.reportPrinterName.trim() ||
         undefined;
+
+      if (firstPrinter && isVirtualSavePrinterName(firstPrinter)) {
+        await checkDirectPrintConnection();
+        message.info(
+          `QZ connection is ready. "${firstPrinter}" is a virtual PDF/XPS printer, so report print will use browser Save dialog.`,
+        );
+        return;
+      }
+
       await checkDirectPrintConnection(firstPrinter);
       message.success('Direct print connection is ready on this computer');
     } catch (error) {
@@ -193,4 +203,3 @@ export function SettingsPrintingPage() {
     </div>
   );
 }
-

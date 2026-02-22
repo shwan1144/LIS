@@ -8,6 +8,18 @@ const QZ_SCRIPT_URL = 'https://cdn.jsdelivr.net/npm/qz-tray@2.2.4/qz-tray.js';
 const QZ_SCRIPT_TIMEOUT_MS = 10000;
 const QZ_CONNECT_TIMEOUT_MS = 10000;
 const QZ_PRINTER_LOOKUP_TIMEOUT_MS = 7000;
+const VIRTUAL_SAVE_PRINTER_KEYWORDS = [
+  'print to pdf',
+  'pdfcreator',
+  'pdf architect',
+  'xps document writer',
+  'onenote',
+];
+
+export function isVirtualSavePrinterName(name: string): boolean {
+  const value = name.trim().toLowerCase();
+  return VIRTUAL_SAVE_PRINTER_KEYWORDS.some((keyword) => value.includes(keyword));
+}
 
 declare global {
   interface Window {
