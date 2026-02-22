@@ -17,8 +17,7 @@ const password_util_1 = require("./auth/password.util");
 const platform_user_entity_1 = require("./entities/platform-user.entity");
 function createSeedDataSource(options = {}) {
     const shouldSynchronize = options.synchronizeSchema ??
-        (process.env.SEED_SYNC === 'true' ||
-            (process.env.SEED_SYNC !== 'false' && Boolean(process.env.DATABASE_URL)));
+        (process.env.SEED_SYNC === 'true');
     if (process.env.DATABASE_URL) {
         return new typeorm_1.DataSource({
             type: 'postgres',

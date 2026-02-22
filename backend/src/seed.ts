@@ -26,8 +26,7 @@ type RunSeedOptions = {
 function createSeedDataSource(options: RunSeedOptions = {}): DataSource {
   const shouldSynchronize =
     options.synchronizeSchema ??
-    (process.env.SEED_SYNC === 'true' ||
-      (process.env.SEED_SYNC !== 'false' && Boolean(process.env.DATABASE_URL)));
+    (process.env.SEED_SYNC === 'true');
 
   if (process.env.DATABASE_URL) {
     return new DataSource({
