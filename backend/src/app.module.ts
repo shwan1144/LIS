@@ -23,6 +23,7 @@ import { AdminAuthModule } from './admin-auth/admin-auth.module';
 import { PlatformAdminModule } from './platform-admin/platform-admin.module';
 import { LabApiModule } from './lab-api/lab-api.module';
 import { DATABASE_ENTITIES } from './database/entities';
+import { DatabaseSupportModule } from './database/database-support.module';
 
 const useDatabaseUrl = Boolean(process.env.DATABASE_URL);
 const isProduction = (process.env.NODE_ENV || '').toLowerCase() === 'production';
@@ -58,6 +59,7 @@ const typeOrmConfig = useDatabaseUrl
       },
     ]),
     TypeOrmModule.forRoot(typeOrmConfig),
+    DatabaseSupportModule,
     AuthModule,
     DashboardModule,
     PatientsModule,

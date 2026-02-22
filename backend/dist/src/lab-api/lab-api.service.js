@@ -21,6 +21,7 @@ const patient_entity_1 = require("../entities/patient.entity");
 const result_entity_1 = require("../entities/result.entity");
 const sample_entity_1 = require("../entities/sample.entity");
 const test_entity_1 = require("../entities/test.entity");
+const lab_counter_util_1 = require("../database/lab-counter.util");
 let LabApiService = class LabApiService {
     constructor(rlsSessionService, auditService) {
         this.rlsSessionService = rlsSessionService;
@@ -104,7 +105,7 @@ let LabApiService = class LabApiService {
             if (tests.length !== uniqueTestIds.length) {
                 throw new common_1.BadRequestException('One or more tests are invalid');
             }
-            const orderNumber = await this.generateOrderNumber(manager, labId);
+            const orderNumber = await this.generateOrderNumber(manager, labId, dto.shiftId ?? null);
             const order = manager.getRepository(order_entity_1.Order).create({
                 patientId: patient.id,
                 labId,
@@ -318,24 +319,20 @@ let LabApiService = class LabApiService {
         const current = parseInt(maxValue.replace(/^P-/, ''), 10) || 0;
         return `P-${String(current + 1).padStart(6, '0')}`;
     }
-    async generateOrderNumber(manager, labId) {
+    async generateOrderNumber(manager, labId, shiftId) {
         const today = new Date();
         const yy = String(today.getFullYear() % 100).padStart(2, '0');
         const mm = String(today.getMonth() + 1).padStart(2, '0');
         const dd = String(today.getDate()).padStart(2, '0');
         const datePrefix = `${yy}${mm}${dd}`;
-        const startOfDay = new Date(today);
-        startOfDay.setHours(0, 0, 0, 0);
-        const endOfDay = new Date(today);
-        endOfDay.setHours(23, 59, 59, 999);
-        const raw = await manager
-            .getRepository(order_entity_1.Order)
-            .createQueryBuilder('o')
-            .select('COUNT(*)', 'count')
-            .where('o.labId = :labId', { labId })
-            .andWhere('o.registeredAt BETWEEN :startOfDay AND :endOfDay', { startOfDay, endOfDay })
-            .getRawOne();
-        const sequence = String((parseInt(raw?.count || '0', 10) || 0) + 1).padStart(3, '0');
+        const seq = await (0, lab_counter_util_1.nextLabCounterValue)(manager, {
+            labId,
+            counterType: 'ORDER_NUMBER',
+            scopeKey: 'ORDER',
+            date: today,
+            shiftId,
+        });
+        const sequence = String(seq).padStart(3, '0');
         return `${datePrefix}${sequence}`;
     }
     toResultFlag(flag) {

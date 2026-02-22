@@ -19,12 +19,14 @@ const passport_jwt_1 = require("passport-jwt");
 const typeorm_1 = require("@nestjs/typeorm");
 const typeorm_2 = require("typeorm");
 const platform_user_entity_1 = require("../entities/platform-user.entity");
+const security_env_1 = require("../config/security-env");
+const platformJwtSecret = (0, security_env_1.requireSecret)('PLATFORM_JWT_SECRET', 'platform-dev-secret', 'AdminJwtStrategy');
 let AdminJwtStrategy = class AdminJwtStrategy extends (0, passport_1.PassportStrategy)(passport_jwt_1.Strategy, 'platform-jwt') {
     constructor(platformUserRepo) {
         super({
             jwtFromRequest: passport_jwt_1.ExtractJwt.fromAuthHeaderAsBearerToken(),
             ignoreExpiration: false,
-            secretOrKey: process.env.PLATFORM_JWT_SECRET || process.env.JWT_SECRET || 'platform-dev-secret',
+            secretOrKey: platformJwtSecret,
         });
         this.platformUserRepo = platformUserRepo;
     }

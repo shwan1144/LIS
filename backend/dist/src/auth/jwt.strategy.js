@@ -20,12 +20,14 @@ const typeorm_1 = require("@nestjs/typeorm");
 const typeorm_2 = require("typeorm");
 const user_entity_1 = require("../entities/user.entity");
 const platform_user_entity_1 = require("../entities/platform-user.entity");
+const security_env_1 = require("../config/security-env");
+const jwtSecret = (0, security_env_1.requireSecret)('JWT_SECRET', 'lis-dev-secret-change-in-production', 'JwtStrategy');
 let JwtStrategy = class JwtStrategy extends (0, passport_1.PassportStrategy)(passport_jwt_1.Strategy, 'lab-jwt') {
     constructor(userRepository, platformUserRepository) {
         super({
             jwtFromRequest: passport_jwt_1.ExtractJwt.fromAuthHeaderAsBearerToken(),
             ignoreExpiration: false,
-            secretOrKey: process.env.JWT_SECRET || 'lis-dev-secret-change-in-production',
+            secretOrKey: jwtSecret,
             passReqToCallback: true,
         });
         this.userRepository = userRepository;

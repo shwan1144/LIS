@@ -53,7 +53,10 @@ This document describes the implemented backend foundation for:
 
 ### RLS Session Helper
 - `src/database/rls-session.service.ts`
-- Runs request operations in transaction and sets:
+- `src/tenant/tenant-rls-context.middleware.ts`
+- `src/database/rls-query-runner-enforcer.service.ts`
+- Middleware stores per-request DB scope (`lab`, `admin`, `none`) and query-runner enforcer applies it automatically for repository/query-builder usage.
+- Explicit wrapper methods are still available and run in transaction:
   - `SET LOCAL app.current_lab_id = '<lab-id>'`
   - `SET LOCAL ROLE app_lab_user` (best-effort)
   - or `SET LOCAL ROLE app_platform_admin` for admin queries
@@ -114,6 +117,8 @@ Migration includes:
 
 ### Unit
 - `src/tenant/lab-resolver.middleware.spec.ts`
+- `src/tenant/tenant-rls-context.middleware.spec.ts`
+- `src/database/rls-query-runner-enforcer.service.spec.ts`
 - `src/platform-admin/platform-admin.service.spec.ts`
 
 ### E2E-style
@@ -151,7 +156,9 @@ Set env:
    - Optional strict mode: `STRICT_TENANT_HOST=true`
 4. Apply migrations before startup:
    - `npm run migrate:sql`
-   - Includes `013_atomic_counters_and_uniques.sql` (atomic counters + unique order/barcode indexes)
+   - Includes:
+     - `013_atomic_counters_and_uniques.sql` (atomic counters + unique order/barcode indexes)
+     - `014_additional_rls_policies.sql` (audit/history/unmatched/user-assignments RLS coverage)
 5. Verify isolation/hardening:
    - `npm run test -- lab-resolver.middleware.spec.ts`
    - `npm run test:e2e -- rls-isolation.e2e-spec.ts`

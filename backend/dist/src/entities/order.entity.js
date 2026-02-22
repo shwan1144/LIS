@@ -124,6 +124,10 @@ __decorate([
     __metadata("design:type", Array)
 ], Order.prototype, "samples", void 0);
 exports.Order = Order = __decorate([
-    (0, typeorm_1.Entity)('orders')
+    (0, typeorm_1.Entity)('orders'),
+    (0, typeorm_1.Index)('UQ_orders_lab_order_number', ['labId', 'orderNumber'], {
+        unique: true,
+        where: '"orderNumber" IS NOT NULL',
+    })
 ], Order);
 //# sourceMappingURL=order.entity.js.map

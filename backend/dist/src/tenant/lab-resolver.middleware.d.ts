@@ -9,6 +9,8 @@ export declare class LabResolverMiddleware implements NestMiddleware {
     private extractHost;
     private normalizeHost;
     private extractOriginHost;
+    private isTrustProxyEnabled;
+    private isStrictTenantHostEnabled;
     private getAdminHost;
     private extractLabSubdomain;
 }

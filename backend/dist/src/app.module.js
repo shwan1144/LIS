@@ -8,6 +8,8 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.AppModule = void 0;
 const common_1 = require("@nestjs/common");
+const core_1 = require("@nestjs/core");
+const throttler_1 = require("@nestjs/throttler");
 const typeorm_1 = require("@nestjs/typeorm");
 const app_controller_1 = require("./app.controller");
 const app_service_1 = require("./app.service");
@@ -30,10 +32,12 @@ const admin_auth_module_1 = require("./admin-auth/admin-auth.module");
 const platform_admin_module_1 = require("./platform-admin/platform-admin.module");
 const lab_api_module_1 = require("./lab-api/lab-api.module");
 const entities_1 = require("./database/entities");
+const database_support_module_1 = require("./database/database-support.module");
 const useDatabaseUrl = Boolean(process.env.DATABASE_URL);
-const shouldSynchronize = process.env.DB_SYNC === 'true' ||
-    (process.env.DB_SYNC !== 'false' &&
-        (process.env.NODE_ENV !== 'production' || useDatabaseUrl));
+const isProduction = (process.env.NODE_ENV || '').toLowerCase() === 'production';
+const shouldSynchronize = !isProduction && process.env.DB_SYNC === 'true';
+const apiRateLimit = Number.parseInt(process.env.API_RATE_LIMIT || '120', 10);
+const apiRateWindowSeconds = Number.parseInt(process.env.API_RATE_WINDOW_SECONDS || '60', 10);
 const typeOrmConfig = useDatabaseUrl
     ? {
         type: 'postgres',
@@ -57,7 +61,15 @@ exports.AppModule = AppModule;
 exports.AppModule = AppModule = __decorate([
     (0, common_1.Module)({
         imports: [
+            throttler_1.ThrottlerModule.forRoot([
+                {
+                    name: 'default',
+                    ttl: (Number.isFinite(apiRateWindowSeconds) && apiRateWindowSeconds > 0 ? apiRateWindowSeconds : 60) * 1000,
+                    limit: Number.isFinite(apiRateLimit) && apiRateLimit > 0 ? apiRateLimit : 120,
+                },
+            ]),
             typeorm_1.TypeOrmModule.forRoot(typeOrmConfig),
+            database_support_module_1.DatabaseSupportModule,
             auth_module_1.AuthModule,
             dashboard_module_1.DashboardModule,
             patients_module_1.PatientsModule,
@@ -78,7 +90,13 @@ exports.AppModule = AppModule = __decorate([
             lab_api_module_1.LabApiModule,
         ],
         controllers: [app_controller_1.AppController],
-        providers: [app_service_1.AppService],
+        providers: [
+            app_service_1.AppService,
+            {
+                provide: core_1.APP_GUARD,
+                useClass: throttler_1.ThrottlerGuard,
+            },
+        ],
     })
 ], AppModule);
 //# sourceMappingURL=app.module.js.map

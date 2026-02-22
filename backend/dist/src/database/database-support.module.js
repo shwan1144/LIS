@@ -8,14 +8,17 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.DatabaseSupportModule = void 0;
 const common_1 = require("@nestjs/common");
+const request_rls_context_service_1 = require("./request-rls-context.service");
+const rls_query_runner_enforcer_service_1 = require("./rls-query-runner-enforcer.service");
 const rls_session_service_1 = require("./rls-session.service");
 let DatabaseSupportModule = class DatabaseSupportModule {
 };
 exports.DatabaseSupportModule = DatabaseSupportModule;
 exports.DatabaseSupportModule = DatabaseSupportModule = __decorate([
+    (0, common_1.Global)(),
     (0, common_1.Module)({
-        providers: [rls_session_service_1.RlsSessionService],
-        exports: [rls_session_service_1.RlsSessionService],
+        providers: [rls_session_service_1.RlsSessionService, request_rls_context_service_1.RequestRlsContextService, rls_query_runner_enforcer_service_1.RlsQueryRunnerEnforcerService],
+        exports: [rls_session_service_1.RlsSessionService, request_rls_context_service_1.RequestRlsContextService, rls_query_runner_enforcer_service_1.RlsQueryRunnerEnforcerService],
     })
 ], DatabaseSupportModule);
 //# sourceMappingURL=database-support.module.js.map

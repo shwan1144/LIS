@@ -94,6 +94,10 @@ __decorate([
     __metadata("design:type", Array)
 ], Sample.prototype, "orderTests", void 0);
 exports.Sample = Sample = __decorate([
-    (0, typeorm_1.Entity)('samples')
+    (0, typeorm_1.Entity)('samples'),
+    (0, typeorm_1.Index)('UQ_samples_lab_barcode', ['labId', 'barcode'], {
+        unique: true,
+        where: '"barcode" IS NOT NULL',
+    })
 ], Sample);
 //# sourceMappingURL=sample.entity.js.map

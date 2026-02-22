@@ -1,5 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { DataSource, EntityManager, QueryRunner } from 'typeorm';
+import { RequestRlsContext } from './request-rls-context.types';
+
+type QueryExecutor = (query: string, parameters?: unknown[]) => Promise<unknown>;
 
 @Injectable()
 export class RlsSessionService {
@@ -7,6 +10,7 @@ export class RlsSessionService {
   private readonly warnedMissingRoles = new Set<string>();
   private readonly warnedMembershipRoles = new Set<string>();
   private readonly warnedMissingRolePrivileges = new Set<string>();
+  private readonly warnedResetFailures = new Set<string>();
 
   constructor(private readonly dataSource: DataSource) {}
 
@@ -15,12 +19,16 @@ export class RlsSessionService {
     execute: (manager: EntityManager) => Promise<T>,
   ): Promise<T> {
     const runner = this.dataSource.createQueryRunner();
+    this.markRunnerSkipAutoContext(runner);
     await runner.connect();
     await runner.startTransaction();
 
     try {
-      await runner.query(`SELECT set_config('app.current_lab_id', $1, true)`, [labId]);
-      await this.trySetLocalRole(runner, 'app_lab_user');
+      await this.applyRequestContextWithExecutor(
+        runner.query.bind(runner) as QueryExecutor,
+        { scope: 'lab', labId },
+        { local: true },
+      );
       const result = await execute(runner.manager);
       await runner.commitTransaction();
       return result;
@@ -36,12 +44,16 @@ export class RlsSessionService {
     execute: (manager: EntityManager) => Promise<T>,
   ): Promise<T> {
     const runner = this.dataSource.createQueryRunner();
+    this.markRunnerSkipAutoContext(runner);
     await runner.connect();
     await runner.startTransaction();
 
     try {
-      await runner.query(`SELECT set_config('app.current_lab_id', '', true)`);
-      await this.trySetLocalRole(runner, 'app_platform_admin');
+      await this.applyRequestContextWithExecutor(
+        runner.query.bind(runner) as QueryExecutor,
+        { scope: 'admin', labId: null },
+        { local: true },
+      );
       const result = await execute(runner.manager);
       await runner.commitTransaction();
       return result;
@@ -53,14 +65,63 @@ export class RlsSessionService {
     }
   }
 
-  private async trySetLocalRole(runner: QueryRunner, role: string): Promise<void> {
+  async applyRequestContextWithExecutor(
+    executeQuery: QueryExecutor,
+    context: RequestRlsContext,
+    options: { local?: boolean } = {},
+  ): Promise<boolean> {
+    if (context.scope === 'none') {
+      return false;
+    }
+
+    const useLocal = options.local === true;
+    if (context.scope === 'lab') {
+      if (!context.labId) {
+        return false;
+      }
+      await executeQuery(`SELECT set_config('app.current_lab_id', $1, $2)`, [context.labId, useLocal]);
+      await this.trySetRole(executeQuery, 'app_lab_user', useLocal);
+      return true;
+    }
+
+    await executeQuery(`SELECT set_config('app.current_lab_id', $1, $2)`, ['', useLocal]);
+    await this.trySetRole(executeQuery, 'app_platform_admin', useLocal);
+    return true;
+  }
+
+  async resetRequestContextWithExecutor(executeQuery: QueryExecutor): Promise<void> {
+    try {
+      await executeQuery(`SELECT set_config('app.current_lab_id', $1, false)`, ['']);
+      await executeQuery('RESET ROLE');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (!this.warnedResetFailures.has(message)) {
+        this.logger.warn(`Failed to reset DB request context: ${message}`);
+        this.warnedResetFailures.add(message);
+      }
+    }
+  }
+
+  private markRunnerSkipAutoContext(runner: QueryRunner): void {
+    const mutableRunner = runner as QueryRunner & { data?: Record<string, unknown> };
+    mutableRunner.data = {
+      ...(mutableRunner.data ?? {}),
+      skipAutomaticRlsContext: true,
+    };
+  }
+
+  private async trySetRole(
+    executeQuery: QueryExecutor,
+    role: string,
+    useLocal: boolean,
+  ): Promise<void> {
     const safeRole = role.trim();
     if (!/^[a-z_][a-z0-9_]*$/i.test(safeRole)) {
       this.logger.warn(`Skipped invalid role identifier: ${role}`);
       return;
     }
 
-    const status = await runner.query(
+    const status = await executeQuery(
       `
       SELECT
         EXISTS(SELECT 1 FROM pg_roles WHERE rolname = $1) AS "roleExists",
@@ -71,14 +132,14 @@ export class RlsSessionService {
         END AS "canSetRole"
       `,
       [safeRole],
-    ) as Array<{ roleExists: boolean; canSetRole: boolean }>;
+    ) as Array<{ roleExists: boolean | string; canSetRole: boolean | string }>;
 
-    const roleExists = Boolean(status?.[0]?.roleExists);
-    const canSetRole = Boolean(status?.[0]?.canSetRole);
+    const roleExists = this.toBoolean(status?.[0]?.roleExists);
+    const canSetRole = this.toBoolean(status?.[0]?.canSetRole);
 
     if (!roleExists) {
       if (!this.warnedMissingRoles.has(safeRole)) {
-        this.logger.warn(`Skipped SET LOCAL ROLE ${safeRole}: role does not exist.`);
+        this.logger.warn(`Skipped SET ROLE ${safeRole}: role does not exist.`);
         this.warnedMissingRoles.add(safeRole);
       }
       return;
@@ -86,14 +147,14 @@ export class RlsSessionService {
 
     if (!canSetRole) {
       if (!this.warnedMembershipRoles.has(safeRole)) {
-        this.logger.warn(`Skipped SET LOCAL ROLE ${safeRole}: current DB user is not a member.`);
+        this.logger.warn(`Skipped SET ROLE ${safeRole}: current DB user is not a member.`);
         this.warnedMembershipRoles.add(safeRole);
       }
       return;
     }
 
     if (safeRole === 'app_platform_admin') {
-      const hasPrivilegeRows = await runner.query(
+      const hasPrivilegeRows = await executeQuery(
         `
         SELECT
           CASE
@@ -102,13 +163,13 @@ export class RlsSessionService {
           END AS "hasLabsSelect"
         `,
         [safeRole],
-      ) as Array<{ hasLabsSelect: boolean }>;
+      ) as Array<{ hasLabsSelect: boolean | string }>;
 
-      const hasLabsSelect = Boolean(hasPrivilegeRows?.[0]?.hasLabsSelect);
+      const hasLabsSelect = this.toBoolean(hasPrivilegeRows?.[0]?.hasLabsSelect);
       if (!hasLabsSelect) {
         if (!this.warnedMissingRolePrivileges.has(safeRole)) {
           this.logger.warn(
-            `Skipped SET LOCAL ROLE ${safeRole}: role lacks SELECT privilege on public.labs.`,
+            `Skipped SET ROLE ${safeRole}: role lacks SELECT privilege on public.labs.`,
           );
           this.warnedMissingRolePrivileges.add(safeRole);
         }
@@ -117,7 +178,7 @@ export class RlsSessionService {
     }
 
     try {
-      await runner.query(`SET LOCAL ROLE ${safeRole}`);
+      await executeQuery(`${useLocal ? 'SET LOCAL ROLE' : 'SET ROLE'} ${safeRole}`);
     } catch (error) {
       if (safeRole === 'app_platform_admin') {
         const message = error instanceof Error ? error.message : String(error);
@@ -131,4 +192,17 @@ export class RlsSessionService {
     }
   }
 
+  private toBoolean(value: unknown): boolean {
+    if (typeof value === 'boolean') {
+      return value;
+    }
+    if (typeof value === 'string') {
+      const normalized = value.trim().toLowerCase();
+      return normalized === 'true' || normalized === 't' || normalized === '1';
+    }
+    if (typeof value === 'number') {
+      return value === 1;
+    }
+    return false;
+  }
 }

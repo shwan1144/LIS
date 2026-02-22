@@ -8,9 +8,11 @@ if (!process.env.DB_PASSWORD && !process.env.DATABASE_URL) {
 const core_1 = require("@nestjs/core");
 const common_1 = require("@nestjs/common");
 const express_1 = require("express");
+const helmet_1 = require("helmet");
 const app_module_1 = require("./app.module");
 const seed_1 = require("./seed");
 const typeorm_1 = require("typeorm");
+const security_env_1 = require("./config/security-env");
 const bootstrapLogger = new common_1.Logger('Bootstrap');
 const DEV_CORS_RULES = [
     'http://localhost:*',
@@ -37,7 +39,7 @@ function parseCorsRules() {
         .map((part) => part.trim())
         .filter((part) => part.length > 0)
         .map(normalizeOrigin);
-    if (baseRules.length === 0) {
+    if (baseRules.length === 0 && process.env.NODE_ENV !== 'production') {
         baseRules.push('http://localhost:5173');
     }
     if (process.env.NODE_ENV !== 'production') {
@@ -46,6 +48,18 @@ function parseCorsRules() {
         }
     }
     return Array.from(new Set(baseRules));
+}
+function validateCorsRules(rules) {
+    const isProduction = (process.env.NODE_ENV || '').toLowerCase() === 'production';
+    if (!isProduction) {
+        return;
+    }
+    if (rules.length === 0) {
+        throw new Error('[SECURITY] CORS_ORIGIN must be explicitly configured in production.');
+    }
+    if (rules.includes('*')) {
+        throw new Error('[SECURITY] CORS_ORIGIN cannot include "*" in production when credentials are enabled.');
+    }
 }
 function isOriginAllowed(origin, rules) {
     const normalizedOrigin = normalizeOrigin(origin);
@@ -61,13 +75,7 @@ function isOriginAllowed(origin, rules) {
     });
 }
 function shouldAutoSeedOnBoot() {
-    if (process.env.AUTO_SEED_ON_BOOT === 'true') {
-        return true;
-    }
-    if (process.env.AUTO_SEED_ON_BOOT === 'false') {
-        return false;
-    }
-    return process.env.NODE_ENV === 'production';
+    return process.env.AUTO_SEED_ON_BOOT === 'true';
 }
 async function ensureReportBrandingColumns(dataSource) {
     const sqlStatements = [
@@ -237,7 +245,27 @@ async function ensureTenantRolePrivileges(dataSource) {
     }
 }
 async function bootstrap() {
+    (0, security_env_1.assertRequiredProductionEnv)(['JWT_SECRET', 'PLATFORM_JWT_SECRET'], 'bootstrap');
     const app = await core_1.NestFactory.create(app_module_1.AppModule);
+    const trustProxyHops = Number.parseInt(process.env.TRUST_PROXY_HOPS || '1', 10);
+    const expressApp = app.getHttpAdapter().getInstance();
+    expressApp.set('trust proxy', Number.isFinite(trustProxyHops) && trustProxyHops > 0 ? trustProxyHops : 1);
+    bootstrapLogger.log(`trust proxy configured to ${String(expressApp.get('trust proxy'))}`);
+    app.use((0, helmet_1.default)({
+        contentSecurityPolicy: {
+            useDefaults: true,
+            directives: {
+                defaultSrc: ["'self'"],
+                scriptSrc: ["'self'"],
+                styleSrc: ["'self'", "'unsafe-inline'"],
+                imgSrc: ["'self'", 'data:'],
+                objectSrc: ["'none'"],
+                frameAncestors: ["'none'"],
+                baseUri: ["'self'"],
+            },
+        },
+        crossOriginEmbedderPolicy: false,
+    }));
     app.use((0, express_1.json)({ limit: '10mb' }));
     app.use((0, express_1.urlencoded)({ extended: true, limit: '10mb' }));
     const dataSource = app.get(typeorm_1.DataSource);
@@ -258,6 +286,7 @@ async function bootstrap() {
     }
     app.useGlobalPipes(new common_1.ValidationPipe({ whitelist: true, forbidNonWhitelisted: true }));
     const corsRules = parseCorsRules();
+    validateCorsRules(corsRules);
     bootstrapLogger.log(`CORS rules: ${corsRules.join(', ')}`);
     app.enableCors({
         origin: (origin, callback) => {

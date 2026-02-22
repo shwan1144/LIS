@@ -26,6 +26,7 @@ const test_entity_1 = require("../entities/test.entity");
 const pricing_entity_1 = require("../entities/pricing.entity");
 const test_component_entity_1 = require("../entities/test-component.entity");
 const lab_orders_worklist_entity_1 = require("../entities/lab-orders-worklist.entity");
+const lab_counter_util_1 = require("../database/lab-counter.util");
 let OrdersService = class OrdersService {
     constructor(orderRepo, patientRepo, labRepo, shiftRepo, testRepo, pricingRepo, testComponentRepo, worklistRepo) {
         this.orderRepo = orderRepo;
@@ -588,7 +589,19 @@ let OrdersService = class OrdersService {
         return this.computeNextOrderNumber(labId, shiftId);
     }
     async generateOrderNumber(labId, shiftId) {
-        return this.computeNextOrderNumber(labId, shiftId);
+        const today = new Date();
+        const yy = String(today.getFullYear() % 100).padStart(2, '0');
+        const mm = String(today.getMonth() + 1).padStart(2, '0');
+        const dd = String(today.getDate()).padStart(2, '0');
+        const dateStr = `${yy}${mm}${dd}`;
+        const nextSeq = await (0, lab_counter_util_1.nextLabCounterValue)(this.orderRepo.manager, {
+            labId,
+            counterType: 'ORDER_NUMBER',
+            scopeKey: 'ORDER',
+            date: today,
+            shiftId,
+        });
+        return `${dateStr}${String(nextSeq).padStart(3, '0')}`;
     }
     async computeNextOrderNumber(labId, shiftId) {
         const today = new Date();
@@ -596,91 +609,24 @@ let OrdersService = class OrdersService {
         const mm = String(today.getMonth() + 1).padStart(2, '0');
         const dd = String(today.getDate()).padStart(2, '0');
         const dateStr = `${yy}${mm}${dd}`;
-        const startOfDay = new Date(today);
-        startOfDay.setHours(0, 0, 0, 0);
-        const endOfDay = new Date(today);
-        endOfDay.setHours(23, 59, 59, 999);
-        const qb = this.orderRepo.manager
-            .createQueryBuilder()
-            .select('COUNT(sample.id)', 'count')
-            .from(sample_entity_1.Sample, 'sample')
-            .innerJoin('sample.order', 'order')
-            .where('order.labId = :labId', { labId })
-            .andWhere('order.registeredAt BETWEEN :startOfDay AND :endOfDay', {
-            startOfDay,
-            endOfDay,
+        const nextSeq = await (0, lab_counter_util_1.peekNextLabCounterValue)(this.orderRepo.manager, {
+            labId,
+            counterType: 'ORDER_NUMBER',
+            scopeKey: 'ORDER',
+            date: today,
+            shiftId,
         });
-        if (shiftId == null) {
-            qb.andWhere('order.shiftId IS NULL');
-        }
-        else {
-            qb.andWhere('order.shiftId = :shiftId', { shiftId });
-        }
-        const result = await qb.getRawOne();
-        const count = Number(result?.count ?? 0) | 0;
-        const sequence = String(count + 1).padStart(3, '0');
-        return `${dateStr}${sequence}`;
+        return `${dateStr}${String(nextSeq).padStart(3, '0')}`;
     }
     async getNextSequenceForScope(labId, sequenceResetBy, shiftId, scopeKey, labelSequenceBy) {
-        const today = new Date();
-        const startOfDay = new Date(today);
-        startOfDay.setHours(0, 0, 0, 0);
-        const endOfDay = new Date(today);
-        endOfDay.setHours(23, 59, 59, 999);
-        const applyShiftFilter = (qb) => {
-            if (sequenceResetBy !== 'shift')
-                return;
-            if (shiftId == null) {
-                qb.andWhere('order.shiftId IS NULL');
-            }
-            else {
-                qb.andWhere('order.shiftId = :shiftId', { shiftId });
-            }
-        };
-        if (labelSequenceBy === 'tube_type') {
-            const qb = this.orderRepo.manager
-                .createQueryBuilder()
-                .select('COUNT(sample.id)', 'count')
-                .from(sample_entity_1.Sample, 'sample')
-                .innerJoin('sample.order', 'order')
-                .where('order.labId = :labId', { labId })
-                .andWhere('order.registeredAt BETWEEN :startOfDay AND :endOfDay', {
-                startOfDay,
-                endOfDay,
-            });
-            applyShiftFilter(qb);
-            if (scopeKey == null) {
-                qb.andWhere('sample.tubeType IS NULL');
-            }
-            else {
-                qb.andWhere('sample.tubeType = :scopeKey', { scopeKey });
-            }
-            const result = await qb.getRawOne();
-            const count = Number(result?.count ?? 0) | 0;
-            return count + 1;
-        }
-        const qb = this.orderRepo.manager
-            .createQueryBuilder()
-            .select('COUNT(DISTINCT sample.id)', 'count')
-            .from(sample_entity_1.Sample, 'sample')
-            .innerJoin('sample.order', 'order')
-            .innerJoin('sample.orderTests', 'ot')
-            .innerJoin('ot.test', 'test')
-            .where('order.labId = :labId', { labId })
-            .andWhere('order.registeredAt BETWEEN :startOfDay AND :endOfDay', {
-            startOfDay,
-            endOfDay,
+        const counterType = labelSequenceBy === 'department' ? 'SAMPLE_SEQUENCE_DEPARTMENT' : 'SAMPLE_SEQUENCE_TUBE';
+        const scopedShiftId = sequenceResetBy === 'shift' ? shiftId ?? null : null;
+        return (0, lab_counter_util_1.nextLabCounterValue)(this.orderRepo.manager, {
+            labId,
+            counterType,
+            scopeKey: scopeKey ?? '__none__',
+            shiftId: scopedShiftId,
         });
-        applyShiftFilter(qb);
-        if (scopeKey == null) {
-            qb.andWhere('test.departmentId IS NULL');
-        }
-        else {
-            qb.andWhere('test.departmentId = :scopeKey', { scopeKey });
-        }
-        const result = await qb.getRawOne();
-        const count = Number(result?.count ?? 0) | 0;
-        return count + 1;
     }
     async estimatePrice(labId, testIds, shiftId = null) {
         if (!testIds?.length)

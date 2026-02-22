@@ -25,6 +25,7 @@ let LabResolverMiddleware = class LabResolverMiddleware {
     async use(req, _res, next) {
         const host = this.normalizeHost(this.extractHost(req));
         const originHost = this.normalizeHost(this.extractOriginHost(req));
+        const strictHostMode = this.isStrictTenantHostEnabled();
         req.tenantHost = host;
         req.hostScope = host_scope_enum_1.HostScope.UNKNOWN;
         req.tenantSubdomain = null;
@@ -44,11 +45,18 @@ let LabResolverMiddleware = class LabResolverMiddleware {
                 next();
                 return;
             }
-            const originSubdomain = this.extractLabSubdomain(originHost);
-            if (originSubdomain) {
-                subdomain = originSubdomain;
-                req.tenantHost = originHost;
+            if (strictHostMode) {
+                throw new common_1.ForbiddenException('Ambiguous tenant host for API requests');
             }
+            next();
+            return;
+        }
+        if (subdomain === 'api') {
+            if (strictHostMode) {
+                throw new common_1.ForbiddenException('Ambiguous tenant host for API requests');
+            }
+            next();
+            return;
         }
         if (!subdomain) {
             next();
@@ -70,12 +78,32 @@ let LabResolverMiddleware = class LabResolverMiddleware {
         next();
     }
     extractHost(req) {
-        const forwardedHost = req.headers['x-forwarded-host'];
-        if (typeof forwardedHost === 'string' && forwardedHost.trim()) {
-            return forwardedHost.trim().split(',')[0]?.trim() ?? req.hostname;
+        if (!this.isTrustProxyEnabled(req)) {
+            return req.hostname || '';
         }
-        if (Array.isArray(forwardedHost) && forwardedHost.length > 0) {
-            return forwardedHost[0] ?? req.hostname;
+        const strictHostMode = this.isStrictTenantHostEnabled();
+        const forwardedHost = req.headers['x-forwarded-host'];
+        let rawForwardedHost = '';
+        if (typeof forwardedHost === 'string') {
+            rawForwardedHost = forwardedHost.trim();
+        }
+        else if (Array.isArray(forwardedHost) && forwardedHost.length > 0) {
+            rawForwardedHost = String(forwardedHost[0] ?? '').trim();
+        }
+        if (rawForwardedHost) {
+            const forwardedHosts = rawForwardedHost
+                .split(',')
+                .map((part) => part.trim())
+                .filter((part) => part.length > 0);
+            if (forwardedHosts.length > 0) {
+                if (strictHostMode) {
+                    const distinctHosts = Array.from(new Set(forwardedHosts.map((item) => item.toLowerCase())));
+                    if (distinctHosts.length > 1) {
+                        throw new common_1.ForbiddenException('Ambiguous forwarded host chain');
+                    }
+                }
+                return forwardedHosts[0] ?? req.hostname;
+            }
         }
         return req.hostname || '';
     }
@@ -102,6 +130,22 @@ let LabResolverMiddleware = class LabResolverMiddleware {
             }
         }
         return '';
+    }
+    isTrustProxyEnabled(req) {
+        const value = req.app?.get?.('trust proxy');
+        if (value === true)
+            return true;
+        if (typeof value === 'number')
+            return value > 0;
+        if (typeof value === 'string') {
+            return value.trim().length > 0 && value !== 'false' && value !== '0';
+        }
+        if (Array.isArray(value))
+            return value.length > 0;
+        return false;
+    }
+    isStrictTenantHostEnabled() {
+        return (process.env.STRICT_TENANT_HOST || '').trim().toLowerCase() === 'true';
     }
     getAdminHost() {
         const explicit = (process.env.APP_ADMIN_HOST || '').trim().toLowerCase();
