@@ -16,7 +16,8 @@
     "test:e2e": "jest --config ./test/jest-e2e.json --runInBand",
     "seed": "ts-node -r tsconfig-paths/register src/seed.ts",
     "migrate:fix-patient-number": "ts-node -r tsconfig-paths/register scripts/fix-patient-number.ts",
-    "migrate:sql": "node scripts/run-sql-migrations.js"
+    "migrate:sql": "node scripts/run-sql-migrations.js",
+    "fix:tenant-grants": "node scripts/fix-tenant-grants.js"
   },
   "dependencies": {
     "@nestjs/common": "^11.0.1",
