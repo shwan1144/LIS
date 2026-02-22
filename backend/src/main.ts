@@ -248,6 +248,14 @@ async function ensureTenantRolePrivileges(dataSource: DataSource): Promise<void>
     `
       DO $$
       BEGIN
+        IF to_regclass('public.patients') IS NOT NULL THEN
+          GRANT SELECT, INSERT, UPDATE ON TABLE "patients" TO app_lab_user;
+        END IF;
+      END $$;
+    `,
+    `
+      DO $$
+      BEGIN
         IF to_regclass('public.audit_logs') IS NOT NULL THEN
           GRANT SELECT, INSERT ON TABLE "audit_logs" TO app_lab_user;
           ALTER TABLE "audit_logs" ENABLE ROW LEVEL SECURITY;
