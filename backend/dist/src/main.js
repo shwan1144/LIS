@@ -272,7 +272,9 @@ async function ensureTenantRolePrivileges(dataSource) {
           'lab_orders_worklist',
           'instrument_test_mappings',
           'instrument_messages',
-          'user_lab_assignments'
+          'user_lab_assignments',
+          'order_test_result_history',
+          'unmatched_instrument_results'
         ]
         LOOP
           IF to_regclass(format('public.%I', table_name)) IS NOT NULL THEN
@@ -311,6 +313,56 @@ async function ensureTenantRolePrivileges(dataSource) {
             FOR ALL TO app_lab_user
             USING ("labId" = app.current_lab_id())
             WITH CHECK ("labId" = app.current_lab_id());
+        END IF;
+
+        IF to_regclass('public.order_test_result_history') IS NOT NULL
+           AND to_regclass('public.order_tests') IS NOT NULL THEN
+          ALTER TABLE "order_test_result_history" ENABLE ROW LEVEL SECURITY;
+          ALTER TABLE "order_test_result_history" FORCE ROW LEVEL SECURITY;
+          DROP POLICY IF EXISTS "order_test_result_history_tenant_isolation" ON "order_test_result_history";
+          CREATE POLICY "order_test_result_history_tenant_isolation" ON "order_test_result_history"
+            FOR ALL TO app_lab_user
+            USING (
+              EXISTS (
+                SELECT 1
+                FROM "order_tests" ot
+                WHERE ot.id = "order_test_result_history"."orderTestId"
+                  AND ot."labId" = app.current_lab_id()
+              )
+            )
+            WITH CHECK (
+              EXISTS (
+                SELECT 1
+                FROM "order_tests" ot
+                WHERE ot.id = "order_test_result_history"."orderTestId"
+                  AND ot."labId" = app.current_lab_id()
+              )
+            );
+        END IF;
+
+        IF to_regclass('public.unmatched_instrument_results') IS NOT NULL
+           AND to_regclass('public.instruments') IS NOT NULL THEN
+          ALTER TABLE "unmatched_instrument_results" ENABLE ROW LEVEL SECURITY;
+          ALTER TABLE "unmatched_instrument_results" FORCE ROW LEVEL SECURITY;
+          DROP POLICY IF EXISTS "unmatched_instrument_results_tenant_isolation" ON "unmatched_instrument_results";
+          CREATE POLICY "unmatched_instrument_results_tenant_isolation" ON "unmatched_instrument_results"
+            FOR ALL TO app_lab_user
+            USING (
+              EXISTS (
+                SELECT 1
+                FROM "instruments" i
+                WHERE i.id = "unmatched_instrument_results"."instrumentId"
+                  AND i."labId" = app.current_lab_id()
+              )
+            )
+            WITH CHECK (
+              EXISTS (
+                SELECT 1
+                FROM "instruments" i
+                WHERE i.id = "unmatched_instrument_results"."instrumentId"
+                  AND i."labId" = app.current_lab_id()
+              )
+            );
         END IF;
       END $$;
     `,
