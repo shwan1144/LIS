@@ -157,12 +157,30 @@ describe('LabResolverMiddleware', () => {
     expect(repo.findOne).not.toHaveBeenCalled();
   });
 
-  it('rejects ambiguous api host in strict mode', async () => {
-    process.env.STRICT_TENANT_HOST = 'true';
+  it('resolves lab scope from api host when origin host points to a lab', async () => {
     const req = buildRequest('api.yourlis.local', {
       origin: 'https://lab1.yourlis.local',
       trustProxy: 1,
     });
+    const next = jest.fn();
+    (repo.findOne as jest.Mock).mockResolvedValue({
+      id: 'lab-id-1',
+      subdomain: 'lab1',
+      code: 'LAB1',
+      isActive: true,
+    } as Lab);
+
+    await middleware.use(req, {} as Response, next);
+
+    expect(req.hostScope).toBe(HostScope.LAB);
+    expect(req.tenantSubdomain).toBe('lab1');
+    expect(req.labId).toBe('lab-id-1');
+    expect(next).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects ambiguous api host in strict mode when origin is missing', async () => {
+    process.env.STRICT_TENANT_HOST = 'true';
+    const req = buildRequest('api.yourlis.local', { trustProxy: 1 });
     const next = jest.fn();
 
     await expect(middleware.use(req, {} as Response, next)).rejects.toBeInstanceOf(ForbiddenException);

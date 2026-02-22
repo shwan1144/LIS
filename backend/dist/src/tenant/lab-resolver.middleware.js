@@ -38,25 +38,25 @@ let LabResolverMiddleware = class LabResolverMiddleware {
             return;
         }
         let subdomain = this.extractLabSubdomain(host);
-        if (subdomain === 'api' && originHost) {
+        if (subdomain === 'api') {
+            const originSubdomain = this.extractLabSubdomain(originHost);
             if (originHost === adminHost) {
                 req.hostScope = host_scope_enum_1.HostScope.ADMIN;
                 req.tenantHost = originHost;
                 next();
                 return;
             }
-            if (strictHostMode) {
-                throw new common_1.ForbiddenException('Ambiguous tenant host for API requests');
+            if (originSubdomain) {
+                subdomain = originSubdomain;
+                req.tenantHost = originHost;
             }
-            next();
-            return;
-        }
-        if (subdomain === 'api') {
-            if (strictHostMode) {
-                throw new common_1.ForbiddenException('Ambiguous tenant host for API requests');
+            else {
+                if (strictHostMode) {
+                    throw new common_1.ForbiddenException('Ambiguous tenant host for API requests');
+                }
+                next();
+                return;
             }
-            next();
-            return;
         }
         if (!subdomain) {
             next();

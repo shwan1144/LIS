@@ -35,26 +35,26 @@ export class LabResolverMiddleware implements NestMiddleware {
     }
 
     let subdomain = this.extractLabSubdomain(host);
-    if (subdomain === 'api' && originHost) {
+    if (subdomain === 'api') {
+      const originSubdomain = this.extractLabSubdomain(originHost);
+
       if (originHost === adminHost) {
         req.hostScope = HostScope.ADMIN;
         req.tenantHost = originHost;
         next();
         return;
       }
-      if (strictHostMode) {
-        throw new ForbiddenException('Ambiguous tenant host for API requests');
-      }
-      next();
-      return;
-    }
 
-    if (subdomain === 'api') {
-      if (strictHostMode) {
-        throw new ForbiddenException('Ambiguous tenant host for API requests');
+      if (originSubdomain) {
+        subdomain = originSubdomain;
+        req.tenantHost = originHost;
+      } else {
+        if (strictHostMode) {
+          throw new ForbiddenException('Ambiguous tenant host for API requests');
+        }
+        next();
+        return;
       }
-      next();
-      return;
     }
 
     if (!subdomain) {
