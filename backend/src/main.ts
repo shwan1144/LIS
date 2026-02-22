@@ -289,6 +289,8 @@ async function ensureTenantRolePrivileges(dataSource: DataSource): Promise<void>
           'instrument_test_mappings',
           'instrument_messages',
           'user_lab_assignments',
+          'user_department_assignments',
+          'user_shift_assignments',
           'order_test_result_history',
           'unmatched_instrument_results'
         ]
@@ -352,6 +354,56 @@ async function ensureTenantRolePrivileges(dataSource: DataSource): Promise<void>
                 FROM "order_tests" ot
                 WHERE ot.id = "order_test_result_history"."orderTestId"
                   AND ot."labId" = app.current_lab_id()
+              )
+            );
+        END IF;
+
+        IF to_regclass('public.user_department_assignments') IS NOT NULL
+           AND to_regclass('public.departments') IS NOT NULL THEN
+          ALTER TABLE "user_department_assignments" ENABLE ROW LEVEL SECURITY;
+          ALTER TABLE "user_department_assignments" FORCE ROW LEVEL SECURITY;
+          DROP POLICY IF EXISTS "user_department_assignments_tenant_isolation" ON "user_department_assignments";
+          CREATE POLICY "user_department_assignments_tenant_isolation" ON "user_department_assignments"
+            FOR ALL TO app_lab_user
+            USING (
+              EXISTS (
+                SELECT 1
+                FROM "departments" d
+                WHERE d.id = "user_department_assignments"."departmentId"
+                  AND d."labId" = app.current_lab_id()
+              )
+            )
+            WITH CHECK (
+              EXISTS (
+                SELECT 1
+                FROM "departments" d
+                WHERE d.id = "user_department_assignments"."departmentId"
+                  AND d."labId" = app.current_lab_id()
+              )
+            );
+        END IF;
+
+        IF to_regclass('public.user_shift_assignments') IS NOT NULL
+           AND to_regclass('public.shifts') IS NOT NULL THEN
+          ALTER TABLE "user_shift_assignments" ENABLE ROW LEVEL SECURITY;
+          ALTER TABLE "user_shift_assignments" FORCE ROW LEVEL SECURITY;
+          DROP POLICY IF EXISTS "user_shift_assignments_tenant_isolation" ON "user_shift_assignments";
+          CREATE POLICY "user_shift_assignments_tenant_isolation" ON "user_shift_assignments"
+            FOR ALL TO app_lab_user
+            USING (
+              EXISTS (
+                SELECT 1
+                FROM "shifts" s
+                WHERE s.id = "user_shift_assignments"."shiftId"
+                  AND s."labId" = app.current_lab_id()
+              )
+            )
+            WITH CHECK (
+              EXISTS (
+                SELECT 1
+                FROM "shifts" s
+                WHERE s.id = "user_shift_assignments"."shiftId"
+                  AND s."labId" = app.current_lab_id()
               )
             );
         END IF;
