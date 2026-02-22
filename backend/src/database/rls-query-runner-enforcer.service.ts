@@ -2,6 +2,7 @@ import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { DataSource, QueryRunner } from 'typeorm';
 import { RequestRlsContextService } from './request-rls-context.service';
 import { RlsSessionService } from './rls-session.service';
+import { isRlsStrictModeEnabled } from '../config/security-env';
 
 type RawQueryExecutor = (
   query: string,
@@ -11,6 +12,7 @@ type RawQueryExecutor = (
 @Injectable()
 export class RlsQueryRunnerEnforcerService implements OnModuleInit {
   private readonly logger = new Logger(RlsQueryRunnerEnforcerService.name);
+  private readonly strictRlsMode = isRlsStrictModeEnabled();
   private readonly patchedRunners = new WeakSet<QueryRunner>();
   private dataSourcePatched = false;
 
@@ -103,7 +105,11 @@ export class RlsQueryRunnerEnforcerService implements OnModuleInit {
       return false;
     }
     if (context.scope === 'lab' && !context.labId) {
-      this.logger.warn('Skipped automatic lab RLS context: lab scope is missing labId.');
+      const message = 'Skipped automatic lab RLS context: lab scope is missing labId.';
+      if (this.strictRlsMode) {
+        throw new Error(`[SECURITY][RLS] ${message}`);
+      }
+      this.logger.warn(message);
       return false;
     }
 

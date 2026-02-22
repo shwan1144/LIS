@@ -77,6 +77,17 @@ function isOriginAllowed(origin, rules) {
 function shouldAutoSeedOnBoot() {
     return process.env.AUTO_SEED_ON_BOOT === 'true';
 }
+function toBoolean(value) {
+    if (typeof value === 'boolean')
+        return value;
+    if (typeof value === 'string') {
+        const normalized = value.trim().toLowerCase();
+        return normalized === 'true' || normalized === 't' || normalized === '1';
+    }
+    if (typeof value === 'number')
+        return value === 1;
+    return false;
+}
 async function ensureReportBrandingColumns(dataSource) {
     const sqlStatements = [
         'ALTER TABLE IF EXISTS "labs" ADD COLUMN IF NOT EXISTS "reportBannerDataUrl" text',
@@ -244,9 +255,48 @@ async function ensureTenantRolePrivileges(dataSource) {
         await dataSource.query(sql);
     }
 }
+async function assertTenantRoleReadiness(dataSource) {
+    const rows = await dataSource.query(`
+      SELECT
+        EXISTS(SELECT 1 FROM pg_roles WHERE rolname = 'app_lab_user') AS "labRoleExists",
+        EXISTS(SELECT 1 FROM pg_roles WHERE rolname = 'app_platform_admin') AS "platformRoleExists",
+        pg_has_role(current_user, 'app_lab_user', 'MEMBER') AS "canSetLabRole",
+        pg_has_role(current_user, 'app_platform_admin', 'MEMBER') AS "canSetPlatformRole",
+        to_regprocedure('app.current_lab_id()') IS NOT NULL AS "hasCurrentLabFunction",
+        CASE
+          WHEN to_regclass('public.labs') IS NULL THEN true
+          ELSE has_table_privilege('app_platform_admin', 'public.labs', 'SELECT')
+        END AS "platformHasLabsSelect"
+    `);
+    const row = rows[0] ?? {};
+    const failures = [];
+    if (!toBoolean(row.labRoleExists)) {
+        failures.push('role app_lab_user does not exist');
+    }
+    if (!toBoolean(row.platformRoleExists)) {
+        failures.push('role app_platform_admin does not exist');
+    }
+    if (!toBoolean(row.canSetLabRole)) {
+        failures.push('current DB user is not a member of app_lab_user');
+    }
+    if (!toBoolean(row.canSetPlatformRole)) {
+        failures.push('current DB user is not a member of app_platform_admin');
+    }
+    if (!toBoolean(row.hasCurrentLabFunction)) {
+        failures.push('function app.current_lab_id() is missing');
+    }
+    if (!toBoolean(row.platformHasLabsSelect)) {
+        failures.push('app_platform_admin lacks SELECT on public.labs');
+    }
+    if (failures.length > 0) {
+        throw new Error(`[SECURITY][RLS] Strict startup check failed: ${failures.join('; ')}.`);
+    }
+}
 async function bootstrap() {
     (0, security_env_1.assertRequiredProductionEnv)(['JWT_SECRET', 'PLATFORM_JWT_SECRET'], 'bootstrap');
     const app = await core_1.NestFactory.create(app_module_1.AppModule);
+    const strictRlsMode = (0, security_env_1.isRlsStrictModeEnabled)();
+    bootstrapLogger.log(`RLS strict mode: ${strictRlsMode ? 'enabled' : 'disabled'}`);
     const trustProxyHops = Number.parseInt(process.env.TRUST_PROXY_HOPS || '1', 10);
     const expressApp = app.getHttpAdapter().getInstance();
     expressApp.set('trust proxy', Number.isFinite(trustProxyHops) && trustProxyHops > 0 ? trustProxyHops : 1);
@@ -280,6 +330,9 @@ async function bootstrap() {
     }
     catch (error) {
         bootstrapLogger.warn(`Failed to auto-ensure tenant role privileges: ${error instanceof Error ? error.message : String(error)}`);
+    }
+    if (strictRlsMode) {
+        await assertTenantRoleReadiness(dataSource);
     }
     if (shouldAutoSeedOnBoot()) {
         await (0, seed_1.runSeed)({ synchronizeSchema: false });

@@ -13,10 +13,12 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.RlsSessionService = void 0;
 const common_1 = require("@nestjs/common");
 const typeorm_1 = require("typeorm");
+const security_env_1 = require("../config/security-env");
 let RlsSessionService = RlsSessionService_1 = class RlsSessionService {
     constructor(dataSource) {
         this.dataSource = dataSource;
         this.logger = new common_1.Logger(RlsSessionService_1.name);
+        this.strictRlsMode = (0, security_env_1.isRlsStrictModeEnabled)();
         this.warnedMissingRoles = new Set();
         this.warnedMembershipRoles = new Set();
         this.warnedMissingRolePrivileges = new Set();
@@ -67,6 +69,9 @@ let RlsSessionService = RlsSessionService_1 = class RlsSessionService {
         const useLocal = options.local === true;
         if (context.scope === 'lab') {
             if (!context.labId) {
+                if (this.strictRlsMode) {
+                    throw new Error('[SECURITY][RLS] Missing labId for lab-scoped DB context.');
+                }
                 return false;
             }
             await executeQuery(`SELECT set_config('app.current_lab_id', $1, $2)`, [context.labId, useLocal]);
@@ -84,9 +89,13 @@ let RlsSessionService = RlsSessionService_1 = class RlsSessionService {
         }
         catch (error) {
             const message = error instanceof Error ? error.message : String(error);
-            if (!this.warnedResetFailures.has(message)) {
-                this.logger.warn(`Failed to reset DB request context: ${message}`);
-                this.warnedResetFailures.add(message);
+            const failureMessage = `Failed to reset DB request context: ${message}`;
+            if (this.strictRlsMode) {
+                throw new Error(`[SECURITY][RLS] ${failureMessage}`);
+            }
+            if (!this.warnedResetFailures.has(failureMessage)) {
+                this.logger.warn(failureMessage);
+                this.warnedResetFailures.add(failureMessage);
             }
         }
     }
@@ -100,7 +109,7 @@ let RlsSessionService = RlsSessionService_1 = class RlsSessionService {
     async trySetRole(executeQuery, role, useLocal) {
         const safeRole = role.trim();
         if (!/^[a-z_][a-z0-9_]*$/i.test(safeRole)) {
-            this.logger.warn(`Skipped invalid role identifier: ${role}`);
+            this.failOrWarn(`Invalid role identifier for RLS context: ${role}`, this.warnedMissingRoles);
             return;
         }
         const status = await executeQuery(`
@@ -115,17 +124,11 @@ let RlsSessionService = RlsSessionService_1 = class RlsSessionService {
         const roleExists = this.toBoolean(status?.[0]?.roleExists);
         const canSetRole = this.toBoolean(status?.[0]?.canSetRole);
         if (!roleExists) {
-            if (!this.warnedMissingRoles.has(safeRole)) {
-                this.logger.warn(`Skipped SET ROLE ${safeRole}: role does not exist.`);
-                this.warnedMissingRoles.add(safeRole);
-            }
+            this.failOrWarn(`Skipped SET ROLE ${safeRole}: role does not exist.`, this.warnedMissingRoles);
             return;
         }
         if (!canSetRole) {
-            if (!this.warnedMembershipRoles.has(safeRole)) {
-                this.logger.warn(`Skipped SET ROLE ${safeRole}: current DB user is not a member.`);
-                this.warnedMembershipRoles.add(safeRole);
-            }
+            this.failOrWarn(`Skipped SET ROLE ${safeRole}: current DB user is not a member.`, this.warnedMembershipRoles);
             return;
         }
         if (safeRole === 'app_platform_admin') {
@@ -138,10 +141,7 @@ let RlsSessionService = RlsSessionService_1 = class RlsSessionService {
         `, [safeRole]);
             const hasLabsSelect = this.toBoolean(hasPrivilegeRows?.[0]?.hasLabsSelect);
             if (!hasLabsSelect) {
-                if (!this.warnedMissingRolePrivileges.has(safeRole)) {
-                    this.logger.warn(`Skipped SET ROLE ${safeRole}: role lacks SELECT privilege on public.labs.`);
-                    this.warnedMissingRolePrivileges.add(safeRole);
-                }
+                this.failOrWarn(`Skipped SET ROLE ${safeRole}: role lacks SELECT privilege on public.labs.`, this.warnedMissingRolePrivileges);
                 return;
             }
         }
@@ -151,13 +151,20 @@ let RlsSessionService = RlsSessionService_1 = class RlsSessionService {
         catch (error) {
             if (safeRole === 'app_platform_admin') {
                 const message = error instanceof Error ? error.message : String(error);
-                if (!this.warnedMissingRolePrivileges.has(`${safeRole}:set-role`)) {
-                    this.logger.warn(`Skipped SET LOCAL ROLE ${safeRole}: ${message}`);
-                    this.warnedMissingRolePrivileges.add(`${safeRole}:set-role`);
-                }
+                this.failOrWarn(`Skipped SET ROLE ${safeRole}: ${message}`, this.warnedMissingRolePrivileges, `${safeRole}:set-role:${message}`);
                 return;
             }
             throw error;
+        }
+    }
+    failOrWarn(message, warnedSet, keyOverride) {
+        if (this.strictRlsMode) {
+            throw new Error(`[SECURITY][RLS] ${message}`);
+        }
+        const key = keyOverride ?? message;
+        if (!warnedSet.has(key)) {
+            this.logger.warn(message);
+            warnedSet.add(key);
         }
     }
     toBoolean(value) {

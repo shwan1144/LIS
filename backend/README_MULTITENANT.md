@@ -112,6 +112,9 @@ Migration includes:
   - `helmet` security headers + CSP are enabled.
   - Global throttling is enabled (`API_RATE_LIMIT`, `API_RATE_WINDOW_SECONDS`).
   - In production, CORS must be explicit (`CORS_ORIGIN`) and cannot include `*` when credentials are enabled.
+- Strict RLS safety mode:
+  - `RLS_STRICT_MODE` defaults to `true` in production.
+  - When enabled, missing tenant DB roles/context (`app_lab_user`, `app_platform_admin`, `app.current_lab_id()`) causes startup/request failure instead of warning fallback.
 
 ## Tests
 
@@ -148,6 +151,7 @@ Set env:
    - `JWT_SECRET=<strong-random-secret>`
    - `PLATFORM_JWT_SECRET=<strong-random-secret>`
    - `CORS_ORIGIN=https://admin.yourdomain.com,https://lab01.yourdomain.com` (explicit list only)
+   - Optional override: `RLS_STRICT_MODE=true` (recommended; default true in production)
 2. Keep schema safety on:
    - `DB_SYNC=false` (production ignores sync even if set true)
    - `AUTO_SEED_ON_BOOT=false` (default)

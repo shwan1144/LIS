@@ -7,6 +7,7 @@ export declare class RlsQueryRunnerEnforcerService implements OnModuleInit {
     private readonly requestRlsContextService;
     private readonly rlsSessionService;
     private readonly logger;
+    private readonly strictRlsMode;
     private readonly patchedRunners;
     private dataSourcePatched;
     constructor(dataSource: DataSource, requestRlsContextService: RequestRlsContextService, rlsSessionService: RlsSessionService);

@@ -1,12 +1,14 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { DataSource, EntityManager, QueryRunner } from 'typeorm';
 import { RequestRlsContext } from './request-rls-context.types';
+import { isRlsStrictModeEnabled } from '../config/security-env';
 
 type QueryExecutor = (query: string, parameters?: unknown[]) => Promise<unknown>;
 
 @Injectable()
 export class RlsSessionService {
   private readonly logger = new Logger(RlsSessionService.name);
+  private readonly strictRlsMode = isRlsStrictModeEnabled();
   private readonly warnedMissingRoles = new Set<string>();
   private readonly warnedMembershipRoles = new Set<string>();
   private readonly warnedMissingRolePrivileges = new Set<string>();
@@ -77,6 +79,9 @@ export class RlsSessionService {
     const useLocal = options.local === true;
     if (context.scope === 'lab') {
       if (!context.labId) {
+        if (this.strictRlsMode) {
+          throw new Error('[SECURITY][RLS] Missing labId for lab-scoped DB context.');
+        }
         return false;
       }
       await executeQuery(`SELECT set_config('app.current_lab_id', $1, $2)`, [context.labId, useLocal]);
@@ -95,9 +100,13 @@ export class RlsSessionService {
       await executeQuery('RESET ROLE');
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      if (!this.warnedResetFailures.has(message)) {
-        this.logger.warn(`Failed to reset DB request context: ${message}`);
-        this.warnedResetFailures.add(message);
+      const failureMessage = `Failed to reset DB request context: ${message}`;
+      if (this.strictRlsMode) {
+        throw new Error(`[SECURITY][RLS] ${failureMessage}`);
+      }
+      if (!this.warnedResetFailures.has(failureMessage)) {
+        this.logger.warn(failureMessage);
+        this.warnedResetFailures.add(failureMessage);
       }
     }
   }
@@ -117,7 +126,10 @@ export class RlsSessionService {
   ): Promise<void> {
     const safeRole = role.trim();
     if (!/^[a-z_][a-z0-9_]*$/i.test(safeRole)) {
-      this.logger.warn(`Skipped invalid role identifier: ${role}`);
+      this.failOrWarn(
+        `Invalid role identifier for RLS context: ${role}`,
+        this.warnedMissingRoles,
+      );
       return;
     }
 
@@ -138,18 +150,18 @@ export class RlsSessionService {
     const canSetRole = this.toBoolean(status?.[0]?.canSetRole);
 
     if (!roleExists) {
-      if (!this.warnedMissingRoles.has(safeRole)) {
-        this.logger.warn(`Skipped SET ROLE ${safeRole}: role does not exist.`);
-        this.warnedMissingRoles.add(safeRole);
-      }
+      this.failOrWarn(
+        `Skipped SET ROLE ${safeRole}: role does not exist.`,
+        this.warnedMissingRoles,
+      );
       return;
     }
 
     if (!canSetRole) {
-      if (!this.warnedMembershipRoles.has(safeRole)) {
-        this.logger.warn(`Skipped SET ROLE ${safeRole}: current DB user is not a member.`);
-        this.warnedMembershipRoles.add(safeRole);
-      }
+      this.failOrWarn(
+        `Skipped SET ROLE ${safeRole}: current DB user is not a member.`,
+        this.warnedMembershipRoles,
+      );
       return;
     }
 
@@ -167,12 +179,10 @@ export class RlsSessionService {
 
       const hasLabsSelect = this.toBoolean(hasPrivilegeRows?.[0]?.hasLabsSelect);
       if (!hasLabsSelect) {
-        if (!this.warnedMissingRolePrivileges.has(safeRole)) {
-          this.logger.warn(
-            `Skipped SET ROLE ${safeRole}: role lacks SELECT privilege on public.labs.`,
-          );
-          this.warnedMissingRolePrivileges.add(safeRole);
-        }
+        this.failOrWarn(
+          `Skipped SET ROLE ${safeRole}: role lacks SELECT privilege on public.labs.`,
+          this.warnedMissingRolePrivileges,
+        );
         return;
       }
     }
@@ -182,13 +192,26 @@ export class RlsSessionService {
     } catch (error) {
       if (safeRole === 'app_platform_admin') {
         const message = error instanceof Error ? error.message : String(error);
-        if (!this.warnedMissingRolePrivileges.has(`${safeRole}:set-role`)) {
-          this.logger.warn(`Skipped SET LOCAL ROLE ${safeRole}: ${message}`);
-          this.warnedMissingRolePrivileges.add(`${safeRole}:set-role`);
-        }
+        this.failOrWarn(
+          `Skipped SET ROLE ${safeRole}: ${message}`,
+          this.warnedMissingRolePrivileges,
+          `${safeRole}:set-role:${message}`,
+        );
         return;
       }
       throw error;
+    }
+  }
+
+  private failOrWarn(message: string, warnedSet: Set<string>, keyOverride?: string): void {
+    if (this.strictRlsMode) {
+      throw new Error(`[SECURITY][RLS] ${message}`);
+    }
+
+    const key = keyOverride ?? message;
+    if (!warnedSet.has(key)) {
+      this.logger.warn(message);
+      warnedSet.add(key);
     }
   }
 

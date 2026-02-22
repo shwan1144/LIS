@@ -15,12 +15,14 @@ const common_1 = require("@nestjs/common");
 const typeorm_1 = require("typeorm");
 const request_rls_context_service_1 = require("./request-rls-context.service");
 const rls_session_service_1 = require("./rls-session.service");
+const security_env_1 = require("../config/security-env");
 let RlsQueryRunnerEnforcerService = RlsQueryRunnerEnforcerService_1 = class RlsQueryRunnerEnforcerService {
     constructor(dataSource, requestRlsContextService, rlsSessionService) {
         this.dataSource = dataSource;
         this.requestRlsContextService = requestRlsContextService;
         this.rlsSessionService = rlsSessionService;
         this.logger = new common_1.Logger(RlsQueryRunnerEnforcerService_1.name);
+        this.strictRlsMode = (0, security_env_1.isRlsStrictModeEnabled)();
         this.patchedRunners = new WeakSet();
         this.dataSourcePatched = false;
     }
@@ -87,7 +89,11 @@ let RlsQueryRunnerEnforcerService = RlsQueryRunnerEnforcerService_1 = class RlsQ
             return false;
         }
         if (context.scope === 'lab' && !context.labId) {
-            this.logger.warn('Skipped automatic lab RLS context: lab scope is missing labId.');
+            const message = 'Skipped automatic lab RLS context: lab scope is missing labId.';
+            if (this.strictRlsMode) {
+                throw new Error(`[SECURITY][RLS] ${message}`);
+            }
+            this.logger.warn(message);
             return false;
         }
         await this.rlsSessionService.applyRequestContextWithExecutor(executeQuery, context, {

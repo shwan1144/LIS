@@ -4,6 +4,12 @@ export function isProductionEnv(): boolean {
   return (process.env.NODE_ENV || '').toLowerCase() === 'production';
 }
 
+function isTruthy(value: string | undefined): boolean {
+  if (!value) return false;
+  const normalized = value.trim().toLowerCase();
+  return normalized === '1' || normalized === 'true' || normalized === 'yes' || normalized === 'on';
+}
+
 function warnDevFallback(envName: string, source: string): void {
   const key = `${source}:${envName}`;
   if (warnedDevFallbacks.has(key)) {
@@ -50,4 +56,12 @@ export function assertRequiredProductionEnv(envNames: string[], source: string):
       `[SECURITY] Missing required environment variables in production (${source}): ${missing.join(', ')}`,
     );
   }
+}
+
+export function isRlsStrictModeEnabled(): boolean {
+  const configured = process.env.RLS_STRICT_MODE;
+  if (typeof configured === 'string' && configured.trim().length > 0) {
+    return isTruthy(configured);
+  }
+  return isProductionEnv();
 }
