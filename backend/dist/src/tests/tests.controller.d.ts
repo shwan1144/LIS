@@ -23,6 +23,11 @@ export declare class TestsController {
             skipped: number;
             tests: string[];
         };
+        urinalysis: {
+            created: number;
+            skipped: number;
+            tests: string[];
+        };
         total: {
             created: number;
             skipped: number;
@@ -34,6 +39,11 @@ export declare class TestsController {
         tests: string[];
     }>;
     seedChemistry(req: RequestWithUser): Promise<{
+        created: number;
+        skipped: number;
+        tests: string[];
+    }>;
+    seedUrinalysis(req: RequestWithUser): Promise<{
         created: number;
         skipped: number;
         tests: string[];

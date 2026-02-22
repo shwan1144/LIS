@@ -90,6 +90,31 @@ export class TestResultTextOptionDto {
   isDefault?: boolean;
 }
 
+export class TestPanelComponentDto {
+  @IsUUID()
+  childTestId: string;
+
+  @IsBoolean()
+  @IsOptional()
+  required?: boolean;
+
+  @Type(() => Number)
+  @IsNumber()
+  @IsOptional()
+  @Min(0)
+  sortOrder?: number;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(50)
+  reportSection?: string | null;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(50)
+  reportGroup?: string | null;
+}
+
 export class CreateTestDto {
   @IsString()
   @MinLength(1)
@@ -152,6 +177,17 @@ export class CreateTestDto {
   @ValidateNested({ each: true })
   @Type(() => TestResultTextOptionDto)
   resultTextOptions?: TestResultTextOptionDto[] | null;
+
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => TestPanelComponentDto)
+  panelComponents?: TestPanelComponentDto[] | null;
+
+  @IsOptional()
+  @IsArray()
+  @IsUUID(undefined, { each: true })
+  panelComponentTestIds?: string[] | null;
 
   @IsBoolean()
   @IsOptional()

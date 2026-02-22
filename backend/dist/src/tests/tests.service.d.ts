@@ -23,6 +23,11 @@ export declare class TestsService {
     private normalizeResultTextOptions;
     private normalizeResultFlag;
     private validateResultEntryConfig;
+    private isUuid;
+    private resolvePanelComponentTestIds;
+    private validatePanelComponents;
+    private syncPanelComponentsForTest;
+    private attachPanelComponents;
     delete(id: string, labId: string): Promise<void>;
     toggleActive(id: string, labId: string): Promise<Test>;
     getPricingForTest(testId: string, labId: string): Promise<{
@@ -42,6 +47,11 @@ export declare class TestsService {
     }>;
     private getReportSection;
     private getReportGroup;
+    seedUrinalysisTests(labId: string): Promise<{
+        created: number;
+        skipped: number;
+        tests: string[];
+    }>;
     seedChemistryTests(labId: string): Promise<{
         created: number;
         skipped: number;

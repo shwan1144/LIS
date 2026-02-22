@@ -42,10 +42,15 @@ export class TestsController {
     if (!labId) throw new Error('Lab ID not found in token');
     const cbc = await this.testsService.seedCBCTests(labId);
     const chem = await this.testsService.seedChemistryTests(labId);
+    const urinalysis = await this.testsService.seedUrinalysisTests(labId);
     return {
       cbc,
       chemistry: chem,
-      total: { created: cbc.created + chem.created, skipped: cbc.skipped + chem.skipped },
+      urinalysis,
+      total: {
+        created: cbc.created + chem.created + urinalysis.created,
+        skipped: cbc.skipped + chem.skipped + urinalysis.skipped,
+      },
     };
   }
 
@@ -61,6 +66,13 @@ export class TestsController {
     const labId = req.user?.labId;
     if (!labId) throw new Error('Lab ID not found in token');
     return this.testsService.seedChemistryTests(labId);
+  }
+
+  @Post('seed/urinalysis')
+  async seedUrinalysis(@Req() req: RequestWithUser) {
+    const labId = req.user?.labId;
+    if (!labId) throw new Error('Lab ID not found in token');
+    return this.testsService.seedUrinalysisTests(labId);
   }
 
   @Get(':id/pricing')

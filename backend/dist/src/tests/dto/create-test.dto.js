@@ -9,7 +9,7 @@ var __metadata = (this && this.__metadata) || function (k, v) {
     if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.CreateTestDto = exports.TestResultTextOptionDto = exports.TestNumericAgeRangeDto = exports.TestParameterDefinitionDto = exports.TEST_RESULT_FLAGS = exports.TEST_RESULT_ENTRY_TYPES = void 0;
+exports.CreateTestDto = exports.TestPanelComponentDto = exports.TestResultTextOptionDto = exports.TestNumericAgeRangeDto = exports.TestParameterDefinitionDto = exports.TEST_RESULT_FLAGS = exports.TEST_RESULT_ENTRY_TYPES = void 0;
 const class_validator_1 = require("class-validator");
 const class_transformer_1 = require("class-transformer");
 const test_entity_1 = require("../../entities/test.entity");
@@ -104,6 +104,37 @@ __decorate([
     (0, class_validator_1.IsBoolean)(),
     __metadata("design:type", Boolean)
 ], TestResultTextOptionDto.prototype, "isDefault", void 0);
+class TestPanelComponentDto {
+}
+exports.TestPanelComponentDto = TestPanelComponentDto;
+__decorate([
+    (0, class_validator_1.IsUUID)(),
+    __metadata("design:type", String)
+], TestPanelComponentDto.prototype, "childTestId", void 0);
+__decorate([
+    (0, class_validator_1.IsBoolean)(),
+    (0, class_validator_1.IsOptional)(),
+    __metadata("design:type", Boolean)
+], TestPanelComponentDto.prototype, "required", void 0);
+__decorate([
+    (0, class_transformer_1.Type)(() => Number),
+    (0, class_validator_1.IsNumber)(),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.Min)(0),
+    __metadata("design:type", Number)
+], TestPanelComponentDto.prototype, "sortOrder", void 0);
+__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    (0, class_validator_1.MaxLength)(50),
+    __metadata("design:type", Object)
+], TestPanelComponentDto.prototype, "reportSection", void 0);
+__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    (0, class_validator_1.MaxLength)(50),
+    __metadata("design:type", Object)
+], TestPanelComponentDto.prototype, "reportGroup", void 0);
 class CreateTestDto {
 }
 exports.CreateTestDto = CreateTestDto;
@@ -183,6 +214,19 @@ __decorate([
     (0, class_transformer_1.Type)(() => TestResultTextOptionDto),
     __metadata("design:type", Object)
 ], CreateTestDto.prototype, "resultTextOptions", void 0);
+__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsArray)(),
+    (0, class_validator_1.ValidateNested)({ each: true }),
+    (0, class_transformer_1.Type)(() => TestPanelComponentDto),
+    __metadata("design:type", Object)
+], CreateTestDto.prototype, "panelComponents", void 0);
+__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsArray)(),
+    (0, class_validator_1.IsUUID)(undefined, { each: true }),
+    __metadata("design:type", Object)
+], CreateTestDto.prototype, "panelComponentTestIds", void 0);
 __decorate([
     (0, class_validator_1.IsBoolean)(),
     (0, class_validator_1.IsOptional)(),

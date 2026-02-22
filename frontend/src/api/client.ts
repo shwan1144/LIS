@@ -1134,6 +1134,22 @@ export interface TestResultTextOption {
   isDefault?: boolean;
 }
 
+export interface TestPanelComponent {
+  childTestId: string;
+  required: boolean;
+  sortOrder: number;
+  reportSection: string | null;
+  reportGroup: string | null;
+  childTest?: {
+    id: string;
+    code: string;
+    name: string;
+    type: TestType;
+    unit: string | null;
+    isActive: boolean;
+  };
+}
+
 export interface TestDto {
   id: string;
   code: string;
@@ -1153,6 +1169,7 @@ export interface TestDto {
   resultEntryType: TestResultEntryType;
   resultTextOptions: TestResultTextOption[] | null;
   allowCustomResultText: boolean;
+  panelComponents?: TestPanelComponent[];
   description: string | null;
   childTestIds: string | null;
   parameterDefinitions: TestParameterDefinition[] | null;
@@ -1182,6 +1199,8 @@ export interface CreateTestDto {
   resultEntryType?: TestResultEntryType;
   resultTextOptions?: TestResultTextOption[] | null;
   allowCustomResultText?: boolean;
+  panelComponents?: TestPanelComponent[] | null;
+  panelComponentTestIds?: string[] | null;
   description?: string;
   childTestIds?: string;
   parameterDefinitions?: TestParameterDefinition[] | null;
@@ -1238,8 +1257,23 @@ export async function seedChemistryTests(): Promise<SeedResult> {
   return res.data;
 }
 
-export async function seedAllTests(): Promise<{ cbc: SeedResult; chemistry: SeedResult; total: { created: number; skipped: number } }> {
-  const res = await api.post<{ cbc: SeedResult; chemistry: SeedResult; total: { created: number; skipped: number } }>('/tests/seed/all');
+export async function seedUrinalysisTests(): Promise<SeedResult> {
+  const res = await api.post<SeedResult>('/tests/seed/urinalysis');
+  return res.data;
+}
+
+export async function seedAllTests(): Promise<{
+  cbc: SeedResult;
+  chemistry: SeedResult;
+  urinalysis: SeedResult;
+  total: { created: number; skipped: number };
+}> {
+  const res = await api.post<{
+    cbc: SeedResult;
+    chemistry: SeedResult;
+    urinalysis: SeedResult;
+    total: { created: number; skipped: number };
+  }>('/tests/seed/all');
   return res.data;
 }
 

@@ -35,10 +35,15 @@ let TestsController = class TestsController {
             throw new Error('Lab ID not found in token');
         const cbc = await this.testsService.seedCBCTests(labId);
         const chem = await this.testsService.seedChemistryTests(labId);
+        const urinalysis = await this.testsService.seedUrinalysisTests(labId);
         return {
             cbc,
             chemistry: chem,
-            total: { created: cbc.created + chem.created, skipped: cbc.skipped + chem.skipped },
+            urinalysis,
+            total: {
+                created: cbc.created + chem.created + urinalysis.created,
+                skipped: cbc.skipped + chem.skipped + urinalysis.skipped,
+            },
         };
     }
     async seedCBC(req) {
@@ -52,6 +57,12 @@ let TestsController = class TestsController {
         if (!labId)
             throw new Error('Lab ID not found in token');
         return this.testsService.seedChemistryTests(labId);
+    }
+    async seedUrinalysis(req) {
+        const labId = req.user?.labId;
+        if (!labId)
+            throw new Error('Lab ID not found in token');
+        return this.testsService.seedUrinalysisTests(labId);
     }
     async getPricing(req, id) {
         const labId = req.user?.labId;
@@ -128,6 +139,13 @@ __decorate([
     __metadata("design:paramtypes", [Object]),
     __metadata("design:returntype", Promise)
 ], TestsController.prototype, "seedChemistry", null);
+__decorate([
+    (0, common_1.Post)('seed/urinalysis'),
+    __param(0, (0, common_1.Req)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object]),
+    __metadata("design:returntype", Promise)
+], TestsController.prototype, "seedUrinalysis", null);
 __decorate([
     (0, common_1.Get)(':id/pricing'),
     __param(0, (0, common_1.Req)()),

@@ -20,6 +20,26 @@ import { Department } from '../entities/department.entity';
 import { CreateTestDto } from './dto/create-test.dto';
 import { UpdateTestDto } from './dto/update-test.dto';
 
+interface TestPanelComponentView {
+  childTestId: string;
+  required: boolean;
+  sortOrder: number;
+  reportSection: string | null;
+  reportGroup: string | null;
+  childTest: {
+    id: string;
+    code: string;
+    name: string;
+    type: TestType;
+    unit: string | null;
+    isActive: boolean;
+  };
+}
+
+type TestWithPanelComponents = Test & {
+  panelComponents?: TestPanelComponentView[];
+};
+
 @Injectable()
 export class TestsService {
   constructor(
@@ -35,12 +55,16 @@ export class TestsService {
     private readonly departmentRepo: Repository<Department>,
   ) {}
 
-  async findAll(labId: string, activeOnly: boolean = true): Promise<Test[]> {
+  async findAll(
+    labId: string,
+    activeOnly: boolean = true,
+  ): Promise<Test[]> {
     const where = activeOnly ? { labId, isActive: true } : { labId };
-    return this.testRepo.find({
+    const tests = await this.testRepo.find({
       where,
       order: { sortOrder: 'ASC', code: 'ASC' },
     });
+    return this.attachPanelComponents(tests);
   }
 
   async findOne(id: string, labId: string): Promise<Test> {
@@ -48,7 +72,8 @@ export class TestsService {
     if (!test) {
       throw new NotFoundException('Test not found');
     }
-    return test;
+    const [withComponents] = await this.attachPanelComponents([test]);
+    return withComponents ?? test;
   }
 
   async findByCode(code: string, labId: string): Promise<Test | null> {
@@ -99,8 +124,10 @@ export class TestsService {
       sortOrder: dto.sortOrder ?? 0,
       expectedCompletionMinutes: dto.expectedCompletionMinutes ?? null,
     });
-
-    return this.testRepo.save(test);
+    const saved = await this.testRepo.save(test);
+    await this.syncPanelComponentsForTest(saved, dto, labId);
+    const [withComponents] = await this.attachPanelComponents([saved]);
+    return withComponents ?? saved;
   }
 
   async update(id: string, labId: string, dto: UpdateTestDto): Promise<Test> {
@@ -166,7 +193,10 @@ export class TestsService {
     test.resultTextOptions = nextResultTextOptions;
     test.allowCustomResultText = nextAllowCustomResultText;
 
-    return this.testRepo.save(test);
+    const saved = await this.testRepo.save(test);
+    await this.syncPanelComponentsForTest(saved, dto, labId);
+    const [withComponents] = await this.attachPanelComponents([saved]);
+    return withComponents ?? saved;
   }
 
   private normalizeNumericAgeRanges(
@@ -333,6 +363,264 @@ export class TestsService {
     }
   }
 
+  private isUuid(value: string): boolean {
+    return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+      value,
+    );
+  }
+
+  private async resolvePanelComponentTestIds(
+    test: Test,
+    dto: CreateTestDto | UpdateTestDto,
+    labId: string,
+  ): Promise<
+    | Array<{
+        childTestId: string;
+        required: boolean;
+        sortOrder: number;
+        reportSection: string | null;
+        reportGroup: string | null;
+      }>
+    | null
+  > {
+    const explicitComponents = dto.panelComponents;
+    if (Array.isArray(explicitComponents)) {
+      if (explicitComponents.length === 0) return [];
+      const ordered = explicitComponents.map((component, index) => ({
+        childTestId: component.childTestId,
+        required: component.required ?? true,
+        sortOrder: component.sortOrder ?? index + 1,
+        reportSection: component.reportSection?.trim() || null,
+        reportGroup: component.reportGroup?.trim() || null,
+      }));
+      return this.validatePanelComponents(ordered, test.id, labId);
+    }
+
+    const explicitIds = dto.panelComponentTestIds;
+    if (Array.isArray(explicitIds)) {
+      const ordered = explicitIds
+        .map((childTestId, index) => ({
+          childTestId: childTestId.trim(),
+          required: true,
+          sortOrder: index + 1,
+          reportSection: null,
+          reportGroup: null,
+        }))
+        .filter((component) => component.childTestId.length > 0);
+      return this.validatePanelComponents(ordered, test.id, labId);
+    }
+
+    if (dto.childTestIds !== undefined) {
+      const tokens = (dto.childTestIds || '')
+        .split(',')
+        .map((token) => token.trim())
+        .filter((token) => token.length > 0);
+
+      if (tokens.length === 0) return [];
+
+      const uuidTokens = tokens.filter((token) => this.isUuid(token));
+      const codeTokens = tokens
+        .filter((token) => !this.isUuid(token))
+        .map((token) => token.toUpperCase());
+
+      const qb = this.testRepo
+        .createQueryBuilder('test')
+        .where('test.labId = :labId', { labId });
+      if (uuidTokens.length && codeTokens.length) {
+        qb.andWhere('(test.id IN (:...uuidTokens) OR UPPER(test.code) IN (:...codeTokens))', {
+          uuidTokens,
+          codeTokens,
+        });
+      } else if (uuidTokens.length) {
+        qb.andWhere('test.id IN (:...uuidTokens)', { uuidTokens });
+      } else {
+        qb.andWhere('UPPER(test.code) IN (:...codeTokens)', { codeTokens });
+      }
+
+      const matches = await qb.getMany();
+      const byId = new Map(matches.map((matched) => [matched.id, matched]));
+      const byCode = new Map(
+        matches.map((matched) => [matched.code.toUpperCase(), matched]),
+      );
+
+      const resolved = tokens.map((token, index) => {
+        const child =
+          byId.get(token) ??
+          byCode.get(token.toUpperCase()) ??
+          null;
+        if (!child) {
+          throw new BadRequestException(
+            `Panel component "${token}" was not found in this lab`,
+          );
+        }
+        return {
+          childTestId: child.id,
+          required: true,
+          sortOrder: index + 1,
+          reportSection: null,
+          reportGroup: null,
+        };
+      });
+      return this.validatePanelComponents(resolved, test.id, labId);
+    }
+
+    return null;
+  }
+
+  private async validatePanelComponents(
+    components: Array<{
+      childTestId: string;
+      required: boolean;
+      sortOrder: number;
+      reportSection: string | null;
+      reportGroup: string | null;
+    }>,
+    panelTestId: string,
+    labId: string,
+  ) {
+    const deduped = new Map<string, (typeof components)[number]>();
+    for (const component of components) {
+      if (component.childTestId === panelTestId) {
+        throw new BadRequestException('A panel cannot include itself as a component');
+      }
+      deduped.set(component.childTestId, component);
+    }
+    const normalized = Array.from(deduped.values()).sort(
+      (a, b) => a.sortOrder - b.sortOrder,
+    );
+    if (!normalized.length) return [];
+
+    const childIds = normalized.map((component) => component.childTestId);
+    const childTests = await this.testRepo.find({
+      where: childIds.map((id) => ({ id, labId })),
+      select: ['id', 'type'],
+    });
+    if (childTests.length !== childIds.length) {
+      throw new BadRequestException(
+        'One or more panel component tests were not found in this lab',
+      );
+    }
+    if (childTests.some((child) => child.type === TestType.PANEL)) {
+      throw new BadRequestException('Nested panels are not supported');
+    }
+
+    return normalized;
+  }
+
+  private async syncPanelComponentsForTest(
+    test: Test,
+    dto: CreateTestDto | UpdateTestDto,
+    labId: string,
+  ): Promise<void> {
+    if (test.type !== TestType.PANEL) {
+      await this.testComponentRepo.delete({ panelTestId: test.id });
+      return;
+    }
+
+    const resolvedComponents = await this.resolvePanelComponentTestIds(
+      test,
+      dto,
+      labId,
+    );
+    if (resolvedComponents === null) {
+      return;
+    }
+
+    const existing = await this.testComponentRepo.find({
+      where: { panelTestId: test.id },
+    });
+    const existingByChild = new Map(
+      existing.map((component) => [component.childTestId, component]),
+    );
+    const desiredChildIds = new Set(
+      resolvedComponents.map((component) => component.childTestId),
+    );
+
+    for (const component of resolvedComponents) {
+      const current = existingByChild.get(component.childTestId);
+      if (!current) {
+        const created = this.testComponentRepo.create({
+          panelTestId: test.id,
+          childTestId: component.childTestId,
+          required: component.required,
+          sortOrder: component.sortOrder,
+          reportSection: component.reportSection,
+          reportGroup: component.reportGroup,
+        });
+        await this.testComponentRepo.save(created);
+        continue;
+      }
+
+      current.required = component.required;
+      current.sortOrder = component.sortOrder;
+      current.reportSection = component.reportSection;
+      current.reportGroup = component.reportGroup;
+      await this.testComponentRepo.save(current);
+    }
+
+    const staleIds = existing
+      .filter((component) => !desiredChildIds.has(component.childTestId))
+      .map((component) => component.childTestId);
+
+    if (staleIds.length > 0) {
+      await this.testComponentRepo
+        .createQueryBuilder()
+        .delete()
+        .from(TestComponent)
+        .where('panelTestId = :panelTestId', { panelTestId: test.id })
+        .andWhere('childTestId IN (:...childIds)', { childIds: staleIds })
+        .execute();
+    }
+  }
+
+  private async attachPanelComponents(
+    tests: Test[],
+  ): Promise<TestWithPanelComponents[]> {
+    if (!tests.length) return [];
+    const panelIds = tests
+      .filter((test) => test.type === TestType.PANEL)
+      .map((test) => test.id);
+    if (!panelIds.length) return tests;
+
+    const components = await this.testComponentRepo
+      .createQueryBuilder('component')
+      .innerJoinAndSelect('component.childTest', 'childTest')
+      .where('component.panelTestId IN (:...panelIds)', { panelIds })
+      .orderBy('component.panelTestId', 'ASC')
+      .addOrderBy('component.sortOrder', 'ASC')
+      .addOrderBy('childTest.code', 'ASC')
+      .getMany();
+
+    const grouped = new Map<string, TestPanelComponentView[]>();
+    for (const component of components) {
+      const mapped: TestPanelComponentView = {
+        childTestId: component.childTestId,
+        required: component.required,
+        sortOrder: component.sortOrder,
+        reportSection: component.reportSection ?? null,
+        reportGroup: component.reportGroup ?? null,
+        childTest: {
+          id: component.childTest.id,
+          code: component.childTest.code,
+          name: component.childTest.name,
+          type: component.childTest.type,
+          unit: component.childTest.unit,
+          isActive: component.childTest.isActive,
+        },
+      };
+      const current = grouped.get(component.panelTestId) ?? [];
+      current.push(mapped);
+      grouped.set(component.panelTestId, current);
+    }
+
+    return tests.map((test) => {
+      if (test.type !== TestType.PANEL) return test;
+      return Object.assign(test, {
+        panelComponents: grouped.get(test.id) ?? [],
+      });
+    });
+  }
+
   async delete(id: string, labId: string): Promise<void> {
     const test = await this.findOne(id, labId);
 
@@ -418,7 +706,7 @@ export class TestsService {
    *
    * - Creates individual CBC subtests (WBC, RBC, HGB, etc.) as SINGLE tests.
    * - Marks subtests as inactive so they don't appear in normal test list (used mainly for instrument mapping).
-   * - Ensures a CBC panel test exists with childTestIds pointing to the subtests.
+   * - Ensures a CBC panel test exists with normalized panel components.
    */
   async seedCBCTests(labId: string): Promise<{ created: number; skipped: number; tests: string[] }> {
     const subtests = [
@@ -521,6 +809,7 @@ export class TestsService {
         panel.tubeType = TubeType.WHOLE_BLOOD;
         panel.labId = labId;
         panel.isActive = true;
+        panel.childTestIds = null;
         panel.sortOrder = 1;
         panel.description =
           panel.description ||
@@ -544,28 +833,26 @@ export class TestsService {
         createdTests.push('CBC');
       }
 
-      // Create TestComponent rows for panel
-      const existingComponents = await this.testComponentRepo.find({
-        where: { panelTestId: panel.id },
-      });
-      const existingChildIds = new Set(existingComponents.map(c => c.childTestId));
-
-      for (let i = 0; i < childIds.length; i++) {
-        const childId = childIds[i];
-        const subtestData = subtests[i];
-
-        if (!existingChildIds.has(childId)) {
-          const component = this.testComponentRepo.create({
-            panelTestId: panel.id,
-            childTestId: childId,
-            required: true,
-            sortOrder: subtestData.sortOrder,
-            reportSection: this.getReportSection(subtestData.code),
-            reportGroup: this.getReportGroup(subtestData.code),
-          });
-          await this.testComponentRepo.save(component);
-        }
-      }
+      await this.syncPanelComponentsForTest(
+        panel,
+        {
+          panelComponents: childIds.map((childId, index) => {
+            const subtestData = subtests[index];
+            return {
+              childTestId: childId,
+              required: true,
+              sortOrder: subtestData?.sortOrder ?? index + 1,
+              reportSection: subtestData
+                ? this.getReportSection(subtestData.code)
+                : null,
+              reportGroup: subtestData
+                ? this.getReportGroup(subtestData.code)
+                : null,
+            };
+          }),
+        } as CreateTestDto,
+        labId,
+      );
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       throw new Error(`Failed to seed CBC panel: ${msg}`);
@@ -607,6 +894,262 @@ export class TestsService {
       return 'Platelets';
     }
     return null;
+  }
+
+  /**
+   * Seed GUE (General Urine Examination) as a panel with explicit subtests.
+   */
+  async seedUrinalysisTests(
+    labId: string,
+  ): Promise<{ created: number; skipped: number; tests: string[] }> {
+    const subtests: Array<{
+      code: string;
+      name: string;
+      resultEntryType: TestResultEntryType;
+      resultTextOptions?: TestResultTextOption[] | null;
+      allowCustomResultText?: boolean;
+      unit?: string | null;
+      normalMin?: number | null;
+      normalMax?: number | null;
+      sortOrder: number;
+      reportSection: string;
+      reportGroup: string;
+    }> = [
+      {
+        code: 'UCOL',
+        name: 'Urine Color',
+        resultEntryType: 'QUALITATIVE',
+        resultTextOptions: [
+          { value: 'Colorless', flag: 'N' },
+          { value: 'Yellow', flag: 'N', isDefault: true },
+          { value: 'Deep Yellow', flag: 'ABN' },
+          { value: 'Amber', flag: 'ABN' },
+          { value: 'Red', flag: 'ABN' },
+          { value: 'Brown', flag: 'ABN' },
+        ],
+        sortOrder: 10,
+        reportSection: 'Physical',
+        reportGroup: 'Macroscopic',
+      },
+      {
+        code: 'UAPP',
+        name: 'Urine Appearance',
+        resultEntryType: 'QUALITATIVE',
+        resultTextOptions: [
+          { value: 'Clear', flag: 'N', isDefault: true },
+          { value: 'Slightly Cloudy', flag: 'ABN' },
+          { value: 'Cloudy', flag: 'ABN' },
+          { value: 'Turbid', flag: 'ABN' },
+        ],
+        sortOrder: 11,
+        reportSection: 'Physical',
+        reportGroup: 'Macroscopic',
+      },
+      {
+        code: 'USG',
+        name: 'Urine Specific Gravity',
+        resultEntryType: 'NUMERIC',
+        unit: '',
+        normalMin: 1.005,
+        normalMax: 1.03,
+        sortOrder: 20,
+        reportSection: 'Chemical',
+        reportGroup: 'Dipstick',
+      },
+      {
+        code: 'UPH',
+        name: 'Urine pH',
+        resultEntryType: 'NUMERIC',
+        unit: '',
+        normalMin: 5,
+        normalMax: 8,
+        sortOrder: 21,
+        reportSection: 'Chemical',
+        reportGroup: 'Dipstick',
+      },
+      {
+        code: 'UPRO',
+        name: 'Urine Protein',
+        resultEntryType: 'QUALITATIVE',
+        resultTextOptions: [
+          { value: 'Negative', flag: 'N', isDefault: true },
+          { value: 'Trace', flag: 'ABN' },
+          { value: '+', flag: 'H' },
+          { value: '++', flag: 'HH' },
+          { value: '+++', flag: 'HH' },
+        ],
+        sortOrder: 22,
+        reportSection: 'Chemical',
+        reportGroup: 'Dipstick',
+      },
+      {
+        code: 'UGLU',
+        name: 'Urine Glucose',
+        resultEntryType: 'QUALITATIVE',
+        resultTextOptions: [
+          { value: 'Negative', flag: 'N', isDefault: true },
+          { value: 'Trace', flag: 'ABN' },
+          { value: '+', flag: 'H' },
+          { value: '++', flag: 'HH' },
+          { value: '+++', flag: 'HH' },
+        ],
+        sortOrder: 23,
+        reportSection: 'Chemical',
+        reportGroup: 'Dipstick',
+      },
+      {
+        code: 'UKET',
+        name: 'Urine Ketone',
+        resultEntryType: 'QUALITATIVE',
+        resultTextOptions: [
+          { value: 'Negative', flag: 'N', isDefault: true },
+          { value: 'Trace', flag: 'ABN' },
+          { value: '+', flag: 'H' },
+          { value: '++', flag: 'HH' },
+          { value: '+++', flag: 'HH' },
+        ],
+        sortOrder: 24,
+        reportSection: 'Chemical',
+        reportGroup: 'Dipstick',
+      },
+      {
+        code: 'UNIT',
+        name: 'Urine Nitrite',
+        resultEntryType: 'QUALITATIVE',
+        resultTextOptions: [
+          { value: 'Negative', flag: 'N', isDefault: true },
+          { value: 'Positive', flag: 'POS' },
+        ],
+        sortOrder: 25,
+        reportSection: 'Chemical',
+        reportGroup: 'Dipstick',
+      },
+      {
+        code: 'ULEU',
+        name: 'Urine Leukocyte Esterase',
+        resultEntryType: 'QUALITATIVE',
+        resultTextOptions: [
+          { value: 'Negative', flag: 'N', isDefault: true },
+          { value: 'Trace', flag: 'ABN' },
+          { value: '+', flag: 'H' },
+          { value: '++', flag: 'HH' },
+        ],
+        sortOrder: 26,
+        reportSection: 'Chemical',
+        reportGroup: 'Dipstick',
+      },
+      {
+        code: 'URBC',
+        name: 'Urine RBC / HPF',
+        resultEntryType: 'NUMERIC',
+        unit: '/HPF',
+        normalMin: 0,
+        normalMax: 2,
+        sortOrder: 30,
+        reportSection: 'Microscopic',
+        reportGroup: 'Cells',
+      },
+      {
+        code: 'UWBC',
+        name: 'Urine WBC / HPF',
+        resultEntryType: 'NUMERIC',
+        unit: '/HPF',
+        normalMin: 0,
+        normalMax: 5,
+        sortOrder: 31,
+        reportSection: 'Microscopic',
+        reportGroup: 'Cells',
+      },
+    ];
+
+    let created = 0;
+    let skipped = 0;
+    const createdTests: string[] = [];
+    const childIds: string[] = [];
+
+    for (const data of subtests) {
+      let test = await this.findByCode(data.code, labId);
+      if (test) {
+        skipped++;
+        test.name = data.name;
+        test.type = TestType.SINGLE;
+        test.tubeType = TubeType.URINE;
+        test.resultEntryType = data.resultEntryType;
+        test.resultTextOptions = data.resultTextOptions ?? null;
+        test.allowCustomResultText = data.allowCustomResultText ?? false;
+        test.unit = data.unit ?? null;
+        test.normalMin = data.normalMin ?? null;
+        test.normalMax = data.normalMax ?? null;
+        test.sortOrder = data.sortOrder;
+        test.isActive = false;
+        test = await this.testRepo.save(test);
+      } else {
+        test = this.testRepo.create({
+          labId,
+          code: data.code,
+          name: data.name,
+          type: TestType.SINGLE,
+          tubeType: TubeType.URINE,
+          resultEntryType: data.resultEntryType,
+          resultTextOptions: data.resultTextOptions ?? null,
+          allowCustomResultText: data.allowCustomResultText ?? false,
+          unit: data.unit ?? null,
+          normalMin: data.normalMin ?? null,
+          normalMax: data.normalMax ?? null,
+          sortOrder: data.sortOrder,
+          isActive: false,
+        });
+        test = await this.testRepo.save(test);
+        created++;
+        createdTests.push(data.code);
+      }
+      childIds.push(test.id);
+    }
+
+    let panel = await this.findByCode('GUE', labId);
+    if (panel) {
+      panel.type = TestType.PANEL;
+      panel.tubeType = TubeType.URINE;
+      panel.isActive = true;
+      panel.childTestIds = null;
+      panel.sortOrder = 2;
+      panel.description =
+        panel.description ||
+        'General Urine Examination panel with physical, chemical, and microscopic subtests.';
+      panel = await this.testRepo.save(panel);
+    } else {
+      panel = this.testRepo.create({
+        labId,
+        code: 'GUE',
+        name: 'General Urine Examination',
+        type: TestType.PANEL,
+        tubeType: TubeType.URINE,
+        childTestIds: null,
+        description:
+          'General Urine Examination panel with physical, chemical, and microscopic subtests.',
+        isActive: true,
+        sortOrder: 2,
+      });
+      panel = await this.testRepo.save(panel);
+      created++;
+      createdTests.push('GUE');
+    }
+
+    await this.syncPanelComponentsForTest(
+      panel,
+      {
+        panelComponents: childIds.map((childId, index) => ({
+          childTestId: childId,
+          required: true,
+          sortOrder: subtests[index]?.sortOrder ?? index + 1,
+          reportSection: subtests[index]?.reportSection ?? null,
+          reportGroup: subtests[index]?.reportGroup ?? null,
+        })),
+      } as CreateTestDto,
+      labId,
+    );
+
+    return { created, skipped, tests: createdTests };
   }
 
   /**

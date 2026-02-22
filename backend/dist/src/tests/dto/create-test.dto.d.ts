@@ -21,6 +21,13 @@ export declare class TestResultTextOptionDto {
     flag?: (typeof TEST_RESULT_FLAGS)[number] | null;
     isDefault?: boolean;
 }
+export declare class TestPanelComponentDto {
+    childTestId: string;
+    required?: boolean;
+    sortOrder?: number;
+    reportSection?: string | null;
+    reportGroup?: string | null;
+}
 export declare class CreateTestDto {
     code: string;
     name: string;
@@ -36,6 +43,8 @@ export declare class CreateTestDto {
     normalText?: string;
     resultEntryType?: (typeof TEST_RESULT_ENTRY_TYPES)[number];
     resultTextOptions?: TestResultTextOptionDto[] | null;
+    panelComponents?: TestPanelComponentDto[] | null;
+    panelComponentTestIds?: string[] | null;
     allowCustomResultText?: boolean;
     numericAgeRanges?: TestNumericAgeRangeDto[];
     description?: string;

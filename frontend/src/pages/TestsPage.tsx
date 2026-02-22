@@ -29,6 +29,7 @@ import {
 import type { ColumnsType } from 'antd/es/table';
 import {
   getTests,
+  getTest,
   createTest,
   updateTest,
   deleteTest,
@@ -94,6 +95,7 @@ const RESULT_FLAG_OPTIONS: { label: string; value: NonNullable<TestResultTextOpt
 export function TestsPage() {
   const { isDark } = useTheme();
   const [tests, setTests] = useState<TestDto[]>([]);
+  const [allTests, setAllTests] = useState<TestDto[]>([]);
   const [loading, setLoading] = useState(false);
   const [showAll, setShowAll] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
@@ -128,10 +130,14 @@ export function TestsPage() {
   const loadTests = async () => {
     setLoading(true);
     try {
-      const data = await getTests(!showAll);
+      const [data, allData] = await Promise.all([
+        getTests(!showAll),
+        getTests(false),
+      ]);
       setTests(data);
+      setAllTests(allData);
       setCategories(
-        Array.from(new Set(data.map((t) => t.category).filter((c): c is string => Boolean(c)))).sort(),
+        Array.from(new Set(allData.map((t) => t.category).filter((c): c is string => Boolean(c)))).sort(),
       );
     } catch {
       message.error('Failed to load tests');
@@ -155,43 +161,58 @@ export function TestsPage() {
     [departments],
   );
 
+  const panelComponentOptions = useMemo(
+    () =>
+      allTests
+        .filter((test) => test.type === 'SINGLE')
+        .sort((a, b) => a.code.localeCompare(b.code))
+        .map((test) => ({
+          label: `${test.code} - ${test.name}`,
+          value: test.id,
+        })),
+    [allTests],
+  );
+
   const handleOpenModal = async (test?: TestDto) => {
-    const [shiftList, deptList] = await Promise.all([
+    const [shiftList, deptList, latestAllTests] = await Promise.all([
       getShifts().catch(() => []),
       getDepartments().catch(() => []),
+      getTests(false).catch(() => []),
     ]);
     setShifts(shiftList);
     setDepartments(deptList);
+    setAllTests(latestAllTests);
     const initialPrices: Record<string, number> = { default: 0 };
     shiftList.forEach((s) => { initialPrices[s.id] = 0; });
     if (test) {
-      setEditingTest(test);
+      const fullTest = await getTest(test.id).catch(() => test);
+      setEditingTest(fullTest);
       form.setFieldsValue({
-        ...test,
-        category: test.category || undefined,
-        normalMin: test.normalMin ?? undefined,
-        normalMax: test.normalMax ?? undefined,
-        normalMinMale: test.normalMinMale ?? undefined,
-        normalMaxMale: test.normalMaxMale ?? undefined,
-        normalMinFemale: test.normalMinFemale ?? undefined,
-        normalMaxFemale: test.normalMaxFemale ?? undefined,
-        numericAgeRanges: (test.numericAgeRanges ?? []).map((range) => ({
+        ...fullTest,
+        category: fullTest.category || undefined,
+        normalMin: fullTest.normalMin ?? undefined,
+        normalMax: fullTest.normalMax ?? undefined,
+        normalMinMale: fullTest.normalMinMale ?? undefined,
+        normalMaxMale: fullTest.normalMaxMale ?? undefined,
+        normalMinFemale: fullTest.normalMinFemale ?? undefined,
+        normalMaxFemale: fullTest.normalMaxFemale ?? undefined,
+        numericAgeRanges: (fullTest.numericAgeRanges ?? []).map((range) => ({
           sex: range.sex ?? 'ANY',
           minAgeYears: range.minAgeYears ?? undefined,
           maxAgeYears: range.maxAgeYears ?? undefined,
           normalMin: range.normalMin ?? undefined,
           normalMax: range.normalMax ?? undefined,
         })),
-        departmentId: test.departmentId ?? undefined,
-        expectedCompletionMinutes: test.expectedCompletionMinutes ?? undefined,
-        resultEntryType: test.resultEntryType ?? 'NUMERIC',
-        allowCustomResultText: Boolean(test.allowCustomResultText),
-        resultTextOptions: (test.resultTextOptions ?? []).map((option) => ({
+        departmentId: fullTest.departmentId ?? undefined,
+        expectedCompletionMinutes: fullTest.expectedCompletionMinutes ?? undefined,
+        resultEntryType: fullTest.resultEntryType ?? 'NUMERIC',
+        allowCustomResultText: Boolean(fullTest.allowCustomResultText),
+        resultTextOptions: (fullTest.resultTextOptions ?? []).map((option) => ({
           value: option.value,
           flag: option.flag ?? undefined,
           isDefault: Boolean(option.isDefault),
         })),
-        parameterDefinitions: (test.parameterDefinitions ?? []).map((p) => ({
+        parameterDefinitions: (fullTest.parameterDefinitions ?? []).map((p) => ({
           code: p.code,
           label: p.label,
           type: p.type,
@@ -199,8 +220,11 @@ export function TestsPage() {
           normalOptions: p.normalOptions ?? [],
           defaultValue: p.defaultValue ?? undefined,
         })),
+        panelComponentTestIds: (fullTest.panelComponents ?? [])
+          .sort((a, b) => a.sortOrder - b.sortOrder)
+          .map((component) => component.childTestId),
       });
-      const pricing = await getTestPricing(test.id).catch(() => []);
+      const pricing = await getTestPricing(fullTest.id).catch(() => []);
       pricing.forEach((p) => {
         const key = p.shiftId ?? 'default';
         initialPrices[key] = p.price;
@@ -220,6 +244,7 @@ export function TestsPage() {
         resultEntryType: 'NUMERIC',
         allowCustomResultText: false,
         resultTextOptions: [],
+        panelComponentTestIds: [],
       });
     }
     setPricesByShift(initialPrices);
@@ -313,6 +338,7 @@ export function TestsPage() {
         flag?: TestResultTextOption['flag'];
         isDefault?: boolean;
       }[];
+      panelComponentTestIds?: string[];
       type?: TestType;
     },
   ) => {
@@ -362,6 +388,7 @@ export function TestsPage() {
         }))
         .filter((option) => option.value.length > 0);
     const resultEntryType = values.resultEntryType ?? 'NUMERIC';
+    const panelComponentTestIds = (values.panelComponentTestIds ?? []).filter(Boolean);
 
     if (
       normalizedResultTextOptions.filter((option) => option.isDefault).length > 1
@@ -391,6 +418,7 @@ export function TestsPage() {
         : normalizedResultTextOptions.length
           ? normalizedResultTextOptions
           : null,
+      panelComponentTestIds: isPanel ? panelComponentTestIds : null,
     };
     try {
       let testId: string;
@@ -1164,6 +1192,20 @@ export function TestsPage() {
                           placeholder="Select department"
                           allowClear
                           options={departments.map((d) => ({ label: `${d.code} – ${d.name}`, value: d.id }))}
+                        />
+                      </Form.Item>
+                      <Form.Item
+                        name="panelComponentTestIds"
+                        label="Panel subtests"
+                        style={{ marginBottom: 12 }}
+                        extra="Choose the child tests included in this panel (for example CBC and GUE analytes)."
+                      >
+                        <Select
+                          mode="multiple"
+                          placeholder="Select subtests"
+                          showSearch
+                          optionFilterProp="label"
+                          options={panelComponentOptions.filter((option) => option.value !== editingTest?.id)}
                         />
                       </Form.Item>
                       <Form.Item name="description" label="Description" style={{ marginBottom: 0 }}>
