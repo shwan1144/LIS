@@ -7,6 +7,13 @@ import { User } from '../entities/user.entity';
 import { PlatformUser } from '../entities/platform-user.entity';
 import type { JwtPayload } from './jwt-payload.interface';
 import type { Request } from 'express';
+import { requireSecret } from '../config/security-env';
+
+const jwtSecret = requireSecret(
+  'JWT_SECRET',
+  'lis-dev-secret-change-in-production',
+  'JwtStrategy',
+);
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy, 'lab-jwt') {
@@ -19,7 +26,7 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'lab-jwt') {
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
       ignoreExpiration: false,
-      secretOrKey: process.env.JWT_SECRET || 'lis-dev-secret-change-in-production',
+      secretOrKey: jwtSecret,
       passReqToCallback: true,
     });
   }

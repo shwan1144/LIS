@@ -1,4 +1,6 @@
 import { Module } from '@nestjs/common';
+import { APP_GUARD } from '@nestjs/core';
+import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
@@ -23,10 +25,10 @@ import { LabApiModule } from './lab-api/lab-api.module';
 import { DATABASE_ENTITIES } from './database/entities';
 
 const useDatabaseUrl = Boolean(process.env.DATABASE_URL);
-const shouldSynchronize =
-  process.env.DB_SYNC === 'true' ||
-  (process.env.DB_SYNC !== 'false' &&
-    (process.env.NODE_ENV !== 'production' || useDatabaseUrl));
+const isProduction = (process.env.NODE_ENV || '').toLowerCase() === 'production';
+const shouldSynchronize = !isProduction && process.env.DB_SYNC === 'true';
+const apiRateLimit = Number.parseInt(process.env.API_RATE_LIMIT || '120', 10);
+const apiRateWindowSeconds = Number.parseInt(process.env.API_RATE_WINDOW_SECONDS || '60', 10);
 
 const typeOrmConfig = useDatabaseUrl
   ? {
@@ -48,6 +50,13 @@ const typeOrmConfig = useDatabaseUrl
 
 @Module({
   imports: [
+    ThrottlerModule.forRoot([
+      {
+        name: 'default',
+        ttl: (Number.isFinite(apiRateWindowSeconds) && apiRateWindowSeconds > 0 ? apiRateWindowSeconds : 60) * 1000,
+        limit: Number.isFinite(apiRateLimit) && apiRateLimit > 0 ? apiRateLimit : 120,
+      },
+    ]),
     TypeOrmModule.forRoot(typeOrmConfig),
     AuthModule,
     DashboardModule,
@@ -69,6 +78,12 @@ const typeOrmConfig = useDatabaseUrl
     LabApiModule,
   ],
   controllers: [AppController],
-  providers: [AppService],
+  providers: [
+    AppService,
+    {
+      provide: APP_GUARD,
+      useClass: ThrottlerGuard,
+    },
+  ],
 })
 export class AppModule {}

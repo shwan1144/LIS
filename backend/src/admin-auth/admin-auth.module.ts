@@ -8,15 +8,21 @@ import { AdminAuthController } from './admin-auth.controller';
 import { AdminAuthService } from './admin-auth.service';
 import { AdminJwtStrategy } from './admin-jwt.strategy';
 import { AdminJwtAuthGuard } from './admin-jwt-auth.guard';
+import { requireSecret } from '../config/security-env';
 
 const platformJwtAccessTtlSeconds = Number(process.env.PLATFORM_JWT_ACCESS_TTL || 900);
+const platformJwtSecret = requireSecret(
+  'PLATFORM_JWT_SECRET',
+  'platform-dev-secret',
+  'AdminAuthModule',
+);
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([PlatformUser]),
     PassportModule.register({ defaultStrategy: 'platform-jwt' }),
     JwtModule.register({
-      secret: process.env.PLATFORM_JWT_SECRET || process.env.JWT_SECRET || 'platform-dev-secret',
+      secret: platformJwtSecret,
       signOptions: {
         expiresIn:
           Number.isFinite(platformJwtAccessTtlSeconds) && platformJwtAccessTtlSeconds > 0

@@ -7,6 +7,7 @@ import {
   JoinColumn,
   CreateDateColumn,
   UpdateDateColumn,
+  Index,
 } from 'typeorm';
 import { Patient } from './patient.entity';
 import { Lab } from './lab.entity';
@@ -28,6 +29,10 @@ export enum PatientType {
 }
 
 @Entity('orders')
+@Index('UQ_orders_lab_order_number', ['labId', 'orderNumber'], {
+  unique: true,
+  where: '"orderNumber" IS NOT NULL',
+})
 export class Order {
   @PrimaryGeneratedColumn('uuid')
   id: string;

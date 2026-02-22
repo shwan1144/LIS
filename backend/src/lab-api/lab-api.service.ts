@@ -26,6 +26,7 @@ import { LabActorContext } from '../types/lab-actor-context';
 import { CreateLabOrderDto } from './dto/create-lab-order.dto';
 import { EnterResultDto } from './dto/enter-result.dto';
 import { UpsertPatientDto } from './dto/upsert-patient.dto';
+import { nextLabCounterValue } from '../database/lab-counter.util';
 
 @Injectable()
 export class LabApiService {
@@ -138,7 +139,7 @@ export class LabApiService {
         throw new BadRequestException('One or more tests are invalid');
       }
 
-      const orderNumber = await this.generateOrderNumber(manager, labId);
+      const orderNumber = await this.generateOrderNumber(manager, labId, dto.shiftId ?? null);
       const order = manager.getRepository(Order).create({
         patientId: patient.id,
         labId,
@@ -394,27 +395,24 @@ export class LabApiService {
     return `P-${String(current + 1).padStart(6, '0')}`;
   }
 
-  private async generateOrderNumber(manager: EntityManager, labId: string): Promise<string> {
+  private async generateOrderNumber(
+    manager: EntityManager,
+    labId: string,
+    shiftId: string | null,
+  ): Promise<string> {
     const today = new Date();
     const yy = String(today.getFullYear() % 100).padStart(2, '0');
     const mm = String(today.getMonth() + 1).padStart(2, '0');
     const dd = String(today.getDate()).padStart(2, '0');
     const datePrefix = `${yy}${mm}${dd}`;
-
-    const startOfDay = new Date(today);
-    startOfDay.setHours(0, 0, 0, 0);
-    const endOfDay = new Date(today);
-    endOfDay.setHours(23, 59, 59, 999);
-
-    const raw = await manager
-      .getRepository(Order)
-      .createQueryBuilder('o')
-      .select('COUNT(*)', 'count')
-      .where('o.labId = :labId', { labId })
-      .andWhere('o.registeredAt BETWEEN :startOfDay AND :endOfDay', { startOfDay, endOfDay })
-      .getRawOne<{ count: string }>();
-
-    const sequence = String((parseInt(raw?.count || '0', 10) || 0) + 1).padStart(3, '0');
+    const seq = await nextLabCounterValue(manager, {
+      labId,
+      counterType: 'ORDER_NUMBER',
+      scopeKey: 'ORDER',
+      date: today,
+      shiftId,
+    });
+    const sequence = String(seq).padStart(3, '0');
     return `${datePrefix}${sequence}`;
   }
 

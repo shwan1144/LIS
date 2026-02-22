@@ -5,16 +5,40 @@ import { Lab } from '../entities/lab.entity';
 import { HostScope } from './host-scope.enum';
 import { LabResolverMiddleware } from './lab-resolver.middleware';
 
-function buildRequest(hostname: string, forwardedHost?: string): Request {
+function buildRequest(
+  hostname: string,
+  options?: {
+    forwardedHost?: string;
+    origin?: string;
+    referer?: string;
+    trustProxy?: unknown;
+  },
+): Request {
+  const headers: Record<string, string> = {};
+  if (options?.forwardedHost) {
+    headers['x-forwarded-host'] = options.forwardedHost;
+  }
+  if (options?.origin) {
+    headers.origin = options.origin;
+  }
+  if (options?.referer) {
+    headers.referer = options.referer;
+  }
+
+  const trustProxySetting = options?.trustProxy ?? false;
   return {
-    headers: forwardedHost ? { 'x-forwarded-host': forwardedHost } : {},
+    headers,
     hostname,
+    app: {
+      get: (key: string) => (key === 'trust proxy' ? trustProxySetting : undefined),
+    },
   } as unknown as Request;
 }
 
 describe('LabResolverMiddleware', () => {
   const originalBaseDomain = process.env.APP_BASE_DOMAIN;
   const originalAdminHost = process.env.APP_ADMIN_HOST;
+  const originalStrictTenantHost = process.env.STRICT_TENANT_HOST;
   let repo: Pick<Repository<Lab>, 'findOne'>;
   let middleware: LabResolverMiddleware;
 
@@ -30,6 +54,7 @@ describe('LabResolverMiddleware', () => {
   afterEach(() => {
     process.env.APP_BASE_DOMAIN = originalBaseDomain;
     process.env.APP_ADMIN_HOST = originalAdminHost;
+    process.env.STRICT_TENANT_HOST = originalStrictTenantHost;
     jest.clearAllMocks();
   });
 
@@ -97,5 +122,50 @@ describe('LabResolverMiddleware', () => {
     expect(req.labId).toBeNull();
     expect(next).toHaveBeenCalledTimes(1);
     expect(repo.findOne).not.toHaveBeenCalled();
+  });
+
+  it('uses x-forwarded-host only when trust proxy is enabled', async () => {
+    const req = buildRequest('localhost', {
+      forwardedHost: 'lab1.yourlis.local',
+      trustProxy: 1,
+    });
+    const next = jest.fn();
+    (repo.findOne as jest.Mock).mockResolvedValue({
+      id: 'lab-id-1',
+      subdomain: 'lab1',
+      code: 'LAB1',
+      isActive: true,
+    } as Lab);
+
+    await middleware.use(req, {} as Response, next);
+
+    expect(req.hostScope).toBe(HostScope.LAB);
+    expect(req.tenantSubdomain).toBe('lab1');
+    expect(next).toHaveBeenCalledTimes(1);
+  });
+
+  it('ignores x-forwarded-host when trust proxy is disabled', async () => {
+    const req = buildRequest('localhost', {
+      forwardedHost: 'lab1.yourlis.local',
+      trustProxy: false,
+    });
+    const next = jest.fn();
+
+    await middleware.use(req, {} as Response, next);
+
+    expect(req.hostScope).toBe(HostScope.UNKNOWN);
+    expect(repo.findOne).not.toHaveBeenCalled();
+  });
+
+  it('rejects ambiguous api host in strict mode', async () => {
+    process.env.STRICT_TENANT_HOST = 'true';
+    const req = buildRequest('api.yourlis.local', {
+      origin: 'https://lab1.yourlis.local',
+      trustProxy: 1,
+    });
+    const next = jest.fn();
+
+    await expect(middleware.use(req, {} as Response, next)).rejects.toBeInstanceOf(ForbiddenException);
+    expect(next).not.toHaveBeenCalled();
   });
 });

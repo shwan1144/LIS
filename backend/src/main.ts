@@ -9,9 +9,11 @@ if (!process.env.DB_PASSWORD && !process.env.DATABASE_URL) {
 import { NestFactory } from '@nestjs/core';
 import { Logger, ValidationPipe } from '@nestjs/common';
 import { json, urlencoded } from 'express';
+import helmet from 'helmet';
 import { AppModule } from './app.module';
 import { runSeed } from './seed';
 import { DataSource } from 'typeorm';
+import { assertRequiredProductionEnv } from './config/security-env';
 
 const bootstrapLogger = new Logger('Bootstrap');
 
@@ -42,7 +44,7 @@ function parseCorsRules(): string[] {
     .filter((part) => part.length > 0)
     .map(normalizeOrigin);
 
-  if (baseRules.length === 0) {
+  if (baseRules.length === 0 && process.env.NODE_ENV !== 'production') {
     baseRules.push('http://localhost:5173');
   }
 
@@ -53,6 +55,25 @@ function parseCorsRules(): string[] {
   }
 
   return Array.from(new Set(baseRules));
+}
+
+function validateCorsRules(rules: string[]): void {
+  const isProduction = (process.env.NODE_ENV || '').toLowerCase() === 'production';
+  if (!isProduction) {
+    return;
+  }
+
+  if (rules.length === 0) {
+    throw new Error(
+      '[SECURITY] CORS_ORIGIN must be explicitly configured in production.',
+    );
+  }
+
+  if (rules.includes('*')) {
+    throw new Error(
+      '[SECURITY] CORS_ORIGIN cannot include "*" in production when credentials are enabled.',
+    );
+  }
 }
 
 function isOriginAllowed(origin: string, rules: string[]): boolean {
@@ -68,13 +89,7 @@ function isOriginAllowed(origin: string, rules: string[]): boolean {
 }
 
 function shouldAutoSeedOnBoot(): boolean {
-  if (process.env.AUTO_SEED_ON_BOOT === 'true') {
-    return true;
-  }
-  if (process.env.AUTO_SEED_ON_BOOT === 'false') {
-    return false;
-  }
-  return process.env.NODE_ENV === 'production';
+  return process.env.AUTO_SEED_ON_BOOT === 'true';
 }
 
 async function ensureReportBrandingColumns(dataSource: DataSource): Promise<void> {
@@ -249,7 +264,29 @@ async function ensureTenantRolePrivileges(dataSource: DataSource): Promise<void>
 }
 
 async function bootstrap() {
+  assertRequiredProductionEnv(['JWT_SECRET', 'PLATFORM_JWT_SECRET'], 'bootstrap');
   const app = await NestFactory.create(AppModule);
+  const trustProxyHops = Number.parseInt(process.env.TRUST_PROXY_HOPS || '1', 10);
+  const expressApp = app.getHttpAdapter().getInstance();
+  expressApp.set('trust proxy', Number.isFinite(trustProxyHops) && trustProxyHops > 0 ? trustProxyHops : 1);
+  bootstrapLogger.log(`trust proxy configured to ${String(expressApp.get('trust proxy'))}`);
+  app.use(
+    helmet({
+      contentSecurityPolicy: {
+        useDefaults: true,
+        directives: {
+          defaultSrc: ["'self'"],
+          scriptSrc: ["'self'"],
+          styleSrc: ["'self'", "'unsafe-inline'"],
+          imgSrc: ["'self'", 'data:'],
+          objectSrc: ["'none'"],
+          frameAncestors: ["'none'"],
+          baseUri: ["'self'"],
+        },
+      },
+      crossOriginEmbedderPolicy: false,
+    }),
+  );
   app.use(json({ limit: '10mb' }));
   app.use(urlencoded({ extended: true, limit: '10mb' }));
   const dataSource = app.get(DataSource);
@@ -276,6 +313,7 @@ async function bootstrap() {
     new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true }),
   );
   const corsRules = parseCorsRules();
+  validateCorsRules(corsRules);
   bootstrapLogger.log(`CORS rules: ${corsRules.join(', ')}`);
   app.enableCors({
     origin: (origin: string | undefined, callback: (error: Error | null, allow?: boolean) => void) => {

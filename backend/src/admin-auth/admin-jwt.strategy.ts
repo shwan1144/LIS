@@ -5,6 +5,13 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { PlatformUser } from '../entities/platform-user.entity';
 import type { AdminJwtPayload } from './admin-jwt-payload.interface';
+import { requireSecret } from '../config/security-env';
+
+const platformJwtSecret = requireSecret(
+  'PLATFORM_JWT_SECRET',
+  'platform-dev-secret',
+  'AdminJwtStrategy',
+);
 
 @Injectable()
 export class AdminJwtStrategy extends PassportStrategy(Strategy, 'platform-jwt') {
@@ -15,7 +22,7 @@ export class AdminJwtStrategy extends PassportStrategy(Strategy, 'platform-jwt')
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
       ignoreExpiration: false,
-      secretOrKey: process.env.PLATFORM_JWT_SECRET || process.env.JWT_SECRET || 'platform-dev-secret',
+      secretOrKey: platformJwtSecret,
     });
   }
 

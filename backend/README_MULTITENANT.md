@@ -93,12 +93,22 @@ Migration includes:
 - Lab token must match resolved subdomain lab.
 - Admin drill-down orders endpoint requires explicit `labId`.
 - Audit logging implemented for lab/platform auth and sensitive actions.
+- Production-safe secret handling:
+  - `JWT_SECRET` is required in production.
+  - `PLATFORM_JWT_SECRET` is required in production.
+  - In non-production, dev fallback secrets are allowed with explicit startup warnings.
+- Seeding is now opt-in only: set `AUTO_SEED_ON_BOOT=true` when you intentionally want boot-time seeding.
+- TypeORM `synchronize` is always disabled in production.
 - Login brute-force/rate protection is DB-backed via `audit_logs` windows:
   - `AUTH_LOGIN_RATE_WINDOW_SECONDS`, `AUTH_LOGIN_RATE_MAX_ATTEMPTS_PER_IP`
   - `AUTH_LOGIN_FAILED_WINDOW_SECONDS`, `AUTH_LOGIN_FAILED_MAX_PER_IP`, `AUTH_LOGIN_FAILED_MAX_PER_IDENTIFIER`
 - Admin-to-lab bridge login is one-time and short-lived:
   - Env: `LAB_PORTAL_BRIDGE_TTL_SECONDS` (default `90`, max `300`)
   - Token is hashed in DB and invalid after first use or expiry.
+- Global API hardening:
+  - `helmet` security headers + CSP are enabled.
+  - Global throttling is enabled (`API_RATE_LIMIT`, `API_RATE_WINDOW_SECONDS`).
+  - In production, CORS must be explicit (`CORS_ORIGIN`) and cannot include `*` when credentials are enabled.
 
 ## Tests
 
@@ -109,6 +119,7 @@ Migration includes:
 ### E2E-style
 - `test/lab-user-scope.e2e-spec.ts`
 - `test/rls-isolation.e2e-spec.ts` (runs only when `RLS_E2E_DATABASE_URL` is set)
+- `test/order-number-concurrency.e2e-spec.ts` (runs only when `RLS_E2E_DATABASE_URL` or `DATABASE_URL` is set)
 
 Run:
 - `npm test`
@@ -124,6 +135,27 @@ Map in hosts file:
 Set env:
 - `APP_BASE_DOMAIN=localhost`
 - `APP_ADMIN_HOST=admin.localhost`
+
+## Production Checklist
+
+1. Set required env vars:
+   - `NODE_ENV=production`
+   - `JWT_SECRET=<strong-random-secret>`
+   - `PLATFORM_JWT_SECRET=<strong-random-secret>`
+   - `CORS_ORIGIN=https://admin.yourdomain.com,https://lab01.yourdomain.com` (explicit list only)
+2. Keep schema safety on:
+   - `DB_SYNC=false` (production ignores sync even if set true)
+   - `AUTO_SEED_ON_BOOT=false` (default)
+3. Configure proxy/host safety:
+   - `TRUST_PROXY_HOPS=1` (single reverse proxy)
+   - Optional strict mode: `STRICT_TENANT_HOST=true`
+4. Apply migrations before startup:
+   - `npm run migrate:sql`
+   - Includes `013_atomic_counters_and_uniques.sql` (atomic counters + unique order/barcode indexes)
+5. Verify isolation/hardening:
+   - `npm run test -- lab-resolver.middleware.spec.ts`
+   - `npm run test:e2e -- rls-isolation.e2e-spec.ts`
+   - `npm run test:e2e -- order-number-concurrency.e2e-spec.ts`
 
 ## Admin Console Implementation Checklist (Execution Tracker)
 

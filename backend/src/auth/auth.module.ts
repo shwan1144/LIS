@@ -15,8 +15,14 @@ import { JwtAuthGuard } from './jwt-auth.guard';
 import { RolesGuard } from './roles.guard';
 import { RefreshTokenService } from './refresh-token.service';
 import { AuthRateLimitService } from './auth-rate-limit.service';
+import { requireSecret } from '../config/security-env';
 
 const jwtAccessTtlSeconds = Number(process.env.JWT_ACCESS_TTL || 900);
+const jwtSecret = requireSecret(
+  'JWT_SECRET',
+  'lis-dev-secret-change-in-production',
+  'AuthModule',
+);
 
 @Module({
   imports: [
@@ -30,7 +36,7 @@ const jwtAccessTtlSeconds = Number(process.env.JWT_ACCESS_TTL || 900);
     ]),
     PassportModule.register({ defaultStrategy: 'lab-jwt' }),
     JwtModule.register({
-      secret: process.env.JWT_SECRET || 'lis-dev-secret-change-in-production',
+      secret: jwtSecret,
       signOptions: {
         expiresIn: Number.isFinite(jwtAccessTtlSeconds) && jwtAccessTtlSeconds > 0 ? jwtAccessTtlSeconds : 900,
       },

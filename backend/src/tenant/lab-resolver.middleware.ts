@@ -20,6 +20,7 @@ export class LabResolverMiddleware implements NestMiddleware {
   async use(req: Request, _res: Response, next: NextFunction): Promise<void> {
     const host = this.normalizeHost(this.extractHost(req));
     const originHost = this.normalizeHost(this.extractOriginHost(req));
+    const strictHostMode = this.isStrictTenantHostEnabled();
     req.tenantHost = host;
     req.hostScope = HostScope.UNKNOWN;
     req.tenantSubdomain = null;
@@ -41,11 +42,19 @@ export class LabResolverMiddleware implements NestMiddleware {
         next();
         return;
       }
-      const originSubdomain = this.extractLabSubdomain(originHost);
-      if (originSubdomain) {
-        subdomain = originSubdomain;
-        req.tenantHost = originHost;
+      if (strictHostMode) {
+        throw new ForbiddenException('Ambiguous tenant host for API requests');
       }
+      next();
+      return;
+    }
+
+    if (subdomain === 'api') {
+      if (strictHostMode) {
+        throw new ForbiddenException('Ambiguous tenant host for API requests');
+      }
+      next();
+      return;
     }
 
     if (!subdomain) {
@@ -71,13 +80,36 @@ export class LabResolverMiddleware implements NestMiddleware {
   }
 
   private extractHost(req: Request): string {
+    if (!this.isTrustProxyEnabled(req)) {
+      return req.hostname || '';
+    }
+
+    const strictHostMode = this.isStrictTenantHostEnabled();
     const forwardedHost = req.headers['x-forwarded-host'];
-    if (typeof forwardedHost === 'string' && forwardedHost.trim()) {
-      return forwardedHost.trim().split(',')[0]?.trim() ?? req.hostname;
+    let rawForwardedHost = '';
+    if (typeof forwardedHost === 'string') {
+      rawForwardedHost = forwardedHost.trim();
+    } else if (Array.isArray(forwardedHost) && forwardedHost.length > 0) {
+      rawForwardedHost = String(forwardedHost[0] ?? '').trim();
     }
-    if (Array.isArray(forwardedHost) && forwardedHost.length > 0) {
-      return forwardedHost[0] ?? req.hostname;
+
+    if (rawForwardedHost) {
+      const forwardedHosts = rawForwardedHost
+        .split(',')
+        .map((part) => part.trim())
+        .filter((part) => part.length > 0);
+
+      if (forwardedHosts.length > 0) {
+        if (strictHostMode) {
+          const distinctHosts = Array.from(new Set(forwardedHosts.map((item) => item.toLowerCase())));
+          if (distinctHosts.length > 1) {
+            throw new ForbiddenException('Ambiguous forwarded host chain');
+          }
+        }
+        return forwardedHosts[0] ?? req.hostname;
+      }
     }
+
     return req.hostname || '';
   }
 
@@ -103,6 +135,21 @@ export class LabResolverMiddleware implements NestMiddleware {
       }
     }
     return '';
+  }
+
+  private isTrustProxyEnabled(req: Request): boolean {
+    const value = req.app?.get?.('trust proxy');
+    if (value === true) return true;
+    if (typeof value === 'number') return value > 0;
+    if (typeof value === 'string') {
+      return value.trim().length > 0 && value !== 'false' && value !== '0';
+    }
+    if (Array.isArray(value)) return value.length > 0;
+    return false;
+  }
+
+  private isStrictTenantHostEnabled(): boolean {
+    return (process.env.STRICT_TENANT_HOST || '').trim().toLowerCase() === 'true';
   }
 
   private getAdminHost(): string {

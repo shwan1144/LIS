@@ -7,6 +7,7 @@ import {
   JoinColumn,
   CreateDateColumn,
   UpdateDateColumn,
+  Index,
 } from 'typeorm';
 import { Order } from './order.entity';
 import { OrderTest } from './order-test.entity';
@@ -23,6 +24,10 @@ export enum TubeType {
 }
 
 @Entity('samples')
+@Index('UQ_samples_lab_barcode', ['labId', 'barcode'], {
+  unique: true,
+  where: '"barcode" IS NOT NULL',
+})
 export class Sample {
   @PrimaryGeneratedColumn('uuid')
   id: string;
