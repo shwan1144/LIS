@@ -116,6 +116,19 @@ const RESULT_FLAG_META: Record<string, { color: string; label: string }> = {
   ABN: { color: 'purple', label: 'Abnormal' },
 };
 
+const VIRTUAL_SAVE_PRINTER_KEYWORDS = [
+  'print to pdf',
+  'pdfcreator',
+  'pdf architect',
+  'xps document writer',
+  'onenote',
+];
+
+function isVirtualSavePrinter(name: string): boolean {
+  const value = name.trim().toLowerCase();
+  return VIRTUAL_SAVE_PRINTER_KEYWORDS.some((keyword) => value.includes(keyword));
+}
+
 function cleanPhoneNumber(phone: string): string {
   return phone.replace(/\D/g, '');
 }
@@ -336,6 +349,11 @@ export function ReportsPage() {
         const settings = await getLabSettings();
         const printerName = settings.printing?.reportPrinterName?.trim();
         if (settings.printing?.mode === 'direct_qz' && printerName) {
+          if (isVirtualSavePrinter(printerName)) {
+            message.info(
+              `Report printer "${printerName}" is a virtual PDF/XPS printer. Using browser print so Save dialog can appear.`,
+            );
+          } else {
           try {
             await directPrintReportPdf({
               orderId,
@@ -346,6 +364,7 @@ export function ReportsPage() {
             return;
           } catch (error) {
             message.warning(`${getDirectPrintErrorMessage(error)} Falling back to browser print.`);
+          }
           }
         }
       } catch {
