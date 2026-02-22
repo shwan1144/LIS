@@ -144,6 +144,57 @@ async function ensureTenantRolePrivileges(dataSource) {
       $$;
     `,
         `
+      CREATE TABLE IF NOT EXISTS "lab_counters" (
+        "id" uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+        "labId" uuid NOT NULL,
+        "counterType" varchar(64) NOT NULL,
+        "scopeKey" varchar(128) NOT NULL DEFAULT '__default__',
+        "dateKey" date NOT NULL,
+        "shiftId" uuid NULL,
+        "shiftScopeKey" varchar(36) NOT NULL DEFAULT '',
+        "value" bigint NOT NULL DEFAULT 0,
+        "createdAt" timestamp NOT NULL DEFAULT now(),
+        "updatedAt" timestamp NOT NULL DEFAULT now()
+      )
+    `,
+        `
+      DO $$
+      BEGIN
+        IF to_regclass('public.lab_counters') IS NOT NULL THEN
+          IF NOT EXISTS (
+            SELECT 1
+            FROM pg_constraint
+            WHERE conname = 'FK_lab_counters_labId_labs'
+          ) THEN
+            ALTER TABLE "lab_counters"
+              ADD CONSTRAINT "FK_lab_counters_labId_labs"
+              FOREIGN KEY ("labId") REFERENCES "labs"("id")
+              ON DELETE CASCADE;
+          END IF;
+
+          IF to_regclass('public.shifts') IS NOT NULL
+             AND NOT EXISTS (
+               SELECT 1
+               FROM pg_constraint
+               WHERE conname = 'FK_lab_counters_shiftId_shifts'
+             ) THEN
+            ALTER TABLE "lab_counters"
+              ADD CONSTRAINT "FK_lab_counters_shiftId_shifts"
+              FOREIGN KEY ("shiftId") REFERENCES "shifts"("id")
+              ON DELETE SET NULL;
+          END IF;
+        END IF;
+      END $$;
+    `,
+        `
+      CREATE UNIQUE INDEX IF NOT EXISTS "UQ_lab_counters_scope"
+      ON "lab_counters" ("labId", "counterType", "scopeKey", "dateKey", "shiftScopeKey")
+    `,
+        `
+      CREATE INDEX IF NOT EXISTS "IDX_lab_counters_lab_date"
+      ON "lab_counters" ("labId", "dateKey")
+    `,
+        `
       DO $$
       BEGIN
         IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'app_lab_user') THEN
@@ -209,6 +260,7 @@ async function ensureTenantRolePrivileges(dataSource) {
           'samples',
           'order_tests',
           'results',
+          'lab_counters',
           'refresh_tokens',
           'admin_lab_portal_tokens',
           'tests',
@@ -240,6 +292,16 @@ async function ensureTenantRolePrivileges(dataSource) {
         `
       DO $$
       BEGIN
+        IF to_regclass('public.lab_counters') IS NOT NULL THEN
+          ALTER TABLE "lab_counters" ENABLE ROW LEVEL SECURITY;
+          ALTER TABLE "lab_counters" FORCE ROW LEVEL SECURITY;
+          DROP POLICY IF EXISTS "lab_counters_tenant_isolation" ON "lab_counters";
+          CREATE POLICY "lab_counters_tenant_isolation" ON "lab_counters"
+            FOR ALL TO app_lab_user
+            USING ("labId" = app.current_lab_id())
+            WITH CHECK ("labId" = app.current_lab_id());
+        END IF;
+
         IF to_regclass('public.audit_logs') IS NOT NULL THEN
           GRANT SELECT, INSERT ON TABLE "audit_logs" TO app_lab_user;
           ALTER TABLE "audit_logs" ENABLE ROW LEVEL SECURITY;
