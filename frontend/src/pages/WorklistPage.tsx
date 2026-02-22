@@ -157,7 +157,13 @@ export function WorklistPage() {
   // Result entry modal
   const [resultModalOpen, setResultModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<WorklistItem | null>(null);
-  const [resultForm] = Form.useForm();
+  const [resultForm] = Form.useForm<{
+    resultValue?: number;
+    resultText?: string;
+    customResultText?: string;
+    resultParameters?: Record<string, string>;
+    resultParametersCustom?: Record<string, string>;
+  }>();
   const [submitting, setSubmitting] = useState(false);
 
   // Reject modal
@@ -222,11 +228,35 @@ export function WorklistPage() {
     setEditingItem(item);
     const existingParams = item.resultParameters ?? {};
     const defaults: Record<string, string> = {};
+    const resultParametersInitial: Record<string, string> = {};
+    const resultParametersCustomInitial: Record<string, string> = {};
+    const defsByCode = new Map(
+      (item.parameterDefinitions ?? []).map((definition) => [
+        definition.code,
+        definition,
+      ]),
+    );
     (item.parameterDefinitions ?? []).forEach((def) => {
       if (def.defaultValue != null && def.defaultValue.trim() !== '' && (existingParams[def.code] == null || String(existingParams[def.code]).trim() === '')) {
         defaults[def.code] = def.defaultValue.trim();
       }
     });
+    for (const [code, rawValue] of Object.entries(existingParams)) {
+      const value = rawValue != null ? String(rawValue).trim() : '';
+      if (!value) continue;
+      const definition = defsByCode.get(code);
+      if (definition?.type === 'select') {
+        const known = new Set(
+          (definition.options ?? []).map((option) => option.trim().toLowerCase()),
+        );
+        if (known.size > 0 && !known.has(value.toLowerCase())) {
+          resultParametersInitial[code] = '__other__';
+          resultParametersCustomInitial[code] = value;
+          continue;
+        }
+      }
+      resultParametersInitial[code] = value;
+    }
     const qualitativeOptions = item.resultTextOptions ?? [];
     const defaultQualitativeOption =
       qualitativeOptions.find((option) => option.isDefault)?.value ??
@@ -258,7 +288,8 @@ export function WorklistPage() {
         : item.resultValue,
       resultText: initialResultText,
       customResultText,
-      resultParameters: { ...defaults, ...existingParams },
+      resultParameters: { ...defaults, ...resultParametersInitial },
+      resultParametersCustom: resultParametersCustomInitial,
     });
     setResultModalOpen(true);
   };
@@ -274,16 +305,28 @@ export function WorklistPage() {
     resultText?: string;
     customResultText?: string;
     resultParameters?: Record<string, string>;
+    resultParametersCustom?: Record<string, string>;
   }) => {
     if (!editingItem) return;
 
     const raw = values.resultParameters ?? {};
-    const resultParams = Object.fromEntries(
-      Object.entries(raw).filter(([, v]) => {
-        const s = v != null ? String(v).trim() : '';
-        return s !== '' && s !== '__other__';
-      })
-    );
+    const rawCustom = values.resultParametersCustom ?? {};
+    const resultParamsEntries: Array<[string, string]> = [];
+    for (const [code, rawValue] of Object.entries(raw)) {
+      const value = rawValue != null ? String(rawValue).trim() : '';
+      if (!value) continue;
+      if (value === '__other__') {
+        const customValue = rawCustom[code] != null ? String(rawCustom[code]).trim() : '';
+        if (!customValue) {
+          message.warning(`Please specify custom value for ${code}.`);
+          return;
+        }
+        resultParamsEntries.push([code, customValue]);
+        continue;
+      }
+      resultParamsEntries.push([code, value]);
+    }
+    const resultParams = Object.fromEntries(resultParamsEntries);
     const selectedResultText = values.resultText?.trim() || '';
     const finalResultText =
       selectedResultText === '__other__'
@@ -944,9 +987,6 @@ export function WorklistPage() {
                                     ]}
                                     showSearch
                                     optionFilterProp="label"
-                                    onChange={(v) => {
-                                      if (v === '__other__') resultForm.setFieldValue(['resultParameters', def.code], '');
-                                    }}
                                   />
                                 ) : (
                                   <Input placeholder={`Enter ${def.label}`} size="large" />
@@ -972,8 +1012,13 @@ export function WorklistPage() {
                             {editingItem.parameterDefinitions!.filter((def) => def.type === 'select').map((def) =>
                               params[def.code] === '__other__' ? (
                                 <Col xs={24} md={12} key={`${def.code}-other`}>
-                                  <Form.Item name={['resultParameters', def.code]} label={`${def.label} (specify)`} style={{ marginBottom: 16 }}>
-                                    <Input placeholder={`Type ${def.label}…`} size="large" />
+                                  <Form.Item
+                                    name={['resultParametersCustom', def.code]}
+                                    label={`${def.label} (specify)`}
+                                    rules={[{ required: true, message: `Type ${def.label}` }]}
+                                    style={{ marginBottom: 16 }}
+                                  >
+                                    <Input placeholder={`Type ${def.label}...`} size="large" />
                                   </Form.Item>
                                 </Col>
                               ) : null

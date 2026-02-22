@@ -216,6 +216,7 @@ export function ReportsPage() {
     resultText?: string;
     customResultText?: string;
     resultParameters?: Record<string, string>;
+    resultParametersCustom?: Record<string, string>;
   }>();
   const compactCellStyle = { paddingTop: 6, paddingBottom: 6, fontSize: 12 };
 
@@ -541,6 +542,11 @@ export function ReportsPage() {
     const allowCustomResultText = Boolean(orderTest.test?.allowCustomResultText);
     const existingParams = orderTest.resultParameters ?? {};
     const defaults: Record<string, string> = {};
+    const resultParametersInitial: Record<string, string> = {};
+    const resultParametersCustomInitial: Record<string, string> = {};
+    const defsByCode = new Map(
+      parameterDefinitions.map((definition) => [definition.code, definition]),
+    );
     parameterDefinitions.forEach((def) => {
       if (
         def.defaultValue != null &&
@@ -550,6 +556,22 @@ export function ReportsPage() {
         defaults[def.code] = def.defaultValue.trim();
       }
     });
+    for (const [code, rawValue] of Object.entries(existingParams)) {
+      const value = rawValue != null ? String(rawValue).trim() : '';
+      if (!value) continue;
+      const definition = defsByCode.get(code);
+      if (definition?.type === 'select') {
+        const known = new Set(
+          (definition.options ?? []).map((option) => option.trim().toLowerCase()),
+        );
+        if (known.size > 0 && !known.has(value.toLowerCase())) {
+          resultParametersInitial[code] = '__other__';
+          resultParametersCustomInitial[code] = value;
+          continue;
+        }
+      }
+      resultParametersInitial[code] = value;
+    }
 
     let initialResultText = orderTest.resultText ?? undefined;
     let customResultText: string | undefined;
@@ -592,7 +614,8 @@ export function ReportsPage() {
           : (Number.isFinite(valueCandidate) ? valueCandidate : undefined),
       resultText: initialResultText,
       customResultText,
-      resultParameters: { ...defaults, ...existingParams },
+      resultParameters: { ...defaults, ...resultParametersInitial },
+      resultParametersCustom: resultParametersCustomInitial,
     });
 
     setEditResultModalOpen(true);
@@ -605,12 +628,24 @@ export function ReportsPage() {
     let resultValue = values.resultValue ?? null;
     let resultText = values.resultText?.trim() || null;
     const rawParams = values.resultParameters ?? {};
-    const resultParameters = Object.fromEntries(
-      Object.entries(rawParams).filter(([, value]) => {
-        const v = value != null ? String(value).trim() : '';
-        return v !== '' && v !== '__other__';
-      }),
-    );
+    const rawCustomParams = values.resultParametersCustom ?? {};
+    const resultParameterEntries: Array<[string, string]> = [];
+    for (const [code, rawValue] of Object.entries(rawParams)) {
+      const value = rawValue != null ? String(rawValue).trim() : '';
+      if (!value) continue;
+      if (value === '__other__') {
+        const customValue =
+          rawCustomParams[code] != null ? String(rawCustomParams[code]).trim() : '';
+        if (!customValue) {
+          message.warning(`Please specify custom value for ${code}.`);
+          return;
+        }
+        resultParameterEntries.push([code, customValue]);
+        continue;
+      }
+      resultParameterEntries.push([code, value]);
+    }
+    const resultParameters = Object.fromEntries(resultParameterEntries);
     const hasResultParameters = Object.keys(resultParameters).length > 0;
 
     if (editResultContext.resultEntryType === 'QUALITATIVE') {
@@ -1305,11 +1340,6 @@ export function ReportsPage() {
                                     ]}
                                     showSearch
                                     optionFilterProp="label"
-                                    onChange={(nextValue) => {
-                                      if (nextValue === '__other__') {
-                                        editResultForm.setFieldValue(['resultParameters', def.code], '');
-                                      }
-                                    }}
                                   />
                                 ) : (
                                   <Input placeholder={`Enter ${def.label}`} size="large" />
@@ -1321,6 +1351,49 @@ export function ReportsPage() {
                       </Form.Item>
                     ))}
                   </Row>
+                  {editResultContext.parameterDefinitions.some((def) => def.type === 'select') && (
+                    <Form.Item
+                      noStyle
+                      shouldUpdate={(prev, curr) => {
+                        const prevKeys = prev?.resultParameters
+                          ? Object.keys(prev.resultParameters)
+                          : [];
+                        const currKeys = curr?.resultParameters
+                          ? Object.keys(curr.resultParameters)
+                          : [];
+                        return (
+                          prevKeys.some((key) => prev.resultParameters?.[key] === '__other__') !==
+                          currKeys.some((key) => curr.resultParameters?.[key] === '__other__')
+                        );
+                      }}
+                    >
+                      {() => {
+                        const params = editResultForm.getFieldValue('resultParameters') ?? {};
+                        return (
+                          <Row gutter={[20, 0]}>
+                            {editResultContext.parameterDefinitions
+                              .filter((def) => def.type === 'select')
+                              .map((def) =>
+                                params[def.code] === '__other__' ? (
+                                  <Col xs={24} md={12} key={`${def.code}-other`}>
+                                    <Form.Item
+                                      name={['resultParametersCustom', def.code]}
+                                      label={`${def.label} (specify)`}
+                                      rules={[
+                                        { required: true, message: `Type ${def.label}` },
+                                      ]}
+                                      style={{ marginBottom: 16 }}
+                                    >
+                                      <Input placeholder={`Type ${def.label}...`} size="large" />
+                                    </Form.Item>
+                                  </Col>
+                                ) : null,
+                              )}
+                          </Row>
+                        );
+                      }}
+                    </Form.Item>
+                  )}
                 </>
               )}
 
