@@ -489,6 +489,7 @@ export function TestsPage() {
           <ul style={{ marginTop: 8 }}>
             <li><strong>CBC</strong> – one panel test (Complete Blood Count), order by name only</li>
             <li><strong>Chemistry</strong> – BMP, Liver, Lipid, Thyroid, Coagulation (individual tests with normal ranges)</li>
+            <li><strong>Urinalysis (GUE)</strong> – one panel plus physical/chemical/microscopic subtests</li>
           </ul>
           <p style={{ marginTop: 8, color: '#666' }}>Existing tests with the same code will be skipped.</p>
         </div>
