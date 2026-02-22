@@ -209,6 +209,8 @@ async function ensureTenantRolePrivileges(dataSource) {
           'samples',
           'order_tests',
           'results',
+          'refresh_tokens',
+          'admin_lab_portal_tokens',
           'tests',
           'test_components',
           'shifts',
@@ -225,6 +227,21 @@ async function ensureTenantRolePrivileges(dataSource) {
             EXECUTE format('GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE %I TO app_lab_user', table_name);
           END IF;
         END LOOP;
+      END $$;
+    `,
+        `
+      DO $$
+      BEGIN
+        IF to_regclass('public.audit_logs') IS NOT NULL THEN
+          GRANT SELECT, INSERT ON TABLE "audit_logs" TO app_lab_user;
+          ALTER TABLE "audit_logs" ENABLE ROW LEVEL SECURITY;
+          ALTER TABLE "audit_logs" FORCE ROW LEVEL SECURITY;
+          DROP POLICY IF EXISTS "audit_logs_tenant_isolation" ON "audit_logs";
+          CREATE POLICY "audit_logs_tenant_isolation" ON "audit_logs"
+            FOR ALL TO app_lab_user
+            USING ("labId" = app.current_lab_id())
+            WITH CHECK ("labId" = app.current_lab_id());
+        END IF;
       END $$;
     `,
         `
