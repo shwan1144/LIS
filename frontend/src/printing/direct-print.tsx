@@ -39,7 +39,7 @@ declare global {
         find: (name?: string) => Promise<string | string[]>;
       };
       configs: {
-        create: (printerName: string, options?: { jobName?: string }) => unknown;
+        create: (printerName: string, options?: Record<string, unknown>) => unknown;
       };
       print: (config: unknown, data: Array<Record<string, unknown>>) => Promise<void>;
       __medilisConfigured?: boolean;
@@ -269,16 +269,29 @@ async function qzPrintHtml(html: string, printerName: string, jobName: string): 
   const qz = await loadQz();
   await ensureQzConnected(qz);
   const printer = await ensurePrinter(qz, printerName);
+  console.log(`[DirectPrint] Sending HTML job "${jobName}" to printer "${printer}"`);
   const config = qz.configs.create(printer, { jobName });
   await qz.print(config, [{ type: 'html', format: 'plain', data: html }]);
+  console.log(`[DirectPrint] HTML job "${jobName}" sent successfully`);
 }
 
 async function qzPrintPdf(blob: Blob, printerName: string, jobName: string): Promise<void> {
   const qz = await loadQz();
   await ensureQzConnected(qz);
   const printer = await ensurePrinter(qz, printerName);
+  console.log(`[DirectPrint] Sending PDF job "${jobName}" to printer "${printer}" (${blob.size} bytes)`);
   const base64 = await blobToBase64(blob);
-  const config = qz.configs.create(printer, { jobName });
+  console.log(`[DirectPrint] PDF base64 length: ${base64.length}`);
+  const config = qz.configs.create(printer, {
+    jobName,
+    scaleContent: true,
+    rasterize: true,
+    units: 'mm',
+    size: { width: 210, height: 297 },   // A4
+    orientation: 'portrait',
+    margins: 0,
+    interpolation: 'bicubic',
+  });
   await qz.print(config, [
     {
       type: 'pixel',
@@ -287,6 +300,7 @@ async function qzPrintPdf(blob: Blob, printerName: string, jobName: string): Pro
       data: base64,
     },
   ]);
+  console.log(`[DirectPrint] PDF job "${jobName}" sent successfully`);
 }
 
 async function blobToBase64(blob: Blob): Promise<string> {

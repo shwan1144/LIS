@@ -345,20 +345,21 @@ export function ReportsPage() {
               `Report printer "${printerName}" is a virtual PDF/XPS printer. Using browser print so Save dialog can appear.`,
             );
           } else {
-          try {
-            await directPrintReportPdf({
-              orderId,
-              blob,
-              printerName,
-            });
-            message.success(`Report sent to ${printerName}`);
-            return;
-          } catch (error) {
-            message.warning(`${getDirectPrintErrorMessage(error)} Falling back to browser print.`);
-          }
+            try {
+              await directPrintReportPdf({
+                orderId,
+                blob,
+                printerName,
+              });
+              message.success(`Report sent to ${printerName}`);
+              return;
+            } catch (error) {
+              message.warning(`${getDirectPrintErrorMessage(error)} Falling back to browser print.`);
+            }
           }
         }
-      } catch {
+      } catch (settingsError) {
+        console.error('[DirectPrint] Failed to load settings for direct print:', settingsError);
         // continue with browser print fallback
       }
 
@@ -828,27 +829,27 @@ export function ReportsPage() {
       },
       ...(canAdminEditResults
         ? [
-            {
-              title: 'Actions',
-              key: 'actions',
-              width: 90,
-              align: 'right' as const,
-              render: (_: unknown, row: ExpandedOrderTestRow) => (
-                <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                  <Button
-                    type="link"
-                    size="small"
-                    icon={<EditOutlined />}
-                    onClick={() => openEditResultModal(order, row.raw)}
-                    style={{ paddingInline: 4 }}
-                  >
-                    Edit
-                  </Button>
-                </div>
-              ),
-              onCell: () => ({ style: compactCellStyle }),
-            },
-          ]
+          {
+            title: 'Actions',
+            key: 'actions',
+            width: 90,
+            align: 'right' as const,
+            render: (_: unknown, row: ExpandedOrderTestRow) => (
+              <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                <Button
+                  type="link"
+                  size="small"
+                  icon={<EditOutlined />}
+                  onClick={() => openEditResultModal(order, row.raw)}
+                  style={{ paddingInline: 4 }}
+                >
+                  Edit
+                </Button>
+              </div>
+            ),
+            onCell: () => ({ style: compactCellStyle }),
+          },
+        ]
         : []),
     ];
 
@@ -1290,7 +1291,7 @@ export function ReportsPage() {
                           }
                         >
                           {editResultContext.resultEntryType === 'QUALITATIVE' &&
-                          (editResultContext.resultTextOptions?.length ?? 0) > 0 ? (
+                            (editResultContext.resultTextOptions?.length ?? 0) > 0 ? (
                             <Select
                               allowClear
                               showSearch
