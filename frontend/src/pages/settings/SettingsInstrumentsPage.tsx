@@ -109,6 +109,34 @@ const COBAS_E411_SERIAL_PRESET = {
   isActive: true,
 };
 
+const COBAS_C111_ASTM_PRESET = {
+  manufacturer: 'Roche',
+  model: 'cobas c111',
+  protocol: 'ASTM',
+  connectionType: 'TCP_SERVER',
+  port: 5001,
+  autoPost: true,
+  requireVerification: true,
+  bidirectionalEnabled: false,
+  isActive: true,
+};
+
+const COBAS_C111_SERIAL_PRESET = {
+  manufacturer: 'Roche',
+  model: 'cobas c111',
+  protocol: 'ASTM',
+  connectionType: 'SERIAL',
+  serialPort: 'COM1',
+  baudRate: 9600,
+  dataBits: '8',
+  parity: 'NONE',
+  stopBits: '1',
+  autoPost: true,
+  requireVerification: true,
+  bidirectionalEnabled: false,
+  isActive: true,
+};
+
 const MEDONIC_M51_HL7_PRESET = {
   manufacturer: 'Boule',
   model: 'Medonic M51',
@@ -289,6 +317,33 @@ export function SettingsInstrumentsPage() {
       filePattern: undefined,
     });
     message.success('Cobas e411 serial preset applied');
+  };
+
+  const handleApplyCobasC111Preset = () => {
+    form.setFieldsValue({
+      ...COBAS_C111_ASTM_PRESET,
+      host: undefined,
+      port: COBAS_C111_ASTM_PRESET.port,
+      serialPort: undefined,
+      baudRate: undefined,
+      dataBits: undefined,
+      parity: undefined,
+      stopBits: undefined,
+      watchFolder: undefined,
+      filePattern: undefined,
+    });
+    message.success('Cobas c111 ASTM preset applied');
+  };
+
+  const handleApplyCobasC111SerialPreset = () => {
+    form.setFieldsValue({
+      ...COBAS_C111_SERIAL_PRESET,
+      host: undefined,
+      port: undefined,
+      watchFolder: undefined,
+      filePattern: undefined,
+    });
+    message.success('Cobas c111 serial preset applied');
   };
 
   const handleApplyMedonicM51Preset = () => {
@@ -1032,6 +1087,12 @@ L|1|N`,
                 </Button>
                 <Button size="small" onClick={handleApplyCobasSerialPreset}>
                   Cobas e411 ASTM (Serial)
+                </Button>
+                <Button size="small" onClick={handleApplyCobasC111Preset}>
+                  Cobas c111 ASTM (TCP)
+                </Button>
+                <Button size="small" onClick={handleApplyCobasC111SerialPreset}>
+                  Cobas c111 ASTM (Serial)
                 </Button>
                 <Button size="small" onClick={handleApplyMedonicM51Preset}>
                   Medonic M51 HL7 (TCP)
