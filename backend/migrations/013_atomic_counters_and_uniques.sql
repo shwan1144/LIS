@@ -104,6 +104,26 @@ CREATE INDEX IF NOT EXISTS "IDX_lab_counters_lab_date"
 
 DO $$
 BEGIN
+  -- Normalize legacy duplicate order numbers inside the same lab.
+  WITH ranked AS (
+    SELECT
+      "id",
+      "orderNumber",
+      ROW_NUMBER() OVER (
+        PARTITION BY "labId", "orderNumber"
+        ORDER BY "createdAt" ASC, "id" ASC
+      ) AS rn
+    FROM "orders"
+    WHERE "orderNumber" IS NOT NULL
+  )
+  UPDATE "orders" o
+  SET "orderNumber" = LEFT(r."orderNumber", 52) || '-D' || SUBSTRING(REPLACE(o."id"::text, '-', '') FROM 1 FOR 10),
+      "updatedAt" = CURRENT_TIMESTAMP
+  FROM ranked r
+  WHERE o."id" = r."id"
+    AND r.rn > 1;
+
+  -- Safety check after normalization.
   IF EXISTS (
     SELECT 1
     FROM (
@@ -114,7 +134,7 @@ BEGIN
       HAVING COUNT(*) > 1
     ) duplicates
   ) THEN
-    RAISE EXCEPTION 'Duplicate orderNumber values found per lab. Resolve duplicates before applying 013_atomic_counters_and_uniques.sql';
+    RAISE EXCEPTION 'Duplicate orderNumber values still exist after normalization.';
   END IF;
 END $$;
 
@@ -124,6 +144,26 @@ CREATE UNIQUE INDEX IF NOT EXISTS "UQ_orders_lab_order_number"
 
 DO $$
 BEGIN
+  -- Normalize legacy duplicate barcodes inside the same lab.
+  WITH ranked AS (
+    SELECT
+      "id",
+      "barcode",
+      ROW_NUMBER() OVER (
+        PARTITION BY "labId", "barcode"
+        ORDER BY "createdAt" ASC, "id" ASC
+      ) AS rn
+    FROM "samples"
+    WHERE "barcode" IS NOT NULL
+  )
+  UPDATE "samples" s
+  SET "barcode" = LEFT(r."barcode", 116) || '-D' || SUBSTRING(REPLACE(s."id"::text, '-', '') FROM 1 FOR 10),
+      "updatedAt" = CURRENT_TIMESTAMP
+  FROM ranked r
+  WHERE s."id" = r."id"
+    AND r.rn > 1;
+
+  -- Safety check after normalization.
   IF EXISTS (
     SELECT 1
     FROM (
@@ -134,7 +174,7 @@ BEGIN
       HAVING COUNT(*) > 1
     ) duplicates
   ) THEN
-    RAISE EXCEPTION 'Duplicate sample barcode values found per lab. Resolve duplicates before applying 013_atomic_counters_and_uniques.sql';
+    RAISE EXCEPTION 'Duplicate sample barcode values still exist after normalization.';
   END IF;
 END $$;
 
