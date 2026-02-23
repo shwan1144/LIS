@@ -80,6 +80,17 @@ const statusColors: Record<string, string> = {
   CONNECTING: 'processing',
 };
 
+const COBAS_E411_ASTM_PRESET = {
+  manufacturer: 'Roche',
+  model: 'cobas e411',
+  protocol: 'ASTM',
+  connectionType: 'TCP_SERVER',
+  port: 5001,
+  autoPost: true,
+  requireVerification: true,
+  isActive: true,
+};
+
 export function SettingsInstrumentsPage() {
   const [loading, setLoading] = useState(false);
   const [instruments, setInstruments] = useState<InstrumentDto[]>([]);
@@ -161,11 +172,12 @@ export function SettingsInstrumentsPage() {
     setEditingInstrument(null);
     form.resetFields();
     form.setFieldsValue({
+      ...COBAS_E411_ASTM_PRESET,
       protocol: 'HL7_V2',
-      connectionType: 'TCP_SERVER',
-      autoPost: true,
+      manufacturer: undefined,
+      model: undefined,
+      port: undefined,
       requireVerification: false,
-      isActive: true,
     });
     setModalOpen(true);
   };
@@ -174,6 +186,21 @@ export function SettingsInstrumentsPage() {
     setEditingInstrument(instrument);
     form.setFieldsValue(instrument);
     setModalOpen(true);
+  };
+
+  const handleApplyCobasPreset = () => {
+    form.setFieldsValue({
+      ...COBAS_E411_ASTM_PRESET,
+      host: undefined,
+      serialPort: undefined,
+      baudRate: undefined,
+      dataBits: undefined,
+      parity: undefined,
+      stopBits: undefined,
+      watchFolder: undefined,
+      filePattern: undefined,
+    });
+    message.success('Cobas e411 ASTM preset applied');
   };
 
   const handleOpenDetail = async (instrument: InstrumentDto) => {
@@ -277,6 +304,7 @@ export function SettingsInstrumentsPage() {
     setTrackerMessages([]);
     setSelectedMessage(null);
     setTrackerRunning(true);
+    setSelectedPanel(instrument.protocol === 'ASTM' ? 'cobasE411Astm' : 'cbc');
     setTrackerModalOpen(true);
     loadTrackerMessages(instrument.id);
   };
@@ -317,12 +345,22 @@ export function SettingsInstrumentsPage() {
     }
   };
 
-  const formatHL7Message = (raw: string) => {
-    // Format HL7 message with line breaks for each segment
-    return raw
-      .replace(/\r\n|\r|\n/g, '\n')
-      .split(/(?=MSH|PID|PV1|ORC|OBR|OBX|NTE|MSA|ERR)/g)
-      .filter(s => s.trim())
+  const formatInstrumentMessage = (raw: string) => {
+    const normalized = raw.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+
+    // HL7 formatting
+    if (/(^|\n)MSH\|/.test(normalized)) {
+      return normalized
+        .split(/(?=MSH\||PID\||PV1\||ORC\||OBR\||OBX\||NTE\||MSA\||ERR\|)/g)
+        .filter((s) => s.trim())
+        .join('\n');
+    }
+
+    // ASTM or plain text formatting
+    return normalized
+      .split('\n')
+      .map((line) => line.trim())
+      .filter(Boolean)
       .join('\n');
   };
 
@@ -353,7 +391,7 @@ export function SettingsInstrumentsPage() {
     }
   };
 
-  // Sample HL7 ORU messages for testing
+  // Sample HL7/ASTM messages for testing
   const getTimestamp = () => new Date().toISOString().replace(/[-:T]/g, '').slice(0, 14);
   
   const sampleMessages: Record<string, { name: string; message: string }> = {
@@ -468,6 +506,14 @@ OBX|2|NM|RBC^Red Blood Cell Count||3.2|10^12/L|4.5-5.5|L|||F
 OBX|3|NM|HGB^Hemoglobin||8.5|g/dL|12.0-16.0|LL|||F
 OBX|4|NM|HCT^Hematocrit||28.0|%|36-46|L|||F
 OBX|5|NM|PLT^Platelet Count||45|10^9/L|150-400|LL|||F`,
+    },
+    cobasE411Astm: {
+      name: 'Cobas e411 ASTM (TSH sample)',
+      message: `H|\\^&|||cobas-e411|||||P|1
+P|1
+O|1|260220001||^^^TSH|R
+R|1|^^^TSH|2.31|mIU/L|0.27-4.2|N|||F
+L|1|N`,
     },
   };
 
@@ -694,6 +740,23 @@ OBX|5|NM|PLT^Platelet Count||45|10^9/L|150-400|LL|||F`,
         width={600}
       >
         <Form form={form} layout="vertical">
+          <Alert
+            type="info"
+            showIcon
+            style={{ marginBottom: 12 }}
+            message="Quick Preset"
+            description={(
+              <Space wrap>
+                <Button size="small" onClick={handleApplyCobasPreset}>
+                  Apply Cobas e411 ASTM Preset
+                </Button>
+                <Text type="secondary">
+                  Sets protocol ASTM, TCP server mode, port 5001, and verification enabled.
+                </Text>
+              </Space>
+            )}
+          />
+
           <Space style={{ display: 'flex' }} align="start">
             <Form.Item name="code" label="Code" rules={[{ required: true }]} style={{ width: 120 }}>
               <Input />
@@ -988,7 +1051,7 @@ OBX|5|NM|PLT^Platelet Count||45|10^9/L|150-400|LL|||F`,
                     }))}
                   />
                   <Button size="small" type="primary" onClick={() => setSimulatorMessage(sampleHL7Message)}>
-                    Load Panel
+                    Load Template
                   </Button>
                 </Space>
               }
@@ -996,7 +1059,7 @@ OBX|5|NM|PLT^Platelet Count||45|10^9/L|150-400|LL|||F`,
               <Input.TextArea
                 value={simulatorMessage}
                 onChange={(e) => setSimulatorMessage(e.target.value)}
-                placeholder="Paste HL7 message here or select a test panel above and click 'Load Panel'..."
+                placeholder="Paste HL7 or ASTM message here, or select a template above and click 'Load Template'..."
                 rows={5}
                 style={{ fontFamily: 'Consolas, Monaco, monospace', fontSize: 11, marginBottom: 8 }}
               />
@@ -1014,7 +1077,7 @@ OBX|5|NM|PLT^Platelet Count||45|10^9/L|150-400|LL|||F`,
                   Clear
                 </Button>
                 <Text type="secondary" style={{ fontSize: 11 }}>
-                  Paste an HL7 message and click Process to simulate receiving it from the instrument
+                  Paste an HL7 or ASTM message and click Process to simulate receiving it from the instrument
                 </Text>
               </Space>
             </Card>
@@ -1132,7 +1195,7 @@ OBX|5|NM|PLT^Platelet Count||45|10^9/L|150-400|LL|||F`,
                           wordBreak: 'break-all',
                         }}
                       >
-                        {formatHL7Message(selectedMessage.rawMessage || '')}
+                        {formatInstrumentMessage(selectedMessage.rawMessage || '')}
                       </pre>
                       {selectedMessage.parsedMessage && (
                         <>

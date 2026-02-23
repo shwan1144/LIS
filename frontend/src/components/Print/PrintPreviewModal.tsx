@@ -30,8 +30,8 @@ export function PrintPreviewModal({
 
   const handlePrint = useReactToPrint({
     contentRef: printRef,
-    documentTitle: type === 'receipt' 
-      ? `Receipt-${order?.orderNumber || 'order'}` 
+    documentTitle: type === 'receipt'
+      ? `Receipt-${order?.orderNumber || 'order'}`
       : `Labels-${order?.orderNumber || 'order'}`,
   });
 
@@ -42,7 +42,7 @@ export function PrintPreviewModal({
       title={type === 'receipt' ? 'Print Receipt' : 'Print Sample Labels'}
       open={open}
       onCancel={onClose}
-      width={type === 'receipt' ? 400 : 500}
+      width={type === 'receipt' ? 420 : 500}
       className="print-preview-modal"
       footer={
         <Space>

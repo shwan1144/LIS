@@ -19,9 +19,11 @@ const test_entity_1 = require("../entities/test.entity");
 const instruments_service_1 = require("./instruments.service");
 const instruments_controller_1 = require("./instruments.controller");
 const hl7_parser_service_1 = require("./hl7-parser.service");
+const astm_parser_service_1 = require("./astm-parser.service");
 const tcp_listener_service_1 = require("./tcp-listener.service");
 const result_processor_service_1 = require("./result-processor.service");
 const hl7_ingestion_service_1 = require("./hl7-ingestion.service");
+const astm_ingestion_service_1 = require("./astm-ingestion.service");
 const panels_module_1 = require("../panels/panels.module");
 let InstrumentsModule = class InstrumentsModule {
 };
@@ -46,11 +48,20 @@ exports.InstrumentsModule = InstrumentsModule = __decorate([
         providers: [
             instruments_service_1.InstrumentsService,
             hl7_parser_service_1.HL7ParserService,
+            astm_parser_service_1.AstmParserService,
             tcp_listener_service_1.TCPListenerService,
             result_processor_service_1.InstrumentResultProcessor,
             hl7_ingestion_service_1.HL7IngestionService,
+            astm_ingestion_service_1.AstmIngestionService,
         ],
-        exports: [instruments_service_1.InstrumentsService, hl7_parser_service_1.HL7ParserService, tcp_listener_service_1.TCPListenerService, hl7_ingestion_service_1.HL7IngestionService],
+        exports: [
+            instruments_service_1.InstrumentsService,
+            hl7_parser_service_1.HL7ParserService,
+            astm_parser_service_1.AstmParserService,
+            tcp_listener_service_1.TCPListenerService,
+            hl7_ingestion_service_1.HL7IngestionService,
+            astm_ingestion_service_1.AstmIngestionService,
+        ],
     })
 ], InstrumentsModule);
 //# sourceMappingURL=instruments.module.js.map

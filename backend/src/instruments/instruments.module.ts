@@ -10,9 +10,11 @@ import { Test } from '../entities/test.entity';
 import { InstrumentsService } from './instruments.service';
 import { InstrumentsController } from './instruments.controller';
 import { HL7ParserService } from './hl7-parser.service';
+import { AstmParserService } from './astm-parser.service';
 import { TCPListenerService } from './tcp-listener.service';
 import { InstrumentResultProcessor } from './result-processor.service';
 import { HL7IngestionService } from './hl7-ingestion.service';
+import { AstmIngestionService } from './astm-ingestion.service';
 import { PanelsModule } from '../panels/panels.module';
 
 @Module({
@@ -34,10 +36,19 @@ import { PanelsModule } from '../panels/panels.module';
   providers: [
     InstrumentsService,
     HL7ParserService,
+    AstmParserService,
     TCPListenerService,
     InstrumentResultProcessor,
     HL7IngestionService,
+    AstmIngestionService,
   ],
-  exports: [InstrumentsService, HL7ParserService, TCPListenerService, HL7IngestionService],
+  exports: [
+    InstrumentsService,
+    HL7ParserService,
+    AstmParserService,
+    TCPListenerService,
+    HL7IngestionService,
+    AstmIngestionService,
+  ],
 })
 export class InstrumentsModule {}

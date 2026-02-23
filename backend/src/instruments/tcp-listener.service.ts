@@ -2,11 +2,17 @@ import { Injectable, OnModuleInit, OnModuleDestroy, Logger } from '@nestjs/commo
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import * as net from 'net';
-import { Instrument, InstrumentStatus, ConnectionType } from '../entities/instrument.entity';
+import {
+  Instrument,
+  InstrumentStatus,
+  ConnectionType,
+  InstrumentProtocol,
+} from '../entities/instrument.entity';
 import { InstrumentMessage } from '../entities/instrument.entity';
-import { HL7ParserService, ParsedORU } from './hl7-parser.service';
-import { InstrumentResultProcessor } from './result-processor.service';
+import { HL7ParserService } from './hl7-parser.service';
+import { AstmParserService } from './astm-parser.service';
 import { HL7IngestionService } from './hl7-ingestion.service';
+import { AstmIngestionService } from './astm-ingestion.service';
 
 interface ActiveConnection {
   server?: net.Server;
@@ -26,8 +32,9 @@ export class TCPListenerService implements OnModuleInit, OnModuleDestroy {
     @InjectRepository(InstrumentMessage)
     private readonly messageRepo: Repository<InstrumentMessage>,
     private readonly hl7Parser: HL7ParserService,
-    private readonly resultProcessor: InstrumentResultProcessor,
+    private readonly astmParser: AstmParserService,
     private readonly hl7Ingestion: HL7IngestionService,
+    private readonly astmIngestion: AstmIngestionService,
   ) {}
 
   async onModuleInit() {
@@ -166,8 +173,10 @@ export class TCPListenerService implements OnModuleInit, OnModuleDestroy {
       buffer += data.toString();
       this.logger.debug(`Received data from ${instrument.code}: ${data.length} bytes`);
 
-      // Try to extract complete HL7 messages
-      const messages = this.extractMessages(buffer, instrument);
+      // Extract complete messages by protocol (HL7/ASTM)
+      const messages = instrument.protocol === InstrumentProtocol.ASTM
+        ? this.extractAstmMessages(buffer)
+        : this.extractMessages(buffer, instrument);
       buffer = messages.remaining;
 
       for (const rawMessage of messages.complete) {
@@ -217,6 +226,83 @@ export class TCPListenerService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
+   * Extract complete ASTM messages from buffer.
+   * ASTM streams can include framing bytes and record numbers, so we anchor on H|...L|.
+   */
+  private extractAstmMessages(buffer: string): { complete: string[]; remaining: string } {
+    const complete: string[] = [];
+    let remaining = buffer.replace(/\r\n/g, '\r').replace(/\n/g, '\r');
+
+    while (true) {
+      const headerStart = this.findAstmHeaderStart(remaining);
+      if (headerStart === -1) {
+        if (remaining.length > 4096) {
+          remaining = remaining.slice(-4096);
+        }
+        break;
+      }
+
+      if (headerStart > 0) {
+        remaining = remaining.slice(headerStart);
+      }
+
+      const endIndex = this.findAstmMessageEnd(remaining);
+      if (endIndex === -1) {
+        break;
+      }
+
+      const message = remaining.slice(0, endIndex).trim();
+      if (message) {
+        complete.push(message);
+      }
+      remaining = remaining.slice(endIndex);
+    }
+
+    return { complete, remaining };
+  }
+
+  private findAstmHeaderStart(value: string): number {
+    for (let i = 0; i < value.length - 1; i += 1) {
+      if (value[i] === 'H' && value[i + 1] === '|') {
+        return i;
+      }
+      if (i < value.length - 2 && /\d/.test(value[i]) && value[i + 1] === 'H' && value[i + 2] === '|') {
+        return i;
+      }
+    }
+    return -1;
+  }
+
+  private findAstmMessageEnd(value: string): number {
+    for (let i = 0; i < value.length - 1; i += 1) {
+      const lineStart = i === 0 || value[i - 1] === '\r';
+      if (!lineStart) continue;
+
+      const startsWithL = value[i] === 'L' && value[i + 1] === '|';
+      const startsWithFrameAndL =
+        i < value.length - 2 &&
+        /\d/.test(value[i]) &&
+        value[i + 1] === 'L' &&
+        value[i + 2] === '|';
+
+      if (!startsWithL && !startsWithFrameAndL) continue;
+
+      const lineBreakIndex = value.indexOf('\r', i);
+      if (lineBreakIndex === -1) {
+        return -1;
+      }
+
+      let end = lineBreakIndex + 1;
+      while (end < value.length && (value[end] === '\r' || value[end] === '\n' || value[end] === '\x04')) {
+        end += 1;
+      }
+      return end;
+    }
+
+    return -1;
+  }
+
+  /**
    * Simulate receiving a message (for testing)
    */
   async simulateMessage(instrument: Instrument, rawMessage: string): Promise<{ success: boolean; message?: string; messageId?: string }> {
@@ -244,6 +330,9 @@ export class TCPListenerService implements OnModuleInit, OnModuleDestroy {
    */
   private async processMessageInternal(instrument: Instrument, rawMessage: string): Promise<{ success: boolean; message?: string; messageId?: string }> {
     this.logger.log(`Processing message from ${instrument.code}`);
+    const shouldUseAstm =
+      instrument.protocol === InstrumentProtocol.ASTM ||
+      (instrument.protocol !== InstrumentProtocol.HL7_V2 && this.astmParser.isLikelyAstm(rawMessage));
 
     // Save incoming message
     const messageRecord = this.messageRepo.create({
@@ -255,6 +344,45 @@ export class TCPListenerService implements OnModuleInit, OnModuleDestroy {
     });
 
     try {
+      if (shouldUseAstm) {
+        const parsed = this.astmParser.parseMessage(rawMessage);
+        messageRecord.messageType = parsed.messageType;
+        messageRecord.parsedMessage = {
+          protocol: 'ASTM',
+          sender: parsed.sender,
+          variant: parsed.protocolVariant,
+          terminationCode: parsed.terminationCode,
+        };
+        await this.messageRepo.save(messageRecord);
+
+        const result = await this.astmIngestion.ingestAstmResult(instrument.id, rawMessage, {
+          strictMode: true,
+        });
+
+        if (result.unmatched > 0 && result.errors.length === 0) {
+          messageRecord.errorMessage = `${result.unmatched} unmatched results`;
+        } else if (result.errors.length > 0) {
+          messageRecord.errorMessage = result.errors.join('; ');
+        }
+
+        messageRecord.status = result.errors.length > 0 ? 'ERROR' : 'PROCESSED';
+        await this.messageRepo.save(messageRecord);
+
+        const conn = this.connections.get(instrument.id);
+        if (conn?.socket && !conn.socket.destroyed) {
+          await this.sendAstmControl(
+            instrument,
+            result.ackCode === 'AA' ? 'ACK' : 'NAK',
+          );
+        }
+
+        return {
+          success: result.success,
+          message: `Processed ${result.messageId ? parsed.messageType : 'ASTM'} message`,
+          messageId: messageRecord.id,
+        };
+      }
+
       // Parse the message
       const parsed = this.hl7Parser.parseMessage(rawMessage);
       messageRecord.messageType = parsed.messageType;
@@ -301,12 +429,16 @@ export class TCPListenerService implements OnModuleInit, OnModuleDestroy {
       try {
         const conn = this.connections.get(instrument.id);
         if (conn?.socket && !conn.socket.destroyed) {
-          try {
-            const parsed = this.hl7Parser.parseMessage(rawMessage);
-            const nak = this.hl7Parser.generateACK(parsed, 'AE', errorMsg);
-            await this.sendMessage(instrument, nak);
-          } catch {
-            // Can't even parse the message to send NAK
+          if (shouldUseAstm) {
+            await this.sendAstmControl(instrument, 'NAK');
+          } else {
+            try {
+              const parsed = this.hl7Parser.parseMessage(rawMessage);
+              const nak = this.hl7Parser.generateACK(parsed, 'AE', errorMsg);
+              await this.sendMessage(instrument, nak);
+            } catch {
+              // Can't even parse the message to send NAK
+            }
           }
         }
       } catch {
@@ -372,8 +504,10 @@ export class TCPListenerService implements OnModuleInit, OnModuleDestroy {
       return false;
     }
 
-    // Add MLLP framing
-    const framedMessage = this.hl7Parser.addMLLPFraming(message);
+    // Use HL7 MLLP framing for HL7 protocol; send raw payload otherwise.
+    const framedMessage = instrument.protocol === InstrumentProtocol.HL7_V2
+      ? this.hl7Parser.addMLLPFraming(message)
+      : message;
 
     return new Promise((resolve) => {
       conn.socket!.write(framedMessage, (err) => {
@@ -398,6 +532,36 @@ export class TCPListenerService implements OnModuleInit, OnModuleDestroy {
     });
   }
 
+  private async sendAstmControl(instrument: Instrument, control: 'ACK' | 'NAK'): Promise<boolean> {
+    const conn = this.connections.get(instrument.id);
+    if (!conn?.socket || conn.socket.destroyed) {
+      this.logger.error(`No active connection for ${instrument.code}`);
+      return false;
+    }
+
+    const payload = control === 'ACK' ? '\x06' : '\x15';
+
+    return new Promise((resolve) => {
+      conn.socket!.write(payload, (err) => {
+        if (err) {
+          this.logger.error(`Error sending ASTM ${control} to ${instrument.code}: ${err.message}`);
+          resolve(false);
+          return;
+        }
+
+        this.messageRepo.save({
+          instrumentId: instrument.id,
+          direction: 'OUT',
+          messageType: `ASTM_${control}`,
+          rawMessage: payload,
+          status: 'SENT',
+        });
+
+        resolve(true);
+      });
+    });
+  }
+
   /**
    * Send order to instrument
    */
@@ -405,6 +569,12 @@ export class TCPListenerService implements OnModuleInit, OnModuleDestroy {
     const instrument = await this.instrumentRepo.findOne({ where: { id: instrumentId } });
     if (!instrument) {
       throw new Error('Instrument not found');
+    }
+    if (instrument.protocol !== InstrumentProtocol.HL7_V2) {
+      this.logger.warn(
+        `sendOrder is currently implemented for HL7 instruments only (instrument ${instrument.code} uses ${instrument.protocol})`,
+      );
+      return false;
     }
 
     // Add instrument-specific settings

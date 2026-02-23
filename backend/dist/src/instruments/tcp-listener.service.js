@@ -21,15 +21,17 @@ const net = require("net");
 const instrument_entity_1 = require("../entities/instrument.entity");
 const instrument_entity_2 = require("../entities/instrument.entity");
 const hl7_parser_service_1 = require("./hl7-parser.service");
-const result_processor_service_1 = require("./result-processor.service");
+const astm_parser_service_1 = require("./astm-parser.service");
 const hl7_ingestion_service_1 = require("./hl7-ingestion.service");
+const astm_ingestion_service_1 = require("./astm-ingestion.service");
 let TCPListenerService = TCPListenerService_1 = class TCPListenerService {
-    constructor(instrumentRepo, messageRepo, hl7Parser, resultProcessor, hl7Ingestion) {
+    constructor(instrumentRepo, messageRepo, hl7Parser, astmParser, hl7Ingestion, astmIngestion) {
         this.instrumentRepo = instrumentRepo;
         this.messageRepo = messageRepo;
         this.hl7Parser = hl7Parser;
-        this.resultProcessor = resultProcessor;
+        this.astmParser = astmParser;
         this.hl7Ingestion = hl7Ingestion;
+        this.astmIngestion = astmIngestion;
         this.logger = new common_1.Logger(TCPListenerService_1.name);
         this.connections = new Map();
     }
@@ -131,7 +133,9 @@ let TCPListenerService = TCPListenerService_1 = class TCPListenerService {
         socket.on('data', async (data) => {
             buffer += data.toString();
             this.logger.debug(`Received data from ${instrument.code}: ${data.length} bytes`);
-            const messages = this.extractMessages(buffer, instrument);
+            const messages = instrument.protocol === instrument_entity_1.InstrumentProtocol.ASTM
+                ? this.extractAstmMessages(buffer)
+                : this.extractMessages(buffer, instrument);
             buffer = messages.remaining;
             for (const rawMessage of messages.complete) {
                 await this.processMessage(instrument, rawMessage);
@@ -167,6 +171,67 @@ let TCPListenerService = TCPListenerService_1 = class TCPListenerService {
         }
         return { complete, remaining };
     }
+    extractAstmMessages(buffer) {
+        const complete = [];
+        let remaining = buffer.replace(/\r\n/g, '\r').replace(/\n/g, '\r');
+        while (true) {
+            const headerStart = this.findAstmHeaderStart(remaining);
+            if (headerStart === -1) {
+                if (remaining.length > 4096) {
+                    remaining = remaining.slice(-4096);
+                }
+                break;
+            }
+            if (headerStart > 0) {
+                remaining = remaining.slice(headerStart);
+            }
+            const endIndex = this.findAstmMessageEnd(remaining);
+            if (endIndex === -1) {
+                break;
+            }
+            const message = remaining.slice(0, endIndex).trim();
+            if (message) {
+                complete.push(message);
+            }
+            remaining = remaining.slice(endIndex);
+        }
+        return { complete, remaining };
+    }
+    findAstmHeaderStart(value) {
+        for (let i = 0; i < value.length - 1; i += 1) {
+            if (value[i] === 'H' && value[i + 1] === '|') {
+                return i;
+            }
+            if (i < value.length - 2 && /\d/.test(value[i]) && value[i + 1] === 'H' && value[i + 2] === '|') {
+                return i;
+            }
+        }
+        return -1;
+    }
+    findAstmMessageEnd(value) {
+        for (let i = 0; i < value.length - 1; i += 1) {
+            const lineStart = i === 0 || value[i - 1] === '\r';
+            if (!lineStart)
+                continue;
+            const startsWithL = value[i] === 'L' && value[i + 1] === '|';
+            const startsWithFrameAndL = i < value.length - 2 &&
+                /\d/.test(value[i]) &&
+                value[i + 1] === 'L' &&
+                value[i + 2] === '|';
+            if (!startsWithL && !startsWithFrameAndL)
+                continue;
+            const lineBreakIndex = value.indexOf('\r', i);
+            if (lineBreakIndex === -1) {
+                return -1;
+            }
+            let end = lineBreakIndex + 1;
+            while (end < value.length && (value[end] === '\r' || value[end] === '\n' || value[end] === '\x04')) {
+                end += 1;
+            }
+            return end;
+        }
+        return -1;
+    }
     async simulateMessage(instrument, rawMessage) {
         this.logger.log(`Simulating message for ${instrument.code}`);
         try {
@@ -183,6 +248,8 @@ let TCPListenerService = TCPListenerService_1 = class TCPListenerService {
     }
     async processMessageInternal(instrument, rawMessage) {
         this.logger.log(`Processing message from ${instrument.code}`);
+        const shouldUseAstm = instrument.protocol === instrument_entity_1.InstrumentProtocol.ASTM ||
+            (instrument.protocol !== instrument_entity_1.InstrumentProtocol.HL7_V2 && this.astmParser.isLikelyAstm(rawMessage));
         const messageRecord = this.messageRepo.create({
             instrumentId: instrument.id,
             direction: 'IN',
@@ -191,6 +258,37 @@ let TCPListenerService = TCPListenerService_1 = class TCPListenerService {
             status: 'RECEIVED',
         });
         try {
+            if (shouldUseAstm) {
+                const parsed = this.astmParser.parseMessage(rawMessage);
+                messageRecord.messageType = parsed.messageType;
+                messageRecord.parsedMessage = {
+                    protocol: 'ASTM',
+                    sender: parsed.sender,
+                    variant: parsed.protocolVariant,
+                    terminationCode: parsed.terminationCode,
+                };
+                await this.messageRepo.save(messageRecord);
+                const result = await this.astmIngestion.ingestAstmResult(instrument.id, rawMessage, {
+                    strictMode: true,
+                });
+                if (result.unmatched > 0 && result.errors.length === 0) {
+                    messageRecord.errorMessage = `${result.unmatched} unmatched results`;
+                }
+                else if (result.errors.length > 0) {
+                    messageRecord.errorMessage = result.errors.join('; ');
+                }
+                messageRecord.status = result.errors.length > 0 ? 'ERROR' : 'PROCESSED';
+                await this.messageRepo.save(messageRecord);
+                const conn = this.connections.get(instrument.id);
+                if (conn?.socket && !conn.socket.destroyed) {
+                    await this.sendAstmControl(instrument, result.ackCode === 'AA' ? 'ACK' : 'NAK');
+                }
+                return {
+                    success: result.success,
+                    message: `Processed ${result.messageId ? parsed.messageType : 'ASTM'} message`,
+                    messageId: messageRecord.id,
+                };
+            }
             const parsed = this.hl7Parser.parseMessage(rawMessage);
             messageRecord.messageType = parsed.messageType;
             messageRecord.messageControlId = parsed.messageControlId;
@@ -226,12 +324,17 @@ let TCPListenerService = TCPListenerService_1 = class TCPListenerService {
             try {
                 const conn = this.connections.get(instrument.id);
                 if (conn?.socket && !conn.socket.destroyed) {
-                    try {
-                        const parsed = this.hl7Parser.parseMessage(rawMessage);
-                        const nak = this.hl7Parser.generateACK(parsed, 'AE', errorMsg);
-                        await this.sendMessage(instrument, nak);
+                    if (shouldUseAstm) {
+                        await this.sendAstmControl(instrument, 'NAK');
                     }
-                    catch {
+                    else {
+                        try {
+                            const parsed = this.hl7Parser.parseMessage(rawMessage);
+                            const nak = this.hl7Parser.generateACK(parsed, 'AE', errorMsg);
+                            await this.sendMessage(instrument, nak);
+                        }
+                        catch {
+                        }
                     }
                 }
             }
@@ -275,7 +378,9 @@ let TCPListenerService = TCPListenerService_1 = class TCPListenerService {
             this.logger.error(`No active connection for ${instrument.code}`);
             return false;
         }
-        const framedMessage = this.hl7Parser.addMLLPFraming(message);
+        const framedMessage = instrument.protocol === instrument_entity_1.InstrumentProtocol.HL7_V2
+            ? this.hl7Parser.addMLLPFraming(message)
+            : message;
         return new Promise((resolve) => {
             conn.socket.write(framedMessage, (err) => {
                 if (err) {
@@ -296,10 +401,39 @@ let TCPListenerService = TCPListenerService_1 = class TCPListenerService {
             });
         });
     }
+    async sendAstmControl(instrument, control) {
+        const conn = this.connections.get(instrument.id);
+        if (!conn?.socket || conn.socket.destroyed) {
+            this.logger.error(`No active connection for ${instrument.code}`);
+            return false;
+        }
+        const payload = control === 'ACK' ? '\x06' : '\x15';
+        return new Promise((resolve) => {
+            conn.socket.write(payload, (err) => {
+                if (err) {
+                    this.logger.error(`Error sending ASTM ${control} to ${instrument.code}: ${err.message}`);
+                    resolve(false);
+                    return;
+                }
+                this.messageRepo.save({
+                    instrumentId: instrument.id,
+                    direction: 'OUT',
+                    messageType: `ASTM_${control}`,
+                    rawMessage: payload,
+                    status: 'SENT',
+                });
+                resolve(true);
+            });
+        });
+    }
     async sendOrder(instrumentId, orderData) {
         const instrument = await this.instrumentRepo.findOne({ where: { id: instrumentId } });
         if (!instrument) {
             throw new Error('Instrument not found');
+        }
+        if (instrument.protocol !== instrument_entity_1.InstrumentProtocol.HL7_V2) {
+            this.logger.warn(`sendOrder is currently implemented for HL7 instruments only (instrument ${instrument.code} uses ${instrument.protocol})`);
+            return false;
         }
         orderData.sendingApplication = orderData.sendingApplication || 'LIS';
         orderData.sendingFacility = instrument.sendingFacility || 'LAB';
@@ -349,7 +483,8 @@ exports.TCPListenerService = TCPListenerService = TCPListenerService_1 = __decor
     __metadata("design:paramtypes", [typeorm_2.Repository,
         typeorm_2.Repository,
         hl7_parser_service_1.HL7ParserService,
-        result_processor_service_1.InstrumentResultProcessor,
-        hl7_ingestion_service_1.HL7IngestionService])
+        astm_parser_service_1.AstmParserService,
+        hl7_ingestion_service_1.HL7IngestionService,
+        astm_ingestion_service_1.AstmIngestionService])
 ], TCPListenerService);
 //# sourceMappingURL=tcp-listener.service.js.map

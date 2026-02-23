@@ -3,8 +3,8 @@
    ===================================================== */
 
 .print-receipt {
-  width: 280px;
-  padding: 16px;
+  width: 72mm;
+  padding: 4mm 2mm;
   font-family: 'Courier New', monospace;
   font-size: 12px;
   background: white;
@@ -376,9 +376,17 @@
    ===================================================== */
 
 @media print {
+
+  /* Default page — used by labels */
   @page {
     margin: 5mm;
     size: A4 landscape;
+  }
+
+  /* Receipt page — 80mm thermal roll, auto height */
+  @page receipt {
+    margin: 0;
+    size: 80mm auto;
   }
 
   body * {
@@ -397,9 +405,11 @@
   }
 
   .print-receipt {
-    width: 72mm; /* Standard thermal receipt width */
+    page: receipt;
+    width: 72mm;
+    /* 80mm paper − ~8mm non-printable edges */
     padding: 2mm;
-    margin: 0;
+    margin: 0 auto;
   }
 
   .sample-label {
