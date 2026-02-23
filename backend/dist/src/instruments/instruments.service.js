@@ -112,6 +112,46 @@ let InstrumentsService = class InstrumentsService {
         await this.findOne(id, labId);
         return this.tcpListener.restartListener(id);
     }
+    async sendTestOrder(id, labId, dto) {
+        const instrument = await this.findOne(id, labId);
+        if (!instrument.bidirectionalEnabled) {
+            throw new common_1.BadRequestException('Bidirectional mode is disabled for this instrument');
+        }
+        if (!dto.orderId?.trim() || !dto.sampleId?.trim() || !dto.patientId?.trim() || !dto.patientName?.trim()) {
+            throw new common_1.BadRequestException('orderId, sampleId, patientId, and patientName are required');
+        }
+        const normalizedTests = (dto.tests || [])
+            .map((test) => ({
+            code: test.code?.trim(),
+            name: test.name?.trim() || test.code?.trim(),
+        }))
+            .filter((test) => Boolean(test.code));
+        if (normalizedTests.length === 0) {
+            throw new common_1.BadRequestException('At least one test is required');
+        }
+        const sent = await this.tcpListener.sendOrder(instrument.id, {
+            messageControlId: `ORM${Date.now()}`,
+            sendingApplication: 'LIS',
+            sendingFacility: instrument.sendingFacility || 'LAB',
+            receivingApplication: instrument.receivingApplication || instrument.code,
+            receivingFacility: instrument.receivingFacility || '',
+            patientId: dto.patientId.trim(),
+            patientName: dto.patientName.trim(),
+            patientDob: dto.patientDob?.trim() || undefined,
+            patientSex: dto.patientSex?.trim() || undefined,
+            sampleId: dto.sampleId.trim(),
+            orderId: dto.orderId.trim(),
+            tests: normalizedTests,
+            priority: dto.priority?.trim() || 'R',
+        });
+        if (!sent) {
+            throw new common_1.BadRequestException('Failed to send order. Check instrument protocol, connection, and bidirectional mode.');
+        }
+        return {
+            success: true,
+            message: `Order ${dto.orderId.trim()} sent to ${instrument.code}`,
+        };
+    }
     async getMappings(instrumentId, labId) {
         await this.findOne(instrumentId, labId);
         return this.mappingRepo.find({

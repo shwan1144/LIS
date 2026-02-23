@@ -34,6 +34,19 @@ export interface CreateMappingDto {
     instrumentTestName?: string;
     multiplier?: number;
 }
+export interface SendInstrumentTestOrderDto {
+    orderId: string;
+    sampleId: string;
+    patientId: string;
+    patientName: string;
+    patientDob?: string;
+    patientSex?: string;
+    priority?: string;
+    tests: Array<{
+        code: string;
+        name?: string;
+    }>;
+}
 export declare class InstrumentsService {
     private readonly instrumentRepo;
     private readonly mappingRepo;
@@ -48,6 +61,10 @@ export declare class InstrumentsService {
     delete(id: string, labId: string): Promise<void>;
     toggleActive(id: string, labId: string): Promise<Instrument>;
     restartConnection(id: string, labId: string): Promise<boolean>;
+    sendTestOrder(id: string, labId: string, dto: SendInstrumentTestOrderDto): Promise<{
+        success: boolean;
+        message: string;
+    }>;
     getMappings(instrumentId: string, labId: string): Promise<InstrumentTestMapping[]>;
     getMappingsByTestId(testId: string, labId: string): Promise<(InstrumentTestMapping & {
         instrument: Instrument;

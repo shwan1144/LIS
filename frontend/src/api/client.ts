@@ -1704,6 +1704,17 @@ export interface InstrumentMessageDto {
   createdAt: string;
 }
 
+export interface SendInstrumentTestOrderRequest {
+  orderId: string;
+  sampleId: string;
+  patientId: string;
+  patientName: string;
+  patientDob?: string;
+  patientSex?: string;
+  priority?: string;
+  tests: Array<{ code: string; name?: string }>;
+}
+
 export async function getInstruments(): Promise<InstrumentDto[]> {
   const res = await api.get<InstrumentDto[]>('/instruments');
   return res.data;
@@ -1735,6 +1746,14 @@ export async function toggleInstrumentActive(id: string): Promise<InstrumentDto>
 
 export async function restartInstrumentConnection(id: string): Promise<{ success: boolean }> {
   const res = await api.post<{ success: boolean }>(`/instruments/${id}/restart`);
+  return res.data;
+}
+
+export async function sendInstrumentTestOrder(
+  id: string,
+  data: SendInstrumentTestOrderRequest,
+): Promise<{ success: boolean; message: string }> {
+  const res = await api.post<{ success: boolean; message: string }>(`/instruments/${id}/send-test-order`, data);
   return res.data;
 }
 

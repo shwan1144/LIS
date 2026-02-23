@@ -50,6 +50,7 @@ import {
   deleteInstrumentMapping,
   getInstrumentMessages,
   simulateInstrumentMessage,
+  sendInstrumentTestOrder,
   getTests,
   type InstrumentDto,
   type InstrumentMappingDto,
@@ -181,6 +182,9 @@ export function SettingsInstrumentsPage() {
   // Mapping modal
   const [mappingModalOpen, setMappingModalOpen] = useState(false);
   const [mappingForm] = Form.useForm();
+  const [sendOrderModalOpen, setSendOrderModalOpen] = useState(false);
+  const [sendOrderSubmitting, setSendOrderSubmitting] = useState(false);
+  const [sendOrderForm] = Form.useForm();
 
   // Live tracker modal
   const [trackerModalOpen, setTrackerModalOpen] = useState(false);
@@ -394,6 +398,85 @@ export function SettingsInstrumentsPage() {
       loadMappings(selectedInstrument.id);
     } catch {
       message.error('Failed to delete mapping');
+    }
+  };
+
+  const handleOpenSendOrderModal = () => {
+    if (!selectedInstrument) return;
+    if (!selectedInstrument.bidirectionalEnabled) {
+      message.warning('Enable bidirectional mode for this instrument first');
+      return;
+    }
+    if (selectedInstrument.protocol !== 'HL7_V2') {
+      message.warning('Send test order is currently available for HL7 instruments only');
+      return;
+    }
+    if (mappings.length === 0) {
+      message.warning('Add at least one test mapping before sending a test order');
+      return;
+    }
+
+    const firstMapping = mappings[0];
+    sendOrderForm.setFieldsValue({
+      orderId: `TEST-${dayjs().format('YYYYMMDD-HHmmss')}`,
+      sampleId: `SMP-${dayjs().format('HHmmss')}`,
+      patientId: 'P-TEST-001',
+      patientName: 'Test Patient',
+      patientDob: '',
+      patientSex: 'M',
+      priority: 'R',
+      selectedTestCodes: [firstMapping.instrumentTestCode],
+    });
+    setSendOrderModalOpen(true);
+  };
+
+  const handleSubmitSendOrder = async () => {
+    if (!selectedInstrument) return;
+
+    try {
+      const values = await sendOrderForm.validateFields();
+      const selectedTestCodes = values.selectedTestCodes as string[];
+      const selectedTests = selectedTestCodes
+        .map((code) => {
+          const mapping = mappings.find((m) => m.instrumentTestCode === code);
+          if (!mapping) return null;
+          const lisTest = tests.find((t) => t.id === mapping.testId);
+          return {
+            code: mapping.instrumentTestCode,
+            name: lisTest?.name || mapping.instrumentTestName || mapping.instrumentTestCode,
+          };
+        })
+        .filter((test): test is { code: string; name: string } => Boolean(test));
+
+      if (selectedTests.length === 0) {
+        message.error('Select at least one mapped test');
+        return;
+      }
+
+      setSendOrderSubmitting(true);
+      const result = await sendInstrumentTestOrder(selectedInstrument.id, {
+        orderId: values.orderId,
+        sampleId: values.sampleId,
+        patientId: values.patientId,
+        patientName: values.patientName,
+        patientDob: values.patientDob || undefined,
+        patientSex: values.patientSex || undefined,
+        priority: values.priority || 'R',
+        tests: selectedTests,
+      });
+
+      message.success(result.message || 'Order sent to instrument');
+      setSendOrderModalOpen(false);
+      await loadMessages(selectedInstrument.id);
+      await loadInstruments();
+    } catch (err: unknown) {
+      if (err && typeof err === 'object' && 'errorFields' in err) return;
+      const msg = err && typeof err === 'object' && 'response' in err
+        ? (err as { response?: { data?: { message?: string } } }).response?.data?.message
+        : 'Failed to send test order';
+      message.error(msg || 'Failed to send test order');
+    } finally {
+      setSendOrderSubmitting(false);
     }
   };
 
@@ -1107,6 +1190,24 @@ L|1|N`,
               </div>
             )}
 
+            <Space style={{ marginBottom: 12 }} wrap>
+              <Button
+                type="primary"
+                onClick={handleOpenSendOrderModal}
+                disabled={
+                  !selectedInstrument.bidirectionalEnabled || selectedInstrument.protocol !== 'HL7_V2'
+                }
+              >
+                Send Test Order
+              </Button>
+              {!selectedInstrument.bidirectionalEnabled && (
+                <Tag color="orange">Enable bidirectional mode to send orders</Tag>
+              )}
+              {selectedInstrument.protocol !== 'HL7_V2' && (
+                <Tag color="default">Currently supported for HL7 instruments</Tag>
+              )}
+            </Space>
+
             <Tabs
               activeKey={activeTab}
               onChange={setActiveTab}
@@ -1171,6 +1272,92 @@ L|1|N`,
             />
           </>
         )}
+      </Modal>
+
+      {/* Send Test Order Modal */}
+      <Modal
+        title="Send Test Order to Instrument"
+        open={sendOrderModalOpen}
+        onCancel={() => setSendOrderModalOpen(false)}
+        onOk={handleSubmitSendOrder}
+        okText="Send"
+        confirmLoading={sendOrderSubmitting}
+      >
+        <Alert
+          type="info"
+          showIcon
+          style={{ marginBottom: 12 }}
+          message="This sends an HL7 ORM test order to the selected instrument."
+        />
+        <Form form={sendOrderForm} layout="vertical">
+          <Space style={{ display: 'flex' }} align="start">
+            <Form.Item name="orderId" label="Order ID" rules={[{ required: true }]} style={{ flex: 1 }}>
+              <Input />
+            </Form.Item>
+            <Form.Item name="sampleId" label="Sample ID" rules={[{ required: true }]} style={{ flex: 1 }}>
+              <Input />
+            </Form.Item>
+          </Space>
+
+          <Space style={{ display: 'flex' }} align="start">
+            <Form.Item name="patientId" label="Patient ID" rules={[{ required: true }]} style={{ flex: 1 }}>
+              <Input />
+            </Form.Item>
+            <Form.Item name="patientName" label="Patient Name" rules={[{ required: true }]} style={{ flex: 1 }}>
+              <Input />
+            </Form.Item>
+          </Space>
+
+          <Space style={{ display: 'flex' }} align="start">
+            <Form.Item name="patientSex" label="Sex" style={{ width: 120 }}>
+              <Select
+                allowClear
+                options={[
+                  { value: 'M', label: 'Male' },
+                  { value: 'F', label: 'Female' },
+                  { value: 'O', label: 'Other' },
+                  { value: 'U', label: 'Unknown' },
+                ]}
+              />
+            </Form.Item>
+            <Form.Item
+              name="patientDob"
+              label="DOB (YYYYMMDD)"
+              style={{ flex: 1 }}
+              extra="Optional HL7 date format, e.g. 19920130"
+            >
+              <Input />
+            </Form.Item>
+            <Form.Item name="priority" label="Priority" style={{ width: 140 }}>
+              <Select
+                options={[
+                  { value: 'R', label: 'Routine (R)' },
+                  { value: 'S', label: 'STAT (S)' },
+                ]}
+              />
+            </Form.Item>
+          </Space>
+
+          <Form.Item
+            name="selectedTestCodes"
+            label="Mapped Tests"
+            rules={[{ required: true, type: 'array', min: 1 }]}
+            extra="Choose the mapped tests to include in the outbound order message."
+          >
+            <Select
+              mode="multiple"
+              placeholder="Select one or more mapped tests"
+              options={mappings.map((m) => {
+                const lisTest = tests.find((t) => t.id === m.testId);
+                const lisLabel = lisTest ? `${lisTest.code} - ${lisTest.name}` : (m.instrumentTestName || m.testId);
+                return {
+                  value: m.instrumentTestCode,
+                  label: `${m.instrumentTestCode} -> ${lisLabel}`,
+                };
+              })}
+            />
+          </Form.Item>
+        </Form>
       </Modal>
 
       {/* Mapping Modal */}

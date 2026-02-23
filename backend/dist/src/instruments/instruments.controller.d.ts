@@ -1,4 +1,4 @@
-import { InstrumentsService, CreateInstrumentDto, CreateMappingDto } from './instruments.service';
+import { InstrumentsService, CreateInstrumentDto, CreateMappingDto, SendInstrumentTestOrderDto } from './instruments.service';
 interface RequestWithUser {
     user: {
         userId: string;
@@ -20,6 +20,10 @@ export declare class InstrumentsController {
     toggleActive(req: RequestWithUser, id: string): Promise<import("../entities/instrument.entity").Instrument>;
     restartConnection(req: RequestWithUser, id: string): Promise<{
         success: boolean;
+    }>;
+    sendTestOrder(req: RequestWithUser, id: string, dto: SendInstrumentTestOrderDto): Promise<{
+        success: boolean;
+        message: string;
     }>;
     getMappings(req: RequestWithUser, id: string): Promise<import("../entities/instrument.entity").InstrumentTestMapping[]>;
     createMapping(req: RequestWithUser, id: string, dto: CreateMappingDto): Promise<import("../entities/instrument.entity").InstrumentTestMapping>;

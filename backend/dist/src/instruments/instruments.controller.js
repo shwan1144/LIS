@@ -69,6 +69,12 @@ let InstrumentsController = class InstrumentsController {
         const success = await this.instrumentsService.restartConnection(id, labId);
         return { success };
     }
+    async sendTestOrder(req, id, dto) {
+        const labId = req.user?.labId;
+        if (!labId)
+            throw new Error('Lab ID not found');
+        return this.instrumentsService.sendTestOrder(id, labId, dto);
+    }
     async getMappings(req, id) {
         const labId = req.user?.labId;
         if (!labId)
@@ -175,6 +181,15 @@ __decorate([
     __metadata("design:paramtypes", [Object, String]),
     __metadata("design:returntype", Promise)
 ], InstrumentsController.prototype, "restartConnection", null);
+__decorate([
+    (0, common_1.Post)(':id/send-test-order'),
+    __param(0, (0, common_1.Req)()),
+    __param(1, (0, common_1.Param)('id', common_1.ParseUUIDPipe)),
+    __param(2, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, String, Object]),
+    __metadata("design:returntype", Promise)
+], InstrumentsController.prototype, "sendTestOrder", null);
 __decorate([
     (0, common_1.Get)(':id/mappings'),
     __param(0, (0, common_1.Req)()),
