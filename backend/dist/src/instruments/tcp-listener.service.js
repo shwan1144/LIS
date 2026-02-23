@@ -304,7 +304,12 @@ let TCPListenerService = TCPListenerService_1 = class TCPListenerService {
                 ackCode = await this.processORU(instrument, rawMessage, messageRecord);
             }
             else if (parsed.messageType.startsWith('ORM')) {
-                this.logger.log(`Received order query from ${instrument.code}`);
+                if (instrument.bidirectionalEnabled) {
+                    this.logger.log(`Received order query from ${instrument.code} (bidirectional enabled)`);
+                }
+                else {
+                    this.logger.warn(`Received order query from ${instrument.code} but bidirectional mode is disabled`);
+                }
             }
             const conn = this.connections.get(instrument.id);
             if (conn?.socket && !conn.socket.destroyed) {
@@ -430,6 +435,10 @@ let TCPListenerService = TCPListenerService_1 = class TCPListenerService {
         const instrument = await this.instrumentRepo.findOne({ where: { id: instrumentId } });
         if (!instrument) {
             throw new Error('Instrument not found');
+        }
+        if (!instrument.bidirectionalEnabled) {
+            this.logger.warn(`sendOrder blocked: bidirectional mode is disabled for instrument ${instrument.code}`);
+            return false;
         }
         if (instrument.protocol !== instrument_entity_1.InstrumentProtocol.HL7_V2) {
             this.logger.warn(`sendOrder is currently implemented for HL7 instruments only (instrument ${instrument.code} uses ${instrument.protocol})`);

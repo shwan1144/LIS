@@ -401,8 +401,14 @@ export class TCPListenerService implements OnModuleInit, OnModuleDestroy {
       if (parsed.messageType.startsWith('ORU')) {
         ackCode = await this.processORU(instrument, rawMessage, messageRecord);
       } else if (parsed.messageType.startsWith('ORM')) {
-        // Order message from instrument (query for orders)
-        this.logger.log(`Received order query from ${instrument.code}`);
+        // Order/query message from instrument (future: send ORM/ACK flow)
+        if (instrument.bidirectionalEnabled) {
+          this.logger.log(`Received order query from ${instrument.code} (bidirectional enabled)`);
+        } else {
+          this.logger.warn(
+            `Received order query from ${instrument.code} but bidirectional mode is disabled`,
+          );
+        }
       }
 
       // Send ACK (only if there's an active connection)
@@ -569,6 +575,12 @@ export class TCPListenerService implements OnModuleInit, OnModuleDestroy {
     const instrument = await this.instrumentRepo.findOne({ where: { id: instrumentId } });
     if (!instrument) {
       throw new Error('Instrument not found');
+    }
+    if (!instrument.bidirectionalEnabled) {
+      this.logger.warn(
+        `sendOrder blocked: bidirectional mode is disabled for instrument ${instrument.code}`,
+      );
+      return false;
     }
     if (instrument.protocol !== InstrumentProtocol.HL7_V2) {
       this.logger.warn(

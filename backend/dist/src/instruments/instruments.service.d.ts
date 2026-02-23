@@ -25,6 +25,7 @@ export interface CreateInstrumentDto {
     receivingFacility?: string;
     autoPost?: boolean;
     requireVerification?: boolean;
+    bidirectionalEnabled?: boolean;
     isActive?: boolean;
 }
 export interface CreateMappingDto {

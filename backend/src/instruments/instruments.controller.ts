@@ -11,7 +11,12 @@ import {
   Req,
   ParseUUIDPipe,
 } from '@nestjs/common';
-import { InstrumentsService, CreateInstrumentDto, CreateMappingDto } from './instruments.service';
+import {
+  InstrumentsService,
+  CreateInstrumentDto,
+  CreateMappingDto,
+  SendInstrumentTestOrderDto,
+} from './instruments.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 
 interface RequestWithUser {
@@ -85,6 +90,17 @@ export class InstrumentsController {
     if (!labId) throw new Error('Lab ID not found');
     const success = await this.instrumentsService.restartConnection(id, labId);
     return { success };
+  }
+
+  @Post(':id/send-test-order')
+  async sendTestOrder(
+    @Req() req: RequestWithUser,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: SendInstrumentTestOrderDto,
+  ) {
+    const labId = req.user?.labId;
+    if (!labId) throw new Error('Lab ID not found');
+    return this.instrumentsService.sendTestOrder(id, labId, dto);
   }
 
   // Mappings

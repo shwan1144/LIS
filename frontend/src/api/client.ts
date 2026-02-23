@@ -1673,6 +1673,7 @@ export interface InstrumentDto {
   isActive: boolean;
   autoPost: boolean;
   requireVerification: boolean;
+  bidirectionalEnabled: boolean;
   createdAt: string;
   updatedAt: string;
   _connectionStatus?: { connected: boolean; hasServer: boolean };

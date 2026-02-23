@@ -11,13 +11,15 @@ interface OrderReceiptProps {
 
 export const OrderReceipt = forwardRef<HTMLDivElement, OrderReceiptProps>(
   ({ order, labName }, ref) => {
-    // Collect all tests from all samples
+    // Collect root-level tests only (panels, not their children)
     const allTests = order.samples.flatMap((sample) =>
-      sample.orderTests.map((ot) => ({
-        code: ot.test.code,
-        name: ot.test.name,
-        price: ot.price,
-      }))
+      sample.orderTests
+        .filter((ot) => !ot.parentOrderTestId)
+        .map((ot) => ({
+          code: ot.test.code,
+          name: ot.test.name,
+          price: ot.price,
+        }))
     );
 
     const patientName = order.patient.fullName || '';

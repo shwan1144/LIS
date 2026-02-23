@@ -35,6 +35,7 @@ export interface CreateInstrumentDto {
   receivingFacility?: string;
   autoPost?: boolean;
   requireVerification?: boolean;
+  bidirectionalEnabled?: boolean;
   isActive?: boolean;
 }
 
@@ -43,6 +44,20 @@ export interface CreateMappingDto {
   instrumentTestCode: string;
   instrumentTestName?: string;
   multiplier?: number;
+}
+
+export interface SendInstrumentTestOrderDto {
+  orderId: string;
+  sampleId: string;
+  patientId: string;
+  patientName: string;
+  patientDob?: string;
+  patientSex?: string;
+  priority?: string;
+  tests: Array<{
+    code: string;
+    name?: string;
+  }>;
 }
 
 @Injectable()
@@ -171,6 +186,60 @@ export class InstrumentsService {
   async restartConnection(id: string, labId: string): Promise<boolean> {
     await this.findOne(id, labId); // Verify access
     return this.tcpListener.restartListener(id);
+  }
+
+  async sendTestOrder(
+    id: string,
+    labId: string,
+    dto: SendInstrumentTestOrderDto,
+  ): Promise<{ success: boolean; message: string }> {
+    const instrument = await this.findOne(id, labId);
+
+    if (!instrument.bidirectionalEnabled) {
+      throw new BadRequestException('Bidirectional mode is disabled for this instrument');
+    }
+
+    if (!dto.orderId?.trim() || !dto.sampleId?.trim() || !dto.patientId?.trim() || !dto.patientName?.trim()) {
+      throw new BadRequestException('orderId, sampleId, patientId, and patientName are required');
+    }
+
+    const normalizedTests = (dto.tests || [])
+      .map((test) => ({
+        code: test.code?.trim(),
+        name: test.name?.trim() || test.code?.trim(),
+      }))
+      .filter((test) => Boolean(test.code));
+
+    if (normalizedTests.length === 0) {
+      throw new BadRequestException('At least one test is required');
+    }
+
+    const sent = await this.tcpListener.sendOrder(instrument.id, {
+      messageControlId: `ORM${Date.now()}`,
+      sendingApplication: 'LIS',
+      sendingFacility: instrument.sendingFacility || 'LAB',
+      receivingApplication: instrument.receivingApplication || instrument.code,
+      receivingFacility: instrument.receivingFacility || '',
+      patientId: dto.patientId.trim(),
+      patientName: dto.patientName.trim(),
+      patientDob: dto.patientDob?.trim() || undefined,
+      patientSex: dto.patientSex?.trim() || undefined,
+      sampleId: dto.sampleId.trim(),
+      orderId: dto.orderId.trim(),
+      tests: normalizedTests as Array<{ code: string; name: string }>,
+      priority: dto.priority?.trim() || 'R',
+    });
+
+    if (!sent) {
+      throw new BadRequestException(
+        'Failed to send order. Check instrument protocol, connection, and bidirectional mode.',
+      );
+    }
+
+    return {
+      success: true,
+      message: `Order ${dto.orderId.trim()} sent to ${instrument.code}`,
+    };
   }
 
   // Test Mappings

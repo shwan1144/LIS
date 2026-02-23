@@ -145,6 +145,9 @@ export class Instrument {
   @Column({ type: 'boolean', default: false })
   requireVerification: boolean; // Results need verification before auto-posting
 
+  @Column({ type: 'boolean', default: false })
+  bidirectionalEnabled: boolean; // Allow LIS to send orders/query replies to instrument
+
   @CreateDateColumn()
   createdAt: Date;
 

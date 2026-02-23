@@ -49,6 +49,7 @@ export declare class Instrument {
     isActive: boolean;
     autoPost: boolean;
     requireVerification: boolean;
+    bidirectionalEnabled: boolean;
     createdAt: Date;
     updatedAt: Date;
     lab: Lab;

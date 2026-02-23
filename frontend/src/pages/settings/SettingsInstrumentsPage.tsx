@@ -88,6 +88,7 @@ const COBAS_E411_ASTM_PRESET = {
   port: 5001,
   autoPost: true,
   requireVerification: true,
+  bidirectionalEnabled: false,
   isActive: true,
 };
 
@@ -103,6 +104,7 @@ const COBAS_E411_SERIAL_PRESET = {
   stopBits: '1',
   autoPost: true,
   requireVerification: true,
+  bidirectionalEnabled: false,
   isActive: true,
 };
 
@@ -114,6 +116,7 @@ const MEDONIC_M51_HL7_PRESET = {
   port: 5600,
   autoPost: true,
   requireVerification: true,
+  bidirectionalEnabled: false,
   isActive: true,
 };
 
@@ -246,6 +249,7 @@ export function SettingsInstrumentsPage() {
       model: undefined,
       port: undefined,
       requireVerification: false,
+      bidirectionalEnabled: false,
     });
     setModalOpen(true);
   };
@@ -728,6 +732,16 @@ L|1|N`,
       },
     },
     {
+      title: 'Mode',
+      key: 'mode',
+      width: 90,
+      render: (_, record) => (
+        <Tag color={record.bidirectionalEnabled ? 'green' : 'default'}>
+          {record.bidirectionalEnabled ? 'BIDIR' : 'UNI'}
+        </Tag>
+      ),
+    },
+    {
       title: 'Connection',
       key: 'connection',
       width: 150,
@@ -1034,6 +1048,14 @@ L|1|N`,
             <Form.Item name="requireVerification" label="Require Verification" valuePropName="checked">
               <Switch />
             </Form.Item>
+            <Form.Item
+              name="bidirectionalEnabled"
+              label="Bidirectional mode"
+              valuePropName="checked"
+              tooltip="Enable when this instrument should receive LIS order/query responses."
+            >
+              <Switch />
+            </Form.Item>
             <Form.Item name="isActive" label="Active" valuePropName="checked">
               <Switch />
             </Form.Item>
@@ -1073,6 +1095,9 @@ L|1|N`,
               </Descriptions.Item>
               <Descriptions.Item label="Auto-post">
                 {selectedInstrument.autoPost ? 'Yes' : 'No'}
+              </Descriptions.Item>
+              <Descriptions.Item label="Bidirectional">
+                {selectedInstrument.bidirectionalEnabled ? 'Enabled' : 'Disabled'}
               </Descriptions.Item>
             </Descriptions>
 
