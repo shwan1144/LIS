@@ -19,9 +19,6 @@ import {
   Divider,
   Tooltip,
   Popconfirm,
-  Radio,
-  AutoComplete,
-  Checkbox,
 } from 'antd';
 import {
   SearchOutlined,
@@ -31,9 +28,6 @@ import {
   ReloadOutlined,
   CheckOutlined,
   UserOutlined,
-  PlusOutlined,
-  DeleteOutlined,
-  MinusCircleOutlined,
 } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import dayjs from 'dayjs';
@@ -84,44 +78,6 @@ const getFlagColor = (flag: ResultFlag | null): string => {
       return '#d9d9d9';
   }
 };
-
-interface AntibioticSensitivity {
-  antibiotic: string;
-  result: 'S' | 'I' | 'R'; // Susceptible, Intermediate, Resistant
-}
-
-interface Organism {
-  name: string;
-  quantity: '1+' | '2+' | '3+' | '4+' | 'Few' | 'Moderate' | 'Many' | 'Heavy';
-  sensitivities: AntibioticSensitivity[];
-}
-
-
-const COMMON_ORGANISMS = [
-  'Escherichia coli',
-  'Staphylococcus aureus',
-  'Klebsiella pneumoniae',
-  'Pseudomonas aeruginosa',
-  'Enterococcus faecalis',
-  'Streptococcus pyogenes',
-  'Candida albicans',
-  'Proteus mirabilis',
-  'Acinetobacter baumannii',
-  'Staphylococcus epidermidis',
-];
-
-const COMMON_ANTIBIOTICS = [
-  'Amoxicillin',
-  'Ciprofloxacin',
-  'Azithromycin',
-  'Doxycycline',
-  'Metronidazole',
-  'Vancomycin',
-  'Meropenem',
-  'Ceftriaxone',
-  'Levofloxacin',
-  'Clindamycin',
-];
 
 const getFlagLabel = (flag: ResultFlag | null): string => {
   switch (flag) {
@@ -209,11 +165,6 @@ export function WorklistPage() {
     resultParametersCustom?: Record<string, string>;
   }>();
   const [submitting, setSubmitting] = useState(false);
-
-  // Culture & Sensitivity state
-  const [cultureNoGrowth, setCultureNoGrowth] = useState(false);
-  const [cultureOrganisms, setCultureOrganisms] = useState<Organism[]>([]);
-  const [cultureComments, setCultureComments] = useState('');
 
   // Reject modal
   const [rejectModalOpen, setRejectModalOpen] = useState(false);
@@ -332,40 +283,14 @@ export function WorklistPage() {
     }
 
     resultForm.setFieldsValue({
-      resultValue: item.resultEntryType === 'QUALITATIVE' || item.resultEntryType === 'TEXT' || item.resultEntryType === 'CULTURE_SENSITIVITY'
+      resultValue: item.resultEntryType === 'QUALITATIVE' || item.resultEntryType === 'TEXT'
         ? undefined
-        : (item.resultValue ?? undefined),
+        : item.resultValue,
       resultText: initialResultText,
       customResultText,
       resultParameters: { ...defaults, ...resultParametersInitial },
       resultParametersCustom: resultParametersCustomInitial,
     });
-
-    // Initialize culture state if editing a C/S test
-    if (item.resultEntryType === 'CULTURE_SENSITIVITY') {
-      const rawCulture = existingParams.__cultureResult;
-      if (rawCulture) {
-        try {
-          const parsed = JSON.parse(rawCulture);
-          setCultureNoGrowth(Boolean(parsed.noGrowth));
-          setCultureOrganisms(parsed.organisms ?? []);
-          setCultureComments(parsed.comments ?? '');
-        } catch {
-          setCultureNoGrowth(false);
-          setCultureOrganisms([]);
-          setCultureComments('');
-        }
-      } else if (item.resultText === 'No growth') {
-        setCultureNoGrowth(true);
-        setCultureOrganisms([]);
-        setCultureComments('');
-      } else {
-        setCultureNoGrowth(false);
-        setCultureOrganisms([]);
-        setCultureComments('');
-      }
-    }
-
     setResultModalOpen(true);
   };
 
@@ -373,61 +298,6 @@ export function WorklistPage() {
     setResultModalOpen(false);
     setEditingItem(null);
     resultForm.resetFields();
-    setCultureNoGrowth(false);
-    setCultureOrganisms([]);
-    setCultureComments('');
-  };
-
-  const handleSubmitCulture = async () => {
-    if (!editingItem) return;
-
-    // Validate
-    if (!cultureNoGrowth && cultureOrganisms.length === 0) {
-      message.warning('Add at least one organism or mark as "No Growth"');
-      return;
-    }
-    if (!cultureNoGrowth) {
-      for (let i = 0; i < cultureOrganisms.length; i++) {
-        if (!cultureOrganisms[i].name.trim()) {
-          message.warning(`Organism ${i + 1}: name is required`);
-          return;
-        }
-      }
-    }
-
-    // Build summary for resultText
-    let summary: string;
-    if (cultureNoGrowth) {
-      summary = 'No growth';
-    } else {
-      summary = cultureOrganisms
-        .map((o) => `${o.name} (${o.quantity})`)
-        .join('; ');
-    }
-
-    // Serialize culture data into resultParameters
-    const cultureData = {
-      noGrowth: cultureNoGrowth,
-      organisms: cultureNoGrowth ? [] : cultureOrganisms,
-      comments: cultureComments || undefined,
-    };
-
-    setSubmitting(true);
-    try {
-      await enterResult(editingItem.id, {
-        resultValue: null,
-        resultText: summary,
-        resultParameters: { __cultureResult: JSON.stringify(cultureData) },
-      });
-      message.success('Culture result saved');
-      handleCloseResultModal();
-      loadData();
-      loadStats();
-    } catch {
-      message.error('Failed to save culture result');
-    } finally {
-      setSubmitting(false);
-    }
   };
 
   const handleSubmitResult = async (values: {
@@ -438,12 +308,6 @@ export function WorklistPage() {
     resultParametersCustom?: Record<string, string>;
   }) => {
     if (!editingItem) return;
-
-    // Delegate to culture handler for C/S tests
-    if (editingItem.resultEntryType === 'CULTURE_SENSITIVITY') {
-      handleSubmitCulture();
-      return;
-    }
 
     const raw = values.resultParameters ?? {};
     const rawCustom = values.resultParametersCustom ?? {};
@@ -947,7 +811,7 @@ export function WorklistPage() {
         open={resultModalOpen}
         onCancel={handleCloseResultModal}
         footer={null}
-        width={editingItem?.resultEntryType === 'CULTURE_SENSITIVITY' ? 820 : 720}
+        width={720}
         styles={{
           body: { paddingTop: 8 },
           header: { borderBottom: isDark ? '1px solid rgba(255,255,255,0.08)' : '1px solid #f0f0f0' },
@@ -992,289 +856,7 @@ export function WorklistPage() {
               layout="vertical"
               onFinish={handleSubmitResult}
             >
-              {/* Culture & Sensitivity Form */}
-              {editingItem.resultEntryType === 'CULTURE_SENSITIVITY' && (
-                <div>
-                  <Checkbox
-                    checked={cultureNoGrowth}
-                    onChange={(e) => {
-                      setCultureNoGrowth(e.target.checked);
-                      if (e.target.checked) {
-                        setCultureOrganisms([]);
-                      }
-                    }}
-                    style={{ marginBottom: 16, fontSize: 15 }}
-                  >
-                    <Text strong style={{ fontSize: 15 }}>No Growth</Text>
-                  </Checkbox>
-
-                  {!cultureNoGrowth && (
-                    <div>
-                      {cultureOrganisms.map((organism, oi) => (
-                        <div
-                          key={oi}
-                          style={{
-                            border: isDark ? '1px solid rgba(100,168,255,0.35)' : '1px solid #91caff',
-                            borderLeft: isDark ? '3px solid #3c89e8' : '3px solid #1677ff',
-                            borderRadius: 8,
-                            padding: 14,
-                            marginBottom: 14,
-                            background: isDark ? 'rgba(255,255,255,0.03)' : '#f7fbff',
-                          }}
-                        >
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-                            <Text strong style={{ fontSize: 14 }}>Organism {oi + 1}</Text>
-                            <Button
-                              danger
-                              size="small"
-                              icon={<DeleteOutlined />}
-                              onClick={() => setCultureOrganisms((prev) => prev.filter((_, i) => i !== oi))}
-                            >
-                              Remove
-                            </Button>
-                          </div>
-
-                          <Row gutter={12}>
-                            <Col xs={24} md={14}>
-                              <div style={{ marginBottom: 10 }}>
-                                <Text type="secondary" style={{ fontSize: 12 }}>Organism name</Text>
-                                <AutoComplete
-                                  style={{ width: '100%', marginTop: 4 }}
-                                  size="large"
-                                  value={organism.name}
-                                  onChange={(val) =>
-                                    setCultureOrganisms((prev) =>
-                                      prev.map((o, i) => (i === oi ? { ...o, name: val } : o))
-                                    )
-                                  }
-                                  options={COMMON_ORGANISMS.filter(
-                                    (name) =>
-                                      !organism.name ||
-                                      name.toLowerCase().includes(organism.name.toLowerCase())
-                                  ).map((name) => ({ value: name, label: name }))}
-                                  placeholder="e.g. Escherichia coli"
-                                  filterOption={false}
-                                />
-                              </div>
-                            </Col>
-                            <Col xs={24} md={10}>
-                              <div style={{ marginBottom: 10 }}>
-                                <Text type="secondary" style={{ fontSize: 12 }}>Colony count</Text>
-                                <Select
-                                  style={{ width: '100%', marginTop: 4 }}
-                                  size="large"
-                                  value={organism.quantity}
-                                  onChange={(val) =>
-                                    setCultureOrganisms((prev) =>
-                                      prev.map((o, i) => (i === oi ? { ...o, quantity: val } : o))
-                                    )
-                                  }
-                                  options={[
-                                    { label: '1+ (Scanty)', value: '1+' },
-                                    { label: '2+ (Light)', value: '2+' },
-                                    { label: '3+ (Moderate)', value: '3+' },
-                                    { label: '4+ (Heavy)', value: '4+' },
-                                    { label: 'Few', value: 'Few' },
-                                    { label: 'Moderate', value: 'Moderate' },
-                                    { label: 'Many', value: 'Many' },
-                                    { label: 'Heavy', value: 'Heavy' },
-                                  ]}
-                                />
-                              </div>
-                            </Col>
-                          </Row>
-
-                          {/* Antibiotic Sensitivity Table */}
-                          <div style={{ marginTop: 8 }}>
-                            <Text type="secondary" style={{ fontSize: 12, marginBottom: 6, display: 'block' }}>
-                              Antibiotic Sensitivity
-                            </Text>
-                            {organism.sensitivities.length > 0 && (
-                              <div style={{ border: isDark ? '1px solid rgba(255,255,255,0.1)' : '1px solid #e8e8e8', borderRadius: 6, overflow: 'hidden', marginBottom: 8 }}>
-                                <div
-                                  style={{
-                                    display: 'grid',
-                                    gridTemplateColumns: '1fr 50px 50px 50px 36px',
-                                    alignItems: 'center',
-                                    padding: '6px 10px',
-                                    background: isDark ? 'rgba(255,255,255,0.06)' : '#f0f5ff',
-                                    fontWeight: 600,
-                                    fontSize: 12,
-                                    gap: 4,
-                                  }}
-                                >
-                                  <span>Antibiotic</span>
-                                  <span style={{ textAlign: 'center', color: '#52c41a' }}>S</span>
-                                  <span style={{ textAlign: 'center', color: '#faad14' }}>I</span>
-                                  <span style={{ textAlign: 'center', color: '#ff4d4f' }}>R</span>
-                                  <span></span>
-                                </div>
-                                {organism.sensitivities.map((sens, si) => (
-                                  <div
-                                    key={si}
-                                    style={{
-                                      display: 'grid',
-                                      gridTemplateColumns: '1fr 50px 50px 50px 36px',
-                                      alignItems: 'center',
-                                      padding: '5px 10px',
-                                      borderTop: isDark ? '1px solid rgba(255,255,255,0.06)' : '1px solid #f0f0f0',
-                                      gap: 4,
-                                    }}
-                                  >
-                                    <AutoComplete
-                                      size="small"
-                                      value={sens.antibiotic}
-                                      onChange={(val) =>
-                                        setCultureOrganisms((prev) =>
-                                          prev.map((o, i) =>
-                                            i === oi
-                                              ? {
-                                                ...o,
-                                                sensitivities: o.sensitivities.map((s, j) =>
-                                                  j === si ? { ...s, antibiotic: val } : s
-                                                ),
-                                              }
-                                              : o
-                                          )
-                                        )
-                                      }
-                                      options={COMMON_ANTIBIOTICS.filter(
-                                        (name) =>
-                                          !sens.antibiotic ||
-                                          name.toLowerCase().includes(sens.antibiotic.toLowerCase())
-                                      ).map((name) => ({ value: name, label: name }))}
-                                      placeholder="Antibiotic name"
-                                      filterOption={false}
-                                      style={{ width: '100%' }}
-                                    />
-                                    <Radio.Group
-                                      size="small"
-                                      value={sens.result}
-                                      onChange={(e) =>
-                                        setCultureOrganisms((prev) =>
-                                          prev.map((o, i) =>
-                                            i === oi
-                                              ? {
-                                                ...o,
-                                                sensitivities: o.sensitivities.map((s, j) =>
-                                                  j === si ? { ...s, result: e.target.value } : s
-                                                ),
-                                              }
-                                              : o
-                                          )
-                                        )
-                                      }
-                                      style={{ display: 'contents' }}
-                                    >
-                                      <Radio.Button
-                                        value="S"
-                                        style={{
-                                          textAlign: 'center',
-                                          padding: '0 4px',
-                                          ...(sens.result === 'S'
-                                            ? { backgroundColor: '#f6ffed', borderColor: '#52c41a', color: '#52c41a' }
-                                            : {}),
-                                        }}
-                                      >
-                                        S
-                                      </Radio.Button>
-                                      <Radio.Button
-                                        value="I"
-                                        style={{
-                                          textAlign: 'center',
-                                          padding: '0 4px',
-                                          ...(sens.result === 'I'
-                                            ? { backgroundColor: '#fffbe6', borderColor: '#faad14', color: '#faad14' }
-                                            : {}),
-                                        }}
-                                      >
-                                        I
-                                      </Radio.Button>
-                                      <Radio.Button
-                                        value="R"
-                                        style={{
-                                          textAlign: 'center',
-                                          padding: '0 4px',
-                                          ...(sens.result === 'R'
-                                            ? { backgroundColor: '#fff2f0', borderColor: '#ff4d4f', color: '#ff4d4f' }
-                                            : {}),
-                                        }}
-                                      >
-                                        R
-                                      </Radio.Button>
-                                    </Radio.Group>
-                                    <Button
-                                      danger
-                                      type="text"
-                                      size="small"
-                                      icon={<MinusCircleOutlined />}
-                                      onClick={() =>
-                                        setCultureOrganisms((prev) =>
-                                          prev.map((o, i) =>
-                                            i === oi
-                                              ? { ...o, sensitivities: o.sensitivities.filter((_, j) => j !== si) }
-                                              : o
-                                          )
-                                        )
-                                      }
-                                    />
-                                  </div>
-                                ))}
-                              </div>
-                            )}
-                            <Button
-                              type="dashed"
-                              size="small"
-                              icon={<PlusOutlined />}
-                              onClick={() =>
-                                setCultureOrganisms((prev) =>
-                                  prev.map((o, i) =>
-                                    i === oi
-                                      ? { ...o, sensitivities: [...o.sensitivities, { antibiotic: '', result: 'S' as const }] }
-                                      : o
-                                  )
-                                )
-                              }
-                            >
-                              Add Antibiotic
-                            </Button>
-                          </div>
-                        </div>
-                      ))}
-
-                      <Button
-                        type="dashed"
-                        block
-                        icon={<PlusOutlined />}
-                        onClick={() =>
-                          setCultureOrganisms((prev) => [
-                            ...prev,
-                            { name: '', quantity: '3+', sensitivities: [] },
-                          ])
-                        }
-                        style={{ marginBottom: 16 }}
-                      >
-                        Add Organism
-                      </Button>
-                    </div>
-                  )}
-
-                  {/* Comments */}
-                  <div style={{ marginTop: 8 }}>
-                    <Text type="secondary" style={{ fontSize: 12 }}>Comments (optional)</Text>
-                    <Input.TextArea
-                      value={cultureComments}
-                      onChange={(e) => setCultureComments(e.target.value)}
-                      rows={2}
-                      placeholder="Additional notes..."
-                      style={{ marginTop: 4 }}
-                    />
-                  </div>
-                </div>
-              )}
-
-              {/* Regular result fields (non-culture) */}
-              {editingItem.resultEntryType !== 'CULTURE_SENSITIVITY' && (editingItem.parameterDefinitions?.length ?? 0) === 0 && (
+              {(editingItem.parameterDefinitions?.length ?? 0) === 0 && (
                 <>
                   {editingItem.resultEntryType === 'QUALITATIVE' ||
                     editingItem.resultEntryType === 'TEXT' ? (
@@ -1368,7 +950,7 @@ export function WorklistPage() {
                 </>
               )}
 
-              {editingItem.resultEntryType !== 'CULTURE_SENSITIVITY' && (editingItem.parameterDefinitions?.length ?? 0) > 0 && (
+              {(editingItem.parameterDefinitions?.length ?? 0) > 0 && (
                 <>
                   <div style={{ marginBottom: 16 }}>
                     <Text strong style={{ fontSize: 14 }}>Parameters</Text>
