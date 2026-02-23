@@ -79,6 +79,7 @@ const RESULT_ENTRY_TYPES: { label: string; value: TestResultEntryType }[] = [
   { label: 'Numeric', value: 'NUMERIC' },
   { label: 'Qualitative (dropdown)', value: 'QUALITATIVE' },
   { label: 'Text', value: 'TEXT' },
+  { label: 'Culture & Sensitivity', value: 'CULTURE_SENSITIVITY' },
 ];
 
 const RESULT_FLAG_OPTIONS: { label: string; value: NonNullable<TestResultTextOption['flag']> }[] = [
@@ -346,15 +347,15 @@ export function TestsPage() {
     const isPanel = values.type === 'PANEL';
     const paramDefs: TestParameterDefinition[] | null = isPanel && (values.parameterDefinitions ?? []).length > 0
       ? (values.parameterDefinitions ?? []).map((p) => ({
-          code: p.code.trim(),
-          label: p.label.trim(),
-          type: p.type,
-          options: p.type === 'select' && p.options
-            ? (typeof p.options === 'string' ? p.options.split(',') : []).map((s) => s.trim()).filter(Boolean)
-            : undefined,
-          normalOptions: Array.isArray(p.normalOptions) && p.normalOptions.length > 0 ? p.normalOptions : undefined,
-          defaultValue: p.defaultValue?.trim() || undefined,
-        }))
+        code: p.code.trim(),
+        label: p.label.trim(),
+        type: p.type,
+        options: p.type === 'select' && p.options
+          ? (typeof p.options === 'string' ? p.options.split(',') : []).map((s) => s.trim()).filter(Boolean)
+          : undefined,
+        normalOptions: Array.isArray(p.normalOptions) && p.normalOptions.length > 0 ? p.normalOptions : undefined,
+        defaultValue: p.defaultValue?.trim() || undefined,
+      }))
       : null;
     const categoryValue = Array.isArray(values.category) ? values.category[0] : values.category;
     const normalizedNumericAgeRanges =
@@ -1224,126 +1225,126 @@ export function TestsPage() {
                         <Form.List name="parameterDefinitions">
                           {(fields, { add, remove }) => (
                             <>
-                            {fields.map(({ key, name, ...rest }) => (
-                              <div
-                                key={key}
-                                style={{
-                                  marginBottom: 10,
-                                  padding: '8px 0',
-                                  borderBottom: panelCardStyle.border,
-                                }}
-                              >
+                              {fields.map(({ key, name, ...rest }) => (
                                 <div
-                                  className="tests-editor-param-grid"
+                                  key={key}
                                   style={{
-                                    display: 'grid',
-                                    gridTemplateColumns: '96px minmax(120px, 1fr) 128px minmax(200px, 1.6fr) auto',
-                                    gap: 8,
-                                    alignItems: 'start',
+                                    marginBottom: 10,
+                                    padding: '8px 0',
+                                    borderBottom: panelCardStyle.border,
                                   }}
                                 >
-                                  <Form.Item
-                                    {...rest}
-                                    name={[name, 'code']}
-                                    label="Code"
-                                    rules={[{ required: true }]}
-                                    style={{ minWidth: 90 }}
+                                  <div
+                                    className="tests-editor-param-grid"
+                                    style={{
+                                      display: 'grid',
+                                      gridTemplateColumns: '96px minmax(120px, 1fr) 128px minmax(200px, 1.6fr) auto',
+                                      gap: 8,
+                                      alignItems: 'start',
+                                    }}
                                   >
-                                    <Input placeholder="e.g. color" />
-                                  </Form.Item>
-                                  <Form.Item
-                                    {...rest}
-                                    name={[name, 'label']}
-                                    label="Label"
-                                    rules={[{ required: true }]}
-                                    style={{ minWidth: 120 }}
-                                  >
-                                    <Input placeholder="e.g. Color" />
-                                  </Form.Item>
-                                  <Form.Item
-                                    {...rest}
-                                    name={[name, 'type']}
-                                    label="Type"
-                                    style={{ minWidth: 110 }}
-                                  >
-                                    <Select options={[{ label: 'Dropdown', value: 'select' }, { label: 'Text', value: 'text' }]} />
-                                  </Form.Item>
-                                  <Form.Item
-                                    {...rest}
-                                    name={[name, 'options']}
-                                    label="Options (for dropdown)"
-                                    style={{ minWidth: 200 }}
-                                  >
-                                    <Input placeholder="Comma-separated, e.g. yellow, red, dark" />
-                                  </Form.Item>
-                                  <Button
-                                    type="text"
-                                    danger
-                                    onClick={() => remove(name)}
-                                    style={{ marginTop: 24, paddingInline: 4, alignSelf: 'start' }}
-                                  >
-                                    Remove
-                                  </Button>
-                                </div>
-                                <Form.Item noStyle shouldUpdate={(prev, curr) => prev?.parameterDefinitions !== curr?.parameterDefinitions}>
-                                  {() => {
-                                    const optsStr = form.getFieldValue(['parameterDefinitions', name, 'options']);
-                                    const optionList = typeof optsStr === 'string' ? optsStr.split(',').map((s: string) => s.trim()).filter(Boolean) : [];
-                                    const paramType = form.getFieldValue(['parameterDefinitions', name, 'type']);
-                                    const isSelect = paramType === 'select';
-                                    return (
-                                      <div
-                                        className="tests-editor-param-meta"
-                                        style={{
-                                          display: 'grid',
-                                          gridTemplateColumns: 'minmax(220px, 1fr) minmax(190px, 1fr)',
-                                          gap: 12,
-                                          alignItems: 'start',
-                                        }}
-                                      >
-                                        {isSelect && optionList.length > 0 && (
+                                    <Form.Item
+                                      {...rest}
+                                      name={[name, 'code']}
+                                      label="Code"
+                                      rules={[{ required: true }]}
+                                      style={{ minWidth: 90 }}
+                                    >
+                                      <Input placeholder="e.g. color" />
+                                    </Form.Item>
+                                    <Form.Item
+                                      {...rest}
+                                      name={[name, 'label']}
+                                      label="Label"
+                                      rules={[{ required: true }]}
+                                      style={{ minWidth: 120 }}
+                                    >
+                                      <Input placeholder="e.g. Color" />
+                                    </Form.Item>
+                                    <Form.Item
+                                      {...rest}
+                                      name={[name, 'type']}
+                                      label="Type"
+                                      style={{ minWidth: 110 }}
+                                    >
+                                      <Select options={[{ label: 'Dropdown', value: 'select' }, { label: 'Text', value: 'text' }]} />
+                                    </Form.Item>
+                                    <Form.Item
+                                      {...rest}
+                                      name={[name, 'options']}
+                                      label="Options (for dropdown)"
+                                      style={{ minWidth: 200 }}
+                                    >
+                                      <Input placeholder="Comma-separated, e.g. yellow, red, dark" />
+                                    </Form.Item>
+                                    <Button
+                                      type="text"
+                                      danger
+                                      onClick={() => remove(name)}
+                                      style={{ marginTop: 24, paddingInline: 4, alignSelf: 'start' }}
+                                    >
+                                      Remove
+                                    </Button>
+                                  </div>
+                                  <Form.Item noStyle shouldUpdate={(prev, curr) => prev?.parameterDefinitions !== curr?.parameterDefinitions}>
+                                    {() => {
+                                      const optsStr = form.getFieldValue(['parameterDefinitions', name, 'options']);
+                                      const optionList = typeof optsStr === 'string' ? optsStr.split(',').map((s: string) => s.trim()).filter(Boolean) : [];
+                                      const paramType = form.getFieldValue(['parameterDefinitions', name, 'type']);
+                                      const isSelect = paramType === 'select';
+                                      return (
+                                        <div
+                                          className="tests-editor-param-meta"
+                                          style={{
+                                            display: 'grid',
+                                            gridTemplateColumns: 'minmax(220px, 1fr) minmax(190px, 1fr)',
+                                            gap: 12,
+                                            alignItems: 'start',
+                                          }}
+                                        >
+                                          {isSelect && optionList.length > 0 && (
+                                            <Form.Item
+                                              {...rest}
+                                              name={[name, 'normalOptions']}
+                                              label="Normal range"
+                                              style={{ minWidth: 200 }}
+                                            >
+                                              <Select
+                                                mode="multiple"
+                                                size="small"
+                                                placeholder="Which options are normal (e.g. yellow)"
+                                                options={optionList.map((o: string) => ({ label: o, value: o }))}
+                                              />
+                                            </Form.Item>
+                                          )}
                                           <Form.Item
                                             {...rest}
-                                            name={[name, 'normalOptions']}
-                                            label="Normal range"
-                                            style={{ minWidth: 200 }}
+                                            name={[name, 'defaultValue']}
+                                            label="Default value"
+                                            style={{ minWidth: 180 }}
                                           >
-                                            <Select
-                                              mode="multiple"
-                                              size="small"
-                                              placeholder="Which options are normal (e.g. yellow)"
-                                              options={optionList.map((o: string) => ({ label: o, value: o }))}
-                                            />
+                                            {isSelect && optionList.length > 0 ? (
+                                              <Select
+                                                allowClear
+                                                size="small"
+                                                placeholder="Pre-fill when entering result (e.g. nil)"
+                                                options={[{ label: '— None —', value: '' }, ...optionList.map((o: string) => ({ label: o, value: o }))]}
+                                              />
+                                            ) : (
+                                              <Input size="small" placeholder="Pre-fill when entering result" style={{ width: 200 }} />
+                                            )}
                                           </Form.Item>
-                                        )}
-                                        <Form.Item
-                                          {...rest}
-                                          name={[name, 'defaultValue']}
-                                          label="Default value"
-                                          style={{ minWidth: 180 }}
-                                        >
-                                          {isSelect && optionList.length > 0 ? (
-                                            <Select
-                                              allowClear
-                                              size="small"
-                                              placeholder="Pre-fill when entering result (e.g. nil)"
-                                              options={[{ label: '— None —', value: '' }, ...optionList.map((o: string) => ({ label: o, value: o }))]}
-                                            />
-                                          ) : (
-                                            <Input size="small" placeholder="Pre-fill when entering result" style={{ width: 200 }} />
-                                          )}
-                                        </Form.Item>
-                                      </div>
-                                    );
-                                  }}
-                                </Form.Item>
-                              </div>
-                            ))}
-                            <Form.Item style={{ marginBottom: 0 }}>
-                              <Button type="dashed" onClick={() => add({ type: 'select', options: '', normalOptions: [], defaultValue: undefined })} block>
-                                + Add parameter
-                              </Button>
-                            </Form.Item>
+                                        </div>
+                                      );
+                                    }}
+                                  </Form.Item>
+                                </div>
+                              ))}
+                              <Form.Item style={{ marginBottom: 0 }}>
+                                <Button type="dashed" onClick={() => add({ type: 'select', options: '', normalOptions: [], defaultValue: undefined })} block>
+                                  + Add parameter
+                                </Button>
+                              </Form.Item>
                             </>
                           )}
                         </Form.List>

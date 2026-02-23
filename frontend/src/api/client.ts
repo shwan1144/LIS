@@ -826,7 +826,7 @@ export async function getOrdersTrend(days?: number): Promise<OrdersTrendPoint[]>
   const res = await api.get<{ data?: OrdersTrendPoint[] } | OrdersTrendPoint[] | null>(
     '/dashboard/orders-trend',
     {
-    params: days ? { days } : undefined,
+      params: days ? { days } : undefined,
     },
   );
 
@@ -1126,7 +1126,7 @@ export interface TestNumericAgeRange {
   normalMax?: number | null;
 }
 
-export type TestResultEntryType = 'NUMERIC' | 'QUALITATIVE' | 'TEXT';
+export type TestResultEntryType = 'NUMERIC' | 'QUALITATIVE' | 'TEXT' | 'CULTURE_SENSITIVITY';
 
 export interface TestResultTextOption {
   value: string;

@@ -85,7 +85,7 @@ export class WorklistService {
     private readonly departmentRepo: Repository<Department>,
     private readonly panelStatusService: PanelStatusService,
     private readonly auditService: AuditService,
-  ) {}
+  ) { }
 
   async getWorklist(
     labId: string,
@@ -203,10 +203,10 @@ export class WorklistService {
       'ot.verifiedBy AS "verifiedBy"',
       'test.parameterDefinitions AS "parameterDefinitions"',
     ])
-    // Show newest registrations first so newly added patients/orders appear at the top.
-    .orderBy('order.registeredAt', 'DESC')
-    .addOrderBy('test.sortOrder', 'ASC')
-    .addOrderBy('test.code', 'ASC');
+      // Show newest registrations first so newly added patients/orders appear at the top.
+      .orderBy('order.registeredAt', 'DESC')
+      .addOrderBy('test.sortOrder', 'ASC')
+      .addOrderBy('test.code', 'ASC');
 
     const total = await qb.getCount();
     const rawItems = await qb.offset(skip).limit(size).getRawMany();
@@ -374,6 +374,15 @@ export class WorklistService {
         orderTest.resultText,
         resultTextOptions,
       );
+    } else if (resultEntryType === 'CULTURE_SENSITIVITY') {
+      // Culture results: structured data stored in resultParameters.__cultureResult
+      // resultText stores a human-readable summary (e.g. "E. coli (Heavy growth)")
+      if (data.resultText !== undefined) {
+        orderTest.resultText = normalizedResultTextInput ?? null;
+      }
+      orderTest.resultValue = null;
+      // No automatic flag for culture — flagging done manually if needed
+      orderTest.flag = null;
     } else {
       if (data.resultText !== undefined) {
         orderTest.resultText = normalizedResultTextInput ?? null;
@@ -419,11 +428,11 @@ export class WorklistService {
     const impersonationAudit =
       actor.isImpersonation && actor.platformUserId
         ? {
-            impersonation: {
-              active: true,
-              platformUserId: actor.platformUserId,
-            },
-          }
+          impersonation: {
+            active: true,
+            platformUserId: actor.platformUserId,
+          },
+        }
         : {};
 
     await this.auditService.log({
@@ -487,11 +496,11 @@ export class WorklistService {
     const impersonationAudit =
       actor.isImpersonation && actor.platformUserId
         ? {
-            impersonation: {
-              active: true,
-              platformUserId: actor.platformUserId,
-            },
-          }
+          impersonation: {
+            active: true,
+            platformUserId: actor.platformUserId,
+          },
+        }
         : {};
 
     await this.auditService.log({
@@ -571,11 +580,11 @@ export class WorklistService {
     const impersonationAudit =
       actor.isImpersonation && actor.platformUserId
         ? {
-            impersonation: {
-              active: true,
-              platformUserId: actor.platformUserId,
-            },
-          }
+          impersonation: {
+            active: true,
+            platformUserId: actor.platformUserId,
+          },
+        }
         : {};
 
     await this.auditService.log({
@@ -604,7 +613,8 @@ export class WorklistService {
     if (
       normalized === 'NUMERIC' ||
       normalized === 'QUALITATIVE' ||
-      normalized === 'TEXT'
+      normalized === 'TEXT' ||
+      normalized === 'CULTURE_SENSITIVITY'
     ) {
       return normalized;
     }

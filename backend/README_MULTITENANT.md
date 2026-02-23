@@ -309,6 +309,15 @@ Use this as the single source of truth while building and deploying.
 - [ ] Analytics page (lab comparison, test volumes, operational)
 - [ ] Optional global tests catalog admin view/editor
 
+## Local Instrument Connector (Windows)
+
+Use `backend/scripts/instrument-connector.js` when analyzer traffic must stay inside lab LAN/PC.
+
+- Env template: `backend/.env.connector.example`
+- Quick check: `npm run connector:doctor`
+- Start listener: `npm run connector:start`
+- Full setup guide: `backend/INSTRUMENT_CONNECTOR.md`
+
 ## Status Update Rule
 
 For each task:

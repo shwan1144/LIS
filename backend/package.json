@@ -17,7 +17,9 @@
     "seed": "ts-node -r tsconfig-paths/register src/seed.ts",
     "migrate:fix-patient-number": "ts-node -r tsconfig-paths/register scripts/fix-patient-number.ts",
     "migrate:sql": "node scripts/run-sql-migrations.js",
-    "fix:tenant-grants": "node scripts/fix-tenant-grants.js"
+    "fix:tenant-grants": "node scripts/fix-tenant-grants.js",
+    "connector:start": "node scripts/instrument-connector.js",
+    "connector:doctor": "node scripts/instrument-connector.js --doctor"
   },
   "dependencies": {
     "@nestjs/common": "^11.0.1",
