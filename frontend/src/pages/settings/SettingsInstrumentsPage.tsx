@@ -106,6 +106,43 @@ const COBAS_E411_SERIAL_PRESET = {
   isActive: true,
 };
 
+const MEDONIC_M51_HL7_PRESET = {
+  manufacturer: 'Boule',
+  model: 'Medonic M51',
+  protocol: 'HL7_V2',
+  connectionType: 'TCP_SERVER',
+  port: 5600,
+  autoPost: true,
+  requireVerification: true,
+  isActive: true,
+};
+
+const MEDONIC_M51_CBC_MAPPING_SUGGESTIONS: Array<{
+  instrumentCode: string;
+  lisCandidates: string[];
+}> = [
+  { instrumentCode: 'WBC', lisCandidates: ['WBC'] },
+  { instrumentCode: 'RBC', lisCandidates: ['RBC'] },
+  { instrumentCode: 'HGB', lisCandidates: ['HGB', 'HB'] },
+  { instrumentCode: 'HCT', lisCandidates: ['HCT'] },
+  { instrumentCode: 'MCV', lisCandidates: ['MCV'] },
+  { instrumentCode: 'MCH', lisCandidates: ['MCH'] },
+  { instrumentCode: 'MCHC', lisCandidates: ['MCHC'] },
+  { instrumentCode: 'PLT', lisCandidates: ['PLT'] },
+  { instrumentCode: 'MPV', lisCandidates: ['MPV'] },
+  { instrumentCode: 'RDW', lisCandidates: ['RDW', 'RDW-CV'] },
+  { instrumentCode: 'LYM%', lisCandidates: ['LYM%', 'LYM_PCT', 'LYM PCT'] },
+  { instrumentCode: 'MID%', lisCandidates: ['MID%', 'MID_PCT', 'MID PCT'] },
+  { instrumentCode: 'GRA%', lisCandidates: ['GRA%', 'NEU%', 'NEUT%', 'NEUTROPHIL%'] },
+  { instrumentCode: 'LYM#', lisCandidates: ['LYM#', 'LYM_ABS', 'LYM ABS'] },
+  { instrumentCode: 'MID#', lisCandidates: ['MID#', 'MID_ABS', 'MID ABS'] },
+  { instrumentCode: 'GRA#', lisCandidates: ['GRA#', 'NEU#', 'NEUT#', 'ANC'] },
+  { instrumentCode: 'PCT', lisCandidates: ['PCT'] },
+  { instrumentCode: 'PDW', lisCandidates: ['PDW'] },
+];
+
+const normalizeCode = (value: string) => value.trim().toUpperCase().replace(/\s+/g, '');
+
 const serialDataBitsOptions = [
   { value: '7', label: '7' },
   { value: '8', label: '8' },
@@ -246,6 +283,21 @@ export function SettingsInstrumentsPage() {
     message.success('Cobas e411 serial preset applied');
   };
 
+  const handleApplyMedonicM51Preset = () => {
+    form.setFieldsValue({
+      ...MEDONIC_M51_HL7_PRESET,
+      host: undefined,
+      serialPort: undefined,
+      baudRate: undefined,
+      dataBits: undefined,
+      parity: undefined,
+      stopBits: undefined,
+      watchFolder: undefined,
+      filePattern: undefined,
+    });
+    message.success('Medonic M51 HL7 preset applied');
+  };
+
   const handleOpenDetail = async (instrument: InstrumentDto) => {
     setSelectedInstrument(instrument);
     setActiveTab('mappings');
@@ -341,13 +393,79 @@ export function SettingsInstrumentsPage() {
     }
   };
 
+  const handleAutoMapMedonicM51 = async () => {
+    if (!selectedInstrument) return;
+
+    const testsByCode = new Map<string, TestDto>();
+    for (const test of tests) {
+      testsByCode.set(normalizeCode(test.code), test);
+    }
+
+    const existingCodes = new Set(
+      mappings.map((m) => normalizeCode(m.instrumentTestCode || '')),
+    );
+
+    let added = 0;
+    let skippedExisting = 0;
+    let skippedMissingTest = 0;
+    let failed = 0;
+
+    for (const suggestion of MEDONIC_M51_CBC_MAPPING_SUGGESTIONS) {
+      const instrumentCode = normalizeCode(suggestion.instrumentCode);
+      if (existingCodes.has(instrumentCode)) {
+        skippedExisting += 1;
+        continue;
+      }
+
+      const matchedTest = suggestion.lisCandidates
+        .map((candidate) => testsByCode.get(normalizeCode(candidate)))
+        .find((test) => Boolean(test));
+
+      if (!matchedTest) {
+        skippedMissingTest += 1;
+        continue;
+      }
+
+      try {
+        await createInstrumentMapping(selectedInstrument.id, {
+          testId: matchedTest.id,
+          instrumentTestCode: suggestion.instrumentCode,
+          instrumentTestName: matchedTest.name,
+        });
+        existingCodes.add(instrumentCode);
+        added += 1;
+      } catch {
+        failed += 1;
+      }
+    }
+
+    await loadMappings(selectedInstrument.id);
+
+    if (added > 0) {
+      message.success(
+        `M51 auto-mapping done: added ${added}, existing ${skippedExisting}, missing LIS tests ${skippedMissingTest}, failed ${failed}.`,
+      );
+      return;
+    }
+
+    message.info(
+      `No new mappings added. Existing ${skippedExisting}, missing LIS tests ${skippedMissingTest}, failed ${failed}.`,
+    );
+  };
+
   // Live Tracker functions
   const handleOpenTracker = (instrument: InstrumentDto) => {
     setTrackerInstrument(instrument);
     setTrackerMessages([]);
     setSelectedMessage(null);
     setTrackerRunning(true);
-    setSelectedPanel(instrument.protocol === 'ASTM' ? 'cobasE411Astm' : 'cbc');
+    setSelectedPanel(
+      instrument.protocol === 'ASTM'
+        ? 'cobasE411Astm'
+        : instrument.model?.toLowerCase().includes('m51')
+          ? 'medonicM51CbcHl7'
+          : 'cbc',
+    );
     setTrackerModalOpen(true);
     loadTrackerMessages(instrument.id);
   };
@@ -549,6 +667,28 @@ OBX|2|NM|RBC^Red Blood Cell Count||3.2|10^12/L|4.5-5.5|L|||F
 OBX|3|NM|HGB^Hemoglobin||8.5|g/dL|12.0-16.0|LL|||F
 OBX|4|NM|HCT^Hematocrit||28.0|%|36-46|L|||F
 OBX|5|NM|PLT^Platelet Count||45|10^9/L|150-400|LL|||F`,
+    },
+    medonicM51CbcHl7: {
+      name: 'Medonic M51 CBC (HL7)',
+      message: `MSH|^~\\&|M51|HEMATOLOGY|LIS|LAB|${getTimestamp()}||ORU^R01|M51${Date.now()}|P|2.3
+PID|1||PAT001||Doe^John||19800101|M
+OBR|1|ORD001|SAM001|CBC^Complete Blood Count||${getTimestamp()}
+OBX|1|NM|WBC^White Blood Cell Count||7.20|10^9/L|4.0-10.0|N|||F
+OBX|2|NM|RBC^Red Blood Cell Count||4.95|10^12/L|4.5-5.9|N|||F
+OBX|3|NM|HGB^Hemoglobin||14.8|g/dL|13.0-17.0|N|||F
+OBX|4|NM|HCT^Hematocrit||44.2|%|40-52|N|||F
+OBX|5|NM|MCV^Mean Corpuscular Volume||89.3|fL|80-100|N|||F
+OBX|6|NM|MCH^Mean Corpuscular Hemoglobin||29.9|pg|27-33|N|||F
+OBX|7|NM|MCHC^Mean Corpuscular Hemoglobin Concentration||33.5|g/dL|32-36|N|||F
+OBX|8|NM|PLT^Platelet Count||268|10^9/L|150-400|N|||F
+OBX|9|NM|LYM%^Lymphocytes %||31.6|%|20-45|N|||F
+OBX|10|NM|MID%^MID %||7.9|%|2-12|N|||F
+OBX|11|NM|GRA%^Granulocytes %||60.5|%|40-75|N|||F
+OBX|12|NM|LYM#^Lymphocytes Absolute||2.28|10^9/L|1.0-4.0|N|||F
+OBX|13|NM|MID#^MID Absolute||0.57|10^9/L|0.1-1.5|N|||F
+OBX|14|NM|GRA#^Granulocytes Absolute||4.35|10^9/L|2.0-7.0|N|||F
+OBX|15|NM|RDW^Red Cell Distribution Width||13.4|%|11.5-14.5|N|||F
+OBX|16|NM|MPV^Mean Platelet Volume||9.6|fL|7.5-11.5|N|||F`,
     },
     cobasE411Astm: {
       name: 'Cobas e411 ASTM (TSH sample)',
@@ -796,8 +936,11 @@ L|1|N`,
                 <Button size="small" onClick={handleApplyCobasSerialPreset}>
                   Cobas e411 ASTM (Serial)
                 </Button>
+                <Button size="small" onClick={handleApplyMedonicM51Preset}>
+                  Medonic M51 HL7 (TCP)
+                </Button>
                 <Text type="secondary">
-                  TCP preset is for network analyzer connectivity. Serial preset is for COM/RS-232 setups.
+                  TCP presets are for network analyzer connectivity. Serial preset is for COM/RS-232 setups.
                 </Text>
               </Space>
             )}
@@ -952,15 +1095,22 @@ L|1|N`,
                   ),
                   children: (
                     <>
-                      <Button
-                        type="primary"
-                        size="small"
-                        icon={<PlusOutlined />}
-                        onClick={handleAddMapping}
-                        style={{ marginBottom: 8 }}
-                      >
-                        Add Mapping
-                      </Button>
+                      <Space style={{ marginBottom: 8 }} wrap>
+                        <Button
+                          type="primary"
+                          size="small"
+                          icon={<PlusOutlined />}
+                          onClick={handleAddMapping}
+                        >
+                          Add Mapping
+                        </Button>
+                        <Button
+                          size="small"
+                          onClick={handleAutoMapMedonicM51}
+                        >
+                          Auto-map M51 CBC
+                        </Button>
+                      </Space>
                       <Table
                         columns={mappingColumns}
                         dataSource={mappings}

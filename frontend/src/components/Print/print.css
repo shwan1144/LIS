@@ -129,6 +129,40 @@
   font-weight: bold;
 }
 
+/* Payment status */
+.receipt-payment-status {
+  text-align: center;
+  font-weight: bold;
+  font-size: 14px;
+  padding: 4px 0;
+  margin: 2px 0;
+  border: 1px solid #000;
+}
+
+.receipt-payment-paid {
+  font-size: 16px;
+  letter-spacing: 2px;
+}
+
+.receipt-payment-partial {
+  text-align: left;
+  font-size: 12px;
+  padding: 4px;
+}
+
+.receipt-payment-badge {
+  text-align: center;
+  font-size: 13px;
+  font-weight: bold;
+  margin-bottom: 3px;
+  letter-spacing: 1px;
+}
+
+.receipt-payment-unpaid {
+  font-size: 16px;
+  letter-spacing: 2px;
+}
+
 .receipt-footer {
   margin-top: 6px;
   text-align: center;

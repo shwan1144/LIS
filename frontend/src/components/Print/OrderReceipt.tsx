@@ -158,7 +158,42 @@ export const OrderReceipt = forwardRef<HTMLDivElement, OrderReceiptProps>(
           </span>
         </div>
 
-
+        {/* Payment Status */}
+        <div className="receipt-divider" />
+        {order.paymentStatus === 'paid' ? (
+          <div className="receipt-payment-status receipt-payment-paid">
+            ✓ PAID
+          </div>
+        ) : order.paymentStatus === 'partial' ? (
+          <div className="receipt-payment-status receipt-payment-partial">
+            <div className="receipt-payment-badge">PARTIALLY PAID</div>
+            {order.paidAmount != null && (
+              <>
+                <div className="receipt-row">
+                  <span className="receipt-label">Paid</span>
+                  <span className="receipt-value">
+                    {parseFloat(order.paidAmount.toString()).toFixed(0)} IQD
+                  </span>
+                </div>
+                <div className="receipt-row">
+                  <span className="receipt-label">Remaining</span>
+                  <span className="receipt-value" style={{ fontWeight: 'bold' }}>
+                    {(
+                      (order.finalAmount != null
+                        ? parseFloat(order.finalAmount.toString())
+                        : parseFloat(order.totalAmount.toString())) -
+                      parseFloat(order.paidAmount.toString())
+                    ).toFixed(0)} IQD
+                  </span>
+                </div>
+              </>
+            )}
+          </div>
+        ) : (
+          <div className="receipt-payment-status receipt-payment-unpaid">
+            ✗ NOT PAID
+          </div>
+        )}
 
         {/* Footer */}
         <div className="receipt-footer">
