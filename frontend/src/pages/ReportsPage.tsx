@@ -35,6 +35,7 @@ import {
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import {
+  downloadOrderReceiptPDF,
   downloadTestResultsPDF,
   enterResult,
   getLabSettings,
@@ -49,6 +50,7 @@ import {
 } from '../api/client';
 import { useTheme } from '../contexts/ThemeContext';
 import {
+  directPrintReceipt,
   directPrintReportPdf,
   getDirectPrintErrorMessage,
   isVirtualSavePrinterName,
@@ -396,6 +398,64 @@ export function ReportsPage() {
       } else {
         message.error('Failed to load results for printing');
       }
+    } finally {
+      setDownloading(null);
+    }
+  };
+
+  const handlePrintReceipt = async (order: OrderDto) => {
+    setDownloading(`receipt-${order.id}`);
+    try {
+      try {
+        const settings = await getLabSettings();
+        const printerName = settings.printing?.receiptPrinterName?.trim();
+        if (settings.printing?.mode === 'direct_qz' && printerName) {
+          if (isVirtualSavePrinterName(printerName)) {
+            message.info(
+              `Receipt printer "${printerName}" is a virtual PDF/XPS printer. Using browser print so Save dialog can appear.`,
+            );
+          } else {
+            try {
+              await directPrintReceipt({
+                order,
+                printerName,
+              });
+              message.success(`Receipt sent to ${printerName}`);
+              return;
+            } catch (error) {
+              message.warning(`${getDirectPrintErrorMessage(error)} Falling back to browser print.`);
+            }
+          }
+        }
+      } catch {
+        // continue with browser print fallback
+      }
+
+      const blob = await downloadOrderReceiptPDF(order.id);
+      const url = window.URL.createObjectURL(blob);
+      const iframe = document.createElement('iframe');
+      iframe.style.position = 'fixed';
+      iframe.style.right = '0';
+      iframe.style.bottom = '0';
+      iframe.style.width = '1px';
+      iframe.style.height = '1px';
+      iframe.style.border = '0';
+      iframe.src = url;
+      const cleanup = () => {
+        window.URL.revokeObjectURL(url);
+        iframe.remove();
+      };
+      iframe.onload = () => {
+        try {
+          iframe.contentWindow?.focus();
+          iframe.contentWindow?.print();
+        } finally {
+          window.setTimeout(cleanup, 5000);
+        }
+      };
+      document.body.appendChild(iframe);
+    } catch {
+      message.error('Failed to print receipt');
     } finally {
       setDownloading(null);
     }
@@ -1110,6 +1170,19 @@ export function ReportsPage() {
         footer={[
           <Button key="cancel" onClick={() => setPaymentModalOpen(false)}>
             Cancel
+          </Button>,
+          <Button
+            key="receipt"
+            icon={<PrinterOutlined />}
+            loading={Boolean(paymentModalOrder && downloading === `receipt-${paymentModalOrder.id}`)}
+            disabled={!paymentModalOrder}
+            onClick={() => {
+              if (paymentModalOrder) {
+                void handlePrintReceipt(paymentModalOrder);
+              }
+            }}
+          >
+            Print receipt
           </Button>,
           <Button key="paid" type="primary" loading={markingPaid} onClick={handlePaymentModalConfirm}>
             Mark as paid
