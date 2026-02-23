@@ -60,7 +60,7 @@ import { useTheme } from '../contexts/ThemeContext';
 const { Title, Text } = Typography;
 
 const TEST_TYPES: { label: string; value: TestType }[] = [
-  { label: 'Single Test', value: 'SINGLE' },
+  { label: 'Single', value: 'SINGLE' },
   { label: 'Test Panel', value: 'PANEL' },
 ];
 
