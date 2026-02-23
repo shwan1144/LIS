@@ -101,6 +101,12 @@ function log(level, message, meta) {
   console.log(`[${now()}] [${level}] ${message}`);
 }
 
+function isHtmlResponseBody(body) {
+  if (typeof body !== 'string') return false;
+  const normalized = body.trim().toLowerCase();
+  return normalized.startsWith('<!doctype html') || normalized.startsWith('<html');
+}
+
 async function postJson(url, body, headers = {}, timeoutMs = 15000) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -150,6 +156,14 @@ class LisSession {
       headers,
       this.config.requestTimeoutMs,
     );
+    if (isHtmlResponseBody(res.body)) {
+      throw new Error(
+        'Login returned HTML page instead of JSON. ' +
+        'LIS_BASE_URL is pointing to frontend, not backend API. ' +
+        'Set LIS_BASE_URL to backend host (example: https://api.medilis.net) ' +
+        'and set LIS_FORWARDED_HOST to your lab host (example: lab01.medilis.net).',
+      );
+    }
     if (!res.ok || !res.body || typeof res.body !== 'object') {
       throw new Error(`Login failed (${res.status}): ${JSON.stringify(res.body)}`);
     }
@@ -421,4 +435,3 @@ main().catch((error) => {
   log('ERROR', error && error.stack ? error.stack : String(error));
   process.exit(1);
 });
-
