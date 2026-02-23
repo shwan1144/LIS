@@ -377,16 +377,22 @@
 
 @media print {
 
-  /* Default page — used by labels */
+  /* Default page fallback */
   @page {
-    margin: 5mm;
-    size: A4 landscape;
+    margin: 0;
+    size: auto;
   }
 
   /* Receipt page — 80mm thermal roll, auto height */
   @page receipt {
     margin: 0;
     size: 80mm auto;
+  }
+
+  /* Label page — one label per sticker, exact label size */
+  @page label {
+    margin: 0;
+    size: 50mm 25mm;
   }
 
   body * {
@@ -413,25 +419,32 @@
   }
 
   .sample-label {
+    page: label;
     width: 50mm !important;
     height: 25mm !important;
     margin: 0 !important;
     padding: 0 !important;
+    page-break-after: always;
     page-break-inside: avoid;
     display: flex !important;
     flex-direction: row !important;
     box-sizing: border-box !important;
     gap: 0 !important;
+    border: none !important;
+    /* No border on actual sticker print */
+  }
+
+  /* Remove the last label's page break to avoid feeding a blank sticker */
+  .sample-label:last-child {
+    page-break-after: auto;
   }
 
   .all-labels-container {
-    display: flex !important;
-    flex-direction: row !important;
-    flex-wrap: wrap !important;
-    width: 100%;
-    gap: 2mm;
-    align-items: flex-start;
-    justify-content: flex-start;
+    display: block !important;
+    width: 50mm;
+    padding: 0;
+    margin: 0;
+    gap: 0;
   }
 
   .all-labels-container .sample-label {
@@ -440,7 +453,6 @@
     margin: 0;
     width: 50mm !important;
     height: 25mm !important;
-    page-break-inside: avoid;
   }
 
   /* Hide screen-only elements when printing */

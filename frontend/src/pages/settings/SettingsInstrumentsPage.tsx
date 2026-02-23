@@ -91,6 +91,37 @@ const COBAS_E411_ASTM_PRESET = {
   isActive: true,
 };
 
+const COBAS_E411_SERIAL_PRESET = {
+  manufacturer: 'Roche',
+  model: 'cobas e411',
+  protocol: 'ASTM',
+  connectionType: 'SERIAL',
+  serialPort: 'COM1',
+  baudRate: 9600,
+  dataBits: '8',
+  parity: 'NONE',
+  stopBits: '1',
+  autoPost: true,
+  requireVerification: true,
+  isActive: true,
+};
+
+const serialDataBitsOptions = [
+  { value: '7', label: '7' },
+  { value: '8', label: '8' },
+];
+
+const serialParityOptions = [
+  { value: 'NONE', label: 'None' },
+  { value: 'EVEN', label: 'Even' },
+  { value: 'ODD', label: 'Odd' },
+];
+
+const serialStopBitsOptions = [
+  { value: '1', label: '1' },
+  { value: '2', label: '2' },
+];
+
 export function SettingsInstrumentsPage() {
   const [loading, setLoading] = useState(false);
   const [instruments, setInstruments] = useState<InstrumentDto[]>([]);
@@ -192,6 +223,7 @@ export function SettingsInstrumentsPage() {
     form.setFieldsValue({
       ...COBAS_E411_ASTM_PRESET,
       host: undefined,
+      port: COBAS_E411_ASTM_PRESET.port,
       serialPort: undefined,
       baudRate: undefined,
       dataBits: undefined,
@@ -201,6 +233,17 @@ export function SettingsInstrumentsPage() {
       filePattern: undefined,
     });
     message.success('Cobas e411 ASTM preset applied');
+  };
+
+  const handleApplyCobasSerialPreset = () => {
+    form.setFieldsValue({
+      ...COBAS_E411_SERIAL_PRESET,
+      host: undefined,
+      port: undefined,
+      watchFolder: undefined,
+      filePattern: undefined,
+    });
+    message.success('Cobas e411 serial preset applied');
   };
 
   const handleOpenDetail = async (instrument: InstrumentDto) => {
@@ -748,10 +791,13 @@ L|1|N`,
             description={(
               <Space wrap>
                 <Button size="small" onClick={handleApplyCobasPreset}>
-                  Apply Cobas e411 ASTM Preset
+                  Cobas e411 ASTM (TCP)
+                </Button>
+                <Button size="small" onClick={handleApplyCobasSerialPreset}>
+                  Cobas e411 ASTM (Serial)
                 </Button>
                 <Text type="secondary">
-                  Sets protocol ASTM, TCP server mode, port 5001, and verification enabled.
+                  TCP preset is for network analyzer connectivity. Serial preset is for COM/RS-232 setups.
                 </Text>
               </Space>
             )}
@@ -798,20 +844,33 @@ L|1|N`,
           )}
 
           {connectionType === 'SERIAL' && (
-            <Space style={{ display: 'flex' }} align="start">
-              <Form.Item name="serialPort" label="Serial Port" rules={[{ required: true }]} style={{ width: 120 }}>
-                <Input placeholder="COM1" />
-              </Form.Item>
-              <Form.Item name="baudRate" label="Baud Rate" style={{ width: 120 }}>
-                <Select options={[
-                  { value: 9600, label: '9600' },
-                  { value: 19200, label: '19200' },
-                  { value: 38400, label: '38400' },
-                  { value: 57600, label: '57600' },
-                  { value: 115200, label: '115200' },
-                ]} />
-              </Form.Item>
-            </Space>
+            <>
+              <Space style={{ display: 'flex' }} align="start">
+                <Form.Item name="serialPort" label="Serial Port" rules={[{ required: true }]} style={{ width: 140 }}>
+                  <Input placeholder="COM1" />
+                </Form.Item>
+                <Form.Item name="baudRate" label="Baud Rate" style={{ width: 140 }}>
+                  <Select options={[
+                    { value: 9600, label: '9600' },
+                    { value: 19200, label: '19200' },
+                    { value: 38400, label: '38400' },
+                    { value: 57600, label: '57600' },
+                    { value: 115200, label: '115200' },
+                  ]} />
+                </Form.Item>
+              </Space>
+              <Space style={{ display: 'flex' }} align="start">
+                <Form.Item name="dataBits" label="Data Bits" style={{ width: 140 }}>
+                  <Select options={serialDataBitsOptions} />
+                </Form.Item>
+                <Form.Item name="parity" label="Parity" style={{ width: 140 }}>
+                  <Select options={serialParityOptions} />
+                </Form.Item>
+                <Form.Item name="stopBits" label="Stop Bits" style={{ width: 140 }}>
+                  <Select options={serialStopBitsOptions} />
+                </Form.Item>
+              </Space>
+            </>
           )}
 
           {connectionType === 'FILE_WATCH' && (
