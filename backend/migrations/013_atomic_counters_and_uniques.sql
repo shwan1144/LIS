@@ -41,6 +41,45 @@ BEGIN
   END IF;
 END $$;
 
+-- Normalize legacy rows before enforcing strict shift scope check.
+UPDATE "lab_counters"
+SET "shiftScopeKey" = ''
+WHERE "shiftScopeKey" IS NULL;
+
+UPDATE "lab_counters"
+SET "shiftScopeKey" = CASE
+  WHEN "shiftId" IS NULL THEN ''
+  ELSE "shiftId"::text
+END
+WHERE "shiftScopeKey" IS DISTINCT FROM CASE
+  WHEN "shiftId" IS NULL THEN ''
+  ELSE "shiftId"::text
+END;
+
+-- Deduplicate any legacy collisions before adding unique index.
+WITH ranked AS (
+  SELECT
+    "id",
+    ROW_NUMBER() OVER (
+      PARTITION BY
+        "labId",
+        "counterType",
+        "scopeKey",
+        "dateKey",
+        "shiftScopeKey"
+      ORDER BY
+        "value" DESC,
+        "updatedAt" DESC,
+        "createdAt" DESC,
+        "id" ASC
+    ) AS rn
+  FROM "lab_counters"
+)
+DELETE FROM "lab_counters" c
+USING ranked r
+WHERE c."id" = r."id"
+  AND r.rn > 1;
+
 DO $$
 BEGIN
   IF NOT EXISTS (
