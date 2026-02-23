@@ -17,7 +17,6 @@ export const OrderReceipt = forwardRef<HTMLDivElement, OrderReceiptProps>(
         code: ot.test.code,
         name: ot.test.name,
         price: ot.price,
-        tubeType: sample.tubeType,
       }))
     );
 
@@ -99,7 +98,6 @@ export const OrderReceipt = forwardRef<HTMLDivElement, OrderReceiptProps>(
 
         {/* Tests */}
         <div className="receipt-tests">
-          <h4 className="receipt-section-title">Tests Ordered</h4>
           <table className="receipt-table">
             <thead>
               <tr>
@@ -110,9 +108,7 @@ export const OrderReceipt = forwardRef<HTMLDivElement, OrderReceiptProps>(
             <tbody>
               {allTests.map((test, idx) => (
                 <tr key={idx}>
-                  <td className="receipt-td-left">
-                    <span className="receipt-test-code">{test.code}</span>
-                  </td>
+                  <td className="receipt-td-left">{test.code}</td>
                   <td className="receipt-td-right">
                     {test.price !== null ? `${parseFloat(test.price.toString()).toFixed(0)} IQD` : '—'}
                   </td>
@@ -125,7 +121,7 @@ export const OrderReceipt = forwardRef<HTMLDivElement, OrderReceiptProps>(
         <div className="receipt-divider-double" />
 
         {/* Subtotal */}
-        <div className="receipt-row" style={{ marginBottom: 4 }}>
+        <div className="receipt-row">
           <span className="receipt-label">Subtotal</span>
           <span className="receipt-value">
             {parseFloat(order.totalAmount.toString()).toFixed(0)} IQD
@@ -133,13 +129,13 @@ export const OrderReceipt = forwardRef<HTMLDivElement, OrderReceiptProps>(
         </div>
         {order.discountPercent != null && Number(order.discountPercent) > 0 && (
           <>
-            <div className="receipt-row" style={{ marginBottom: 4 }}>
+            <div className="receipt-row">
               <span className="receipt-label">Discount</span>
               <span className="receipt-value">
                 {parseFloat(order.discountPercent.toString()).toFixed(0)}%
               </span>
             </div>
-            <div className="receipt-row" style={{ marginBottom: 4 }}>
+            <div className="receipt-row">
               <span className="receipt-label">Discount Amount</span>
               <span className="receipt-value">
                 -{(
@@ -162,21 +158,7 @@ export const OrderReceipt = forwardRef<HTMLDivElement, OrderReceiptProps>(
           </span>
         </div>
 
-        <div className="receipt-divider" />
 
-        {/* Samples Summary */}
-        <div className="receipt-samples">
-          <h4 className="receipt-section-title">Samples</h4>
-          <p className="receipt-samples-count">{order.samples.length} sample(s) to collect:</p>
-          <ul className="receipt-samples-list">
-            {order.samples.map((sample, idx) => (
-              <li key={sample.id}>
-                {sample.tubeType?.replace('_', ' ') || 'Unknown'} tube
-                {sample.sampleId && ` (${sample.sampleId})`}
-              </li>
-            ))}
-          </ul>
-        </div>
 
         {/* Footer */}
         <div className="receipt-footer">
