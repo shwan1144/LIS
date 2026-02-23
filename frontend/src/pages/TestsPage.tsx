@@ -61,7 +61,7 @@ const { Title, Text } = Typography;
 
 const TEST_TYPES: { label: string; value: TestType }[] = [
   { label: 'Single Test', value: 'SINGLE' },
-  { label: 'Panel', value: 'PANEL' },
+  { label: 'Test Panel', value: 'PANEL' },
 ];
 
 const TUBE_TYPES: { label: string; value: TestTubeType }[] = [
@@ -1501,4 +1501,3 @@ export function TestsPage() {
     </div>
   );
 }
-
