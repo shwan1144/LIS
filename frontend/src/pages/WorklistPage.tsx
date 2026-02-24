@@ -480,14 +480,47 @@ export function WorklistPage() {
     }),
   };
 
+  const formatWorklistResultPreview = (item: WorklistItem, allItems: WorklistItem[]): React.ReactNode => {
+    if (item.testType === 'PANEL') {
+      const children = allItems.filter(i => i.parentOrderTestId === item.id);
+      const total = children.length;
+      const completed = children.filter(i => i.status === 'COMPLETED' || i.status === 'VERIFIED').length;
+      if (total === 0) return <Text type="secondary" italic>No tests</Text>;
+      const percent = Math.round((completed / total) * 100);
+      return (
+        <Space size={4}>
+          <Text strong={completed > 0} style={{ fontSize: 12 }}>
+            {completed}/{total} done
+          </Text>
+          {completed > 0 && <Text type="secondary" style={{ fontSize: 11 }}>({percent}%)</Text>}
+        </Space>
+      );
+    }
+
+    if (item.resultValue !== null) {
+      return (
+        <Space size={4}>
+          <Text strong style={{ fontSize: 12 }}>{item.resultValue}</Text>
+          {item.testUnit && <Text type="secondary" style={{ fontSize: 11 }}>{item.testUnit}</Text>}
+        </Space>
+      );
+    }
+    if (item.resultText) {
+      return <Text style={{ fontSize: 12 }} ellipsis title={item.resultText}>{item.resultText}</Text>;
+    }
+    return <Text type="secondary" style={{ fontSize: 12 }}>—</Text>;
+  };
+
   const renderExpandedTests = (group: WorklistOrderGroup) => {
     // Show items that are root level, OR items whose parent is not in this list
     const rootItems = group.items.filter(
       (i) => !i.parentOrderTestId || !group.items.some((p) => p.id === i.parentOrderTestId)
     );
 
+    const compactStyle = { paddingTop: 6, paddingBottom: 6, fontSize: 12 };
+
     return (
-      <div className="worklist-expanded-panel">
+      <div className="worklist-expanded-panel" style={{ padding: '8px 16px 16px' }}>
         <Table
           className="worklist-subtests-table"
           size="small"
@@ -496,67 +529,59 @@ export function WorklistPage() {
           pagination={false}
           columns={[
             {
+              title: 'Sample',
+              dataIndex: 'sampleLabel',
+              key: 'sample',
+              width: 100,
+              render: (v: string) => <Text style={{ fontSize: 12 }}>{v}</Text>,
+              onCell: () => ({ style: compactStyle }),
+            },
+            {
               title: 'Test',
               key: 'test',
-              width: 200,
+              width: 220,
               render: (_: unknown, r: WorklistItem) => (
                 <div>
-                  <Tag color="blue">{r.testCode}</Tag>
-                  <Text>{r.testName}</Text>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <Tag color="blue" style={{ margin: 0, fontSize: 10, lineHeight: '16px' }}>{r.testCode}</Tag>
+                    <Text strong style={{ fontSize: 12 }}>{r.testName}</Text>
+                  </div>
+                  {r.testType === 'PANEL' && <Text type="secondary" style={{ fontSize: 10 }}>Panel Test</Text>}
                 </div>
               ),
+              onCell: () => ({ style: compactStyle }),
             },
             {
               title: 'Result',
               key: 'result',
-              width: 150,
-              render: (_: unknown, r: WorklistItem) => {
-                if (r.resultValue !== null) {
-                  return (
-                    <Space>
-                      <Text strong style={{ color: getFlagColor(r.flag) }}>{r.resultValue}</Text>
-                      {r.testUnit && <Text type="secondary">{r.testUnit}</Text>}
-                      {r.flag && r.flag !== 'N' && <Tag color={getFlagColor(r.flag)}>{r.flag}</Tag>}
-                    </Space>
-                  );
-                }
-                if (r.resultText) {
-                  return (
-                    <Space size={6}>
-                      <Text>{r.resultText}</Text>
-                      {r.flag && (
-                        <Tag color={getFlagColor(r.flag)} style={{ margin: 0 }}>
-                          {getFlagLabel(r.flag) || r.flag}
-                        </Tag>
-                      )}
-                    </Space>
-                  );
-                }
-                return <Text type="secondary">—</Text>;
-              },
+              width: 160,
+              render: (_: unknown, r: WorklistItem) => (
+                <div>
+                  {formatWorklistResultPreview(r, group.items)}
+                  {r.testType !== 'PANEL' && (r.normalMin !== null || r.normalMax !== null || r.normalText) && (
+                    <div style={{ fontSize: 10, color: 'rgba(128,128,128,0.7)', marginTop: 2 }}>
+                      Range: {r.normalText || `${r.normalMin ?? '-'} - ${r.normalMax ?? '-'} ${r.testUnit || ''}`}
+                    </div>
+                  )}
+                </div>
+              ),
+              onCell: () => ({ style: compactStyle }),
             },
             {
-              title: 'Normal Range',
-              key: 'normalRange',
-              width: 130,
+              title: 'Flag',
+              key: 'flag',
+              width: 100,
               render: (_: unknown, r: WorklistItem) => {
-                if (r.normalText) return <Text type="secondary">{r.normalText}</Text>;
-                if (r.normalMin !== null || r.normalMax !== null) {
-                  return (
-                    <Text type="secondary">
-                      {r.normalMin ?? '-'} - {r.normalMax ?? '-'} {r.testUnit || ''}
-                    </Text>
-                  );
-                }
-                return <Text type="secondary">—</Text>;
+                if (!r.flag || r.flag === 'N') return <Text type="secondary">—</Text>;
+                return <Tag color={getFlagColor(r.flag)} style={{ margin: 0, fontSize: 10 }}>{getFlagLabel(r.flag) || r.flag}</Tag>;
               },
+              onCell: () => ({ style: compactStyle }),
             },
             {
               title: 'Status',
-              dataIndex: 'status',
               key: 'status',
-              width: 100,
-              render: (status: OrderTestStatus) => {
+              width: 110,
+              render: (_: unknown, r: WorklistItem) => {
                 const colors: Record<OrderTestStatus, string> = {
                   PENDING: 'default',
                   IN_PROGRESS: 'processing',
@@ -564,56 +589,53 @@ export function WorklistPage() {
                   VERIFIED: 'success',
                   REJECTED: 'error',
                 };
-                return <Tag color={colors[status]}>{status}</Tag>;
+                return <Tag color={colors[r.status]} style={{ margin: 0, fontSize: 10 }}>{r.status}</Tag>;
               },
-            },
-            {
-              title: 'Tube',
-              dataIndex: 'tubeType',
-              key: 'tubeType',
-              width: 90,
-              render: (v: string | null) => (v ? <Tag color="purple">{v.replace('_', ' ')}</Tag> : '—'),
+              onCell: () => ({ style: compactStyle }),
             },
             {
               title: 'Actions',
               key: 'actions',
-              width: 200,
+              width: 180,
+              align: 'right',
               render: (_: unknown, r: WorklistItem) => (
                 <Space size="small">
                   {r.status !== 'VERIFIED' && r.status !== 'REJECTED' && (
-                    <Button type="primary" size="small" onClick={() => handleOpenResultModal(r)}>
+                    <Button type="primary" size="small" ghost onClick={() => handleOpenResultModal(r)} style={{ fontSize: 11, height: 24 }}>
                       {r.resultValue !== null || r.resultText ? 'Edit' : 'Enter'}
                     </Button>
                   )}
                   {r.status === 'COMPLETED' && (
-                    <>
-                      <Tooltip title="Verify">
+                    <Space size={4}>
+                      <Tooltip title="Verify Result">
                         <Button
                           type="primary"
                           size="small"
-                          icon={<CheckCircleOutlined />}
+                          icon={<CheckCircleOutlined style={{ fontSize: 12 }} />}
                           onClick={() => handleVerify(r.id)}
-                          style={{ backgroundColor: '#52c41a', borderColor: '#52c41a' }}
+                          style={{ backgroundColor: '#52c41a', borderColor: '#52c41a', height: 24, width: 24, padding: 0 }}
                         />
                       </Tooltip>
-                      <Tooltip title="Reject">
+                      <Tooltip title="Reject/Repeat">
                         <Button
                           danger
                           size="small"
-                          icon={<CloseCircleOutlined />}
+                          icon={<CloseCircleOutlined style={{ fontSize: 12 }} />}
                           onClick={() => handleOpenRejectModal(r)}
+                          style={{ height: 24, width: 24, padding: 0 }}
                         />
                       </Tooltip>
-                    </>
+                    </Space>
                   )}
                   {r.status === 'VERIFIED' && (
-                    <Tag icon={<CheckCircleOutlined />} color="success">Verified</Tag>
+                    <Text type="success" style={{ fontSize: 11 }}><CheckCircleOutlined /> Verified</Text>
                   )}
                   {r.status === 'REJECTED' && (
-                    <Tag icon={<CloseCircleOutlined />} color="error">Rejected</Tag>
+                    <Text type="danger" style={{ fontSize: 11 }}><CloseCircleOutlined /> Rejected</Text>
                   )}
                 </Space>
               ),
+              onCell: () => ({ style: compactStyle }),
             },
           ]}
         />
