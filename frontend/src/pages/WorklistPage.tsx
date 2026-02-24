@@ -157,13 +157,7 @@ export function WorklistPage() {
   // Result entry modal
   const [resultModalOpen, setResultModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<WorklistItem | null>(null);
-  const [resultForm] = Form.useForm<{
-    resultValue?: number;
-    resultText?: string;
-    customResultText?: string;
-    resultParameters?: Record<string, string>;
-    resultParametersCustom?: Record<string, string>;
-  }>();
+  const [resultForm] = Form.useForm<any>();
   const [submitting, setSubmitting] = useState(false);
 
   // Reject modal
@@ -226,71 +220,87 @@ export function WorklistPage() {
 
   const handleOpenResultModal = (item: WorklistItem) => {
     setEditingItem(item);
-    const existingParams = item.resultParameters ?? {};
-    const defaults: Record<string, string> = {};
-    const resultParametersInitial: Record<string, string> = {};
-    const resultParametersCustomInitial: Record<string, string> = {};
-    const defsByCode = new Map(
-      (item.parameterDefinitions ?? []).map((definition) => [
-        definition.code,
-        definition,
-      ]),
-    );
-    (item.parameterDefinitions ?? []).forEach((def) => {
-      if (def.defaultValue != null && def.defaultValue.trim() !== '' && (existingParams[def.code] == null || String(existingParams[def.code]).trim() === '')) {
-        defaults[def.code] = def.defaultValue.trim();
+
+    const isPanel = item.testType === 'PANEL';
+    const targets = isPanel
+      ? data.filter((i) => i.parentOrderTestId === item.id)
+      : [item];
+
+    const formValues: any = {};
+
+    targets.forEach((target) => {
+      const existingParams = target.resultParameters ?? {};
+      const defsByCode = new Map(
+        (target.parameterDefinitions ?? []).map((definition) => [
+          definition.code,
+          definition,
+        ]),
+      );
+
+      const resultParametersInitial: Record<string, string> = {};
+      const resultParametersCustomInitial: Record<string, string> = {};
+      const defaults: Record<string, string> = {};
+
+      (target.parameterDefinitions ?? []).forEach((def) => {
+        if (def.defaultValue != null && def.defaultValue.trim() !== '' && (existingParams[def.code] == null || String(existingParams[def.code]).trim() === '')) {
+          defaults[def.code] = def.defaultValue.trim();
+        }
+      });
+
+      for (const [code, rawValue] of Object.entries(existingParams)) {
+        const value = rawValue != null ? String(rawValue).trim() : '';
+        if (!value) continue;
+        const definition = defsByCode.get(code);
+        if (definition?.type === 'select') {
+          const known = new Set(
+            (definition.options ?? []).map((option) => option.trim().toLowerCase()),
+          );
+          if (known.size > 0 && !known.has(value.toLowerCase())) {
+            resultParametersInitial[code] = '__other__';
+            resultParametersCustomInitial[code] = value;
+            continue;
+          }
+        }
+        resultParametersInitial[code] = value;
       }
-    });
-    for (const [code, rawValue] of Object.entries(existingParams)) {
-      const value = rawValue != null ? String(rawValue).trim() : '';
-      if (!value) continue;
-      const definition = defsByCode.get(code);
-      if (definition?.type === 'select') {
-        const known = new Set(
-          (definition.options ?? []).map((option) => option.trim().toLowerCase()),
-        );
-        if (known.size > 0 && !known.has(value.toLowerCase())) {
-          resultParametersInitial[code] = '__other__';
-          resultParametersCustomInitial[code] = value;
-          continue;
+
+      const qualitativeOptions = target.resultTextOptions ?? [];
+      const defaultQualitativeOption =
+        qualitativeOptions.find((option) => option.isDefault)?.value ??
+        qualitativeOptions[0]?.value;
+      const knownOptionValues = new Set(
+        qualitativeOptions.map((option) => option.value.trim().toLowerCase()),
+      );
+
+      let initialResultText = target.resultText ?? undefined;
+      let customResultText: string | undefined;
+
+      if (target.resultEntryType === 'QUALITATIVE') {
+        if (!initialResultText && defaultQualitativeOption) {
+          initialResultText = defaultQualitativeOption;
+        }
+        if (
+          initialResultText &&
+          target.allowCustomResultText &&
+          !knownOptionValues.has(initialResultText.trim().toLowerCase())
+        ) {
+          customResultText = initialResultText;
+          initialResultText = '__other__';
         }
       }
-      resultParametersInitial[code] = value;
-    }
-    const qualitativeOptions = item.resultTextOptions ?? [];
-    const defaultQualitativeOption =
-      qualitativeOptions.find((option) => option.isDefault)?.value ??
-      qualitativeOptions[0]?.value;
-    const knownOptionValues = new Set(
-      qualitativeOptions.map((option) => option.value.trim().toLowerCase()),
-    );
 
-    let initialResultText = item.resultText ?? undefined;
-    let customResultText: string | undefined;
-
-    if (item.resultEntryType === 'QUALITATIVE') {
-      if (!initialResultText && defaultQualitativeOption) {
-        initialResultText = defaultQualitativeOption;
-      }
-      if (
-        initialResultText &&
-        item.allowCustomResultText &&
-        !knownOptionValues.has(initialResultText.trim().toLowerCase())
-      ) {
-        customResultText = initialResultText;
-        initialResultText = '__other__';
-      }
-    }
-
-    resultForm.setFieldsValue({
-      resultValue: item.resultEntryType === 'QUALITATIVE' || item.resultEntryType === 'TEXT'
-        ? undefined
-        : item.resultValue,
-      resultText: initialResultText,
-      customResultText,
-      resultParameters: { ...defaults, ...resultParametersInitial },
-      resultParametersCustom: resultParametersCustomInitial,
+      formValues[target.id] = {
+        resultValue: target.resultEntryType === 'QUALITATIVE' || target.resultEntryType === 'TEXT'
+          ? undefined
+          : target.resultValue,
+        resultText: initialResultText,
+        customResultText,
+        resultParameters: { ...defaults, ...resultParametersInitial },
+        resultParametersCustom: resultParametersCustomInitial,
+      };
     });
+
+    resultForm.setFieldsValue(formValues);
     setResultModalOpen(true);
   };
 
@@ -300,54 +310,58 @@ export function WorklistPage() {
     resultForm.resetFields();
   };
 
-  const handleSubmitResult = async (values: {
-    resultValue?: number;
-    resultText?: string;
-    customResultText?: string;
-    resultParameters?: Record<string, string>;
-    resultParametersCustom?: Record<string, string>;
-  }) => {
+  const handleSubmitResult = async (values: any) => {
     if (!editingItem) return;
 
-    const raw = values.resultParameters ?? {};
-    const rawCustom = values.resultParametersCustom ?? {};
-    const resultParamsEntries: Array<[string, string]> = [];
-    for (const [code, rawValue] of Object.entries(raw)) {
-      const value = rawValue != null ? String(rawValue).trim() : '';
-      if (!value) continue;
-      if (value === '__other__') {
-        const customValue = rawCustom[code] != null ? String(rawCustom[code]).trim() : '';
-        if (!customValue) {
-          message.warning(`Please specify custom value for ${code}.`);
-          return;
-        }
-        resultParamsEntries.push([code, customValue]);
-        continue;
-      }
-      resultParamsEntries.push([code, value]);
-    }
-    const resultParams = Object.fromEntries(resultParamsEntries);
-    const selectedResultText = values.resultText?.trim() || '';
-    const finalResultText =
-      selectedResultText === '__other__'
-        ? values.customResultText?.trim() || ''
-        : selectedResultText;
-    const isQualitative = editingItem.resultEntryType === 'QUALITATIVE';
-    const isTextOnly = editingItem.resultEntryType === 'TEXT';
+    const isPanel = editingItem.testType === 'PANEL';
+    const targets = isPanel
+      ? data.filter((i) => i.parentOrderTestId === editingItem.id)
+      : [editingItem];
 
     setSubmitting(true);
     try {
-      await enterResult(editingItem.id, {
-        resultValue: isQualitative || isTextOnly ? null : values.resultValue ?? null,
-        resultText: finalResultText || null,
-        resultParameters: Object.keys(resultParams).length > 0 ? resultParams : null,
+      const savePromises = targets.map(async (target) => {
+        const itemValues = values[target.id] || {};
+        const resultParamsEntries: [string, string][] = [];
+        const rawParams = itemValues.resultParameters ?? {};
+        const rawCustomParams = itemValues.resultParametersCustom ?? {};
+
+        for (const [code, rawValue] of Object.entries(rawParams)) {
+          const value = rawValue != null ? String(rawValue).trim() : '';
+          if (!value) continue;
+          if (value === '__other__') {
+            const customValue = rawCustomParams[code] != null ? String(rawCustomParams[code]).trim() : '';
+            if (!customValue) continue;
+            resultParamsEntries.push([code, customValue]);
+            continue;
+          }
+          resultParamsEntries.push([code, value]);
+        }
+
+        const resultParams = Object.fromEntries(resultParamsEntries);
+        const selectedResultText = itemValues.resultText?.trim() || '';
+        const finalResultText =
+          selectedResultText === '__other__'
+            ? itemValues.customResultText?.trim() || ''
+            : selectedResultText;
+
+        const isQualitative = target.resultEntryType === 'QUALITATIVE';
+        const isTextOnly = target.resultEntryType === 'TEXT';
+
+        return enterResult(target.id, {
+          resultValue: isQualitative || isTextOnly ? null : itemValues.resultValue ?? null,
+          resultText: finalResultText || null,
+          resultParameters: Object.keys(resultParams).length > 0 ? resultParams : null,
+        });
       });
-      message.success('Result saved');
+
+      await Promise.all(savePromises);
+      message.success(isPanel ? 'Panel results saved' : 'Result saved');
       handleCloseResultModal();
       loadData();
       loadStats();
     } catch {
-      message.error('Failed to save result');
+      message.error('Failed to save result(s)');
     } finally {
       setSubmitting(false);
     }
@@ -468,139 +482,143 @@ export function WorklistPage() {
     }),
   };
 
-  const renderExpandedTests = (group: WorklistOrderGroup) => (
-    <div className="worklist-expanded-panel">
-      <Table
-        className="worklist-subtests-table"
-        size="small"
-        rowKey="id"
-        dataSource={group.items}
-        pagination={false}
-        columns={[
-          {
-            title: 'Test',
-            key: 'test',
-            width: 200,
-            render: (_: unknown, r: WorklistItem) => (
-              <div>
-                <Tag color="blue">{r.testCode}</Tag>
-                <Text>{r.testName}</Text>
-              </div>
-            ),
-          },
-          {
-            title: 'Result',
-            key: 'result',
-            width: 150,
-            render: (_: unknown, r: WorklistItem) => {
-              if (r.resultValue !== null) {
-                return (
-                  <Space>
-                    <Text strong style={{ color: getFlagColor(r.flag) }}>{r.resultValue}</Text>
-                    {r.testUnit && <Text type="secondary">{r.testUnit}</Text>}
-                    {r.flag && r.flag !== 'N' && <Tag color={getFlagColor(r.flag)}>{r.flag}</Tag>}
-                  </Space>
-                );
-              }
-              if (r.resultText) {
-                return (
-                  <Space size={6}>
-                    <Text>{r.resultText}</Text>
-                    {r.flag && (
-                      <Tag color={getFlagColor(r.flag)} style={{ margin: 0 }}>
-                        {getFlagLabel(r.flag) || r.flag}
-                      </Tag>
-                    )}
-                  </Space>
-                );
-              }
-              return <Text type="secondary">—</Text>;
+  const renderExpandedTests = (group: WorklistOrderGroup) => {
+    const rootItems = group.items.filter((i) => !i.parentOrderTestId);
+
+    return (
+      <div className="worklist-expanded-panel">
+        <Table
+          className="worklist-subtests-table"
+          size="small"
+          rowKey="id"
+          dataSource={rootItems}
+          pagination={false}
+          columns={[
+            {
+              title: 'Test',
+              key: 'test',
+              width: 200,
+              render: (_: unknown, r: WorklistItem) => (
+                <div>
+                  <Tag color="blue">{r.testCode}</Tag>
+                  <Text>{r.testName}</Text>
+                </div>
+              ),
             },
-          },
-          {
-            title: 'Normal Range',
-            key: 'normalRange',
-            width: 130,
-            render: (_: unknown, r: WorklistItem) => {
-              if (r.normalText) return <Text type="secondary">{r.normalText}</Text>;
-              if (r.normalMin !== null || r.normalMax !== null) {
-                return (
-                  <Text type="secondary">
-                    {r.normalMin ?? '-'} - {r.normalMax ?? '-'} {r.testUnit || ''}
-                  </Text>
-                );
-              }
-              return <Text type="secondary">—</Text>;
+            {
+              title: 'Result',
+              key: 'result',
+              width: 150,
+              render: (_: unknown, r: WorklistItem) => {
+                if (r.resultValue !== null) {
+                  return (
+                    <Space>
+                      <Text strong style={{ color: getFlagColor(r.flag) }}>{r.resultValue}</Text>
+                      {r.testUnit && <Text type="secondary">{r.testUnit}</Text>}
+                      {r.flag && r.flag !== 'N' && <Tag color={getFlagColor(r.flag)}>{r.flag}</Tag>}
+                    </Space>
+                  );
+                }
+                if (r.resultText) {
+                  return (
+                    <Space size={6}>
+                      <Text>{r.resultText}</Text>
+                      {r.flag && (
+                        <Tag color={getFlagColor(r.flag)} style={{ margin: 0 }}>
+                          {getFlagLabel(r.flag) || r.flag}
+                        </Tag>
+                      )}
+                    </Space>
+                  );
+                }
+                return <Text type="secondary">—</Text>;
+              },
             },
-          },
-          {
-            title: 'Status',
-            dataIndex: 'status',
-            key: 'status',
-            width: 100,
-            render: (status: OrderTestStatus) => {
-              const colors: Record<OrderTestStatus, string> = {
-                PENDING: 'default',
-                IN_PROGRESS: 'processing',
-                COMPLETED: 'warning',
-                VERIFIED: 'success',
-                REJECTED: 'error',
-              };
-              return <Tag color={colors[status]}>{status}</Tag>;
+            {
+              title: 'Normal Range',
+              key: 'normalRange',
+              width: 130,
+              render: (_: unknown, r: WorklistItem) => {
+                if (r.normalText) return <Text type="secondary">{r.normalText}</Text>;
+                if (r.normalMin !== null || r.normalMax !== null) {
+                  return (
+                    <Text type="secondary">
+                      {r.normalMin ?? '-'} - {r.normalMax ?? '-'} {r.testUnit || ''}
+                    </Text>
+                  );
+                }
+                return <Text type="secondary">—</Text>;
+              },
             },
-          },
-          {
-            title: 'Tube',
-            dataIndex: 'tubeType',
-            key: 'tubeType',
-            width: 90,
-            render: (v: string | null) => (v ? <Tag color="purple">{v.replace('_', ' ')}</Tag> : '—'),
-          },
-          {
-            title: 'Actions',
-            key: 'actions',
-            width: 200,
-            render: (_: unknown, r: WorklistItem) => (
-              <Space size="small">
-                {r.status !== 'VERIFIED' && r.status !== 'REJECTED' && (
-                  <Button type="primary" size="small" onClick={() => handleOpenResultModal(r)}>
-                    {r.resultValue !== null || r.resultText ? 'Edit' : 'Enter'}
-                  </Button>
-                )}
-                {r.status === 'COMPLETED' && (
-                  <>
-                    <Tooltip title="Verify">
-                      <Button
-                        type="primary"
-                        size="small"
-                        icon={<CheckCircleOutlined />}
-                        onClick={() => handleVerify(r.id)}
-                        style={{ backgroundColor: '#52c41a', borderColor: '#52c41a' }}
-                      />
-                    </Tooltip>
-                    <Tooltip title="Reject">
-                      <Button
-                        danger
-                        size="small"
-                        icon={<CloseCircleOutlined />}
-                        onClick={() => handleOpenRejectModal(r)}
-                      />
-                    </Tooltip>
-                  </>
-                )}
-                {r.status === 'VERIFIED' && (
-                  <Tag icon={<CheckCircleOutlined />} color="success">Verified</Tag>
-                )}
-                {r.status === 'REJECTED' && (
-                  <Tag icon={<CloseCircleOutlined />} color="error">Rejected</Tag>
-                )}
-              </Space>
-            ),
-          },
-        ]}
-      />
-    </div>
-  );
+            {
+              title: 'Status',
+              dataIndex: 'status',
+              key: 'status',
+              width: 100,
+              render: (status: OrderTestStatus) => {
+                const colors: Record<OrderTestStatus, string> = {
+                  PENDING: 'default',
+                  IN_PROGRESS: 'processing',
+                  COMPLETED: 'warning',
+                  VERIFIED: 'success',
+                  REJECTED: 'error',
+                };
+                return <Tag color={colors[status]}>{status}</Tag>;
+              },
+            },
+            {
+              title: 'Tube',
+              dataIndex: 'tubeType',
+              key: 'tubeType',
+              width: 90,
+              render: (v: string | null) => (v ? <Tag color="purple">{v.replace('_', ' ')}</Tag> : '—'),
+            },
+            {
+              title: 'Actions',
+              key: 'actions',
+              width: 200,
+              render: (_: unknown, r: WorklistItem) => (
+                <Space size="small">
+                  {r.status !== 'VERIFIED' && r.status !== 'REJECTED' && (
+                    <Button type="primary" size="small" onClick={() => handleOpenResultModal(r)}>
+                      {r.resultValue !== null || r.resultText ? 'Edit' : 'Enter'}
+                    </Button>
+                  )}
+                  {r.status === 'COMPLETED' && (
+                    <>
+                      <Tooltip title="Verify">
+                        <Button
+                          type="primary"
+                          size="small"
+                          icon={<CheckCircleOutlined />}
+                          onClick={() => handleVerify(r.id)}
+                          style={{ backgroundColor: '#52c41a', borderColor: '#52c41a' }}
+                        />
+                      </Tooltip>
+                      <Tooltip title="Reject">
+                        <Button
+                          danger
+                          size="small"
+                          icon={<CloseCircleOutlined />}
+                          onClick={() => handleOpenRejectModal(r)}
+                        />
+                      </Tooltip>
+                    </>
+                  )}
+                  {r.status === 'VERIFIED' && (
+                    <Tag icon={<CheckCircleOutlined />} color="success">Verified</Tag>
+                  )}
+                  {r.status === 'REJECTED' && (
+                    <Tag icon={<CloseCircleOutlined />} color="error">Rejected</Tag>
+                  )}
+                </Space>
+              ),
+            },
+          ]}
+        />
+      </div>
+    );
+  };
 
   return (
     <div>
@@ -856,181 +874,198 @@ export function WorklistPage() {
               layout="vertical"
               onFinish={handleSubmitResult}
             >
-              {(editingItem.parameterDefinitions?.length ?? 0) === 0 && (
-                <>
-                  {editingItem.resultEntryType === 'QUALITATIVE' ||
-                    editingItem.resultEntryType === 'TEXT' ? (
-                    <Row gutter={16}>
-                      <Col xs={24} md={16}>
-                        <Form.Item
-                          name="resultText"
-                          label={
-                            editingItem.resultEntryType === 'QUALITATIVE'
-                              ? 'Result text (select)'
-                              : 'Result text'
-                          }
-                          rules={
-                            editingItem.resultEntryType === 'QUALITATIVE'
-                              ? [{ required: true, message: 'Select or enter a result text value' }]
-                              : undefined
-                          }
-                        >
-                          {(editingItem.resultEntryType === 'QUALITATIVE' &&
-                            (editingItem.resultTextOptions?.length ?? 0) > 0) ? (
-                            <Select
-                              allowClear
-                              showSearch
-                              size="large"
-                              placeholder="Select result text"
-                              options={[
-                                ...(editingItem.resultTextOptions ?? []).map((option) => ({
-                                  label: option.flag ? `${option.value} (${option.flag})` : option.value,
-                                  value: option.value,
-                                })),
-                                ...(editingItem.allowCustomResultText
-                                  ? [{ label: 'Other (type manually)', value: '__other__' }]
-                                  : []),
-                              ]}
-                            />
-                          ) : (
-                            <Input
-                              placeholder="e.g. Positive, Negative, Reactive"
-                              size="large"
-                            />
-                          )}
-                        </Form.Item>
-                      </Col>
-                    </Row>
-                  ) : (
-                    <Row gutter={16}>
-                      <Col xs={24} md={12}>
-                        <Form.Item
-                          name="resultValue"
-                          label={`Result value${editingItem.testUnit ? ` (${editingItem.testUnit})` : ''}`}
-                        >
-                          <InputNumber
-                            style={{ width: '100%' }}
-                            placeholder="Enter numeric result"
-                            precision={4}
-                            size="large"
-                          />
-                        </Form.Item>
-                      </Col>
-                      <Col xs={24} md={12}>
-                        <Form.Item
-                          name="resultText"
-                          label="Result text (optional)"
-                        >
-                          <Input placeholder="Optional qualitative text" size="large" />
-                        </Form.Item>
-                      </Col>
-                    </Row>
+              {(editingItem.testType === 'PANEL'
+                ? data.filter(i => i.parentOrderTestId === editingItem.id)
+                : [editingItem]
+              ).map((target, idx, arr) => (
+                <div key={target.id} style={idx < arr.length - 1 ? { marginBottom: 32, paddingBottom: 24, borderBottom: isDark ? '1px dashed rgba(255,255,255,0.1)' : '1px dashed #f0f0f0' } : {}}>
+                  {arr.length > 1 && (
+                    <div style={{ marginBottom: 16 }}>
+                      <Tag color="blue" style={{ fontSize: 13, padding: '2px 8px' }}>{target.testCode} – {target.testName}</Tag>
+                      {(target.normalMin !== null || target.normalMax !== null || target.normalText) && (
+                        <Text type="secondary" style={{ fontSize: 11, marginLeft: 12 }}>
+                          Range: {target.normalText || `${target.normalMin ?? '–'} – ${target.normalMax ?? '–'} ${target.testUnit || ''}`}
+                        </Text>
+                      )}
+                    </div>
                   )}
 
-                  {editingItem.resultEntryType === 'QUALITATIVE' &&
-                    editingItem.allowCustomResultText && (
-                      <Form.Item noStyle shouldUpdate>
-                        {() =>
-                          resultForm.getFieldValue('resultText') === '__other__' ? (
-                            <Row gutter={16}>
-                              <Col xs={24} md={16}>
-                                <Form.Item
-                                  name="customResultText"
-                                  label="Custom result text"
-                                  rules={[{ required: true, message: 'Enter custom result text' }]}
-                                >
-                                  <Input placeholder="Type custom result value" size="large" />
-                                </Form.Item>
-                              </Col>
-                            </Row>
-                          ) : null
-                        }
-                      </Form.Item>
-                    )}
-                </>
-              )}
+                  {(target.parameterDefinitions?.length ?? 0) === 0 && (
+                    <>
+                      {target.resultEntryType === 'QUALITATIVE' ||
+                        target.resultEntryType === 'TEXT' ? (
+                        <Row gutter={16}>
+                          <Col xs={24} md={16}>
+                            <Form.Item
+                              name={[target.id, 'resultText']}
+                              label={
+                                target.resultEntryType === 'QUALITATIVE'
+                                  ? 'Result text (select)'
+                                  : 'Result text'
+                              }
+                              rules={
+                                target.resultEntryType === 'QUALITATIVE'
+                                  ? [{ required: true, message: 'Select or enter a result text value' }]
+                                  : undefined
+                              }
+                            >
+                              {(target.resultEntryType === 'QUALITATIVE' &&
+                                (target.resultTextOptions?.length ?? 0) > 0) ? (
+                                <Select
+                                  allowClear
+                                  showSearch
+                                  size="large"
+                                  placeholder="Select result text"
+                                  options={[
+                                    ...(target.resultTextOptions ?? []).map((option) => ({
+                                      label: option.flag ? `${option.value} (${option.flag})` : option.value,
+                                      value: option.value,
+                                    })),
+                                    ...(target.allowCustomResultText
+                                      ? [{ label: 'Other (type manually)', value: '__other__' }]
+                                      : []),
+                                  ]}
+                                />
+                              ) : (
+                                <Input
+                                  placeholder="e.g. Positive, Negative, Reactive"
+                                  size="large"
+                                />
+                              )}
+                            </Form.Item>
+                          </Col>
+                        </Row>
+                      ) : (
+                        <Row gutter={16}>
+                          <Col xs={24} md={12}>
+                            <Form.Item
+                              name={[target.id, 'resultValue']}
+                              label={`Result value${target.testUnit ? ` (${target.testUnit})` : ''}`}
+                            >
+                              <InputNumber
+                                style={{ width: '100%' }}
+                                placeholder="Enter numeric result"
+                                precision={4}
+                                size="large"
+                              />
+                            </Form.Item>
+                          </Col>
+                          <Col xs={24} md={12}>
+                            <Form.Item
+                              name={[target.id, 'resultText']}
+                              label="Result text (optional)"
+                            >
+                              <Input placeholder="Optional qualitative text" size="large" />
+                            </Form.Item>
+                          </Col>
+                        </Row>
+                      )}
 
-              {(editingItem.parameterDefinitions?.length ?? 0) > 0 && (
-                <>
-                  <div style={{ marginBottom: 16 }}>
-                    <Text strong style={{ fontSize: 14 }}>Parameters</Text>
-                    <Text type="secondary" style={{ fontSize: 12, marginLeft: 8 }}>Enter result parameters for this test</Text>
-                  </div>
-                  <Row gutter={[20, 0]}>
-                    {editingItem.parameterDefinitions!.map((def) => (
-                      <Form.Item noStyle key={def.code} shouldUpdate={(prev, curr) => prev?.resultParameters?.[def.code] !== curr?.resultParameters?.[def.code]}>
-                        {() => {
-                          const params = resultForm.getFieldValue('resultParameters') ?? {};
-                          const val = params[def.code];
-                          const isAbnormal = (def.normalOptions?.length ?? 0) > 0 && val != null && String(val).trim() !== '' && val !== '__other__' && !def.normalOptions!.includes(String(val).trim());
-                          const labelNode = isAbnormal ? (
-                            <Space size={6}>
-                              <span>{def.label}</span>
-                              <Tag color="orange">Abnormal</Tag>
-                            </Space>
-                          ) : def.label;
-                          return (
-                            <Col xs={24} md={12}>
-                              <Form.Item
-                                name={['resultParameters', def.code]}
-                                label={labelNode}
-                                style={{ marginBottom: 16 }}
-                              >
-                                {def.type === 'select' ? (
-                                  <Select
-                                    allowClear
-                                    placeholder={`Select ${def.label} or Other to type`}
-                                    size="large"
-                                    options={[
-                                      ...(def.options ?? []).map((o) => ({ label: o, value: o })),
-                                      { label: 'Other (enter manually)', value: '__other__' },
-                                    ]}
-                                    showSearch
-                                    optionFilterProp="label"
-                                  />
-                                ) : (
-                                  <Input placeholder={`Enter ${def.label}`} size="large" />
-                                )}
-                              </Form.Item>
-                            </Col>
-                          );
-                        }}
-                      </Form.Item>
-                    ))}
-                  </Row>
-                  {editingItem.parameterDefinitions!.some((def) => def.type === 'select') && (
-                    <Form.Item noStyle shouldUpdate={(prev, curr) => {
-                      const prevKeys = prev?.resultParameters ? Object.keys(prev.resultParameters) : [];
-                      const currKeys = curr?.resultParameters ? Object.keys(curr.resultParameters) : [];
-                      return prevKeys.some((k) => prev.resultParameters?.[k] === '__other__') !==
-                        currKeys.some((k) => curr.resultParameters?.[k] === '__other__');
-                    }}>
-                      {() => {
-                        const params = resultForm.getFieldValue('resultParameters') ?? {};
-                        return (
-                          <Row gutter={[20, 0]}>
-                            {editingItem.parameterDefinitions!.filter((def) => def.type === 'select').map((def) =>
-                              params[def.code] === '__other__' ? (
-                                <Col xs={24} md={12} key={`${def.code}-other`}>
+                      {target.resultEntryType === 'QUALITATIVE' &&
+                        target.allowCustomResultText && (
+                          <Form.Item noStyle shouldUpdate>
+                            {() =>
+                              resultForm.getFieldValue([target.id, 'resultText']) === '__other__' ? (
+                                <Row gutter={16}>
+                                  <Col xs={24} md={16}>
+                                    <Form.Item
+                                      name={[target.id, 'customResultText']}
+                                      label="Custom result text"
+                                      rules={[{ required: true, message: 'Enter custom result text' }]}
+                                    >
+                                      <Input placeholder="Type custom result value" size="large" />
+                                    </Form.Item>
+                                  </Col>
+                                </Row>
+                              ) : null
+                            }
+                          </Form.Item>
+                        )}
+                    </>
+                  )}
+
+                  {(target.parameterDefinitions?.length ?? 0) > 0 && (
+                    <>
+                      <div style={{ marginBottom: 16 }}>
+                        <Text strong style={{ fontSize: 14 }}>Parameters</Text>
+                        <Text type="secondary" style={{ fontSize: 12, marginLeft: 8 }}>Enter result parameters for this test</Text>
+                      </div>
+                      <Row gutter={[20, 0]}>
+                        {target.parameterDefinitions!.map((def) => (
+                          <Form.Item noStyle key={def.code} shouldUpdate={(prev, curr) => prev?.[target.id]?.resultParameters?.[def.code] !== curr?.[target.id]?.resultParameters?.[def.code]}>
+                            {() => {
+                              const params = resultForm.getFieldValue([target.id, 'resultParameters']) ?? {};
+                              const val = params[def.code];
+                              const isAbnormal = (def.normalOptions?.length ?? 0) > 0 && val != null && String(val).trim() !== '' && val !== '__other__' && !def.normalOptions!.includes(String(val).trim());
+                              const labelNode = isAbnormal ? (
+                                <Space size={6}>
+                                  <span>{def.label}</span>
+                                  <Tag color="orange">Abnormal</Tag>
+                                </Space>
+                              ) : def.label;
+                              return (
+                                <Col xs={24} md={12}>
                                   <Form.Item
-                                    name={['resultParametersCustom', def.code]}
-                                    label={`${def.label} (specify)`}
-                                    rules={[{ required: true, message: `Type ${def.label}` }]}
+                                    name={[target.id, 'resultParameters', def.code]}
+                                    label={labelNode}
                                     style={{ marginBottom: 16 }}
                                   >
-                                    <Input placeholder={`Type ${def.label}...`} size="large" />
+                                    {def.type === 'select' ? (
+                                      <Select
+                                        allowClear
+                                        placeholder={`Select ${def.label} or Other to type`}
+                                        size="large"
+                                        options={[
+                                          ...(def.options ?? []).map((o) => ({ label: o, value: o })),
+                                          { label: 'Other (enter manually)', value: '__other__' },
+                                        ]}
+                                        showSearch
+                                        optionFilterProp="label"
+                                      />
+                                    ) : (
+                                      <Input placeholder={`Enter ${def.label}`} size="large" />
+                                    )}
                                   </Form.Item>
                                 </Col>
-                              ) : null
-                            )}
-                          </Row>
-                        );
-                      }}
-                    </Form.Item>
+                              );
+                            }}
+                          </Form.Item>
+                        ))}
+                      </Row>
+                      {target.parameterDefinitions!.some((def) => def.type === 'select') && (
+                        <Form.Item noStyle shouldUpdate={(prev, curr) => {
+                          const prevKeys = prev?.[target.id]?.resultParameters ? Object.keys(prev[target.id].resultParameters) : [];
+                          const currKeys = curr?.[target.id]?.resultParameters ? Object.keys(curr[target.id].resultParameters) : [];
+                          return prevKeys.some((k) => prev[target.id].resultParameters?.[k] === '__other__') !==
+                            currKeys.some((k) => curr[target.id].resultParameters?.[k] === '__other__');
+                        }}>
+                          {() => {
+                            const params = resultForm.getFieldValue([target.id, 'resultParameters']) ?? {};
+                            return (
+                              <Row gutter={[20, 0]}>
+                                {target.parameterDefinitions!.filter((def) => def.type === 'select').map((def) =>
+                                  params[def.code] === '__other__' ? (
+                                    <Col xs={24} md={12} key={`${def.code}-other`}>
+                                      <Form.Item
+                                        name={[target.id, 'resultParametersCustom', def.code]}
+                                        label={`${def.label} (specify)`}
+                                        rules={[{ required: true, message: `Type ${def.label}` }]}
+                                        style={{ marginBottom: 16 }}
+                                      >
+                                        <Input placeholder={`Type ${def.label}...`} size="large" />
+                                      </Form.Item>
+                                    </Col>
+                                  ) : null
+                                )}
+                              </Row>
+                            );
+                          }}
+                        </Form.Item>
+                      )}
+                    </>
                   )}
-                </>
-              )}
-
+                </div>
+              ))}
               <Form.Item style={{ marginBottom: 0, marginTop: 24 }}>
                 <Space style={{ width: '100%', justifyContent: 'flex-end' }} size="middle">
                   <Button onClick={handleCloseResultModal} size="large">Cancel</Button>
