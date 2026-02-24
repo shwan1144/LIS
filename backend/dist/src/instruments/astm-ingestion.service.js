@@ -304,6 +304,13 @@ let AstmIngestionService = AstmIngestionService_1 = class AstmIngestionService {
     async findSample(sampleIdentifier, labId) {
         if (!sampleIdentifier)
             return null;
+        const order = await this.orderRepo.findOne({
+            where: { labId, orderNumber: sampleIdentifier },
+            relations: ['samples'],
+        });
+        if (order && order.samples.length > 0 && order.status !== order_entity_1.OrderStatus.CANCELLED) {
+            return order.samples[0];
+        }
         let sample = await this.sampleRepo
             .createQueryBuilder('s')
             .innerJoin('s.order', 'o')
@@ -322,13 +329,6 @@ let AstmIngestionService = AstmIngestionService_1 = class AstmIngestionService {
             .getOne();
         if (sample)
             return sample;
-        const order = await this.orderRepo.findOne({
-            where: { labId, orderNumber: sampleIdentifier },
-            relations: ['samples'],
-        });
-        if (order && order.samples.length > 0 && order.status !== order_entity_1.OrderStatus.CANCELLED) {
-            return order.samples[0];
-        }
         return null;
     }
     parseResultValue(value, multiplier) {

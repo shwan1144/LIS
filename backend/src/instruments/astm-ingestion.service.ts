@@ -374,6 +374,15 @@ export class AstmIngestionService {
   private async findSample(sampleIdentifier: string, labId: string): Promise<Sample | null> {
     if (!sampleIdentifier) return null;
 
+    // Prefer order number match first (order-based workflow)
+    const order = await this.orderRepo.findOne({
+      where: { labId, orderNumber: sampleIdentifier },
+      relations: ['samples'],
+    });
+    if (order && order.samples.length > 0 && order.status !== OrderStatus.CANCELLED) {
+      return order.samples[0];
+    }
+
     let sample = await this.sampleRepo
       .createQueryBuilder('s')
       .innerJoin('s.order', 'o')
@@ -391,14 +400,6 @@ export class AstmIngestionService {
       .andWhere('o.status != :cancelled', { cancelled: OrderStatus.CANCELLED })
       .getOne();
     if (sample) return sample;
-
-    const order = await this.orderRepo.findOne({
-      where: { labId, orderNumber: sampleIdentifier },
-      relations: ['samples'],
-    });
-    if (order && order.samples.length > 0 && order.status !== OrderStatus.CANCELLED) {
-      return order.samples[0];
-    }
 
     return null;
   }
@@ -422,4 +423,3 @@ export class AstmIngestionService {
     return { numericValue: null, textValue: cleanValue };
   }
 }
-

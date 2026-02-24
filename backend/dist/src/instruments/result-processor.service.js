@@ -128,6 +128,13 @@ let InstrumentResultProcessor = InstrumentResultProcessor_1 = class InstrumentRe
     async findSample(sampleIdentifier, labId) {
         if (!sampleIdentifier)
             return null;
+        const order = await this.orderRepo.findOne({
+            where: { labId, orderNumber: sampleIdentifier },
+            relations: ['samples'],
+        });
+        if (order && order.samples.length > 0) {
+            return order.samples[0];
+        }
         let sample = await this.sampleRepo
             .createQueryBuilder('s')
             .innerJoin('s.order', 'o')
@@ -144,13 +151,6 @@ let InstrumentResultProcessor = InstrumentResultProcessor_1 = class InstrumentRe
             .getOne();
         if (sample)
             return sample;
-        const order = await this.orderRepo.findOne({
-            where: { labId, orderNumber: sampleIdentifier },
-            relations: ['samples'],
-        });
-        if (order && order.samples.length > 0) {
-            return order.samples[0];
-        }
         sample = await this.sampleRepo
             .createQueryBuilder('s')
             .innerJoin('s.order', 'o')

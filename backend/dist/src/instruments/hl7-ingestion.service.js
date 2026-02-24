@@ -217,14 +217,13 @@ let HL7IngestionService = HL7IngestionService_1 = class HL7IngestionService {
     }
     async processOBXResult(instrument, sample, result, messageId, obxSequence, strictMode) {
         const instrumentCode = result.testCode.trim().toUpperCase();
-        const mapping = await this.mappingRepo.findOne({
-            where: {
-                instrumentId: instrument.id,
-                instrumentTestCode: instrumentCode,
-                isActive: true,
-            },
-            relations: ['test'],
-        });
+        const mapping = await this.mappingRepo
+            .createQueryBuilder('m')
+            .leftJoinAndSelect('m.test', 'test')
+            .where('m.instrumentId = :instrumentId', { instrumentId: instrument.id })
+            .andWhere('m.isActive = true')
+            .andWhere('UPPER(TRIM(m.instrumentTestCode)) = :instrumentCode', { instrumentCode })
+            .getOne();
         if (!mapping) {
             return {
                 success: false,
@@ -232,13 +231,24 @@ let HL7IngestionService = HL7IngestionService_1 = class HL7IngestionService {
                 message: `No mapping found for instrument code: ${instrumentCode}`,
             };
         }
-        const orderTest = await this.orderTestRepo.findOne({
+        let orderTest = await this.orderTestRepo.findOne({
             where: {
                 sampleId: sample.id,
                 testId: mapping.testId,
             },
             relations: ['test', 'sample', 'sample.order'],
         });
+        if (!orderTest && sample.orderId) {
+            orderTest = await this.orderTestRepo
+                .createQueryBuilder('ot')
+                .leftJoinAndSelect('ot.test', 'test')
+                .leftJoinAndSelect('ot.sample', 'sample')
+                .leftJoinAndSelect('sample.order', 'order')
+                .where('sample.orderId = :orderId', { orderId: sample.orderId })
+                .andWhere('ot.testId = :testId', { testId: mapping.testId })
+                .orderBy('ot.createdAt', 'ASC')
+                .getOne();
+        }
         if (!orderTest) {
             return {
                 success: false,
@@ -340,6 +350,13 @@ let HL7IngestionService = HL7IngestionService_1 = class HL7IngestionService {
     async findSample(sampleIdentifier, labId) {
         if (!sampleIdentifier)
             return null;
+        const order = await this.orderRepo.findOne({
+            where: { labId, orderNumber: sampleIdentifier },
+            relations: ['samples'],
+        });
+        if (order && order.samples.length > 0 && order.status !== order_entity_1.OrderStatus.CANCELLED) {
+            return order.samples[0];
+        }
         let sample = await this.sampleRepo
             .createQueryBuilder('s')
             .innerJoin('s.order', 'o')
@@ -358,13 +375,6 @@ let HL7IngestionService = HL7IngestionService_1 = class HL7IngestionService {
             .getOne();
         if (sample)
             return sample;
-        const order = await this.orderRepo.findOne({
-            where: { labId, orderNumber: sampleIdentifier },
-            relations: ['samples'],
-        });
-        if (order && order.samples.length > 0 && order.status !== order_entity_1.OrderStatus.CANCELLED) {
-            return order.samples[0];
-        }
         return null;
     }
     parseResultValue(value, multiplier) {

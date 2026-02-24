@@ -158,6 +158,16 @@ export class InstrumentResultProcessor {
   private async findSample(sampleIdentifier: string, labId: string): Promise<Sample | null> {
     if (!sampleIdentifier) return null;
 
+    // Prefer order number match first (order-based workflow)
+    const order = await this.orderRepo.findOne({
+      where: { labId, orderNumber: sampleIdentifier },
+      relations: ['samples'],
+    });
+
+    if (order && order.samples.length > 0) {
+      return order.samples[0];
+    }
+
     // Try to find by sampleId field
     let sample = await this.sampleRepo
       .createQueryBuilder('s')
@@ -177,16 +187,6 @@ export class InstrumentResultProcessor {
       .getOne();
 
     if (sample) return sample;
-
-    // Try to find by order number
-    const order = await this.orderRepo.findOne({
-      where: { labId, orderNumber: sampleIdentifier },
-      relations: ['samples'],
-    });
-
-    if (order && order.samples.length > 0) {
-      return order.samples[0];
-    }
 
     // Try by sample ID (UUID)
     sample = await this.sampleRepo

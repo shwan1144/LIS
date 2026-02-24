@@ -308,15 +308,14 @@ export class HL7IngestionService {
     // Normalize instrument code
     const instrumentCode = result.testCode.trim().toUpperCase();
 
-    // Find mapping
-    const mapping = await this.mappingRepo.findOne({
-      where: {
-        instrumentId: instrument.id,
-        instrumentTestCode: instrumentCode,
-        isActive: true,
-      },
-      relations: ['test'],
-    });
+    // Find mapping (case/whitespace tolerant)
+    const mapping = await this.mappingRepo
+      .createQueryBuilder('m')
+      .leftJoinAndSelect('m.test', 'test')
+      .where('m.instrumentId = :instrumentId', { instrumentId: instrument.id })
+      .andWhere('m.isActive = true')
+      .andWhere('UPPER(TRIM(m.instrumentTestCode)) = :instrumentCode', { instrumentCode })
+      .getOne();
 
     if (!mapping) {
       return {
@@ -326,14 +325,28 @@ export class HL7IngestionService {
       };
     }
 
-    // STRICT: Find existing OrderTest
-    const orderTest = await this.orderTestRepo.findOne({
+    // STRICT: Find existing OrderTest on resolved sample first
+    let orderTest = await this.orderTestRepo.findOne({
       where: {
         sampleId: sample.id,
         testId: mapping.testId,
       },
       relations: ['test', 'sample', 'sample.order'],
     });
+
+    // If not found, this often means OBR-3 carried orderNumber and order has multiple tubes/samples.
+    // Fallback: find the same test in sibling samples under the same order.
+    if (!orderTest && sample.orderId) {
+      orderTest = await this.orderTestRepo
+        .createQueryBuilder('ot')
+        .leftJoinAndSelect('ot.test', 'test')
+        .leftJoinAndSelect('ot.sample', 'sample')
+        .leftJoinAndSelect('sample.order', 'order')
+        .where('sample.orderId = :orderId', { orderId: sample.orderId })
+        .andWhere('ot.testId = :testId', { testId: mapping.testId })
+        .orderBy('ot.createdAt', 'ASC')
+        .getOne();
+    }
 
     if (!orderTest) {
       return {
@@ -467,6 +480,16 @@ export class HL7IngestionService {
   private async findSample(sampleIdentifier: string, labId: string): Promise<Sample | null> {
     if (!sampleIdentifier) return null;
 
+    // Prefer order number match first (order-based workflow)
+    const order = await this.orderRepo.findOne({
+      where: { labId, orderNumber: sampleIdentifier },
+      relations: ['samples'],
+    });
+
+    if (order && order.samples.length > 0 && order.status !== OrderStatus.CANCELLED) {
+      return order.samples[0];
+    }
+
     // Try by sampleId field
     let sample = await this.sampleRepo
       .createQueryBuilder('s')
@@ -488,16 +511,6 @@ export class HL7IngestionService {
       .getOne();
 
     if (sample) return sample;
-
-    // Try by order number
-    const order = await this.orderRepo.findOne({
-      where: { labId, orderNumber: sampleIdentifier },
-      relations: ['samples'],
-    });
-
-    if (order && order.samples.length > 0 && order.status !== OrderStatus.CANCELLED) {
-      return order.samples[0];
-    }
 
     return null;
   }

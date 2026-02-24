@@ -31,6 +31,7 @@ export interface WorklistItem {
   patientAge: number | null;
   testCode: string;
   testName: string;
+  testType: 'SINGLE' | 'PANEL';
   testUnit: string | null;
   normalMin: number | null;
   normalMax: number | null;
@@ -50,6 +51,7 @@ export interface WorklistItem {
   registeredAt: Date;
   orderId: string;
   sampleId: string;
+  parentOrderTestId: string | null;
   departmentId: string | null;
   departmentCode: string | null;
   departmentName: string | null;
@@ -177,6 +179,7 @@ export class WorklistService {
       'patient.dateOfBirth AS "patientDob"',
       'test.code AS "testCode"',
       'test.name AS "testName"',
+      'test.type AS "testType"',
       'test.unit AS "testUnit"',
       'test.departmentId AS "departmentId"',
       'department.code AS "departmentCode"',
@@ -202,6 +205,7 @@ export class WorklistService {
       'ot.verifiedAt AS "verifiedAt"',
       'ot.verifiedBy AS "verifiedBy"',
       'test.parameterDefinitions AS "parameterDefinitions"',
+      'ot.parentOrderTestId AS "parentOrderTestId"',
     ])
       // Show newest registrations first so newly added patients/orders appear at the top.
       .orderBy('order.registeredAt', 'DESC')
@@ -242,6 +246,7 @@ export class WorklistService {
         patientAge,
         testCode: item.testCode,
         testName: item.testName,
+        testType: item.testType,
         testUnit: item.testUnit,
         normalMin: resolvedRange.normalMin,
         normalMax: resolvedRange.normalMax,
@@ -264,6 +269,7 @@ export class WorklistService {
         verifiedAt: item.verifiedAt,
         verifiedBy: item.verifiedBy ?? null,
         registeredAt: item.registeredAt,
+        parentOrderTestId: item.parentOrderTestId ?? null,
         departmentId: item.departmentId ?? null,
         departmentCode: item.departmentCode ?? null,
         departmentName: item.departmentName ?? null,
