@@ -873,14 +873,6 @@ export function ReportsPage() {
           resultParameters: hasResultParameters ? resultParameters : null,
           forceEditVerified: editResultContext.wasVerified,
         });
-
-        if (!editResultContext.wasVerified) {
-          try {
-            await verifyResult(target.id);
-          } catch (verifyError) {
-            console.error('Result saved but verify failed', verifyError);
-          }
-        }
       });
 
       await Promise.all(savePromises);
@@ -888,7 +880,7 @@ export function ReportsPage() {
       message.success(
         editResultContext.wasVerified
           ? 'Verified results updated by admin'
-          : 'Results updated and verified',
+          : 'Results updated. Verify them in Verification tab.',
       );
 
       setEditResultModalOpen(false);
@@ -914,30 +906,10 @@ export function ReportsPage() {
       {
         title: 'Sample',
         dataIndex: 'sampleLabel',
-        key: 'sampleLabel',
-        width: 110,
-        render: (value: string) => <Text style={{ fontSize: 12 }}>{value}</Text>,
-        onCell: () => ({ style: compactCellStyle }),
-      },
-      {
-        title: 'Test',
-        key: 'test',
-        width: 240,
-        render: (_: unknown, row: ExpandedOrderTestRow) => (
-          <div style={{ lineHeight: '14px' }}>
-            <Text strong style={{ display: 'block', fontSize: 12 }}>{row.testCode}</Text>
-            <Text type="secondary" style={{ display: 'block', fontSize: 11 }}>{row.testName}</Text>
-          </div>
-        ),
-        onCell: () => ({ style: compactCellStyle }),
-      },
-      {
-        title: 'Sample',
-        dataIndex: 'sampleLabel',
         key: 'sample',
         width: 100,
         render: (value: string) => <Text style={{ fontSize: 12 }}>{value}</Text>,
-        onCell: () => ({ style: compactStyle }),
+        onCell: () => ({ style: compactCellStyle }),
       },
       {
         title: 'Test',
@@ -960,7 +932,7 @@ export function ReportsPage() {
             )}
           </div>
         ),
-        onCell: () => ({ style: compactStyle }),
+        onCell: () => ({ style: compactCellStyle }),
       },
       {
         title: 'Result',
@@ -982,7 +954,7 @@ export function ReportsPage() {
               )}
           </div>
         ),
-        onCell: () => ({ style: compactStyle }),
+        onCell: () => ({ style: compactCellStyle }),
       },
       {
         title: 'Flag',
@@ -1002,7 +974,7 @@ export function ReportsPage() {
             </Tag>
           );
         },
-        onCell: () => ({ style: compactStyle }),
+        onCell: () => ({ style: compactCellStyle }),
       },
       {
         title: 'Status',
@@ -1016,7 +988,7 @@ export function ReportsPage() {
             {row.status.replace('_', ' ')}
           </Tag>
         ),
-        onCell: () => ({ style: compactStyle }),
+        onCell: () => ({ style: compactCellStyle }),
       },
       {
         title: 'Verified At',
@@ -1027,7 +999,7 @@ export function ReportsPage() {
             {row.verifiedAt ? dayjs(row.verifiedAt).format('YYYY-MM-DD HH:mm') : '-'}
           </Text>
         ),
-        onCell: () => ({ style: compactStyle }),
+        onCell: () => ({ style: compactCellStyle }),
       },
       ...(canAdminEditResults
         ? [
@@ -1049,7 +1021,7 @@ export function ReportsPage() {
                 </Button>
               </div>
             ),
-            onCell: () => ({ style: compactStyle }),
+            onCell: () => ({ style: compactCellStyle }),
           },
         ]
         : []),
@@ -1057,20 +1029,6 @@ export function ReportsPage() {
 
     return (
       <div className="reports-expanded-panel" style={{ padding: '0 16px 16px' }}>
-        {canAdminEditResults && (
-          <div style={{ marginBottom: 8, display: 'flex', justifyContent: 'flex-end' }}>
-            <Button
-              type="primary"
-              size="small"
-              ghost
-              icon={<EditOutlined />}
-              onClick={() => openBatchEditResultModal(order)}
-              style={{ fontSize: 11 }}
-            >
-              Batch Edit Results
-            </Button>
-          </div>
-        )}
         <Table
           className="reports-subtests-table"
           size="small"
@@ -1551,16 +1509,10 @@ export function ReportsPage() {
                                       </Form.Item>
                                       {target.test?.resultEntryType === 'NUMERIC' && !isPanel && target.test?.unit && <Text type="secondary">{target.test.unit}</Text>}
                                     </div>
-                                  ) : target.test?.resultEntryType === 'QUALITATIVE' && (target.test?.resultTextOptions?.length ?? 0) > 0 ? (
-                                    <Select
-                                      allowClear
-                                      showSearch
+                                  ) : target.test?.resultEntryType === 'QUALITATIVE' ? (
+                                    <Input
                                       size={isPanel ? "small" : "large"}
-                                      placeholder="Select"
-                                      options={[
-                                        ...(target.test?.resultTextOptions ?? []).map((o) => ({ label: o.value, value: o.value })),
-                                        ...(target.test?.allowCustomResultText ? [{ label: 'Other...', value: '__other__' }] : []),
-                                      ]}
+                                      placeholder="Result text"
                                     />
                                   ) : (
                                     <Input size={isPanel ? "small" : "large"} placeholder="Result text" />
@@ -1583,23 +1535,6 @@ export function ReportsPage() {
                             )}
                           </div>
 
-                          {/* Qualitative "Other" field */}
-                          {target.test?.resultEntryType === 'QUALITATIVE' && target.test?.allowCustomResultText && (
-                            <Form.Item noStyle shouldUpdate>
-                              {() => editResultForm.getFieldValue([target.id, 'resultText']) === '__other__' && (
-                                <div style={{ marginTop: 8 }}>
-                                  <Form.Item
-                                    name={[target.id, 'customResultText']}
-                                    rules={[{ required: true, message: 'Enter custom text' }]}
-                                    label={isPanel ? null : "Custom text"}
-                                  >
-                                    <Input placeholder="Specify custom result..." size="small" />
-                                  </Form.Item>
-                                </div>
-                              )}
-                            </Form.Item>
-                          )}
-
                           {/* Parameters */}
                           {hasParams && (
                             <div style={{
@@ -1617,18 +1552,7 @@ export function ReportsPage() {
                                       label={<span style={{ fontSize: 12 }}>{def.label}</span>}
                                       style={{ marginBottom: 0 }}
                                     >
-                                      {def.type === 'select' ? (
-                                        <Select
-                                          allowClear
-                                          size="small"
-                                          options={[
-                                            ...(def.options ?? []).map((o) => ({ label: o, value: o })),
-                                            { label: 'Other...', value: '__other__' },
-                                          ]}
-                                        />
-                                      ) : (
-                                        <Input size="small" placeholder="Enter..." />
-                                      )}
+                                      <Input size="small" placeholder="Enter..." />
                                     </Form.Item>
                                   </Col>
                                 ))}
