@@ -887,10 +887,17 @@ export function ReportsPage() {
   };
 
   const renderExpandedOrder = (order: OrderDto) => {
-    const rows = getOrderTestRows(order);
+    const allRows = getOrderTestRows(order);
+    // Filter to only show finalized results (Verified and Rejected)
+    // This addresses "remove the yellow" (Completed status)
+    const rows = allRows.filter((r) => r.status === 'VERIFIED' || r.status === 'REJECTED');
 
     if (rows.length === 0) {
-      return <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No tests found" />;
+      return (
+        <div style={{ padding: '16px', textAlign: 'center' }}>
+          <Text type="secondary">No finalized results available for this order.</Text>
+        </div>
+      );
     }
 
     const columns = [
