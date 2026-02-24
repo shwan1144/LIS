@@ -42,7 +42,6 @@ import {
   logReportDelivery,
   searchOrders,
   updateOrderPayment,
-  verifyResult,
   type OrderDto,
   type OrderStatus,
   type OrderTestDto,
@@ -61,7 +60,7 @@ const { Title, Text } = Typography;
 const { useBreakpoint } = Grid;
 
 type DeliveryChannel = 'WHATSAPP' | 'VIBER';
-type EditResultMode = 'SINGLE' | 'PANEL' | 'BATCH';
+type EditResultMode = 'SINGLE' | 'PANEL';
 
 type EditResultContext = {
   editMode: EditResultMode;
@@ -251,113 +250,6 @@ export function ReportsPage() {
 
   const canAdminEditResults =
     currentUserRole === 'LAB_ADMIN' || currentUserRole === 'SUPER_ADMIN';
-
-  const openBatchEditResultModal = (order: OrderDto) => {
-    const allTests = (order.samples ?? []).flatMap((s) => s.orderTests ?? []);
-    if (allTests.length === 0) return;
-
-    setEditResultContext({
-      editMode: 'BATCH',
-      orderTestId: `batch-${order.id}`,
-      orderNumber: order.orderNumber || order.id.substring(0, 8),
-      patientName: order.patient?.fullName || '-',
-      testCode: 'BATCH',
-      testName: 'Batch Edit Results',
-      testUnit: null,
-      normalMin: null,
-      normalMax: null,
-      normalText: null,
-      resultEntryType: 'TEXT',
-      resultTextOptions: [],
-      allowCustomResultText: false,
-      parameterDefinitions: [],
-      wasVerified: false,
-      targetItems: allTests,
-    });
-
-    const formValues: any = {};
-    allTests.forEach((target) => {
-      const resultEntryType = target.test?.resultEntryType ?? 'NUMERIC';
-      const resultTextOptions = target.test?.resultTextOptions ?? [];
-      const allowCustomResultText = Boolean(target.test?.allowCustomResultText);
-      const parameterDefinitions = target.test?.parameterDefinitions ?? [];
-
-      const valueCandidate =
-        target.resultValue !== null && target.resultValue !== undefined
-          ? Number(target.resultValue)
-          : undefined;
-
-      const defaultQualitativeOption =
-        resultTextOptions.find((option) => option.isDefault)?.value ??
-        resultTextOptions[0]?.value;
-      const knownOptionValues = new Set(
-        resultTextOptions.map((option) => option.value.trim().toLowerCase()),
-      );
-
-      const existingParams = target.resultParameters ?? {};
-      const resultParametersInitial: Record<string, string> = {};
-      const resultParametersCustomInitial: Record<string, string> = {};
-      const defaults: Record<string, string> = {};
-
-      parameterDefinitions.forEach((def) => {
-        if (
-          def.defaultValue != null &&
-          def.defaultValue.trim() !== '' &&
-          (existingParams[def.code] == null || String(existingParams[def.code]).trim() === '')
-        ) {
-          defaults[def.code] = def.defaultValue.trim();
-        }
-      });
-
-      for (const [code, rawValue] of Object.entries(existingParams)) {
-        const value = rawValue != null ? String(rawValue).trim() : '';
-        if (!value) continue;
-        const definition = parameterDefinitions.find((d) => d.code === code);
-        if (definition?.type === 'select') {
-          const known = new Set(
-            (definition.options ?? []).map((option) => option.trim().toLowerCase()),
-          );
-          if (known.size > 0 && !known.has(value.toLowerCase())) {
-            resultParametersInitial[code] = '__other__';
-            resultParametersCustomInitial[code] = value;
-            continue;
-          }
-        }
-        resultParametersInitial[code] = value;
-      }
-
-      let initialResultText = target.resultText ?? undefined;
-      let customResultText: string | undefined;
-
-      if (resultEntryType === 'QUALITATIVE') {
-        if (!initialResultText && defaultQualitativeOption) {
-          initialResultText = defaultQualitativeOption;
-        }
-        if (
-          initialResultText &&
-          allowCustomResultText &&
-          !knownOptionValues.has(initialResultText.trim().toLowerCase())
-        ) {
-          customResultText = initialResultText;
-          initialResultText = '__other__';
-        }
-      }
-
-      formValues[target.id] = {
-        resultValue:
-          resultEntryType === 'QUALITATIVE' || resultEntryType === 'TEXT'
-            ? undefined
-            : valueCandidate,
-        resultText: initialResultText,
-        customResultText,
-        resultParameters: { ...defaults, ...resultParametersInitial },
-        resultParametersCustom: resultParametersCustomInitial,
-      };
-    });
-
-    editResultForm.setFieldsValue(formValues);
-    setEditResultModalOpen(true);
-  };
 
   const canReleaseResults = (order: OrderDto): boolean => {
     const availability = getResultAvailability(order);
