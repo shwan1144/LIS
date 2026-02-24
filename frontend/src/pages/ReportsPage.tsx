@@ -167,11 +167,14 @@ function getResultAvailability(order: OrderDto): { ready: boolean; completed: nu
 
 function getOrderTestRows(order: OrderDto): ExpandedOrderTestRow[] {
   const rows: ExpandedOrderTestRow[] = [];
+  const allTestsInOrder = (order.samples ?? []).flatMap((s) => s.orderTests ?? []);
 
   for (const sample of order.samples ?? []) {
     const sampleLabel = sample.sampleId || sample.barcode || sample.id.substring(0, 8);
     for (const orderTest of sample.orderTests ?? []) {
-      if (orderTest.parentOrderTestId) continue;
+      if (orderTest.parentOrderTestId && allTestsInOrder.some((t) => t.id === orderTest.parentOrderTestId)) {
+        continue;
+      }
       rows.push({
         key: orderTest.id,
         sampleLabel,
@@ -185,7 +188,6 @@ function getOrderTestRows(order: OrderDto): ExpandedOrderTestRow[] {
       });
     }
   }
-
   return rows;
 }
 
@@ -1083,8 +1085,7 @@ export function ReportsPage() {
 
       try {
         if (typeof action === 'function') {
-          const run = action();
-          if (typeof run === 'function') run();
+          action();
         }
       } catch {
         // no-op

@@ -1,24 +1,22 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import {
-  Card,
-  Table,
   Button,
-  Space,
-  message,
-  Input,
-  Typography,
-  Tag,
-  DatePicker,
-  Select,
-  Modal,
-  Form,
-  InputNumber,
-  Statistic,
-  Row,
+  Card,
   Col,
-  Divider,
+  DatePicker,
+  Form,
+  Input,
+  InputNumber,
+  Modal,
+  Row,
+  Select,
+  Space,
+  Table,
+  Tag,
   Tooltip,
-  Popconfirm,
+  Typography,
+  message,
+  Statistic,
 } from 'antd';
 import {
   SearchOutlined,
@@ -483,7 +481,10 @@ export function WorklistPage() {
   };
 
   const renderExpandedTests = (group: WorklistOrderGroup) => {
-    const rootItems = group.items.filter((i) => !i.parentOrderTestId);
+    // Show items that are root level, OR items whose parent is not in this list
+    const rootItems = group.items.filter(
+      (i) => !i.parentOrderTestId || !group.items.some((p) => p.id === i.parentOrderTestId)
+    );
 
     return (
       <div className="worklist-expanded-panel">
