@@ -225,6 +225,8 @@ export function SettingsInstrumentsPage() {
   // Simulator
   const [simulatorMessage, setSimulatorMessage] = useState('');
   const [simulatorSending, setSimulatorSending] = useState(false);
+  const [simulatorSampleId, setSimulatorSampleId] = useState('');
+  const [simulatorPatientId, setSimulatorPatientId] = useState('PAT001');
 
   const loadInstruments = useCallback(async () => {
     setLoading(true);
@@ -673,16 +675,33 @@ export function SettingsInstrumentsPage() {
       return;
     }
 
+    const sampleId = simulatorSampleId.trim();
+    const patientId = simulatorPatientId.trim() || 'PAT001';
+    if (!sampleId) {
+      message.warning('Enter Sample/Order ID from LIS first (e.g. barcode, sample ID, or order number)');
+      return;
+    }
+
+    const payload = simulatorMessage
+      .split('{{SAMPLE_ID}}').join(sampleId)
+      .split('{{ORDER_ID}}').join(sampleId)
+      .split('{{PATIENT_ID}}').join(patientId);
+
     setSimulatorSending(true);
     try {
-      const result = await simulateInstrumentMessage(trackerInstrument.id, simulatorMessage);
+      const result = await simulateInstrumentMessage(trackerInstrument.id, payload);
       if (result.success) {
         message.success(result.message || 'Message processed successfully');
         setSimulatorMessage('');
         // Refresh messages to see the result
         loadTrackerMessages(trackerInstrument.id);
       } else {
-        message.error(result.message || 'Failed to process message');
+        const resultMessage = result.message || 'Failed to process message';
+        if (resultMessage.toLowerCase().includes('sample not found')) {
+          message.error(`${resultMessage}. Use an existing LIS sample/order identifier in the Sample/Order ID field.`);
+        } else {
+          message.error(resultMessage);
+        }
       }
     } catch (err: unknown) {
       const msg = err && typeof err === 'object' && 'response' in err
@@ -701,8 +720,8 @@ export function SettingsInstrumentsPage() {
     cbc: {
       name: 'CBC Panel (Full)',
       message: `MSH|^~\\&|HEMATOLOGY|LAB|LIS|HOSPITAL|${getTimestamp()}||ORU^R01|MSG${Date.now()}|P|2.5
-PID|1||PAT001||Doe^John||19800101|M
-OBR|1|ORD001|SAM001|CBC^Complete Blood Count||${getTimestamp()}
+PID|1||{{PATIENT_ID}}||Doe^John||19800101|M
+OBR|1|{{ORDER_ID}}|{{SAMPLE_ID}}|CBC^Complete Blood Count||${getTimestamp()}
 OBX|1|NM|WBC^White Blood Cell Count||7.5|10^9/L|4.0-11.0|N|||F
 OBX|2|NM|RBC^Red Blood Cell Count||4.82|10^12/L|4.5-5.5|N|||F
 OBX|3|NM|HGB^Hemoglobin||14.2|g/dL|12.0-16.0|N|||F
@@ -724,8 +743,8 @@ OBX|17|NM|LYM#^Lymphocytes Absolute||2.40|10^9/L|1.0-3.0|N|||F`,
     chemistry: {
       name: 'Chemistry Panel (BMP)',
       message: `MSH|^~\\&|CHEMISTRY|LAB|LIS|HOSPITAL|${getTimestamp()}||ORU^R01|MSG${Date.now()}|P|2.5
-PID|1||PAT001||Doe^John||19800101|M
-OBR|1|ORD001|SAM001|BMP^Basic Metabolic Panel||${getTimestamp()}
+PID|1||{{PATIENT_ID}}||Doe^John||19800101|M
+OBR|1|{{ORDER_ID}}|{{SAMPLE_ID}}|BMP^Basic Metabolic Panel||${getTimestamp()}
 OBX|1|NM|GLU^Glucose||95|mg/dL|70-100|N|||F
 OBX|2|NM|BUN^Blood Urea Nitrogen||15|mg/dL|7-20|N|||F
 OBX|3|NM|CREAT^Creatinine||1.0|mg/dL|0.7-1.3|N|||F
@@ -738,8 +757,8 @@ OBX|8|NM|CA^Calcium||9.5|mg/dL|8.5-10.5|N|||F`,
     liver: {
       name: 'Liver Function Panel',
       message: `MSH|^~\\&|CHEMISTRY|LAB|LIS|HOSPITAL|${getTimestamp()}||ORU^R01|MSG${Date.now()}|P|2.5
-PID|1||PAT001||Doe^John||19800101|M
-OBR|1|ORD001|SAM001|LFT^Liver Function Tests||${getTimestamp()}
+PID|1||{{PATIENT_ID}}||Doe^John||19800101|M
+OBR|1|{{ORDER_ID}}|{{SAMPLE_ID}}|LFT^Liver Function Tests||${getTimestamp()}
 OBX|1|NM|ALT^Alanine Aminotransferase||25|U/L|7-56|N|||F
 OBX|2|NM|AST^Aspartate Aminotransferase||22|U/L|10-40|N|||F
 OBX|3|NM|ALP^Alkaline Phosphatase||65|U/L|44-147|N|||F
@@ -752,8 +771,8 @@ OBX|8|NM|TP^Total Protein||7.0|g/dL|6.0-8.3|N|||F`,
     lipid: {
       name: 'Lipid Panel',
       message: `MSH|^~\\&|CHEMISTRY|LAB|LIS|HOSPITAL|${getTimestamp()}||ORU^R01|MSG${Date.now()}|P|2.5
-PID|1||PAT001||Doe^John||19800101|M
-OBR|1|ORD001|SAM001|LIPID^Lipid Panel||${getTimestamp()}
+PID|1||{{PATIENT_ID}}||Doe^John||19800101|M
+OBR|1|{{ORDER_ID}}|{{SAMPLE_ID}}|LIPID^Lipid Panel||${getTimestamp()}
 OBX|1|NM|CHOL^Total Cholesterol||185|mg/dL|<200|N|||F
 OBX|2|NM|TRIG^Triglycerides||120|mg/dL|<150|N|||F
 OBX|3|NM|HDL^HDL Cholesterol||55|mg/dL|>40|N|||F
@@ -763,8 +782,8 @@ OBX|5|NM|VLDL^VLDL Cholesterol||24|mg/dL|5-40|N|||F`,
     thyroid: {
       name: 'Thyroid Panel',
       message: `MSH|^~\\&|IMMUNOASSAY|LAB|LIS|HOSPITAL|${getTimestamp()}||ORU^R01|MSG${Date.now()}|P|2.5
-PID|1||PAT001||Doe^John||19800101|M
-OBR|1|ORD001|SAM001|THYROID^Thyroid Panel||${getTimestamp()}
+PID|1||{{PATIENT_ID}}||Doe^John||19800101|M
+OBR|1|{{ORDER_ID}}|{{SAMPLE_ID}}|THYROID^Thyroid Panel||${getTimestamp()}
 OBX|1|NM|TSH^Thyroid Stimulating Hormone||2.5|mIU/L|0.4-4.0|N|||F
 OBX|2|NM|FT4^Free T4||1.2|ng/dL|0.8-1.8|N|||F
 OBX|3|NM|FT3^Free T3||3.0|pg/mL|2.3-4.2|N|||F
@@ -774,8 +793,8 @@ OBX|5|NM|T3^Total T3||120|ng/dL|80-200|N|||F`,
     urinalysis: {
       name: 'Urinalysis',
       message: `MSH|^~\\&|URINALYSIS|LAB|LIS|HOSPITAL|${getTimestamp()}||ORU^R01|MSG${Date.now()}|P|2.5
-PID|1||PAT001||Doe^John||19800101|M
-OBR|1|ORD001|SAM001|UA^Urinalysis||${getTimestamp()}
+PID|1||{{PATIENT_ID}}||Doe^John||19800101|M
+OBR|1|{{ORDER_ID}}|{{SAMPLE_ID}}|UA^Urinalysis||${getTimestamp()}
 OBX|1|ST|COLOR^Color||Yellow|||||F
 OBX|2|ST|CLARITY^Clarity||Clear|||||F
 OBX|3|NM|SPGR^Specific Gravity||1.020||1.005-1.030|N|||F
@@ -792,8 +811,8 @@ OBX|12|ST|LEUK^Leukocyte Esterase||Negative|||||F`,
     coag: {
       name: 'Coagulation Panel',
       message: `MSH|^~\\&|COAGULATION|LAB|LIS|HOSPITAL|${getTimestamp()}||ORU^R01|MSG${Date.now()}|P|2.5
-PID|1||PAT001||Doe^John||19800101|M
-OBR|1|ORD001|SAM001|COAG^Coagulation Panel||${getTimestamp()}
+PID|1||{{PATIENT_ID}}||Doe^John||19800101|M
+OBR|1|{{ORDER_ID}}|{{SAMPLE_ID}}|COAG^Coagulation Panel||${getTimestamp()}
 OBX|1|NM|PT^Prothrombin Time||12.5|seconds|11.0-13.5|N|||F
 OBX|2|NM|INR^International Normalized Ratio||1.0||0.8-1.2|N|||F
 OBX|3|NM|PTT^Partial Thromboplastin Time||28|seconds|25-35|N|||F
@@ -802,8 +821,8 @@ OBX|4|NM|FIB^Fibrinogen||280|mg/dL|200-400|N|||F`,
     abnormal: {
       name: 'Abnormal Results (High/Low)',
       message: `MSH|^~\\&|HEMATOLOGY|LAB|LIS|HOSPITAL|${getTimestamp()}||ORU^R01|MSG${Date.now()}|P|2.5
-PID|1||PAT001||Doe^John||19800101|M
-OBR|1|ORD001|SAM001|CBC^Complete Blood Count||${getTimestamp()}
+PID|1||{{PATIENT_ID}}||Doe^John||19800101|M
+OBR|1|{{ORDER_ID}}|{{SAMPLE_ID}}|CBC^Complete Blood Count||${getTimestamp()}
 OBX|1|NM|WBC^White Blood Cell Count||15.8|10^9/L|4.0-11.0|HH|||F
 OBX|2|NM|RBC^Red Blood Cell Count||3.2|10^12/L|4.5-5.5|L|||F
 OBX|3|NM|HGB^Hemoglobin||8.5|g/dL|12.0-16.0|LL|||F
@@ -813,8 +832,8 @@ OBX|5|NM|PLT^Platelet Count||45|10^9/L|150-400|LL|||F`,
     medonicM51CbcHl7: {
       name: 'Medonic M51 CBC (HL7)',
       message: `MSH|^~\\&|M51|HEMATOLOGY|LIS|LAB|${getTimestamp()}||ORU^R01|M51${Date.now()}|P|2.3
-PID|1||PAT001||Doe^John||19800101|M
-OBR|1|ORD001|SAM001|CBC^Complete Blood Count||${getTimestamp()}
+PID|1||{{PATIENT_ID}}||Doe^John||19800101|M
+OBR|1|{{ORDER_ID}}|{{SAMPLE_ID}}|CBC^Complete Blood Count||${getTimestamp()}
 OBX|1|NM|WBC^White Blood Cell Count||7.20|10^9/L|4.0-10.0|N|||F
 OBX|2|NM|RBC^Red Blood Cell Count||4.95|10^12/L|4.5-5.9|N|||F
 OBX|3|NM|HGB^Hemoglobin||14.8|g/dL|13.0-17.0|N|||F
@@ -836,7 +855,7 @@ OBX|16|NM|MPV^Mean Platelet Volume||9.6|fL|7.5-11.5|N|||F`,
       name: 'Cobas e411 ASTM (TSH sample)',
       message: `H|\\^&|||cobas-e411|||||P|1
 P|1
-O|1|260220001||^^^TSH|R
+O|1|{{SAMPLE_ID}}||^^^TSH|R
 R|1|^^^TSH|2.31|mIU/L|0.27-4.2|N|||F
 L|1|N`,
     },
@@ -1522,6 +1541,20 @@ L|1|N`,
               style={{ marginBottom: 16 }}
               extra={
                 <Space>
+                  <Input
+                    size="small"
+                    style={{ width: 190 }}
+                    placeholder="Sample/Order ID in LIS"
+                    value={simulatorSampleId}
+                    onChange={(e) => setSimulatorSampleId(e.target.value)}
+                  />
+                  <Input
+                    size="small"
+                    style={{ width: 150 }}
+                    placeholder="Patient ID (optional)"
+                    value={simulatorPatientId}
+                    onChange={(e) => setSimulatorPatientId(e.target.value)}
+                  />
                   <Select
                     value={selectedPanel}
                     onChange={(v) => setSelectedPanel(v)}
@@ -1559,7 +1592,7 @@ L|1|N`,
                   Clear
                 </Button>
                 <Text type="secondary" style={{ fontSize: 11 }}>
-                  Paste an HL7 or ASTM message and click Process to simulate receiving it from the instrument
+                  Use a real LIS sample/order ID. Templates auto-replace {'{{SAMPLE_ID}}'}, {'{{ORDER_ID}}'}, {'{{PATIENT_ID}}'}.
                 </Text>
               </Space>
             </Card>
