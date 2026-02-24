@@ -1,4 +1,5 @@
 import { Lab } from './lab.entity';
+import { Test } from './test.entity';
 export declare enum InstrumentProtocol {
     HL7_V2 = "HL7_V2",
     ASTM = "ASTM",
@@ -66,6 +67,7 @@ export declare class InstrumentTestMapping {
     createdAt: Date;
     updatedAt: Date;
     instrument: Instrument;
+    test: Test;
 }
 export declare class InstrumentMessage {
     id: string;

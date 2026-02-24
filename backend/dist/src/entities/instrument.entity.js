@@ -12,6 +12,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.InstrumentMessage = exports.InstrumentTestMapping = exports.Instrument = exports.InstrumentStatus = exports.ConnectionType = exports.InstrumentProtocol = void 0;
 const typeorm_1 = require("typeorm");
 const lab_entity_1 = require("./lab.entity");
+const test_entity_1 = require("./test.entity");
 var InstrumentProtocol;
 (function (InstrumentProtocol) {
     InstrumentProtocol["HL7_V2"] = "HL7_V2";
@@ -241,6 +242,11 @@ __decorate([
     (0, typeorm_1.JoinColumn)({ name: 'instrumentId' }),
     __metadata("design:type", Instrument)
 ], InstrumentTestMapping.prototype, "instrument", void 0);
+__decorate([
+    (0, typeorm_1.ManyToOne)(() => test_entity_1.Test, { onDelete: 'CASCADE' }),
+    (0, typeorm_1.JoinColumn)({ name: 'testId' }),
+    __metadata("design:type", test_entity_1.Test)
+], InstrumentTestMapping.prototype, "test", void 0);
 exports.InstrumentTestMapping = InstrumentTestMapping = __decorate([
     (0, typeorm_1.Entity)('instrument_test_mappings'),
     (0, typeorm_1.Unique)(['instrumentId', 'instrumentTestCode'])

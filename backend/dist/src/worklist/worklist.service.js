@@ -261,13 +261,6 @@ let WorklistService = class WorklistService {
             orderTest.resultValue = null;
             orderTest.flag = this.resolveFlagFromResultText(orderTest.resultText, resultTextOptions);
         }
-        else if (resultEntryType === 'CULTURE_SENSITIVITY') {
-            if (data.resultText !== undefined) {
-                orderTest.resultText = normalizedResultTextInput ?? null;
-            }
-            orderTest.resultValue = null;
-            orderTest.flag = null;
-        }
         else {
             if (data.resultText !== undefined) {
                 orderTest.resultText = normalizedResultTextInput ?? null;
@@ -437,8 +430,7 @@ let WorklistService = class WorklistService {
         const normalized = String(value || 'NUMERIC').trim().toUpperCase();
         if (normalized === 'NUMERIC' ||
             normalized === 'QUALITATIVE' ||
-            normalized === 'TEXT' ||
-            normalized === 'CULTURE_SENSITIVITY') {
+            normalized === 'TEXT') {
             return normalized;
         }
         return 'NUMERIC';
