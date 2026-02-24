@@ -131,7 +131,18 @@ function buildResultsMessage(order: OrderDto): string {
   return `Hello ${patientName},\n\nYour lab results for Order #${orderNum} (${date}) are ready.\n\nPlease visit our laboratory to collect your report or contact us for more information.\n\nThank you!`;
 }
 
-function formatOrderTestResultPreview(orderTest: OrderTestDto): string {
+function formatOrderTestResultPreview(orderTest: OrderTestDto, allTests: OrderTestDto[] = []): string {
+  if (orderTest.test?.type === 'PANEL') {
+    const children = allTests.filter((t) => t.parentOrderTestId === orderTest.id);
+    const total = children.length;
+    const completed = children.filter(
+      (t) => t.status === 'COMPLETED' || t.status === 'VERIFIED',
+    ).length;
+    if (total === 0) return 'No tests';
+    const percent = Math.round((completed / total) * 100);
+    return `${completed}/${total} done (${percent}%)`;
+  }
+
   const parameters = orderTest.resultParameters;
   if (parameters && Object.keys(parameters).length > 0) {
     return Object.keys(parameters).join(', ');
@@ -180,7 +191,7 @@ function getOrderTestRows(order: OrderDto): ExpandedOrderTestRow[] {
         sampleLabel,
         testCode: orderTest.test?.code || '-',
         testName: orderTest.test?.name || '-',
-        resultPreview: formatOrderTestResultPreview(orderTest),
+        resultPreview: formatOrderTestResultPreview(orderTest, allTestsInOrder),
         status: orderTest.status,
         flag: orderTest.flag,
         verifiedAt: orderTest.verifiedAt,
@@ -194,7 +205,7 @@ function getOrderTestRows(order: OrderDto): ExpandedOrderTestRow[] {
 export function ReportsPage() {
   const screens = useBreakpoint();
   const isCompactActions = !screens.lg;
-  const { isDark } = useTheme();
+  const isDark = useTheme().theme === 'dark';
 
   const [loading, setLoading] = useState(false);
   const [orders, setOrders] = useState<OrderDto[]>([]);
@@ -237,6 +248,112 @@ export function ReportsPage() {
 
   const canAdminEditResults =
     currentUserRole === 'LAB_ADMIN' || currentUserRole === 'SUPER_ADMIN';
+
+  const openBatchEditResultModal = (order: OrderDto) => {
+    const allTests = (order.samples ?? []).flatMap((s) => s.orderTests ?? []);
+    if (allTests.length === 0) return;
+
+    setEditResultContext({
+      orderTestId: `batch-${order.id}`,
+      orderNumber: order.orderNumber || order.id.substring(0, 8),
+      patientName: order.patient?.fullName || '-',
+      testCode: 'BATCH',
+      testName: 'Batch Edit Results',
+      testUnit: null,
+      normalMin: null,
+      normalMax: null,
+      normalText: null,
+      resultEntryType: 'TEXT',
+      resultTextOptions: [],
+      allowCustomResultText: false,
+      parameterDefinitions: [],
+      wasVerified: false,
+      targetItems: allTests,
+    } as any);
+
+    const formValues: any = {};
+    allTests.forEach((target) => {
+      const resultEntryType = target.test?.resultEntryType ?? 'NUMERIC';
+      const resultTextOptions = target.test?.resultTextOptions ?? [];
+      const allowCustomResultText = Boolean(target.test?.allowCustomResultText);
+      const parameterDefinitions = target.test?.parameterDefinitions ?? [];
+
+      const valueCandidate =
+        target.resultValue !== null && target.resultValue !== undefined
+          ? Number(target.resultValue)
+          : undefined;
+
+      const defaultQualitativeOption =
+        resultTextOptions.find((option) => option.isDefault)?.value ??
+        resultTextOptions[0]?.value;
+      const knownOptionValues = new Set(
+        resultTextOptions.map((option) => option.value.trim().toLowerCase()),
+      );
+
+      const existingParams = target.resultParameters ?? {};
+      const resultParametersInitial: Record<string, string> = {};
+      const resultParametersCustomInitial: Record<string, string> = {};
+      const defaults: Record<string, string> = {};
+
+      parameterDefinitions.forEach((def) => {
+        if (
+          def.defaultValue != null &&
+          def.defaultValue.trim() !== '' &&
+          (existingParams[def.code] == null || String(existingParams[def.code]).trim() === '')
+        ) {
+          defaults[def.code] = def.defaultValue.trim();
+        }
+      });
+
+      for (const [code, rawValue] of Object.entries(existingParams)) {
+        const value = rawValue != null ? String(rawValue).trim() : '';
+        if (!value) continue;
+        const definition = parameterDefinitions.find((d) => d.code === code);
+        if (definition?.type === 'select') {
+          const known = new Set(
+            (definition.options ?? []).map((option) => option.trim().toLowerCase()),
+          );
+          if (known.size > 0 && !known.has(value.toLowerCase())) {
+            resultParametersInitial[code] = '__other__';
+            resultParametersCustomInitial[code] = value;
+            continue;
+          }
+        }
+        resultParametersInitial[code] = value;
+      }
+
+      let initialResultText = target.resultText ?? undefined;
+      let customResultText: string | undefined;
+
+      if (resultEntryType === 'QUALITATIVE') {
+        if (!initialResultText && defaultQualitativeOption) {
+          initialResultText = defaultQualitativeOption;
+        }
+        if (
+          initialResultText &&
+          allowCustomResultText &&
+          !knownOptionValues.has(initialResultText.trim().toLowerCase())
+        ) {
+          customResultText = initialResultText;
+          initialResultText = '__other__';
+        }
+      }
+
+      formValues[target.id] = {
+        resultValue:
+          resultEntryType === 'QUALITATIVE' || resultEntryType === 'TEXT'
+            ? undefined
+            : valueCandidate,
+        resultText: initialResultText,
+        customResultText,
+        resultParameters: { ...defaults, ...resultParametersInitial },
+        resultParametersCustom: resultParametersCustomInitial,
+      };
+    });
+
+    editResultForm.setFieldsValue(formValues);
+    setEditResultModalOpen(true);
+  };
 
   const canReleaseResults = (order: OrderDto): boolean => {
     const availability = getResultAvailability(order);
@@ -798,42 +915,102 @@ export function ReportsPage() {
         onCell: () => ({ style: compactCellStyle }),
       },
       {
-        title: 'Result name',
-        dataIndex: 'resultPreview',
-        key: 'resultPreview',
-        width: 200,
+        title: 'Sample',
+        dataIndex: 'sampleLabel',
+        key: 'sample',
+        width: 100,
         render: (value: string) => <Text style={{ fontSize: 12 }}>{value}</Text>,
-        onCell: () => ({ style: compactCellStyle }),
+        onCell: () => ({ style: compactStyle }),
+      },
+      {
+        title: 'Test',
+        key: 'test',
+        width: 220,
+        render: (_: unknown, row: ExpandedOrderTestRow) => (
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <Tag color="blue" style={{ margin: 0, fontSize: 10, lineHeight: '16px' }}>
+                {row.testCode}
+              </Tag>
+              <Text strong style={{ fontSize: 12 }}>
+                {row.testName}
+              </Text>
+            </div>
+            {row.raw.test?.type === 'PANEL' && (
+              <Text type="secondary" style={{ fontSize: 10 }}>
+                Panel Test
+              </Text>
+            )}
+          </div>
+        ),
+        onCell: () => ({ style: compactStyle }),
+      },
+      {
+        title: 'Result',
+        dataIndex: 'resultPreview',
+        key: 'result',
+        width: 180,
+        render: (value: string, row: ExpandedOrderTestRow) => (
+          <div>
+            <Text style={{ fontSize: 12 }}>{value}</Text>
+            {row.raw.test?.type !== 'PANEL' &&
+              (row.raw.test?.normalMin !== null ||
+                row.raw.test?.normalMax !== null ||
+                row.raw.test?.normalText) && (
+                <div style={{ fontSize: 10, color: 'rgba(128,128,128,0.7)', marginTop: 2 }}>
+                  Range:{' '}
+                  {row.raw.test?.normalText ||
+                    `${row.raw.test?.normalMin ?? '-'} - ${row.raw.test?.normalMax ?? '-'} ${row.raw.test?.unit || ''}`}
+                </div>
+              )}
+          </div>
+        ),
+        onCell: () => ({ style: compactStyle }),
       },
       {
         title: 'Flag',
         key: 'flag',
-        width: 110,
+        width: 100,
         render: (_: unknown, row: ExpandedOrderTestRow) => {
           const meta = row.flag ? RESULT_FLAG_META[row.flag] : null;
-          if (!meta) return <Tag style={{ margin: 0, fontSize: 10, lineHeight: '14px', paddingInline: 4 }}>-</Tag>;
-          return <Tag color={meta.color} style={{ margin: 0, fontSize: 10, lineHeight: '14px', paddingInline: 4 }}>{meta.label}</Tag>;
+          if (!meta || row.flag === 'N')
+            return (
+              <Text type="secondary" style={{ fontSize: 10 }}>
+                —
+              </Text>
+            );
+          return (
+            <Tag color={meta.color} style={{ margin: 0, fontSize: 10, lineHeight: '14px' }}>
+              {meta.label}
+            </Tag>
+          );
         },
-        onCell: () => ({ style: compactCellStyle }),
+        onCell: () => ({ style: compactStyle }),
       },
       {
         title: 'Status',
         key: 'status',
         width: 110,
         render: (_: unknown, row: ExpandedOrderTestRow) => (
-          <Tag color={ORDER_TEST_STATUS_COLORS[row.status] || 'default'} style={{ margin: 0, fontSize: 10, lineHeight: '14px', paddingInline: 4 }}>
+          <Tag
+            color={ORDER_TEST_STATUS_COLORS[row.status] || 'default'}
+            style={{ margin: 0, fontSize: 10, lineHeight: '14px' }}
+          >
             {row.status.replace('_', ' ')}
           </Tag>
         ),
-        onCell: () => ({ style: compactCellStyle }),
+        onCell: () => ({ style: compactStyle }),
       },
       {
         title: 'Verified At',
         key: 'verifiedAt',
         width: 140,
-        render: (_: unknown, row: ExpandedOrderTestRow) =>
-          <Text style={{ fontSize: 12 }}>{row.verifiedAt ? dayjs(row.verifiedAt).format('YYYY-MM-DD HH:mm') : '-'}</Text>,
-        onCell: () => ({ style: compactCellStyle }),
+        render: (_: unknown, row: ExpandedOrderTestRow) => (
+          <Text style={{ fontSize: 12 }}>
+            {row.verifiedAt ? dayjs(row.verifiedAt).format('YYYY-MM-DD HH:mm') : '-'}
+          </Text>
+        ),
+        onCell: () => ({ style: compactStyle }),
       },
       ...(canAdminEditResults
         ? [
@@ -849,20 +1026,34 @@ export function ReportsPage() {
                   size="small"
                   icon={<EditOutlined />}
                   onClick={() => openEditResultModal(order, row.raw)}
-                  style={{ paddingInline: 4 }}
+                  style={{ paddingInline: 4, fontSize: 11 }}
                 >
                   Edit
                 </Button>
               </div>
             ),
-            onCell: () => ({ style: compactCellStyle }),
+            onCell: () => ({ style: compactStyle }),
           },
         ]
         : []),
     ];
 
     return (
-      <div className="reports-expanded-panel">
+      <div className="reports-expanded-panel" style={{ padding: '0 16px 16px' }}>
+        {canAdminEditResults && (
+          <div style={{ marginBottom: 8, display: 'flex', justifyContent: 'flex-end' }}>
+            <Button
+              type="primary"
+              size="small"
+              ghost
+              icon={<EditOutlined />}
+              onClick={() => openBatchEditResultModal(order)}
+              style={{ fontSize: 11 }}
+            >
+              Batch Edit Results
+            </Button>
+          </div>
+        )}
         <Table
           className="reports-subtests-table"
           size="small"
@@ -871,7 +1062,7 @@ export function ReportsPage() {
           rowKey="key"
           pagination={false}
           tableLayout="fixed"
-          scroll={{ x: 780 }}
+          scroll={{ x: 800 }}
         />
       </div>
     );
