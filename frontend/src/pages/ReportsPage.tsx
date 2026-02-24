@@ -61,8 +61,10 @@ const { Title, Text } = Typography;
 const { useBreakpoint } = Grid;
 
 type DeliveryChannel = 'WHATSAPP' | 'VIBER';
+type EditResultMode = 'SINGLE' | 'PANEL' | 'BATCH';
 
 type EditResultContext = {
+  editMode: EditResultMode;
   orderTestId: string;
   orderNumber: string;
   patientName: string;
@@ -77,6 +79,7 @@ type EditResultContext = {
   allowCustomResultText: boolean;
   parameterDefinitions: TestParameterDefinition[];
   wasVerified: boolean;
+  targetItems: OrderTestDto[];
 };
 
 type ExpandedOrderTestRow = {
@@ -254,6 +257,7 @@ export function ReportsPage() {
     if (allTests.length === 0) return;
 
     setEditResultContext({
+      editMode: 'BATCH',
       orderTestId: `batch-${order.id}`,
       orderNumber: order.orderNumber || order.id.substring(0, 8),
       patientName: order.patient?.fullName || '-',
@@ -269,7 +273,7 @@ export function ReportsPage() {
       parameterDefinitions: [],
       wasVerified: false,
       targetItems: allTests,
-    } as any);
+    });
 
     const formValues: any = {};
     allTests.forEach((target) => {
@@ -701,13 +705,26 @@ export function ReportsPage() {
 
   const openEditResultModal = (order: OrderDto, orderTest: OrderTestDto) => {
     const isPanel = orderTest.test?.type === 'PANEL';
+    const allTests = (order.samples ?? []).flatMap((s) => s.orderTests ?? []);
+    const panelChildren = allTests.filter((ot) => ot.parentOrderTestId === orderTest.id);
+    const sameSampleTests = allTests.filter(
+      (ot) =>
+        ot.sampleId === orderTest.sampleId &&
+        ot.id !== orderTest.id &&
+        ot.test?.type !== 'PANEL',
+    );
+
     const targets = isPanel
-      ? (order.samples ?? []).flatMap(s => s.orderTests ?? []).filter(ot => ot.parentOrderTestId === orderTest.id)
+      ? panelChildren.length > 0
+        ? panelChildren
+        : sameSampleTests.length > 0
+          ? sameSampleTests
+          : [orderTest]
       : [orderTest];
 
     setEditResultContext({
+      editMode: isPanel ? 'PANEL' : 'SINGLE',
       orderTestId: orderTest.id,
-      testType: isPanel ? 'PANEL' : 'SINGLE',
       orderNumber: order.orderNumber || order.id.substring(0, 8),
       patientName: order.patient?.fullName || '-',
       testCode: orderTest.test?.code || '-',
@@ -722,7 +739,7 @@ export function ReportsPage() {
       parameterDefinitions: orderTest.test?.parameterDefinitions ?? [],
       wasVerified: orderTest.status === 'VERIFIED',
       targetItems: targets,
-    } as any);
+    });
 
     const formValues: any = {};
 
@@ -812,7 +829,7 @@ export function ReportsPage() {
   const handleEditResultSave = async (allValues: any) => {
     if (!editResultContext) return;
 
-    const targets = (editResultContext as any).targetItems as OrderTestDto[];
+    const targets = editResultContext.targetItems;
     setSavingResult(true);
 
     try {
@@ -1475,8 +1492,8 @@ export function ReportsPage() {
 
             <Form form={editResultForm} layout="vertical" onFinish={handleEditResultSave}>
               {(() => {
-                const targetItems = (editResultContext as any).targetItems as OrderTestDto[];
-                const isPanel = targetItems.length > 1;
+                const targetItems = editResultContext.targetItems;
+                const isPanel = editResultContext.editMode === 'PANEL';
 
                 return (
                   <>

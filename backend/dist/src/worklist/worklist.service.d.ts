@@ -16,6 +16,7 @@ export interface WorklistItem {
     patientAge: number | null;
     testCode: string;
     testName: string;
+    testType: 'SINGLE' | 'PANEL';
     testUnit: string | null;
     normalMin: number | null;
     normalMax: number | null;
@@ -35,6 +36,7 @@ export interface WorklistItem {
     registeredAt: Date;
     orderId: string;
     sampleId: string;
+    parentOrderTestId: string | null;
     departmentId: string | null;
     departmentCode: string | null;
     departmentName: string | null;

@@ -116,6 +116,7 @@ let WorklistService = class WorklistService {
             'patient.dateOfBirth AS "patientDob"',
             'test.code AS "testCode"',
             'test.name AS "testName"',
+            'test.type AS "testType"',
             'test.unit AS "testUnit"',
             'test.departmentId AS "departmentId"',
             'department.code AS "departmentCode"',
@@ -141,6 +142,7 @@ let WorklistService = class WorklistService {
             'ot.verifiedAt AS "verifiedAt"',
             'ot.verifiedBy AS "verifiedBy"',
             'test.parameterDefinitions AS "parameterDefinitions"',
+            'ot.parentOrderTestId AS "parentOrderTestId"',
         ])
             .orderBy('order.registeredAt', 'DESC')
             .addOrderBy('test.sortOrder', 'ASC')
@@ -170,6 +172,7 @@ let WorklistService = class WorklistService {
                 patientAge,
                 testCode: item.testCode,
                 testName: item.testName,
+                testType: item.testType,
                 testUnit: item.testUnit,
                 normalMin: resolvedRange.normalMin,
                 normalMax: resolvedRange.normalMax,
@@ -190,6 +193,7 @@ let WorklistService = class WorklistService {
                 verifiedAt: item.verifiedAt,
                 verifiedBy: item.verifiedBy ?? null,
                 registeredAt: item.registeredAt,
+                parentOrderTestId: item.parentOrderTestId ?? null,
                 departmentId: item.departmentId ?? null,
                 departmentCode: item.departmentCode ?? null,
                 departmentName: item.departmentName ?? null,
