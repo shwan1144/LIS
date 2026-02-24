@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import {
   Card,
   Table,
@@ -173,7 +173,13 @@ const MEDONIC_M51_CBC_MAPPING_SUGGESTIONS: Array<{
   { instrumentCode: 'PDW', lisCandidates: ['PDW'] },
 ];
 
-const normalizeCode = (value: string) => value.trim().toUpperCase().replace(/\s+/g, '');
+const normalizeCode = (value: string) =>
+  value
+    .trim()
+    .toUpperCase()
+    .replace(/%/g, 'PCT')
+    .replace(/#/g, 'ABS')
+    .replace(/[^A-Z0-9]/g, '');
 
 const serialDataBitsOptions = [
   { value: '7', label: '7' },
@@ -190,6 +196,16 @@ const serialStopBitsOptions = [
   { value: '1', label: '1' },
   { value: '2', label: '2' },
 ];
+
+type M51MappingStatus = 'MAPPED' | 'READY_TO_MAP' | 'MISSING_LIS_TEST';
+
+interface M51MappingAuditRow {
+  instrumentCode: string;
+  lisCandidates: string;
+  currentLisCode: string | null;
+  suggestedLisCode: string | null;
+  status: M51MappingStatus;
+}
 
 export function SettingsInstrumentsPage() {
   const [loading, setLoading] = useState(false);
@@ -213,6 +229,7 @@ export function SettingsInstrumentsPage() {
   const [sendOrderModalOpen, setSendOrderModalOpen] = useState(false);
   const [sendOrderSubmitting, setSendOrderSubmitting] = useState(false);
   const [sendOrderForm] = Form.useForm();
+  const [m51AuditModalOpen, setM51AuditModalOpen] = useState(false);
 
   // Live tracker modal
   const [trackerModalOpen, setTrackerModalOpen] = useState(false);
@@ -272,6 +289,54 @@ export function SettingsInstrumentsPage() {
       message.error('Failed to load messages');
     }
   };
+
+  const m51MappingAuditRows = useMemo<M51MappingAuditRow[]>(() => {
+    const testsById = new Map(tests.map((test) => [test.id, test]));
+    const testsByCode = new Map<string, TestDto>();
+    for (const test of tests) {
+      testsByCode.set(normalizeCode(test.code), test);
+    }
+
+    const mappingsByCode = new Map(
+      mappings.map((mapping) => [normalizeCode(mapping.instrumentTestCode || ''), mapping]),
+    );
+
+    return MEDONIC_M51_CBC_MAPPING_SUGGESTIONS.map((suggestion) => {
+      const normalizedInstrumentCode = normalizeCode(suggestion.instrumentCode);
+      const existing = mappingsByCode.get(normalizedInstrumentCode);
+
+      if (existing) {
+        const mappedTest = testsById.get(existing.testId);
+        return {
+          instrumentCode: suggestion.instrumentCode,
+          lisCandidates: suggestion.lisCandidates.join(', '),
+          currentLisCode: mappedTest?.code || existing.testId,
+          suggestedLisCode: mappedTest?.code || null,
+          status: 'MAPPED',
+        };
+      }
+
+      const candidate = suggestion.lisCandidates
+        .map((code) => testsByCode.get(normalizeCode(code)))
+        .find((test) => Boolean(test));
+
+      return {
+        instrumentCode: suggestion.instrumentCode,
+        lisCandidates: suggestion.lisCandidates.join(', '),
+        currentLisCode: null,
+        suggestedLisCode: candidate?.code || null,
+        status: candidate ? 'READY_TO_MAP' : 'MISSING_LIS_TEST',
+      };
+    });
+  }, [mappings, tests]);
+
+  const m51MappingSummary = useMemo(() => {
+    return {
+      mapped: m51MappingAuditRows.filter((row) => row.status === 'MAPPED').length,
+      readyToMap: m51MappingAuditRows.filter((row) => row.status === 'READY_TO_MAP').length,
+      missingLisTests: m51MappingAuditRows.filter((row) => row.status === 'MISSING_LIS_TEST').length,
+    };
+  }, [m51MappingAuditRows]);
 
   const handleOpenCreate = () => {
     setEditingInstrument(null);
@@ -1006,6 +1071,46 @@ L|1|N`,
     },
   ];
 
+  const m51MappingColumns: ColumnsType<M51MappingAuditRow> = [
+    {
+      title: 'Instrument code',
+      dataIndex: 'instrumentCode',
+      key: 'instrumentCode',
+      width: 140,
+      render: (value: string) => <Text code>{value}</Text>,
+    },
+    {
+      title: 'Current mapped LIS test',
+      dataIndex: 'currentLisCode',
+      key: 'currentLisCode',
+      width: 220,
+      render: (value: string | null) => value || <Text type="secondary">-</Text>,
+    },
+    {
+      title: 'Suggested LIS test',
+      dataIndex: 'suggestedLisCode',
+      key: 'suggestedLisCode',
+      width: 200,
+      render: (value: string | null) => value || <Text type="secondary">-</Text>,
+    },
+    {
+      title: 'Candidate aliases',
+      dataIndex: 'lisCandidates',
+      key: 'lisCandidates',
+    },
+    {
+      title: 'Status',
+      dataIndex: 'status',
+      key: 'status',
+      width: 170,
+      render: (status: M51MappingStatus) => {
+        if (status === 'MAPPED') return <Tag color="green">Mapped</Tag>;
+        if (status === 'READY_TO_MAP') return <Tag color="gold">Ready to map</Tag>;
+        return <Tag color="red">Missing LIS test</Tag>;
+      },
+    },
+  ];
+
   const messageColumns: ColumnsType<InstrumentMessageDto> = [
     {
       title: 'Time',
@@ -1316,6 +1421,12 @@ L|1|N`,
                         >
                           Auto-map M51 CBC
                         </Button>
+                        <Button
+                          size="small"
+                          onClick={() => setM51AuditModalOpen(true)}
+                        >
+                          Show missing M51 mappings
+                        </Button>
                       </Space>
                       <Table
                         columns={mappingColumns}
@@ -1352,6 +1463,32 @@ L|1|N`,
             />
           </>
         )}
+      </Modal>
+
+      {/* M51 Mapping Coverage Modal */}
+      <Modal
+        title="Medonic M51 CBC mapping coverage"
+        open={m51AuditModalOpen}
+        onCancel={() => setM51AuditModalOpen(false)}
+        footer={[
+          <Button key="close" onClick={() => setM51AuditModalOpen(false)}>
+            Close
+          </Button>,
+        ]}
+        width={980}
+      >
+        <Space style={{ marginBottom: 12 }} wrap>
+          <Tag color="green">Mapped: {m51MappingSummary.mapped}</Tag>
+          <Tag color="gold">Ready to map: {m51MappingSummary.readyToMap}</Tag>
+          <Tag color="red">Missing LIS tests: {m51MappingSummary.missingLisTests}</Tag>
+        </Space>
+        <Table
+          columns={m51MappingColumns}
+          dataSource={m51MappingAuditRows}
+          rowKey="instrumentCode"
+          pagination={false}
+          size="small"
+        />
       </Modal>
 
       {/* Send Test Order Modal */}
