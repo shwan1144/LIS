@@ -374,15 +374,6 @@ export class WorklistService {
         orderTest.resultText,
         resultTextOptions,
       );
-    } else if (resultEntryType === 'CULTURE_SENSITIVITY') {
-      // Culture results: structured data stored in resultParameters.__cultureResult
-      // resultText stores a human-readable summary (e.g. "E. coli (Heavy growth)")
-      if (data.resultText !== undefined) {
-        orderTest.resultText = normalizedResultTextInput ?? null;
-      }
-      orderTest.resultValue = null;
-      // No automatic flag for culture — flagging done manually if needed
-      orderTest.flag = null;
     } else {
       if (data.resultText !== undefined) {
         orderTest.resultText = normalizedResultTextInput ?? null;
@@ -613,8 +604,7 @@ export class WorklistService {
     if (
       normalized === 'NUMERIC' ||
       normalized === 'QUALITATIVE' ||
-      normalized === 'TEXT' ||
-      normalized === 'CULTURE_SENSITIVITY'
+      normalized === 'TEXT'
     ) {
       return normalized;
     }

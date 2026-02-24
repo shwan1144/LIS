@@ -1126,7 +1126,7 @@ export interface TestNumericAgeRange {
   normalMax?: number | null;
 }
 
-export type TestResultEntryType = 'NUMERIC' | 'QUALITATIVE' | 'TEXT' | 'CULTURE_SENSITIVITY';
+export type TestResultEntryType = 'NUMERIC' | 'QUALITATIVE' | 'TEXT';
 
 export interface TestResultTextOption {
   value: string;

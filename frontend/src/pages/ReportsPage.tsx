@@ -358,8 +358,7 @@ export function ReportsPage() {
             }
           }
         }
-      } catch (settingsError) {
-        console.error('[DirectPrint] Failed to load settings for direct print:', settingsError);
+      } catch {
         // continue with browser print fallback
       }
 

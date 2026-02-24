@@ -79,7 +79,6 @@ const RESULT_ENTRY_TYPES: { label: string; value: TestResultEntryType }[] = [
   { label: 'Numeric', value: 'NUMERIC' },
   { label: 'Qualitative (dropdown)', value: 'QUALITATIVE' },
   { label: 'Text', value: 'TEXT' },
-  { label: 'Culture & Sensitivity', value: 'CULTURE_SENSITIVITY' },
 ];
 
 const RESULT_FLAG_OPTIONS: { label: string; value: NonNullable<TestResultTextOption['flag']> }[] = [
