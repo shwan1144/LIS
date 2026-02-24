@@ -262,7 +262,7 @@ async function renderOffscreen(element: JSX.Element): Promise<string> {
 async function waitForRenderAndEffects(): Promise<void> {
   await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
   await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
-  await new Promise<void>((resolve) => setTimeout(resolve, 120));
+  await new Promise<void>((resolve) => setTimeout(resolve, 300));
 }
 
 async function qzPrintHtml(html: string, printerName: string, jobName: string): Promise<void> {

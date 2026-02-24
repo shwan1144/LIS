@@ -19,7 +19,11 @@
     "migrate:sql": "node scripts/run-sql-migrations.js",
     "fix:tenant-grants": "node scripts/fix-tenant-grants.js",
     "connector:start": "node scripts/instrument-connector.js",
-    "connector:doctor": "node scripts/instrument-connector.js --doctor"
+    "connector:doctor": "node scripts/instrument-connector.js --doctor",
+    "connector:list-instruments": "node scripts/instrument-connector.js --list-instruments",
+    "connector:build-exe": "pkg scripts/instrument-connector.js --targets node18-win-x64 --output dist/connector/lis-instrument-connector.exe",
+    "connector:install-task": "powershell -ExecutionPolicy Bypass -File scripts/install-connector-task.ps1",
+    "connector:uninstall-task": "powershell -ExecutionPolicy Bypass -File scripts/uninstall-connector-task.ps1"
   },
   "dependencies": {
     "@nestjs/common": "^11.0.1",
@@ -60,6 +64,7 @@
     "ts-jest": "^29.4.6",
     "ts-node": "^10.9.2",
     "tsconfig-paths": "^4.2.0",
-    "typescript": "^5.7.3"
+    "typescript": "^5.7.3",
+    "pkg": "^5.8.1"
   }
 }

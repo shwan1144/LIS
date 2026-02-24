@@ -28,6 +28,12 @@ In your lab panel, create a user only for connector traffic:
 
 Open browser dev tools on Instruments page or use API to copy the instrument UUID.
 
+Or list from connector directly:
+
+```powershell
+npm run connector:list-instruments
+```
+
 ## 3) Create connector env file
 
 In `backend` folder:
@@ -38,7 +44,7 @@ Copy-Item .env.connector.example .env.connector
 
 Edit `.env.connector` with your real values:
 
-- `LIS_BASE_URL`: your lab subdomain URL, example `https://lab01.medilis.net`
+- `LIS_BASE_URL`: backend API URL, example `https://api.medilis.net`
 - `LIS_USERNAME` / `LIS_PASSWORD`
 - `LIS_INSTRUMENT_ID`
 - `CONNECTOR_LISTEN_PORT`: port analyzer will send to (example `5001`)
@@ -73,14 +79,39 @@ Configure analyzer to send output to this Windows PC:
 
 ## 7) Run on startup (Windows)
 
-For production, run as a Windows service (NSSM recommended):
+### Option A: EXE + Scheduled Task (recommended)
 
-- App: `node.exe`
-- Args: `scripts/instrument-connector.js`
-- Startup dir: `...\LIS\backend`
+Build exe once:
+
+```powershell
+npm run connector:build-exe
+```
+
+Install startup task (run PowerShell as Administrator):
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/install-connector-task.ps1
+```
+
+This creates task `LISInstrumentConnector`, runs at startup, and auto-restarts on failure.
+
+Remove task:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/uninstall-connector-task.ps1
+```
+
+### Option B: Node process (manual/dev)
+
+Run directly:
+
+```powershell
+npm run connector:start
+```
+
+Keep terminal open.
 
 ## Notes
 
 - This version is TCP listener first. Serial COM bridge is not included yet.
 - For bidirectional (order download/query) we can add downstream socket write queue in next step.
-

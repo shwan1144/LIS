@@ -316,6 +316,8 @@ Use `backend/scripts/instrument-connector.js` when analyzer traffic must stay in
 - Env template: `backend/.env.connector.example`
 - Quick check: `npm run connector:doctor`
 - Start listener: `npm run connector:start`
+- Build Windows exe: `npm run connector:build-exe`
+- Install auto-start task (Admin PowerShell): `npm run connector:install-task`
 - Full setup guide: `backend/INSTRUMENT_CONNECTOR.md`
 
 ## Status Update Rule

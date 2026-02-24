@@ -21,9 +21,13 @@ const DEFAULTS = {
   requestTimeoutMs: 15000,
 };
 
+const PLACEHOLDER_INSTRUMENT_ID = /^0{8}-0{4}-0{4}-0{4}-0{12}$/i;
+const UUID_V4ISH_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 function loadEnv() {
   const explicitPath = process.env.CONNECTOR_ENV_PATH;
-  const defaultPath = path.resolve(process.cwd(), '.env.connector');
+  const packagedBase = process.pkg ? path.dirname(process.execPath) : process.cwd();
+  const defaultPath = path.resolve(packagedBase, '.env.connector');
   const envPath = explicitPath ? path.resolve(process.cwd(), explicitPath) : defaultPath;
   if (fs.existsSync(envPath)) {
     dotenv.config({ path: envPath });
@@ -40,7 +44,8 @@ function parseIntEnv(name, fallback) {
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
-function getConfig() {
+function getConfig(options = {}) {
+  const requireInstrumentId = options.requireInstrumentId !== false;
   const baseUrl = (process.env.LIS_BASE_URL || '').trim().replace(/\/+$/, '');
   const username = (process.env.LIS_USERNAME || '').trim();
   const password = process.env.LIS_PASSWORD || '';
@@ -58,7 +63,15 @@ function getConfig() {
   if (!baseUrl) errors.push('LIS_BASE_URL is required');
   if (!username) errors.push('LIS_USERNAME is required');
   if (!password) errors.push('LIS_PASSWORD is required');
-  if (!instrumentId) errors.push('LIS_INSTRUMENT_ID is required');
+  if (requireInstrumentId && !instrumentId) errors.push('LIS_INSTRUMENT_ID is required');
+  if (requireInstrumentId && PLACEHOLDER_INSTRUMENT_ID.test(instrumentId)) {
+    errors.push('LIS_INSTRUMENT_ID is still placeholder (all zeros). Use a real instrument UUID from LIS Settings > Instruments');
+  }
+  if (requireInstrumentId && instrumentId && !UUID_V4ISH_REGEX.test(instrumentId)) {
+    errors.push(
+      `LIS_INSTRUMENT_ID must be a valid UUID (36 chars like xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx). Received: "${instrumentId}"`,
+    );
+  }
   if (!['AUTO', 'HL7', 'ASTM'].includes(protocol)) {
     errors.push('CONNECTOR_PROTOCOL must be one of AUTO | HL7 | ASTM');
   }
@@ -137,19 +150,54 @@ async function postJson(url, body, headers = {}, timeoutMs = 15000) {
   }
 }
 
+async function getJson(url, headers = {}, timeoutMs = 15000) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch(url, {
+      method: 'GET',
+      headers: {
+        ...headers,
+      },
+      signal: controller.signal,
+    });
+    const text = await res.text();
+    let json = null;
+    try {
+      json = text ? JSON.parse(text) : null;
+    } catch {
+      json = null;
+    }
+    return {
+      ok: res.ok,
+      status: res.status,
+      body: json ?? text,
+    };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 class LisSession {
   constructor(config) {
     this.config = config;
     this.accessToken = null;
   }
 
+  getTenantHeaders() {
+    if (!this.config.forwardedHost) return {};
+    const origin = `https://${this.config.forwardedHost}`;
+    return {
+      'x-forwarded-host': this.config.forwardedHost,
+      'x-forwarded-proto': 'https',
+      origin,
+      referer: `${origin}/`,
+    };
+  }
+
   async login() {
     const url = `${this.config.baseUrl}/auth/login`;
-    const headers = {};
-    if (this.config.forwardedHost) {
-      headers['x-forwarded-host'] = this.config.forwardedHost;
-      headers['x-forwarded-proto'] = 'https';
-    }
+    const headers = this.getTenantHeaders();
     const res = await postJson(
       url,
       { username: this.config.username, password: this.config.password },
@@ -187,11 +235,8 @@ class LisSession {
     const url = `${this.config.baseUrl}/instruments/${this.config.instrumentId}/simulate`;
     const headers = {
       authorization: `Bearer ${this.accessToken}`,
+      ...this.getTenantHeaders(),
     };
-    if (this.config.forwardedHost) {
-      headers['x-forwarded-host'] = this.config.forwardedHost;
-      headers['x-forwarded-proto'] = 'https';
-    }
 
     let res = await postJson(
       url,
@@ -209,6 +254,41 @@ class LisSession {
       throw new Error(`Ingest failed (${res.status}): ${JSON.stringify(res.body)}`);
     }
     return res.body;
+  }
+
+  authHeaders() {
+    if (!this.accessToken) {
+      throw new Error('Not authenticated');
+    }
+    return {
+      authorization: `Bearer ${this.accessToken}`,
+      ...this.getTenantHeaders(),
+    };
+  }
+
+  async getInstrument() {
+    const url = `${this.config.baseUrl}/instruments/${this.config.instrumentId}`;
+    const res = await getJson(url, this.authHeaders(), this.config.requestTimeoutMs);
+    if (!res.ok) {
+      if (res.status === 404) {
+        throw new Error(
+          `Instrument not found for LIS_INSTRUMENT_ID=${this.config.instrumentId}. ` +
+          'Open LIS Settings > Instruments and copy the real UUID.',
+        );
+      }
+      throw new Error(`Instrument lookup failed (${res.status}): ${JSON.stringify(res.body)}`);
+    }
+    return res.body;
+  }
+
+  async listInstruments() {
+    const url = `${this.config.baseUrl}/instruments`;
+    const res = await getJson(url, this.authHeaders(), this.config.requestTimeoutMs);
+    if (!res.ok) {
+      throw new Error(`List instruments failed (${res.status}): ${JSON.stringify(res.body)}`);
+    }
+    const items = Array.isArray(res.body) ? res.body : [];
+    return items;
   }
 }
 
@@ -387,7 +467,28 @@ async function runDoctor(config, session) {
   log('INFO', `Instrument ID: ${config.instrumentId}`);
   log('INFO', `Forwarded host: ${config.forwardedHost || '(none)'}`);
   await session.login();
+  const instrument = await session.getInstrument();
+  log('INFO', `Instrument resolved: ${instrument?.code || '(no code)'} / ${instrument?.name || '(no name)'}`);
   log('INFO', 'Doctor check passed.');
+}
+
+async function runListInstruments(_config, session) {
+  log('INFO', 'Listing instruments...');
+  await session.login();
+  const instruments = await session.listInstruments();
+  if (!instruments.length) {
+    log('WARN', 'No instruments found for this lab.');
+    return;
+  }
+  const rows = instruments.map((item) => ({
+    id: item.id,
+    code: item.code,
+    name: item.name,
+    protocol: item.protocol,
+    connectionType: item.connectionType,
+    active: item.isActive,
+  }));
+  console.table(rows);
 }
 
 function printHelp() {
@@ -397,6 +498,7 @@ LIS Instrument Connector (local Windows bridge)
 Usage:
   node scripts/instrument-connector.js
   node scripts/instrument-connector.js --doctor
+  node scripts/instrument-connector.js --list-instruments
 
 Environment (.env.connector):
   LIS_BASE_URL=https://lab01.medilis.net
@@ -415,19 +517,25 @@ Environment (.env.connector):
 
 async function main() {
   loadEnv();
+  const isListMode = process.argv.includes('--list-instruments');
   if (process.argv.includes('--help') || process.argv.includes('-h')) {
     printHelp();
     return;
   }
-  const config = getConfig();
+  const config = getConfig({ requireInstrumentId: !isListMode });
   const session = new LisSession(config);
 
   if (process.argv.includes('--doctor')) {
     await runDoctor(config, session);
     return;
   }
+  if (process.argv.includes('--list-instruments')) {
+    await runListInstruments(config, session);
+    return;
+  }
 
   await session.login();
+  await session.getInstrument();
   await startConnector(config, session);
 }
 
