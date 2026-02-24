@@ -10,6 +10,7 @@ import {
   Unique,
 } from 'typeorm';
 import { Lab } from './lab.entity';
+import { Test } from './test.entity';
 
 export enum InstrumentProtocol {
   HL7_V2 = 'HL7_V2',        // HL7 version 2.x
@@ -195,6 +196,10 @@ export class InstrumentTestMapping {
   @ManyToOne(() => Instrument, (instrument) => instrument.testMappings, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'instrumentId' })
   instrument: Instrument;
+
+  @ManyToOne(() => Test, { onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'testId' })
+  test: Test;
 }
 
 @Entity('instrument_messages')
