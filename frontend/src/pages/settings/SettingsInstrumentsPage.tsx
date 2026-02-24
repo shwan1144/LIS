@@ -173,6 +173,32 @@ const MEDONIC_M51_CBC_MAPPING_SUGGESTIONS: Array<{
   { instrumentCode: 'PDW', lisCandidates: ['PDW'] },
 ];
 
+const COBAS_C111_CHEM_MAPPING_SUGGESTIONS: Array<{
+  instrumentCode: string;
+  lisCandidates: string[];
+}> = [
+  { instrumentCode: 'GLU', lisCandidates: ['GLU', 'GLUCOSE'] },
+  { instrumentCode: 'CRE', lisCandidates: ['CRE', 'CREAT', 'CREATININE'] },
+  { instrumentCode: 'UREA', lisCandidates: ['UREA', 'BUN'] },
+  { instrumentCode: 'ALT', lisCandidates: ['ALT', 'SGPT'] },
+  { instrumentCode: 'AST', lisCandidates: ['AST', 'SGOT'] },
+  { instrumentCode: 'ALP', lisCandidates: ['ALP'] },
+  { instrumentCode: 'GGT', lisCandidates: ['GGT'] },
+  { instrumentCode: 'TBIL', lisCandidates: ['TBIL', 'BILI-T', 'TOTAL BILIRUBIN'] },
+  { instrumentCode: 'DBIL', lisCandidates: ['DBIL', 'BILI-D', 'DIRECT BILIRUBIN'] },
+  { instrumentCode: 'TP', lisCandidates: ['TP', 'TOTAL PROTEIN'] },
+  { instrumentCode: 'ALB', lisCandidates: ['ALB', 'ALBUMIN'] },
+  { instrumentCode: 'CHOL', lisCandidates: ['CHOL', 'CHOLESTEROL'] },
+  { instrumentCode: 'TRIG', lisCandidates: ['TRIG', 'TG', 'TRIGLYCERIDES'] },
+  { instrumentCode: 'HDL', lisCandidates: ['HDL', 'HDL-C'] },
+  { instrumentCode: 'LDL', lisCandidates: ['LDL', 'LDL-C'] },
+  { instrumentCode: 'UA', lisCandidates: ['UA', 'URIC', 'URIC ACID'] },
+  { instrumentCode: 'CA', lisCandidates: ['CA', 'CALCIUM'] },
+  { instrumentCode: 'NA', lisCandidates: ['NA', 'SODIUM'] },
+  { instrumentCode: 'K', lisCandidates: ['K', 'POTASSIUM'] },
+  { instrumentCode: 'CL', lisCandidates: ['CL', 'CHLORIDE'] },
+];
+
 const normalizeCode = (value: string) =>
   value
     .trim()
@@ -662,16 +688,84 @@ export function SettingsInstrumentsPage() {
     );
   };
 
+  const handleAutoMapCobasC111 = async () => {
+    if (!selectedInstrument) return;
+    const model = selectedInstrument.model?.toLowerCase() || '';
+    if (!model.includes('c111')) {
+      message.warning('Select a Cobas c111 instrument first');
+      return;
+    }
+
+    const testsByCode = new Map<string, TestDto>();
+    for (const test of tests) {
+      testsByCode.set(normalizeCode(test.code), test);
+    }
+
+    const existingCodes = new Set(
+      mappings.map((m) => normalizeCode(m.instrumentTestCode || '')),
+    );
+
+    let added = 0;
+    let skippedExisting = 0;
+    let skippedMissingTest = 0;
+    let failed = 0;
+
+    for (const suggestion of COBAS_C111_CHEM_MAPPING_SUGGESTIONS) {
+      const instrumentCode = normalizeCode(suggestion.instrumentCode);
+      if (existingCodes.has(instrumentCode)) {
+        skippedExisting += 1;
+        continue;
+      }
+
+      const matchedTest = suggestion.lisCandidates
+        .map((candidate) => testsByCode.get(normalizeCode(candidate)))
+        .find((test) => Boolean(test));
+
+      if (!matchedTest) {
+        skippedMissingTest += 1;
+        continue;
+      }
+
+      try {
+        await createInstrumentMapping(selectedInstrument.id, {
+          testId: matchedTest.id,
+          instrumentTestCode: suggestion.instrumentCode,
+          instrumentTestName: matchedTest.name,
+        });
+        existingCodes.add(instrumentCode);
+        added += 1;
+      } catch {
+        failed += 1;
+      }
+    }
+
+    await loadMappings(selectedInstrument.id);
+
+    if (added > 0) {
+      message.success(
+        `c111 auto-mapping done: added ${added}, existing ${skippedExisting}, missing LIS tests ${skippedMissingTest}, failed ${failed}.`,
+      );
+      return;
+    }
+
+    message.info(
+      `No new c111 mappings added. Existing ${skippedExisting}, missing LIS tests ${skippedMissingTest}, failed ${failed}.`,
+    );
+  };
+
   // Live Tracker functions
   const handleOpenTracker = (instrument: InstrumentDto) => {
+    const model = instrument.model?.toLowerCase() || '';
     setTrackerInstrument(instrument);
     setTrackerMessages([]);
     setSelectedMessage(null);
     setTrackerRunning(true);
     setSelectedPanel(
       instrument.protocol === 'ASTM'
-        ? 'cobasE411Astm'
-        : instrument.model?.toLowerCase().includes('m51')
+        ? model.includes('c111')
+          ? 'cobasC111Astm'
+          : 'cobasE411Astm'
+        : model.includes('m51')
           ? 'medonicM51CbcHl7'
           : 'cbc',
     );
@@ -922,6 +1016,15 @@ OBX|16|NM|MPV^Mean Platelet Volume||9.6|fL|7.5-11.5|N|||F`,
 P|1
 O|1|{{SAMPLE_ID}}||^^^TSH|R
 R|1|^^^TSH|2.31|mIU/L|0.27-4.2|N|||F
+L|1|N`,
+    },
+    cobasC111Astm: {
+      name: 'Cobas c111 ASTM (Chemistry sample)',
+      message: `H|\\^&|||cobas-c111|||||P|1
+P|1
+O|1|{{SAMPLE_ID}}||^^^GLU^Glucose|R
+R|1|^^^GLU^Glucose|92|mg/dL|70-100|N|||F
+R|2|^^^CRE^Creatinine|1.03|mg/dL|0.70-1.30|N|||F
 L|1|N`,
     },
   };
@@ -1420,6 +1523,12 @@ L|1|N`,
                           onClick={handleAutoMapMedonicM51}
                         >
                           Auto-map M51 CBC
+                        </Button>
+                        <Button
+                          size="small"
+                          onClick={handleAutoMapCobasC111}
+                        >
+                          Auto-map c111 chemistry
                         </Button>
                         <Button
                           size="small"

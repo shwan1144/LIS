@@ -26,6 +26,7 @@ import {
   ReloadOutlined,
   CheckOutlined,
   UserOutlined,
+  EditOutlined,
 } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import dayjs from 'dayjs';
@@ -133,7 +134,7 @@ function groupWorklistByOrder(items: WorklistItem[]): WorklistOrderGroup[] {
 }
 
 export function WorklistPage() {
-  const { isDark } = useTheme();
+  const isDark = useTheme().theme === 'dark';
   const [data, setData] = useState<WorklistItem[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(false);
@@ -313,7 +314,9 @@ export function WorklistPage() {
 
     const isPanel = editingItem.testType === 'PANEL';
     const targets = isPanel
-      ? data.filter((i) => i.parentOrderTestId === editingItem.id)
+      ? (editingItem.id.startsWith('group-')
+        ? data.filter((i) => i.orderId === editingItem.orderId)
+        : data.filter((i) => i.parentOrderTestId === editingItem.id))
       : [editingItem];
 
     setSubmitting(true);
@@ -511,6 +514,78 @@ export function WorklistPage() {
     return <Text type="secondary" style={{ fontSize: 12 }}>—</Text>;
   };
 
+  const handleOpenOrderResultModal = (group: WorklistOrderGroup) => {
+    // Create a virtual "panel" item to trigger the modal logic for the whole group
+    const virtualItem: WorklistItem = {
+      ...group.items[0],
+      id: `group-${group.orderId}`,
+      testType: 'PANEL',
+      testName: 'Order Results',
+      testCode: 'ORDER',
+    };
+
+    setEditingItem(virtualItem);
+    const formValues: any = {};
+    group.items.forEach((target) => {
+      const existingParams = target.resultParameters ?? {};
+      const defsByCode = new Map((target.parameterDefinitions ?? []).map((d) => [d.code, d]));
+      const resultParametersInitial: Record<string, string> = {};
+      const resultParametersCustomInitial: Record<string, string> = {};
+      const defaults: Record<string, string> = {};
+
+      (target.parameterDefinitions ?? []).forEach((def) => {
+        if (
+          def.defaultValue != null &&
+          def.defaultValue.trim() !== '' &&
+          (existingParams[def.code] == null || String(existingParams[def.code]).trim() === '')
+        ) {
+          defaults[def.code] = def.defaultValue.trim();
+        }
+      });
+
+      for (const [code, rawValue] of Object.entries(existingParams)) {
+        const value = rawValue != null ? String(rawValue).trim() : '';
+        if (!value) continue;
+        const definition = defsByCode.get(code);
+        if (definition?.type === 'select') {
+          const known = new Set((definition.options ?? []).map((o) => o.trim().toLowerCase()));
+          if (known.size > 0 && !known.has(value.toLowerCase())) {
+            resultParametersInitial[code] = '__other__';
+            resultParametersCustomInitial[code] = value;
+            continue;
+          }
+        }
+        resultParametersInitial[code] = value;
+      }
+
+      let initialResultText = target.resultText ?? undefined;
+      let customResultText: string | undefined;
+      if (target.resultEntryType === 'QUALITATIVE') {
+        const qualitativeOptions = target.resultTextOptions ?? [];
+        const defaultOpt = qualitativeOptions.find((o) => o.isDefault)?.value ?? qualitativeOptions[0]?.value;
+        const known = new Set(qualitativeOptions.map((o) => o.value.trim().toLowerCase()));
+        if (!initialResultText && defaultOpt) initialResultText = defaultOpt;
+        if (initialResultText && target.allowCustomResultText && !known.has(initialResultText.trim().toLowerCase())) {
+          customResultText = initialResultText;
+          initialResultText = '__other__';
+        }
+      }
+
+      formValues[target.id] = {
+        resultValue:
+          target.resultEntryType === 'QUALITATIVE' || target.resultEntryType === 'TEXT'
+            ? undefined
+            : target.resultValue,
+        resultText: initialResultText,
+        customResultText,
+        resultParameters: { ...defaults, ...resultParametersInitial },
+        resultParametersCustom: resultParametersCustomInitial,
+      };
+    });
+    resultForm.setFieldsValue(formValues);
+    setResultModalOpen(true);
+  };
+
   const renderExpandedTests = (group: WorklistOrderGroup) => {
     // Show items that are root level, OR items whose parent is not in this list
     const rootItems = group.items.filter(
@@ -520,7 +595,19 @@ export function WorklistPage() {
     const compactStyle = { paddingTop: 6, paddingBottom: 6, fontSize: 12 };
 
     return (
-      <div className="worklist-expanded-panel" style={{ padding: '8px 16px 16px' }}>
+      <div className="worklist-expanded-panel" style={{ padding: '4px 16px 16px' }}>
+        <div style={{ marginBottom: 8, display: 'flex', justifyContent: 'flex-end' }}>
+          <Button
+            type="primary"
+            size="small"
+            ghost
+            icon={<EditOutlined />}
+            onClick={() => handleOpenOrderResultModal(group)}
+            style={{ fontSize: 11 }}
+          >
+            Enter Results for Order
+          </Button>
+        </div>
         <Table
           className="worklist-subtests-table"
           size="small"
@@ -543,10 +630,18 @@ export function WorklistPage() {
               render: (_: unknown, r: WorklistItem) => (
                 <div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <Tag color="blue" style={{ margin: 0, fontSize: 10, lineHeight: '16px' }}>{r.testCode}</Tag>
-                    <Text strong style={{ fontSize: 12 }}>{r.testName}</Text>
+                    <Tag color="blue" style={{ margin: 0, fontSize: 10, lineHeight: '16px' }}>
+                      {r.testCode}
+                    </Tag>
+                    <Text strong style={{ fontSize: 12 }}>
+                      {r.testName}
+                    </Text>
                   </div>
-                  {r.testType === 'PANEL' && <Text type="secondary" style={{ fontSize: 10 }}>Panel Test</Text>}
+                  {r.testType === 'PANEL' && (
+                    <Text type="secondary" style={{ fontSize: 10 }}>
+                      Panel Test
+                    </Text>
+                  )}
                 </div>
               ),
               onCell: () => ({ style: compactStyle }),
@@ -560,7 +655,8 @@ export function WorklistPage() {
                   {formatWorklistResultPreview(r, group.items)}
                   {r.testType !== 'PANEL' && (r.normalMin !== null || r.normalMax !== null || r.normalText) && (
                     <div style={{ fontSize: 10, color: 'rgba(128,128,128,0.7)', marginTop: 2 }}>
-                      Range: {r.normalText || `${r.normalMin ?? '-'} - ${r.normalMax ?? '-'} ${r.testUnit || ''}`}
+                      Range:{' '}
+                      {r.normalText || `${r.normalMin ?? '-'} - ${r.normalMax ?? '-'} ${r.testUnit || ''}`}
                     </div>
                   )}
                 </div>
@@ -573,7 +669,11 @@ export function WorklistPage() {
               width: 100,
               render: (_: unknown, r: WorklistItem) => {
                 if (!r.flag || r.flag === 'N') return <Text type="secondary">—</Text>;
-                return <Tag color={getFlagColor(r.flag)} style={{ margin: 0, fontSize: 10 }}>{getFlagLabel(r.flag) || r.flag}</Tag>;
+                return (
+                  <Tag color={getFlagColor(r.flag)} style={{ margin: 0, fontSize: 10 }}>
+                    {getFlagLabel(r.flag) || r.flag}
+                  </Tag>
+                );
               },
               onCell: () => ({ style: compactStyle }),
             },
@@ -589,7 +689,11 @@ export function WorklistPage() {
                   VERIFIED: 'success',
                   REJECTED: 'error',
                 };
-                return <Tag color={colors[r.status]} style={{ margin: 0, fontSize: 10 }}>{r.status}</Tag>;
+                return (
+                  <Tag color={colors[r.status]} style={{ margin: 0, fontSize: 10 }}>
+                    {r.status}
+                  </Tag>
+                );
               },
               onCell: () => ({ style: compactStyle }),
             },
@@ -601,7 +705,13 @@ export function WorklistPage() {
               render: (_: unknown, r: WorklistItem) => (
                 <Space size="small">
                   {r.status !== 'VERIFIED' && r.status !== 'REJECTED' && (
-                    <Button type="primary" size="small" ghost onClick={() => handleOpenResultModal(r)} style={{ fontSize: 11, height: 24 }}>
+                    <Button
+                      type="primary"
+                      size="small"
+                      ghost
+                      onClick={() => handleOpenResultModal(r)}
+                      style={{ fontSize: 11, height: 24 }}
+                    >
                       {r.resultValue !== null || r.resultText ? 'Edit' : 'Enter'}
                     </Button>
                   )}
@@ -613,7 +723,13 @@ export function WorklistPage() {
                           size="small"
                           icon={<CheckCircleOutlined style={{ fontSize: 12 }} />}
                           onClick={() => handleVerify(r.id)}
-                          style={{ backgroundColor: '#52c41a', borderColor: '#52c41a', height: 24, width: 24, padding: 0 }}
+                          style={{
+                            backgroundColor: '#52c41a',
+                            borderColor: '#52c41a',
+                            height: 24,
+                            width: 24,
+                            padding: 0,
+                          }}
                         />
                       </Tooltip>
                       <Tooltip title="Reject/Repeat">
@@ -628,10 +744,14 @@ export function WorklistPage() {
                     </Space>
                   )}
                   {r.status === 'VERIFIED' && (
-                    <Text type="success" style={{ fontSize: 11 }}><CheckCircleOutlined /> Verified</Text>
+                    <Text type="success" style={{ fontSize: 11 }}>
+                      <CheckCircleOutlined /> Verified
+                    </Text>
                   )}
                   {r.status === 'REJECTED' && (
-                    <Text type="danger" style={{ fontSize: 11 }}><CloseCircleOutlined /> Rejected</Text>
+                    <Text type="danger" style={{ fontSize: 11 }}>
+                      <CloseCircleOutlined /> Rejected
+                    </Text>
                   )}
                 </Space>
               ),
@@ -642,6 +762,7 @@ export function WorklistPage() {
       </div>
     );
   };
+
 
   return (
     <div>
@@ -899,7 +1020,9 @@ export function WorklistPage() {
             >
               {(() => {
                 const targetItems = editingItem.testType === 'PANEL'
-                  ? data.filter(i => i.parentOrderTestId === editingItem.id)
+                  ? (editingItem.id.startsWith('group-')
+                    ? data.filter(i => i.orderId === editingItem.orderId)
+                    : data.filter(i => i.parentOrderTestId === editingItem.id))
                   : [editingItem];
 
                 const isPanel = targetItems.length > 1;
