@@ -892,7 +892,7 @@ export function ReportsPage() {
           if (!meta || row.flag === 'N')
             return (
               <Text type="secondary" style={{ fontSize: 10 }}>
-                —
+                -
               </Text>
             );
           return (
@@ -1276,36 +1276,36 @@ export function ReportsPage() {
           overflow: hidden;
         }
         .panel-entry-modal .ant-modal-header {
-          padding: 12px 16px;
+          padding: 10px 14px;
           margin-bottom: 0;
         }
         .panel-entry-modal .ant-modal-body {
-          padding: 8px 12px 12px !important;
+          padding: 6px 10px 10px !important;
           max-height: calc(100vh - 160px);
           overflow-y: auto;
         }
         .panel-entry-modal .panel-entry-summary {
-          margin-bottom: 12px;
-          padding: 10px 12px;
-          border-radius: 8px;
+          margin-bottom: 8px;
+          padding: 8px 10px;
+          border-radius: 6px;
         }
         .panel-entry-modal .panel-entry-grid-head {
-          padding: 8px 12px !important;
-          margin-bottom: 8px !important;
+          padding: 6px 10px !important;
+          margin-bottom: 4px !important;
         }
         .panel-entry-modal .panel-entry-grid-row {
-          padding: 6px 12px !important;
-          margin-bottom: 2px !important;
+          padding: 4px 10px !important;
+          margin-bottom: 0 !important;
         }
         .panel-entry-modal .panel-entry-grid-row .ant-form-item {
           margin-bottom: 0;
         }
         .panel-entry-modal .panel-entry-params {
-          margin-top: 8px !important;
-          padding: 10px 12px !important;
+          margin-top: 6px !important;
+          padding: 8px 10px !important;
         }
         .panel-entry-modal .panel-entry-footer {
-          margin-top: 12px !important;
+          margin-top: 8px !important;
         }
         @media (max-width: 992px) {
           .panel-entry-modal .ant-modal {
@@ -1371,7 +1371,7 @@ export function ReportsPage() {
             <span style={{ fontWeight: 600, fontSize: 16 }}>Enter Result</span>
             {editResultContext && (
               <Tag color="blue" style={{ margin: 0 }}>
-                {editResultContext.testCode} - {editResultContext.testName}
+                {editResultContext.testName}
               </Tag>
             )}
           </Space>
@@ -1400,7 +1400,7 @@ export function ReportsPage() {
                 border: isDark ? '1px solid rgba(255,255,255,0.08)' : '1px solid #f0f0f0',
               }}
             >
-              <Row gutter={[12, 4]}>
+              <Row gutter={[8, 2]}>
                 <Col xs={24} sm={12}>
                   <Text type="secondary" style={{ fontSize: 12 }}>Patient</Text>
                   <div style={{ marginTop: 2 }}><Text strong>{editResultContext.patientName}</Text></div>
@@ -1418,7 +1418,7 @@ export function ReportsPage() {
               ) : null}
 
               {(editResultContext.normalMin !== null || editResultContext.normalMax !== null || editResultContext.normalText) && (
-                <div style={{ marginTop: 12, paddingTop: 12, borderTop: isDark ? '1px solid rgba(255,255,255,0.06)' : '1px solid #f0f0f0' }}>
+                <div style={{ marginTop: 8, paddingTop: 8, borderTop: isDark ? '1px solid rgba(255,255,255,0.06)' : '1px solid #f0f0f0' }}>
                   <Text type="secondary" style={{ fontSize: 12 }}>Normal range</Text>
                   <div style={{ marginTop: 2 }}>
                     <Text>
@@ -1463,14 +1463,13 @@ export function ReportsPage() {
 
                       return (
                         <div key={target.id} className={isPanel ? 'panel-entry-grid-row' : undefined} style={{
-                          marginBottom: isPanel ? 0 : 16,
+                          marginBottom: isPanel ? 0 : 10,
                           padding: isPanel ? undefined : 0,
                           borderBottom: isPanel && idx < targetItems.length - 1 ? (isDark ? '1px solid rgba(255,255,255,0.05)' : '1px solid #f0f0f0') : 'none'
                         }}>
                           <div style={{ display: 'flex', alignItems: 'flex-start', flexWrap: 'wrap' }}>
                             <div style={{ flex: isPanel ? '1 1 30%' : '1 1 100%', marginBottom: isPanel ? 0 : 8 }}>
-                              <Text strong={!isPanel} style={{ fontSize: isPanel ? 13 : 14 }}>{target.test?.name}</Text>
-                              {isPanel && <div style={{ fontSize: 11, color: 'rgba(128,128,128,0.8)' }}>{target.test?.code}</div>}
+                              <Text strong={!isPanel} style={{ fontSize: isPanel ? 12 : 14 }}>{target.test?.name}</Text>
                             </div>
 
                             <div style={{ flex: isPanel ? '1 1 30%' : '1 1 100%' }}>
@@ -1512,7 +1511,7 @@ export function ReportsPage() {
                                   {target.test?.unit || '-'}
                                 </div>
                                 <div style={{ flex: '1 1 25%', textAlign: 'right', fontSize: 12, color: 'rgba(128,128,128,0.8)' }}>
-                                  {target.test?.normalText || `${target.test?.normalMin ?? '–'} – ${target.test?.normalMax ?? '–'}`}
+                                  {target.test?.normalText || `${target.test?.normalMin ?? '-'} - ${target.test?.normalMax ?? '-'}`}
                                 </div>
                               </>
                             )}

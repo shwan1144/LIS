@@ -190,7 +190,7 @@ export function AppLayout() {
             style={{ height: '100%', borderRight: 0 }}
           />
         </Sider>
-        <Content style={{ padding: 24, background: isDark ? '#141414' : '#dce5f0' }}>
+        <Content style={{ padding: '12px 24px 24px', background: isDark ? '#141414' : '#dce5f0' }}>
           {isImpersonationMode ? (
             <Alert
               type="warning"

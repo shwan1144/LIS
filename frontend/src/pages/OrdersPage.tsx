@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import {
   Card,
   Button,
@@ -150,8 +150,8 @@ export function OrdersPage() {
   const [listQuery, setListQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'ALL' | OrderStatus>('ALL');
   const [draftPatient, setDraftPatient] = useState<PatientDto | null>(null);
-  /** When set, loadOrderHistory will select the draft row for this patient (e.g. after "Go to order" from Patients). Cleared after use. */
-  const [focusDraftPatientId, setFocusDraftPatientId] = useState<string | null>(null);
+  /** When set, loadOrderHistory will select the draft row for this patient (e.g. after "Go to order" from Patients). Cleared after use. Ref to avoid extra list reload. */
+  const focusDraftPatientIdRef = useRef<string | null>(null);
 
   const [departments, setDepartments] = useState<DepartmentDto[]>([]);
   const [testOptions, setTestOptions] = useState<TestDto[]>([]);
@@ -233,9 +233,9 @@ export function OrdersPage() {
 
         setPatientList(rows);
         setListTotal(result.total ?? 0);
-        if (effectiveDraft && focusDraftPatientId === effectiveDraft.id) {
+        if (effectiveDraft && focusDraftPatientIdRef.current === effectiveDraft.id) {
           setSelectedRowId(`draft-${effectiveDraft.id}`);
-          setFocusDraftPatientId(null);
+          focusDraftPatientIdRef.current = null;
         } else {
           setSelectedRowId((current) => {
             if (options?.focusOrderId) {
@@ -265,8 +265,8 @@ export function OrdersPage() {
               createdOrder: null,
             },
           ]);
-          if (focusDraftPatientId === effectiveDraft.id) {
-            setFocusDraftPatientId(null);
+          if (focusDraftPatientIdRef.current === effectiveDraft.id) {
+            focusDraftPatientIdRef.current = null;
           }
           setSelectedRowId(`draft-${effectiveDraft.id}`);
         } else {
@@ -278,7 +278,7 @@ export function OrdersPage() {
         setWorklistLoading(false);
       }
     },
-    [draftPatient, listPage, listQuery, statusFilter, focusDraftPatientId],
+    [draftPatient, listPage, listQuery, statusFilter],
   );
 
   useEffect(() => {
@@ -288,7 +288,7 @@ export function OrdersPage() {
       return;
     }
 
-    setFocusDraftPatientId(patientIdFromState);
+    focusDraftPatientIdRef.current = patientIdFromState;
     let cancelled = false;
     setPatientLoading(true);
     getPatient(patientIdFromState)
@@ -675,7 +675,7 @@ export function OrdersPage() {
 
   return (
     <div>
-      <Title level={4} style={{ marginBottom: 16 }}>
+      <Title level={4} style={{ marginTop: 0, marginBottom: 12 }}>
         Orders {listTotal > 0 && (
           <Text type="secondary" style={{ fontWeight: 'normal', fontSize: 14 }}>({listTotal} total)</Text>
         )}
