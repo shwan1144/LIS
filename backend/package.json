@@ -18,6 +18,7 @@
     "migrate:fix-patient-number": "ts-node -r tsconfig-paths/register scripts/fix-patient-number.ts",
     "migrate:sql": "node scripts/run-sql-migrations.js",
     "fix:tenant-grants": "node scripts/fix-tenant-grants.js",
+    "fix:order-number-counters": "node scripts/fix-order-number-counters.js",
     "connector:start": "node scripts/instrument-connector.js",
     "connector:doctor": "node scripts/instrument-connector.js --doctor",
     "connector:list-instruments": "node scripts/instrument-connector.js --list-instruments",
