@@ -39,6 +39,7 @@ import {
   downloadTestResultsPDF,
   enterResult,
   getLabSettings,
+  getWorklistStats,
   logReportDelivery,
   searchOrders,
   updateOrderPayment,
@@ -46,8 +47,10 @@ import {
   type OrderStatus,
   type OrderTestDto,
   type TestParameterDefinition,
+  type WorklistStats,
 } from '../api/client';
 import { useTheme } from '../contexts/ThemeContext';
+import { WorklistStatusDashboard } from '../components/WorklistStatusDashboard';
 import {
   directPrintReceipt,
   directPrintReportPdf,
@@ -231,6 +234,7 @@ export function ReportsPage() {
 
   const [loading, setLoading] = useState(false);
   const [orders, setOrders] = useState<OrderDto[]>([]);
+  const [worklistStats, setWorklistStats] = useState<WorklistStats | null>(null);
   const [selectedOrderIds, setSelectedOrderIds] = useState<string[]>([]);
   const [expandedOrderIds, setExpandedOrderIds] = useState<string[]>([]);
   const [dateRange, setDateRange] = useState<[dayjs.Dayjs, dayjs.Dayjs]>([
@@ -286,13 +290,20 @@ export function ReportsPage() {
 
     setLoading(true);
     try {
-      const result = await searchOrders({
-        startDate: dateRange[0].format('YYYY-MM-DD'),
-        endDate: dateRange[1].format('YYYY-MM-DD'),
-        search: searchText.trim() || undefined,
-        size: 1000,
-      });
-      setOrders(result?.items || []);
+      const [ordersResult, statsResult] = await Promise.all([
+        searchOrders({
+          startDate: dateRange[0].format('YYYY-MM-DD'),
+          endDate: dateRange[1].format('YYYY-MM-DD'),
+          search: searchText.trim() || undefined,
+          size: 1000,
+        }),
+        getWorklistStats().catch(() => null),
+      ]);
+
+      setOrders(ordersResult?.items || []);
+      if (statsResult) {
+        setWorklistStats(statsResult);
+      }
       setSelectedOrderIds([]);
     } catch (error) {
       console.error('Failed to load orders:', error);
@@ -1257,6 +1268,53 @@ export function ReportsPage() {
           padding-top: 3px !important;
           padding-bottom: 3px !important;
         }
+        .panel-entry-modal .ant-modal {
+          max-width: calc(100vw - 24px) !important;
+        }
+        .panel-entry-modal .ant-modal-content {
+          border-radius: 12px;
+          overflow: hidden;
+        }
+        .panel-entry-modal .ant-modal-header {
+          padding: 12px 16px;
+          margin-bottom: 0;
+        }
+        .panel-entry-modal .ant-modal-body {
+          padding: 8px 12px 12px !important;
+          max-height: calc(100vh - 160px);
+          overflow-y: auto;
+        }
+        .panel-entry-modal .panel-entry-summary {
+          margin-bottom: 12px;
+          padding: 10px 12px;
+          border-radius: 8px;
+        }
+        .panel-entry-modal .panel-entry-grid-head {
+          padding: 8px 12px !important;
+          margin-bottom: 8px !important;
+        }
+        .panel-entry-modal .panel-entry-grid-row {
+          padding: 6px 12px !important;
+          margin-bottom: 2px !important;
+        }
+        .panel-entry-modal .panel-entry-grid-row .ant-form-item {
+          margin-bottom: 0;
+        }
+        .panel-entry-modal .panel-entry-params {
+          margin-top: 8px !important;
+          padding: 10px 12px !important;
+        }
+        .panel-entry-modal .panel-entry-footer {
+          margin-top: 12px !important;
+        }
+        @media (max-width: 992px) {
+          .panel-entry-modal .ant-modal {
+            margin: 12px auto;
+          }
+          .panel-entry-modal .ant-modal-body {
+            max-height: calc(100vh - 132px);
+          }
+        }
       `}</style>
       <Modal
         title="Payment required"
@@ -1325,7 +1383,8 @@ export function ReportsPage() {
           editResultForm.resetFields();
         }}
         footer={null}
-        width={720}
+        width={920}
+        className="panel-entry-modal"
         styles={{
           body: { paddingTop: 8 },
           header: { borderBottom: isDark ? '1px solid rgba(255,255,255,0.08)' : '1px solid #f0f0f0' },
@@ -1333,17 +1392,15 @@ export function ReportsPage() {
         destroyOnClose
       >
         {editResultContext && (
-          <div style={{ padding: '4px 0' }}>
+          <div>
             <div
+              className="panel-entry-summary"
               style={{
-                marginBottom: 24,
-                padding: 16,
                 backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : '#fafafa',
                 border: isDark ? '1px solid rgba(255,255,255,0.08)' : '1px solid #f0f0f0',
-                borderRadius: 10,
               }}
             >
-              <Row gutter={[24, 8]}>
+              <Row gutter={[12, 4]}>
                 <Col xs={24} sm={12}>
                   <Text type="secondary" style={{ fontSize: 12 }}>Patient</Text>
                   <div style={{ marginTop: 2 }}><Text strong>{editResultContext.patientName}</Text></div>
@@ -1381,18 +1438,19 @@ export function ReportsPage() {
                 return (
                   <>
                     {isPanel && (
-                      <div style={{
+                      <div
+                        className="panel-entry-grid-head"
+                        style={{
                         display: 'flex',
-                        padding: '10px 16px',
                         backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : '#f5f5f5',
                         borderRadius: '6px 6px 0 0',
                         borderBottom: isDark ? '1px solid rgba(255,255,255,0.1)' : '1px solid #e8e8e8',
-                        marginBottom: 16,
                         fontWeight: 600,
                         fontSize: 12,
                         textTransform: 'uppercase',
                         letterSpacing: '0.5px'
-                      }}>
+                      }}
+                      >
                         <div style={{ flex: '1 1 30%' }}>Test</div>
                         <div style={{ flex: '1 1 30%' }}>Result</div>
                         <div style={{ flex: '1 1 15%', textAlign: 'center' }}>Unit</div>
@@ -1404,9 +1462,9 @@ export function ReportsPage() {
                       const hasParams = (target.test?.parameterDefinitions?.length ?? 0) > 0;
 
                       return (
-                        <div key={target.id} style={{
-                          marginBottom: isPanel ? 4 : 24,
-                          padding: isPanel ? '8px 16px' : 0,
+                        <div key={target.id} className={isPanel ? 'panel-entry-grid-row' : undefined} style={{
+                          marginBottom: isPanel ? 0 : 16,
+                          padding: isPanel ? undefined : 0,
                           borderBottom: isPanel && idx < targetItems.length - 1 ? (isDark ? '1px solid rgba(255,255,255,0.05)' : '1px solid #f0f0f0') : 'none'
                         }}>
                           <div style={{ display: 'flex', alignItems: 'flex-start', flexWrap: 'wrap' }}>
@@ -1462,13 +1520,16 @@ export function ReportsPage() {
 
                           {/* Parameters */}
                           {hasParams && (
-                            <div style={{
+                            <div
+                              className="panel-entry-params"
+                              style={{
                               marginTop: isPanel ? 12 : 16,
                               padding: 16,
                               backgroundColor: isDark ? 'rgba(255,255,255,0.02)' : '#fafafa',
                               borderRadius: 8,
                               border: isDark ? '1px solid rgba(255,255,255,0.05)' : '1px solid #f0f0f0'
-                            }}>
+                              }}
+                            >
                               <Row gutter={[16, 12]}>
                                 {target.test?.parameterDefinitions!.map((def) => (
                                   <Col key={def.code} xs={24} sm={12}>
@@ -1491,7 +1552,7 @@ export function ReportsPage() {
                 );
               })()}
 
-              <Form.Item style={{ marginBottom: 0, marginTop: 24 }}>
+              <Form.Item className="panel-entry-footer" style={{ marginBottom: 0, marginTop: 12 }}>
                 <Space style={{ width: '100%', justifyContent: 'flex-end' }} size="middle">
                   <Button
                     onClick={() => {
@@ -1499,11 +1560,10 @@ export function ReportsPage() {
                       setEditResultContext(null);
                       editResultForm.resetFields();
                     }}
-                    size="large"
                   >
                     Cancel
                   </Button>
-                  <Button type="primary" htmlType="submit" loading={savingResult} size="large">
+                  <Button type="primary" htmlType="submit" loading={savingResult}>
                     Save Result
                   </Button>
                 </Space>
@@ -1513,7 +1573,10 @@ export function ReportsPage() {
         )}
       </Modal >
 
-      <Title level={2}>Reports</Title>
+      <Title level={2} style={{ marginTop: 0, marginBottom: 10 }}>
+        Reports
+      </Title>
+      <WorklistStatusDashboard stats={worklistStats} style={{ marginBottom: 12 }} />
       <Card>
         <Space direction="vertical" style={{ width: '100%' }} size="large">
           <Space wrap>

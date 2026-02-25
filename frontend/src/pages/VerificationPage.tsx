@@ -12,9 +12,6 @@ import {
   Typography,
   Tooltip,
   Modal,
-  Statistic,
-  Row,
-  Col,
   Descriptions,
   Badge,
 } from 'antd';
@@ -23,7 +20,6 @@ import {
   CloseCircleOutlined,
   SearchOutlined,
   ReloadOutlined,
-  ExclamationCircleOutlined,
   UserOutlined,
 } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
@@ -41,6 +37,7 @@ import {
   OrderTestStatus,
   ResultFlag,
 } from '../api/client';
+import { WorklistStatusDashboard } from '../components/WorklistStatusDashboard';
 
 const { Title, Text } = Typography;
 const { Search } = Input;
@@ -554,51 +551,35 @@ export function VerificationPage() {
           padding-top: 3px !important;
           padding-bottom: 3px !important;
         }
+        .verification-review-modal .ant-modal {
+          max-width: calc(100vw - 24px) !important;
+        }
+        .verification-review-modal .ant-modal-content {
+          border-radius: 12px;
+          overflow: hidden;
+        }
+        .verification-review-modal .ant-modal-header {
+          padding: 12px 16px;
+          margin-bottom: 0;
+        }
+        .verification-review-modal .ant-modal-body {
+          padding: 10px 12px 12px !important;
+          max-height: calc(100vh - 160px);
+          overflow-y: auto;
+        }
+        @media (max-width: 992px) {
+          .verification-review-modal .ant-modal {
+            margin: 12px auto;
+          }
+          .verification-review-modal .ant-modal-body {
+            max-height: calc(100vh - 132px);
+          }
+        }
       `}</style>
-      <Title level={2}>Verification Queue</Title>
-
-      {/* Stats */}
-      <Row gutter={16} style={{ marginBottom: 16 }}>
-        <Col span={6}>
-          <Card>
-            <Statistic
-              title="Pending Verification"
-              value={stats?.completed || 0}
-              valueStyle={{ color: '#1890ff' }}
-              prefix={<ExclamationCircleOutlined />}
-            />
-          </Card>
-        </Col>
-        <Col span={6}>
-          <Card>
-            <Statistic
-              title="Verified Today"
-              value={stats?.verified || 0}
-              valueStyle={{ color: '#52c41a' }}
-              prefix={<CheckCircleOutlined />}
-            />
-          </Card>
-        </Col>
-        <Col span={6}>
-          <Card>
-            <Statistic
-              title="Rejected"
-              value={stats?.rejected || 0}
-              valueStyle={{ color: '#ff4d4f' }}
-              prefix={<CloseCircleOutlined />}
-            />
-          </Card>
-        </Col>
-        <Col span={6}>
-          <Card>
-            <Statistic
-              title="Pending Results"
-              value={stats?.pending || 0}
-              valueStyle={{ color: '#faad14' }}
-            />
-          </Card>
-        </Col>
-      </Row>
+      <Title level={2} style={{ marginTop: 0, marginBottom: 10 }}>
+        Verification Queue
+      </Title>
+      <WorklistStatusDashboard stats={stats} style={{ marginBottom: 12 }} />
 
       <Card>
         {/* Filters */}
@@ -670,7 +651,8 @@ export function VerificationPage() {
           setReviewGroup(null);
         }}
         footer={null}
-        width={1100}
+        width={1040}
+        className="verification-review-modal"
       >
         {reviewGroup && (
           <Space direction="vertical" style={{ width: '100%' }} size="middle">
@@ -709,7 +691,7 @@ export function VerificationPage() {
               dataSource={reviewGroup.items}
               columns={reviewTableColumns}
               tableLayout="fixed"
-              scroll={{ x: 980 }}
+              scroll={{ x: 980, y: 460 }}
             />
           </Space>
         )}

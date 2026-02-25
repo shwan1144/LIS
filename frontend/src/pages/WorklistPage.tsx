@@ -16,13 +16,11 @@ import {
   Tooltip,
   Typography,
   message,
-  Statistic,
 } from 'antd';
 import {
   SearchOutlined,
   CheckCircleOutlined,
   CloseCircleOutlined,
-  ExclamationCircleOutlined,
   ReloadOutlined,
   CheckOutlined,
   UserOutlined,
@@ -45,6 +43,7 @@ import {
   type DepartmentDto,
 } from '../api/client';
 import { useTheme } from '../contexts/ThemeContext';
+import { WorklistStatusDashboard } from '../components/WorklistStatusDashboard';
 
 const { Title, Text } = Typography;
 
@@ -859,52 +858,56 @@ export function WorklistPage() {
           padding-top: 3px !important;
           padding-bottom: 3px !important;
         }
+        .panel-entry-modal .ant-modal {
+          max-width: calc(100vw - 24px) !important;
+        }
+        .panel-entry-modal .ant-modal-content {
+          border-radius: 12px;
+          overflow: hidden;
+        }
+        .panel-entry-modal .ant-modal-header {
+          padding: 12px 16px;
+          margin-bottom: 0;
+        }
+        .panel-entry-modal .ant-modal-body {
+          padding: 8px 12px 12px !important;
+          max-height: calc(100vh - 160px);
+          overflow-y: auto;
+        }
+        .panel-entry-modal .panel-entry-summary {
+          margin-bottom: 12px;
+          padding: 10px 12px;
+          border-radius: 8px;
+        }
+        .panel-entry-modal .panel-entry-grid-head {
+          padding: 8px 12px !important;
+          margin-bottom: 8px !important;
+        }
+        .panel-entry-modal .panel-entry-grid-row {
+          padding: 6px 12px !important;
+          margin-bottom: 2px !important;
+        }
+        .panel-entry-modal .panel-entry-grid-row .ant-form-item {
+          margin-bottom: 0;
+        }
+        .panel-entry-modal .panel-entry-params {
+          margin-top: 8px !important;
+          padding: 10px 12px !important;
+        }
+        .panel-entry-modal .panel-entry-footer {
+          margin-top: 12px !important;
+        }
+        @media (max-width: 992px) {
+          .panel-entry-modal .ant-modal {
+            margin: 12px auto;
+          }
+          .panel-entry-modal .ant-modal-body {
+            max-height: calc(100vh - 132px);
+          }
+        }
       `}</style>
-      <Title level={4} style={{ marginBottom: 16 }}>Worklist</Title>
-
-      {/* Stats */}
-      {stats && (
-        <Row gutter={16} style={{ marginBottom: 16 }}>
-          <Col span={6}>
-            <Card size="small">
-              <Statistic
-                title="Pending"
-                value={stats.pending}
-                valueStyle={{ color: '#1890ff' }}
-                prefix={<ExclamationCircleOutlined />}
-              />
-            </Card>
-          </Col>
-          <Col span={6}>
-            <Card size="small">
-              <Statistic
-                title="Completed"
-                value={stats.completed}
-                valueStyle={{ color: '#faad14' }}
-              />
-            </Card>
-          </Col>
-          <Col span={6}>
-            <Card size="small">
-              <Statistic
-                title="Verified"
-                value={stats.verified}
-                valueStyle={{ color: '#52c41a' }}
-                prefix={<CheckCircleOutlined />}
-              />
-            </Card>
-          </Col>
-          <Col span={6}>
-            <Card size="small">
-              <Statistic
-                title="Rejected"
-                value={stats.rejected}
-                valueStyle={{ color: '#ff4d4f' }}
-              />
-            </Card>
-          </Col>
-        </Row>
-      )}
+      <Title level={4} style={{ marginTop: 0, marginBottom: 10 }}>Worklist</Title>
+      <WorklistStatusDashboard stats={stats} style={{ marginBottom: 12 }} />
 
       <Card>
         {/* Filters */}
@@ -1001,24 +1004,23 @@ export function WorklistPage() {
         open={resultModalOpen}
         onCancel={handleCloseResultModal}
         footer={null}
-        width={720}
+        width={920}
+        className="panel-entry-modal"
         styles={{
           body: { paddingTop: 8 },
           header: { borderBottom: isDark ? '1px solid rgba(255,255,255,0.08)' : '1px solid #f0f0f0' },
         }}
       >
         {editingItem && (
-          <div style={{ padding: '4px 0' }}>
+          <div>
             <div
+              className="panel-entry-summary"
               style={{
-                marginBottom: 24,
-                padding: 16,
                 backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : '#fafafa',
                 border: isDark ? '1px solid rgba(255,255,255,0.08)' : '1px solid #f0f0f0',
-                borderRadius: 10,
               }}
             >
-              <Row gutter={[24, 8]}>
+              <Row gutter={[12, 4]}>
                 <Col xs={24} sm={12}>
                   <Text type="secondary" style={{ fontSize: 12 }}>Patient</Text>
                   <div style={{ marginTop: 2 }}><Text strong>{editingItem.patientName}</Text></div>
@@ -1058,18 +1060,19 @@ export function WorklistPage() {
                 return (
                   <>
                     {isPanel && (
-                      <div style={{
+                      <div
+                        className="panel-entry-grid-head"
+                        style={{
                         display: 'flex',
-                        padding: '10px 16px',
                         backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : '#f5f5f5',
                         borderRadius: '6px 6px 0 0',
                         borderBottom: isDark ? '1px solid rgba(255,255,255,0.1)' : '1px solid #e8e8e8',
-                        marginBottom: 16,
                         fontWeight: 600,
                         fontSize: 12,
                         textTransform: 'uppercase',
                         letterSpacing: '0.5px'
-                      }}>
+                      }}
+                      >
                         <div style={{ flex: '1 1 30%' }}>Test</div>
                         <div style={{ flex: '1 1 30%' }}>Result</div>
                         <div style={{ flex: '1 1 15%', textAlign: 'center' }}>Unit</div>
@@ -1081,9 +1084,9 @@ export function WorklistPage() {
                       const hasParams = (target.parameterDefinitions?.length ?? 0) > 0;
 
                       return (
-                        <div key={target.id} style={{
-                          marginBottom: isPanel ? 4 : 24,
-                          padding: isPanel ? '8px 16px' : 0,
+                        <div key={target.id} className={isPanel ? 'panel-entry-grid-row' : undefined} style={{
+                          marginBottom: isPanel ? 0 : 16,
+                          padding: isPanel ? undefined : 0,
                           borderBottom: isPanel && idx < targetItems.length - 1 ? (isDark ? '1px solid rgba(255,255,255,0.05)' : '1px solid #f0f0f0') : 'none'
                         }}>
                           <div style={{ display: 'flex', alignItems: 'flex-start', flexWrap: 'wrap' }}>
@@ -1162,13 +1165,16 @@ export function WorklistPage() {
 
                           {/* Parameters */}
                           {hasParams && (
-                            <div style={{
+                            <div
+                              className="panel-entry-params"
+                              style={{
                               marginTop: isPanel ? 12 : 16,
                               padding: 16,
                               backgroundColor: isDark ? 'rgba(255,255,255,0.02)' : '#fafafa',
                               borderRadius: 8,
                               border: isDark ? '1px solid rgba(255,255,255,0.05)' : '1px solid #f0f0f0'
-                            }}>
+                              }}
+                            >
                               <Row gutter={[16, 12]}>
                                 {target.parameterDefinitions!.map((def) => (
                                   <Col key={def.code} xs={24} sm={12}>
@@ -1202,10 +1208,10 @@ export function WorklistPage() {
                   </>
                 );
               })()}
-              <Form.Item style={{ marginBottom: 0, marginTop: 24 }}>
+              <Form.Item className="panel-entry-footer" style={{ marginBottom: 0, marginTop: 12 }}>
                 <Space style={{ width: '100%', justifyContent: 'flex-end' }} size="middle">
-                  <Button onClick={handleCloseResultModal} size="large">Cancel</Button>
-                  <Button type="primary" htmlType="submit" loading={submitting} size="large">
+                  <Button onClick={handleCloseResultModal}>Cancel</Button>
+                  <Button type="primary" htmlType="submit" loading={submitting}>
                     Save Result
                   </Button>
                 </Space>
