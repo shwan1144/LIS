@@ -150,6 +150,8 @@ export function OrdersPage() {
   const [listQuery, setListQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'ALL' | OrderStatus>('ALL');
   const [draftPatient, setDraftPatient] = useState<PatientDto | null>(null);
+  /** When set, loadOrderHistory will select the draft row for this patient (e.g. after "Go to order" from Patients). Cleared after use. */
+  const [focusDraftPatientId, setFocusDraftPatientId] = useState<string | null>(null);
 
   const [departments, setDepartments] = useState<DepartmentDto[]>([]);
   const [testOptions, setTestOptions] = useState<TestDto[]>([]);
@@ -231,23 +233,28 @@ export function OrdersPage() {
 
         setPatientList(rows);
         setListTotal(result.total ?? 0);
-        setSelectedRowId((current) => {
-          if (options?.focusOrderId) {
-            const focusedRow = rows.find(
-              (row) => row.createdOrder?.id === options.focusOrderId,
-            );
-            if (focusedRow) {
-              return focusedRow.rowId;
+        if (effectiveDraft && focusDraftPatientId === effectiveDraft.id) {
+          setSelectedRowId(`draft-${effectiveDraft.id}`);
+          setFocusDraftPatientId(null);
+        } else {
+          setSelectedRowId((current) => {
+            if (options?.focusOrderId) {
+              const focusedRow = rows.find(
+                (row) => row.createdOrder?.id === options.focusOrderId,
+              );
+              if (focusedRow) {
+                return focusedRow.rowId;
+              }
             }
-          }
-          if (current && rows.some((row) => row.rowId === current)) {
-            return current;
-          }
-          if (effectiveDraft) {
-            return `draft-${effectiveDraft.id}`;
-          }
-          return rows[0]?.rowId ?? null;
-        });
+            if (current && rows.some((row) => row.rowId === current)) {
+              return current;
+            }
+            if (effectiveDraft) {
+              return `draft-${effectiveDraft.id}`;
+            }
+            return rows[0]?.rowId ?? null;
+          });
+        }
       } catch {
         message.error('Failed to load order history');
         if (effectiveDraft) {
@@ -258,6 +265,9 @@ export function OrdersPage() {
               createdOrder: null,
             },
           ]);
+          if (focusDraftPatientId === effectiveDraft.id) {
+            setFocusDraftPatientId(null);
+          }
           setSelectedRowId(`draft-${effectiveDraft.id}`);
         } else {
           setPatientList([]);
@@ -268,7 +278,7 @@ export function OrdersPage() {
         setWorklistLoading(false);
       }
     },
-    [draftPatient, listPage, listQuery, statusFilter],
+    [draftPatient, listPage, listQuery, statusFilter, focusDraftPatientId],
   );
 
   useEffect(() => {
@@ -278,6 +288,7 @@ export function OrdersPage() {
       return;
     }
 
+    setFocusDraftPatientId(patientIdFromState);
     let cancelled = false;
     setPatientLoading(true);
     getPatient(patientIdFromState)
