@@ -1,17 +1,42 @@
-import { Controller, Get, Query, UseGuards, Req } from '@nestjs/common';
+import {
+  BadRequestException,
+  Controller,
+  Get,
+  Query,
+  UseGuards,
+  Req,
+  Res,
+} from '@nestjs/common';
 import { DashboardService, DashboardKpis, OrdersTrendPoint, StatisticsDto } from './dashboard.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
+import { StatisticsQueryDto } from './dto/statistics-query.dto';
+import { Response } from 'express';
+import { AuditService } from '../audit/audit.service';
+import { AuditAction } from '../entities/audit-log.entity';
+import { buildLabActorContext } from '../types/lab-actor-context';
 
 interface RequestWithUser {
-  user: { userId: string; username: string; labId: string; role?: string };
+  user: {
+    userId?: string | null;
+    username: string;
+    labId: string;
+    role?: string;
+    platformUserId?: string | null;
+    isImpersonation?: boolean;
+  };
+  ip?: string;
+  headers?: Record<string, string | string[] | undefined>;
 }
 
 @Controller('dashboard')
 @UseGuards(JwtAuthGuard)
 export class DashboardController {
-  constructor(private readonly dashboardService: DashboardService) {}
+  constructor(
+    private readonly dashboardService: DashboardService,
+    private readonly auditService: AuditService,
+  ) {}
 
   @Get('kpis')
   async getKpis(@Req() req: RequestWithUser): Promise<DashboardKpis> {
@@ -46,27 +71,91 @@ export class DashboardController {
   @Roles('LAB_ADMIN', 'SUPER_ADMIN')
   async getStatistics(
     @Req() req: RequestWithUser,
-    @Query('startDate') startDateStr?: string,
-    @Query('endDate') endDateStr?: string,
+    @Query() query: StatisticsQueryDto,
   ): Promise<StatisticsDto> {
     const labId = req.user?.labId;
     if (!labId) {
       return this.emptyStatistics();
     }
-    const endDate = endDateStr ? new Date(endDateStr) : new Date();
-    endDate.setHours(23, 59, 59, 999);
-    const startDate = startDateStr ? new Date(startDateStr) : new Date(endDate);
-    if (!startDateStr) {
-      startDate.setDate(startDate.getDate() - 30);
+    const { startDate, endDate } = this.resolveRange(query.startDate, query.endDate);
+    return this.dashboardService.getStatistics(labId, startDate, endDate, {
+      shiftId: query.shiftId ?? null,
+      departmentId: query.departmentId ?? null,
+    });
+  }
+
+  @Get('statistics/pdf')
+  @UseGuards(RolesGuard)
+  @Roles('LAB_ADMIN', 'SUPER_ADMIN')
+  async getStatisticsPdf(
+    @Req() req: RequestWithUser,
+    @Query() query: StatisticsQueryDto,
+    @Res() res: Response,
+  ) {
+    const labId = req.user?.labId;
+    if (!labId) {
+      return res.status(401).json({ message: 'Lab ID not found in token' });
     }
-    startDate.setHours(0, 0, 0, 0);
-    return this.dashboardService.getStatistics(labId, startDate, endDate);
+
+    const { startDate, endDate } = this.resolveRange(query.startDate, query.endDate);
+    const shiftToken = query.shiftId ? this.toSafeFileToken(query.shiftId) : 'all';
+    const departmentToken = query.departmentId ? this.toSafeFileToken(query.departmentId) : 'all';
+    const fileName = `statistics-${this.formatDateLabel(startDate)}-to-${this.formatDateLabel(endDate)}-${shiftToken}-${departmentToken}.pdf`;
+    const actor = buildLabActorContext(req.user);
+
+    try {
+      const pdfBuffer = await this.dashboardService.generateStatisticsPdf(labId, startDate, endDate, {
+        shiftId: query.shiftId ?? null,
+        departmentId: query.departmentId ?? null,
+      });
+
+      const impersonationAudit =
+        actor.isImpersonation && actor.platformUserId
+          ? {
+              impersonation: {
+                active: true,
+                platformUserId: actor.platformUserId,
+              },
+            }
+          : {};
+
+      await this.auditService.log({
+        actorType: actor.actorType,
+        actorId: actor.actorId,
+        labId,
+        userId: actor.userId,
+        action: AuditAction.REPORT_EXPORT,
+        entityType: 'dashboard_statistics',
+        entityId: null,
+        description: 'Exported statistics PDF',
+        newValues: {
+          startDate: this.formatDateLabel(startDate),
+          endDate: this.formatDateLabel(endDate),
+          shiftId: query.shiftId ?? null,
+          departmentId: query.departmentId ?? null,
+          ...impersonationAudit,
+        },
+        ipAddress: req.ip ?? null,
+        userAgent: (req.headers?.['user-agent'] as string | undefined) ?? null,
+      });
+
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+      return res.send(pdfBuffer);
+    } catch (error) {
+      return res.status(500).json({
+        message: 'Failed to generate statistics PDF',
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+    }
   }
 
   private emptyStatistics(): StatisticsDto {
     return {
       orders: { total: 0, byStatus: {}, byShift: [] },
+      profit: 0,
       revenue: 0,
+      departmentTestTotal: 0,
       tests: { total: 0, byDepartment: [], byTest: [], byShift: [] },
       tat: {
         medianMinutes: null,
@@ -79,5 +168,43 @@ export class DashboardController {
       unmatched: { pending: 0, resolved: 0, discarded: 0, byReason: {} },
       instrumentWorkload: [],
     };
+  }
+
+  private resolveRange(
+    startDateStr?: string,
+    endDateStr?: string,
+  ): { startDate: Date; endDate: Date } {
+    const endDate = endDateStr ? new Date(endDateStr) : new Date();
+    if (Number.isNaN(endDate.getTime())) {
+      throw new BadRequestException('Invalid endDate');
+    }
+    endDate.setHours(23, 59, 59, 999);
+
+    const startDate = startDateStr ? new Date(startDateStr) : new Date(endDate);
+    if (Number.isNaN(startDate.getTime())) {
+      throw new BadRequestException('Invalid startDate');
+    }
+    if (!startDateStr) {
+      startDate.setDate(startDate.getDate() - 30);
+    }
+    startDate.setHours(0, 0, 0, 0);
+    if (startDate.getTime() > endDate.getTime()) {
+      throw new BadRequestException('startDate cannot be after endDate');
+    }
+    return { startDate, endDate };
+  }
+
+  private formatDateLabel(date: Date): string {
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, '0');
+    const d = String(date.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  }
+
+  private toSafeFileToken(value: string): string {
+    return value
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '') || 'all';
   }
 }

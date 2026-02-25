@@ -60,6 +60,7 @@ export declare class OrdersService {
     getNextOrderNumber(labId: string, shiftId: string | null): Promise<string>;
     private generateOrderNumber;
     private computeNextOrderNumber;
+    private getMaxOrderSequenceForDate;
     private getNextSequenceForScope;
     estimatePrice(labId: string, testIds: string[], shiftId?: string | null): Promise<{
         subtotal: number;

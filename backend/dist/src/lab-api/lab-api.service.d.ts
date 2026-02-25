@@ -47,6 +47,7 @@ export declare class LabApiService {
     private findExistingPatient;
     private generatePatientNumber;
     private generateOrderNumber;
+    private getMaxOrderSequenceForDate;
     private toResultFlag;
     private updateOrderStatusAfterResult;
     private getPatientLookupKeys;

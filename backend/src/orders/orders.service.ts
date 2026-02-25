@@ -16,7 +16,11 @@ import { Pricing } from '../entities/pricing.entity';
 import { TestComponent } from '../entities/test-component.entity';
 import { LabOrdersWorklist } from '../entities/lab-orders-worklist.entity';
 import { CreateOrderDto, CreateSampleDto } from './dto/create-order.dto';
-import { nextLabCounterValue, peekNextLabCounterValue } from '../database/lab-counter.util';
+import {
+  nextLabCounterValue,
+  nextLabCounterValueWithFloor,
+  peekNextLabCounterValue,
+} from '../database/lab-counter.util';
 
 export interface WorklistItemStored {
   rowId: string;
@@ -828,36 +832,58 @@ export class OrdersService {
    * Generates a unique order number stored in the database as orderNumber.
    * Uses same logic as getNextOrderNumber. First sample of the order gets this as barcode.
    */
-  private async generateOrderNumber(labId: string, shiftId: string | null): Promise<string> {
+  private async generateOrderNumber(labId: string, _shiftId: string | null): Promise<string> {
     const today = new Date();
     const yy = String(today.getFullYear() % 100).padStart(2, '0');
     const mm = String(today.getMonth() + 1).padStart(2, '0');
     const dd = String(today.getDate()).padStart(2, '0');
     const dateStr = `${yy}${mm}${dd}`;
-    const nextSeq = await nextLabCounterValue(this.orderRepo.manager, {
+    const floor = await this.getMaxOrderSequenceForDate(labId, dateStr);
+    const nextSeq = await nextLabCounterValueWithFloor(this.orderRepo.manager, {
       labId,
       counterType: 'ORDER_NUMBER',
       scopeKey: 'ORDER',
       date: today,
-      shiftId,
-    });
+      shiftId: null,
+    }, floor);
     return `${dateStr}${String(nextSeq).padStart(3, '0')}`;
   }
 
-  private async computeNextOrderNumber(labId: string, shiftId: string | null): Promise<string> {
+  private async computeNextOrderNumber(labId: string, _shiftId: string | null): Promise<string> {
     const today = new Date();
     const yy = String(today.getFullYear() % 100).padStart(2, '0');
     const mm = String(today.getMonth() + 1).padStart(2, '0');
     const dd = String(today.getDate()).padStart(2, '0');
     const dateStr = `${yy}${mm}${dd}`;
-    const nextSeq = await peekNextLabCounterValue(this.orderRepo.manager, {
+    const floor = await this.getMaxOrderSequenceForDate(labId, dateStr);
+    const counterNextSeq = await peekNextLabCounterValue(this.orderRepo.manager, {
       labId,
       counterType: 'ORDER_NUMBER',
       scopeKey: 'ORDER',
       date: today,
-      shiftId,
+      shiftId: null,
     });
+    const nextSeq = Math.max(counterNextSeq, floor + 1);
     return `${dateStr}${String(nextSeq).padStart(3, '0')}`;
+  }
+
+  private async getMaxOrderSequenceForDate(labId: string, datePrefix: string): Promise<number> {
+    const pattern = `^${datePrefix}[0-9]{3}$`;
+    const rows = await this.orderRepo.manager.query(
+      `
+        SELECT COALESCE(MAX(CAST(SUBSTRING("orderNumber" FROM 7 FOR 3) AS integer)), 0) AS "maxSeq"
+        FROM "orders"
+        WHERE "labId" = $1
+          AND "orderNumber" ~ $2
+      `,
+      [labId, pattern],
+    ) as Array<{ maxSeq: string | number | null }>;
+
+    const maxSeq = Number(rows?.[0]?.maxSeq ?? 0);
+    if (!Number.isFinite(maxSeq) || maxSeq < 0) {
+      return 0;
+    }
+    return Math.floor(maxSeq);
   }
 
   /**

@@ -319,21 +319,36 @@ let LabApiService = class LabApiService {
         const current = parseInt(maxValue.replace(/^P-/, ''), 10) || 0;
         return `P-${String(current + 1).padStart(6, '0')}`;
     }
-    async generateOrderNumber(manager, labId, shiftId) {
+    async generateOrderNumber(manager, labId, _shiftId) {
         const today = new Date();
         const yy = String(today.getFullYear() % 100).padStart(2, '0');
         const mm = String(today.getMonth() + 1).padStart(2, '0');
         const dd = String(today.getDate()).padStart(2, '0');
         const datePrefix = `${yy}${mm}${dd}`;
-        const seq = await (0, lab_counter_util_1.nextLabCounterValue)(manager, {
+        const floor = await this.getMaxOrderSequenceForDate(manager, labId, datePrefix);
+        const seq = await (0, lab_counter_util_1.nextLabCounterValueWithFloor)(manager, {
             labId,
             counterType: 'ORDER_NUMBER',
             scopeKey: 'ORDER',
             date: today,
-            shiftId,
-        });
+            shiftId: null,
+        }, floor);
         const sequence = String(seq).padStart(3, '0');
         return `${datePrefix}${sequence}`;
+    }
+    async getMaxOrderSequenceForDate(manager, labId, datePrefix) {
+        const pattern = `^${datePrefix}[0-9]{3}$`;
+        const rows = await manager.query(`
+        SELECT COALESCE(MAX(CAST(SUBSTRING("orderNumber" FROM 7 FOR 3) AS integer)), 0) AS "maxSeq"
+        FROM "orders"
+        WHERE "labId" = $1
+          AND "orderNumber" ~ $2
+      `, [labId, pattern]);
+        const maxSeq = Number(rows?.[0]?.maxSeq ?? 0);
+        if (!Number.isFinite(maxSeq) || maxSeq < 0) {
+            return 0;
+        }
+        return Math.floor(maxSeq);
     }
     toResultFlag(flag) {
         const value = (flag || '').trim().toUpperCase();

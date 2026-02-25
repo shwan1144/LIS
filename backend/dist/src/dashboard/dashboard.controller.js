@@ -18,9 +18,14 @@ const dashboard_service_1 = require("./dashboard.service");
 const jwt_auth_guard_1 = require("../auth/jwt-auth.guard");
 const roles_guard_1 = require("../auth/roles.guard");
 const roles_decorator_1 = require("../auth/roles.decorator");
+const statistics_query_dto_1 = require("./dto/statistics-query.dto");
+const audit_service_1 = require("../audit/audit.service");
+const audit_log_entity_1 = require("../entities/audit-log.entity");
+const lab_actor_context_1 = require("../types/lab-actor-context");
 let DashboardController = class DashboardController {
-    constructor(dashboardService) {
+    constructor(dashboardService, auditService) {
         this.dashboardService = dashboardService;
+        this.auditService = auditService;
     }
     async getKpis(req) {
         const labId = req.user?.labId;
@@ -43,24 +48,76 @@ let DashboardController = class DashboardController {
             : [];
         return { data };
     }
-    async getStatistics(req, startDateStr, endDateStr) {
+    async getStatistics(req, query) {
         const labId = req.user?.labId;
         if (!labId) {
             return this.emptyStatistics();
         }
-        const endDate = endDateStr ? new Date(endDateStr) : new Date();
-        endDate.setHours(23, 59, 59, 999);
-        const startDate = startDateStr ? new Date(startDateStr) : new Date(endDate);
-        if (!startDateStr) {
-            startDate.setDate(startDate.getDate() - 30);
+        const { startDate, endDate } = this.resolveRange(query.startDate, query.endDate);
+        return this.dashboardService.getStatistics(labId, startDate, endDate, {
+            shiftId: query.shiftId ?? null,
+            departmentId: query.departmentId ?? null,
+        });
+    }
+    async getStatisticsPdf(req, query, res) {
+        const labId = req.user?.labId;
+        if (!labId) {
+            return res.status(401).json({ message: 'Lab ID not found in token' });
         }
-        startDate.setHours(0, 0, 0, 0);
-        return this.dashboardService.getStatistics(labId, startDate, endDate);
+        const { startDate, endDate } = this.resolveRange(query.startDate, query.endDate);
+        const shiftToken = query.shiftId ? this.toSafeFileToken(query.shiftId) : 'all';
+        const departmentToken = query.departmentId ? this.toSafeFileToken(query.departmentId) : 'all';
+        const fileName = `statistics-${this.formatDateLabel(startDate)}-to-${this.formatDateLabel(endDate)}-${shiftToken}-${departmentToken}.pdf`;
+        const actor = (0, lab_actor_context_1.buildLabActorContext)(req.user);
+        try {
+            const pdfBuffer = await this.dashboardService.generateStatisticsPdf(labId, startDate, endDate, {
+                shiftId: query.shiftId ?? null,
+                departmentId: query.departmentId ?? null,
+            });
+            const impersonationAudit = actor.isImpersonation && actor.platformUserId
+                ? {
+                    impersonation: {
+                        active: true,
+                        platformUserId: actor.platformUserId,
+                    },
+                }
+                : {};
+            await this.auditService.log({
+                actorType: actor.actorType,
+                actorId: actor.actorId,
+                labId,
+                userId: actor.userId,
+                action: audit_log_entity_1.AuditAction.REPORT_EXPORT,
+                entityType: 'dashboard_statistics',
+                entityId: null,
+                description: 'Exported statistics PDF',
+                newValues: {
+                    startDate: this.formatDateLabel(startDate),
+                    endDate: this.formatDateLabel(endDate),
+                    shiftId: query.shiftId ?? null,
+                    departmentId: query.departmentId ?? null,
+                    ...impersonationAudit,
+                },
+                ipAddress: req.ip ?? null,
+                userAgent: req.headers?.['user-agent'] ?? null,
+            });
+            res.setHeader('Content-Type', 'application/pdf');
+            res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+            return res.send(pdfBuffer);
+        }
+        catch (error) {
+            return res.status(500).json({
+                message: 'Failed to generate statistics PDF',
+                error: error instanceof Error ? error.message : 'Unknown error',
+            });
+        }
     }
     emptyStatistics() {
         return {
             orders: { total: 0, byStatus: {}, byShift: [] },
+            profit: 0,
             revenue: 0,
+            departmentTestTotal: 0,
             tests: { total: 0, byDepartment: [], byTest: [], byShift: [] },
             tat: {
                 medianMinutes: null,
@@ -73,6 +130,37 @@ let DashboardController = class DashboardController {
             unmatched: { pending: 0, resolved: 0, discarded: 0, byReason: {} },
             instrumentWorkload: [],
         };
+    }
+    resolveRange(startDateStr, endDateStr) {
+        const endDate = endDateStr ? new Date(endDateStr) : new Date();
+        if (Number.isNaN(endDate.getTime())) {
+            throw new common_1.BadRequestException('Invalid endDate');
+        }
+        endDate.setHours(23, 59, 59, 999);
+        const startDate = startDateStr ? new Date(startDateStr) : new Date(endDate);
+        if (Number.isNaN(startDate.getTime())) {
+            throw new common_1.BadRequestException('Invalid startDate');
+        }
+        if (!startDateStr) {
+            startDate.setDate(startDate.getDate() - 30);
+        }
+        startDate.setHours(0, 0, 0, 0);
+        if (startDate.getTime() > endDate.getTime()) {
+            throw new common_1.BadRequestException('startDate cannot be after endDate');
+        }
+        return { startDate, endDate };
+    }
+    formatDateLabel(date) {
+        const y = date.getFullYear();
+        const m = String(date.getMonth() + 1).padStart(2, '0');
+        const d = String(date.getDate()).padStart(2, '0');
+        return `${y}-${m}-${d}`;
+    }
+    toSafeFileToken(value) {
+        return value
+            .toLowerCase()
+            .replace(/[^a-z0-9]+/g, '-')
+            .replace(/^-+|-+$/g, '') || 'all';
     }
 };
 exports.DashboardController = DashboardController;
@@ -96,15 +184,26 @@ __decorate([
     (0, common_1.UseGuards)(roles_guard_1.RolesGuard),
     (0, roles_decorator_1.Roles)('LAB_ADMIN', 'SUPER_ADMIN'),
     __param(0, (0, common_1.Req)()),
-    __param(1, (0, common_1.Query)('startDate')),
-    __param(2, (0, common_1.Query)('endDate')),
+    __param(1, (0, common_1.Query)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [Object, String, String]),
+    __metadata("design:paramtypes", [Object, statistics_query_dto_1.StatisticsQueryDto]),
     __metadata("design:returntype", Promise)
 ], DashboardController.prototype, "getStatistics", null);
+__decorate([
+    (0, common_1.Get)('statistics/pdf'),
+    (0, common_1.UseGuards)(roles_guard_1.RolesGuard),
+    (0, roles_decorator_1.Roles)('LAB_ADMIN', 'SUPER_ADMIN'),
+    __param(0, (0, common_1.Req)()),
+    __param(1, (0, common_1.Query)()),
+    __param(2, (0, common_1.Res)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, statistics_query_dto_1.StatisticsQueryDto, Object]),
+    __metadata("design:returntype", Promise)
+], DashboardController.prototype, "getStatisticsPdf", null);
 exports.DashboardController = DashboardController = __decorate([
     (0, common_1.Controller)('dashboard'),
     (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
-    __metadata("design:paramtypes", [dashboard_service_1.DashboardService])
+    __metadata("design:paramtypes", [dashboard_service_1.DashboardService,
+        audit_service_1.AuditService])
 ], DashboardController);
 //# sourceMappingURL=dashboard.controller.js.map

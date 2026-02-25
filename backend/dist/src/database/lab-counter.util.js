@@ -1,6 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.nextLabCounterValue = nextLabCounterValue;
+exports.nextLabCounterValueWithFloor = nextLabCounterValueWithFloor;
 exports.peekNextLabCounterValue = peekNextLabCounterValue;
 function toLocalDateKey(date) {
     const year = date.getFullYear();
@@ -8,12 +9,22 @@ function toLocalDateKey(date) {
     const day = String(date.getDate()).padStart(2, '0');
     return `${year}-${month}-${day}`;
 }
+function normalizeFloorValue(value) {
+    if (!Number.isFinite(value) || value < 0) {
+        return 0;
+    }
+    return Math.floor(value);
+}
 async function nextLabCounterValue(manager, input) {
+    return nextLabCounterValueWithFloor(manager, input, 0);
+}
+async function nextLabCounterValueWithFloor(manager, input, floorValue) {
     const date = input.date ?? new Date();
     const dateKey = toLocalDateKey(date);
     const scopeKey = (input.scopeKey ?? '').trim() || '__default__';
     const shiftId = input.shiftId ?? null;
     const shiftScopeKey = shiftId ?? '';
+    const floor = normalizeFloorValue(floorValue);
     const rows = await manager.query(`
       INSERT INTO "lab_counters" (
         "labId",
@@ -24,14 +35,14 @@ async function nextLabCounterValue(manager, input) {
         "shiftScopeKey",
         "value"
       )
-      VALUES ($1, $2, $3, $4, $5, $6, 1)
+      VALUES ($1, $2, $3, $4, $5, $6, $7 + 1)
       ON CONFLICT ("labId", "counterType", "scopeKey", "dateKey", "shiftScopeKey")
       DO UPDATE
-        SET "value" = "lab_counters"."value" + 1,
+        SET "value" = GREATEST("lab_counters"."value", $7) + 1,
             "shiftId" = EXCLUDED."shiftId",
             "updatedAt" = CURRENT_TIMESTAMP
       RETURNING "value"
-    `, [input.labId, input.counterType, scopeKey, dateKey, shiftId, shiftScopeKey]);
+    `, [input.labId, input.counterType, scopeKey, dateKey, shiftId, shiftScopeKey, floor]);
     const value = Number(rows?.[0]?.value);
     if (!Number.isFinite(value) || value <= 0) {
         throw new Error(`Failed to increment lab counter ${input.counterType} for lab ${input.labId}`);

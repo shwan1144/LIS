@@ -588,35 +588,52 @@ let OrdersService = class OrdersService {
     async getNextOrderNumber(labId, shiftId) {
         return this.computeNextOrderNumber(labId, shiftId);
     }
-    async generateOrderNumber(labId, shiftId) {
+    async generateOrderNumber(labId, _shiftId) {
         const today = new Date();
         const yy = String(today.getFullYear() % 100).padStart(2, '0');
         const mm = String(today.getMonth() + 1).padStart(2, '0');
         const dd = String(today.getDate()).padStart(2, '0');
         const dateStr = `${yy}${mm}${dd}`;
-        const nextSeq = await (0, lab_counter_util_1.nextLabCounterValue)(this.orderRepo.manager, {
+        const floor = await this.getMaxOrderSequenceForDate(labId, dateStr);
+        const nextSeq = await (0, lab_counter_util_1.nextLabCounterValueWithFloor)(this.orderRepo.manager, {
             labId,
             counterType: 'ORDER_NUMBER',
             scopeKey: 'ORDER',
             date: today,
-            shiftId,
-        });
+            shiftId: null,
+        }, floor);
         return `${dateStr}${String(nextSeq).padStart(3, '0')}`;
     }
-    async computeNextOrderNumber(labId, shiftId) {
+    async computeNextOrderNumber(labId, _shiftId) {
         const today = new Date();
         const yy = String(today.getFullYear() % 100).padStart(2, '0');
         const mm = String(today.getMonth() + 1).padStart(2, '0');
         const dd = String(today.getDate()).padStart(2, '0');
         const dateStr = `${yy}${mm}${dd}`;
-        const nextSeq = await (0, lab_counter_util_1.peekNextLabCounterValue)(this.orderRepo.manager, {
+        const floor = await this.getMaxOrderSequenceForDate(labId, dateStr);
+        const counterNextSeq = await (0, lab_counter_util_1.peekNextLabCounterValue)(this.orderRepo.manager, {
             labId,
             counterType: 'ORDER_NUMBER',
             scopeKey: 'ORDER',
             date: today,
-            shiftId,
+            shiftId: null,
         });
+        const nextSeq = Math.max(counterNextSeq, floor + 1);
         return `${dateStr}${String(nextSeq).padStart(3, '0')}`;
+    }
+    async getMaxOrderSequenceForDate(labId, datePrefix) {
+        const pattern = `^${datePrefix}[0-9]{3}$`;
+        const rows = await this.orderRepo.manager.query(`
+        SELECT COALESCE(MAX(CAST(SUBSTRING("orderNumber" FROM 7 FOR 3) AS integer)), 0) AS "maxSeq"
+        FROM "orders"
+        WHERE "labId" = $1
+          AND "orderNumber" ~ $2
+      `, [labId, pattern]);
+        const maxSeq = Number(rows?.[0]?.maxSeq ?? 0);
+        if (!Number.isFinite(maxSeq) || maxSeq < 0) {
+            return 0;
+        }
+        return Math.floor(maxSeq);
     }
     async getNextSequenceForScope(labId, sequenceResetBy, shiftId, scopeKey, labelSequenceBy) {
         const counterType = labelSequenceBy === 'department' ? 'SAMPLE_SEQUENCE_DEPARTMENT' : 'SAMPLE_SEQUENCE_TUBE';

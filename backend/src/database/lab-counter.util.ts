@@ -15,15 +15,31 @@ function toLocalDateKey(date: Date): string {
   return `${year}-${month}-${day}`;
 }
 
+function normalizeFloorValue(value: number): number {
+  if (!Number.isFinite(value) || value < 0) {
+    return 0;
+  }
+  return Math.floor(value);
+}
+
 export async function nextLabCounterValue(
   manager: EntityManager,
   input: LabCounterNextValueInput,
+): Promise<number> {
+  return nextLabCounterValueWithFloor(manager, input, 0);
+}
+
+export async function nextLabCounterValueWithFloor(
+  manager: EntityManager,
+  input: LabCounterNextValueInput,
+  floorValue: number,
 ): Promise<number> {
   const date = input.date ?? new Date();
   const dateKey = toLocalDateKey(date);
   const scopeKey = (input.scopeKey ?? '').trim() || '__default__';
   const shiftId = input.shiftId ?? null;
   const shiftScopeKey = shiftId ?? '';
+  const floor = normalizeFloorValue(floorValue);
 
   const rows = await manager.query(
     `
@@ -36,15 +52,15 @@ export async function nextLabCounterValue(
         "shiftScopeKey",
         "value"
       )
-      VALUES ($1, $2, $3, $4, $5, $6, 1)
+      VALUES ($1, $2, $3, $4, $5, $6, $7 + 1)
       ON CONFLICT ("labId", "counterType", "scopeKey", "dateKey", "shiftScopeKey")
       DO UPDATE
-        SET "value" = "lab_counters"."value" + 1,
+        SET "value" = GREATEST("lab_counters"."value", $7) + 1,
             "shiftId" = EXCLUDED."shiftId",
             "updatedAt" = CURRENT_TIMESTAMP
       RETURNING "value"
     `,
-    [input.labId, input.counterType, scopeKey, dateKey, shiftId, shiftScopeKey],
+    [input.labId, input.counterType, scopeKey, dateKey, shiftId, shiftScopeKey, floor],
   ) as Array<{ value: string | number }>;
 
   const value = Number(rows?.[0]?.value);

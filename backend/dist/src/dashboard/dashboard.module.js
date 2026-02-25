@@ -11,6 +11,10 @@ const common_1 = require("@nestjs/common");
 const typeorm_1 = require("@nestjs/typeorm");
 const patient_entity_1 = require("../entities/patient.entity");
 const order_test_entity_1 = require("../entities/order-test.entity");
+const order_entity_1 = require("../entities/order.entity");
+const lab_entity_1 = require("../entities/lab.entity");
+const shift_entity_1 = require("../entities/shift.entity");
+const department_entity_1 = require("../entities/department.entity");
 const dashboard_service_1 = require("./dashboard.service");
 const dashboard_controller_1 = require("./dashboard.controller");
 const orders_module_1 = require("../orders/orders.module");
@@ -21,7 +25,12 @@ let DashboardModule = class DashboardModule {
 exports.DashboardModule = DashboardModule;
 exports.DashboardModule = DashboardModule = __decorate([
     (0, common_1.Module)({
-        imports: [typeorm_1.TypeOrmModule.forFeature([patient_entity_1.Patient, order_test_entity_1.OrderTest]), orders_module_1.OrdersModule, unmatched_module_1.UnmatchedModule, auth_module_1.AuthModule],
+        imports: [
+            typeorm_1.TypeOrmModule.forFeature([patient_entity_1.Patient, order_test_entity_1.OrderTest, order_entity_1.Order, lab_entity_1.Lab, shift_entity_1.Shift, department_entity_1.Department]),
+            orders_module_1.OrdersModule,
+            unmatched_module_1.UnmatchedModule,
+            auth_module_1.AuthModule,
+        ],
         controllers: [dashboard_controller_1.DashboardController],
         providers: [dashboard_service_1.DashboardService],
         exports: [dashboard_service_1.DashboardService],

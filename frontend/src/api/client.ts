@@ -851,7 +851,9 @@ export interface StatisticsDto {
     byStatus: Record<string, number>;
     byShift: { shiftId: string | null; shiftName: string; count: number }[];
   };
+  profit: number;
   revenue: number;
+  departmentTestTotal: number;
   tests: {
     total: number;
     byDepartment: { departmentId: string | null; departmentName: string; count: number }[];
@@ -882,8 +884,23 @@ export interface StatisticsDto {
 export async function getStatistics(params: {
   startDate?: string;
   endDate?: string;
+  shiftId?: string;
+  departmentId?: string;
 }): Promise<StatisticsDto> {
   const res = await api.get<StatisticsDto>('/dashboard/statistics', { params });
+  return res.data;
+}
+
+export async function downloadStatisticsPDF(params: {
+  startDate?: string;
+  endDate?: string;
+  shiftId?: string;
+  departmentId?: string;
+}): Promise<Blob> {
+  const res = await api.get('/dashboard/statistics/pdf', {
+    params,
+    responseType: 'blob',
+  });
   return res.data;
 }
 

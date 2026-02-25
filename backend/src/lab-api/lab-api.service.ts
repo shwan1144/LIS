@@ -26,7 +26,7 @@ import { LabActorContext } from '../types/lab-actor-context';
 import { CreateLabOrderDto } from './dto/create-lab-order.dto';
 import { EnterResultDto } from './dto/enter-result.dto';
 import { UpsertPatientDto } from './dto/upsert-patient.dto';
-import { nextLabCounterValue } from '../database/lab-counter.util';
+import { nextLabCounterValueWithFloor } from '../database/lab-counter.util';
 
 @Injectable()
 export class LabApiService {
@@ -398,22 +398,46 @@ export class LabApiService {
   private async generateOrderNumber(
     manager: EntityManager,
     labId: string,
-    shiftId: string | null,
+    _shiftId: string | null,
   ): Promise<string> {
     const today = new Date();
     const yy = String(today.getFullYear() % 100).padStart(2, '0');
     const mm = String(today.getMonth() + 1).padStart(2, '0');
     const dd = String(today.getDate()).padStart(2, '0');
     const datePrefix = `${yy}${mm}${dd}`;
-    const seq = await nextLabCounterValue(manager, {
+    const floor = await this.getMaxOrderSequenceForDate(manager, labId, datePrefix);
+    const seq = await nextLabCounterValueWithFloor(manager, {
       labId,
       counterType: 'ORDER_NUMBER',
       scopeKey: 'ORDER',
       date: today,
-      shiftId,
-    });
+      shiftId: null,
+    }, floor);
     const sequence = String(seq).padStart(3, '0');
     return `${datePrefix}${sequence}`;
+  }
+
+  private async getMaxOrderSequenceForDate(
+    manager: EntityManager,
+    labId: string,
+    datePrefix: string,
+  ): Promise<number> {
+    const pattern = `^${datePrefix}[0-9]{3}$`;
+    const rows = await manager.query(
+      `
+        SELECT COALESCE(MAX(CAST(SUBSTRING("orderNumber" FROM 7 FOR 3) AS integer)), 0) AS "maxSeq"
+        FROM "orders"
+        WHERE "labId" = $1
+          AND "orderNumber" ~ $2
+      `,
+      [labId, pattern],
+    ) as Array<{ maxSeq: string | number | null }>;
+
+    const maxSeq = Number(rows?.[0]?.maxSeq ?? 0);
+    if (!Number.isFinite(maxSeq) || maxSeq < 0) {
+      return 0;
+    }
+    return Math.floor(maxSeq);
   }
 
   private toResultFlag(flag: string | undefined): ResultFlag | null {

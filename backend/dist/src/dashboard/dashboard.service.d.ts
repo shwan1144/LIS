@@ -1,6 +1,10 @@
 import { Repository } from 'typeorm';
 import { Patient } from '../entities/patient.entity';
 import { OrderTest } from '../entities/order-test.entity';
+import { Order } from '../entities/order.entity';
+import { Lab } from '../entities/lab.entity';
+import { Shift } from '../entities/shift.entity';
+import { Department } from '../entities/department.entity';
 import { OrdersService } from '../orders/orders.service';
 import { UnmatchedResultsService } from '../unmatched/unmatched-results.service';
 export interface DashboardKpis {
@@ -24,7 +28,9 @@ export interface StatisticsDto {
             count: number;
         }[];
     };
+    profit: number;
     revenue: number;
+    departmentTestTotal: number;
     tests: {
         total: number;
         byDepartment: {
@@ -68,15 +74,32 @@ export interface StatisticsDto {
         count: number;
     }[];
 }
+export interface StatisticsFilterOptions {
+    shiftId?: string | null;
+    departmentId?: string | null;
+}
 export declare class DashboardService {
     private readonly patientRepo;
     private readonly orderTestRepo;
+    private readonly orderRepo;
+    private readonly labRepo;
+    private readonly shiftRepo;
+    private readonly departmentRepo;
     private readonly ordersService;
     private readonly unmatchedService;
-    constructor(patientRepo: Repository<Patient>, orderTestRepo: Repository<OrderTest>, ordersService: OrdersService, unmatchedService: UnmatchedResultsService);
+    constructor(patientRepo: Repository<Patient>, orderTestRepo: Repository<OrderTest>, orderRepo: Repository<Order>, labRepo: Repository<Lab>, shiftRepo: Repository<Shift>, departmentRepo: Repository<Department>, ordersService: OrdersService, unmatchedService: UnmatchedResultsService);
     getKpis(labId: string): Promise<DashboardKpis>;
     getOrdersTrend(labId: string, days: number): Promise<OrdersTrendPoint[]>;
-    getStatistics(labId: string, startDate: Date, endDate: Date): Promise<StatisticsDto>;
+    getStatistics(labId: string, startDate: Date, endDate: Date, filters?: StatisticsFilterOptions): Promise<StatisticsDto>;
+    generateStatisticsPdf(labId: string, startDate: Date, endDate: Date, filters?: StatisticsFilterOptions): Promise<Buffer>;
+    private drawTable;
+    private ensurePdfSpace;
+    private formatCurrency;
+    private formatDateLabel;
+    private normalizeFilters;
+    private buildFilteredRootTestsQuery;
+    private buildFilteredOrdersQuery;
+    private getOrderStatsForPeriod;
     private getTestsStatsForPeriod;
     private getTatForPeriod;
     private getQualityForPeriod;
