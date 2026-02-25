@@ -49,16 +49,11 @@ import { useTheme } from '../contexts/ThemeContext';
 const { Title, Text } = Typography;
 
 const STATUS_OPTIONS = [
+  { label: 'All statuses', value: 'ALL' },
   { label: 'Pending', value: 'PENDING' },
   { label: 'Completed', value: 'COMPLETED' },
   { label: 'Verified', value: 'VERIFIED' },
   { label: 'Rejected', value: 'REJECTED' },
-];
-const DEFAULT_STATUS_FILTER: OrderTestStatus[] = [
-  'PENDING',
-  'COMPLETED',
-  'VERIFIED',
-  'REJECTED',
 ];
 
 const getFlagColor = (flag: ResultFlag | null): string => {
@@ -155,9 +150,7 @@ export function WorklistPage() {
 
   // Filters
   const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState<OrderTestStatus[]>(
-    DEFAULT_STATUS_FILTER,
-  );
+  const [statusFilter, setStatusFilter] = useState<OrderTestStatus | 'ALL'>('ALL');
   const [dateFilter, setDateFilter] = useState<dayjs.Dayjs | null>(dayjs());
   const [departmentId, setDepartmentId] = useState<string | ''>('');
   const [departments, setDepartments] = useState<DepartmentDto[]>([]);
@@ -183,7 +176,7 @@ export function WorklistPage() {
     setLoading(true);
     try {
       const result = await getWorklist({
-        status: statusFilter,
+        status: statusFilter === 'ALL' ? undefined : [statusFilter],
         search: search.trim() || undefined,
         date: dateFilter?.format('YYYY-MM-DD'),
         departmentId: departmentId || undefined,
@@ -791,7 +784,19 @@ export function WorklistPage() {
   return (
     <div>
       <style>{`
+        .worklist-orders-table .ant-table-thead {
+          display: table-header-group !important;
+          visibility: visible !important;
+        }
+        .worklist-orders-table .ant-table-thead > tr {
+          display: table-row !important;
+        }
         .worklist-orders-table .ant-table-thead > tr > th {
+          background: ${isDark ? 'rgba(255,255,255,0.06)' : '#f5f8ff'} !important;
+          color: ${isDark ? 'rgba(255,255,255,0.9)' : 'rgba(0,0,0,0.88)'} !important;
+          border-bottom: 1px solid ${isDark ? 'rgba(255,255,255,0.14)' : '#d9e5ff'} !important;
+          font-weight: 700;
+          font-size: 12px;
           padding-top: 5px !important;
           padding-bottom: 5px !important;
         }
@@ -913,15 +918,12 @@ export function WorklistPage() {
             allowClear
           />
           <Select
-            mode="multiple"
             placeholder="Status"
             value={statusFilter}
-            onChange={(values) =>
-              setStatusFilter(values.length ? (values as OrderTestStatus[]) : DEFAULT_STATUS_FILTER)
-            }
-            style={{ width: 250 }}
+            onChange={(value) => setStatusFilter(value as OrderTestStatus | 'ALL')}
+            style={{ width: 180 }}
             options={STATUS_OPTIONS}
-            allowClear
+            allowClear={false}
           />
           <Select
             placeholder="Department"
@@ -961,7 +963,7 @@ export function WorklistPage() {
           columns={orderColumns}
           dataSource={groupedData}
           loading={loading}
-          showHeader={false}
+          showHeader
           rowClassName={(record) => (expandedOrderIds.includes(record.orderId) ? 'worklist-order-row-expanded' : '')}
           rowSelection={rowSelection}
           expandable={{
