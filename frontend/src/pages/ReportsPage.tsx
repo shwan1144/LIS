@@ -11,6 +11,7 @@ import {
   Input,
   InputNumber,
   Modal,
+  Progress,
   Row,
   Select,
   Space,
@@ -166,6 +167,95 @@ function formatOrderTestResultPreview(orderTest: OrderTestDto, allTests: OrderTe
   return '-';
 }
 
+function isEtaLoadingStatus(status: OrderTestDto['status']): boolean {
+  return status === 'PENDING' || status === 'IN_PROGRESS';
+}
+
+function toValidTimestamp(input?: string | null): number | null {
+  if (!input) return null;
+  const ms = dayjs(input).valueOf();
+  return Number.isFinite(ms) ? ms : null;
+}
+
+function getPanelChildren(parent: OrderTestDto, allTests: OrderTestDto[]): OrderTestDto[] {
+  return allTests.filter((test) => test.parentOrderTestId === parent.id);
+}
+
+function resolveExpectedMinutes(row: ExpandedOrderTestRow, allTests: OrderTestDto[]): number | null {
+  const ownExpected = row.raw.test?.expectedCompletionMinutes ?? null;
+  if (row.raw.test?.type !== 'PANEL') {
+    return ownExpected;
+  }
+  if (ownExpected && ownExpected > 0) {
+    return ownExpected;
+  }
+  const maxChildExpected = getPanelChildren(row.raw, allTests).reduce((max, child) => {
+    const childExpected = child.test?.expectedCompletionMinutes ?? null;
+    if (!childExpected || childExpected <= 0) return max;
+    return Math.max(max, childExpected);
+  }, 0);
+  return maxChildExpected > 0 ? maxChildExpected : null;
+}
+
+function getStartTime(order: OrderDto): number | null {
+  return toValidTimestamp(order.registeredAt);
+}
+
+function getFinishTime(row: ExpandedOrderTestRow, allTests: OrderTestDto[]): number | null {
+  if (row.raw.test?.type === 'PANEL') {
+    const childTimes = getPanelChildren(row.raw, allTests)
+      .map((child) => toValidTimestamp(child.resultedAt ?? child.verifiedAt))
+      .filter((value): value is number => value !== null);
+    if (childTimes.length > 0) {
+      return Math.max(...childTimes);
+    }
+  }
+  return toValidTimestamp(row.raw.resultedAt ?? row.raw.verifiedAt);
+}
+
+function computeEta(params: {
+  startMs: number | null;
+  expectedMinutes: number | null;
+  nowMs: number;
+  finishMs: number | null;
+}): {
+  percent: number;
+  isOverdue: boolean;
+  remainingMinutes: number;
+  overdueMinutes: number;
+  dueAtMs: number;
+} | null {
+  const { startMs, expectedMinutes, nowMs, finishMs } = params;
+  if (startMs === null || !expectedMinutes || expectedMinutes <= 0) return null;
+
+  const totalMs = expectedMinutes * 60 * 1000;
+  const dueAtMs = startMs + totalMs;
+  const referenceNowMs = finishMs ?? nowMs;
+  const elapsedMs = Math.max(0, referenceNowMs - startMs);
+  const percent = Math.max(0, Math.min(100, Math.round((elapsedMs / totalMs) * 100)));
+  const overdueMs = Math.max(0, referenceNowMs - dueAtMs);
+  const remainingMs = Math.max(0, dueAtMs - referenceNowMs);
+
+  return {
+    percent,
+    isOverdue: overdueMs > 0,
+    overdueMinutes: Math.ceil(overdueMs / (60 * 1000)),
+    remainingMinutes: Math.ceil(remainingMs / (60 * 1000)),
+    dueAtMs,
+  };
+}
+
+function getPanelChildProgress(row: ExpandedOrderTestRow, allTests: OrderTestDto[]): string | null {
+  if (row.raw.test?.type !== 'PANEL') return null;
+  const children = getPanelChildren(row.raw, allTests);
+  const total = children.length;
+  if (total === 0) return 'No child tests';
+  const done = children.filter(
+    (test) => test.status === 'COMPLETED' || test.status === 'VERIFIED',
+  ).length;
+  return `${done}/${total} child tests done`;
+}
+
 function getRootOrderTests(order: OrderDto): OrderTestDto[] {
   return (order.samples ?? [])
     .flatMap((sample) => sample.orderTests ?? [])
@@ -253,6 +343,7 @@ export function ReportsPage() {
   const [editResultModalOpen, setEditResultModalOpen] = useState(false);
   const [editResultContext, setEditResultContext] = useState<EditResultContext | null>(null);
   const [savingResult, setSavingResult] = useState(false);
+  const [nowMs, setNowMs] = useState(() => Date.now());
   const [editResultForm] = Form.useForm<any>();
   const compactCellStyle = { paddingTop: 6, paddingBottom: 6, fontSize: 12 };
 
@@ -326,6 +417,25 @@ export function ReportsPage() {
       setExpandedOrderIds([]);
     }
   }, [expandedOrderIds, filteredOrders]);
+
+  const hasActiveExpandedEtaRows = useMemo(() => {
+    if (expandedOrderIds.length === 0) return false;
+    const expandedSet = new Set(expandedOrderIds);
+    return filteredOrders.some((order) => {
+      if (!expandedSet.has(order.id)) return false;
+      const rootTests = getRootOrderTests(order);
+      return rootTests.some((test) => isEtaLoadingStatus(test.status));
+    });
+  }, [expandedOrderIds, filteredOrders]);
+
+  useEffect(() => {
+    if (!hasActiveExpandedEtaRows) return;
+    setNowMs(Date.now());
+    const intervalId = window.setInterval(() => {
+      setNowMs(Date.now());
+    }, 30000);
+    return () => window.clearInterval(intervalId);
+  }, [hasActiveExpandedEtaRows]);
 
   const triggerPdfDownload = (blob: Blob, filename: string) => {
     const url = window.URL.createObjectURL(blob);
@@ -824,6 +934,7 @@ export function ReportsPage() {
 
   const renderExpandedOrder = (order: OrderDto) => {
     const rows = getOrderTestRows(order);
+    const allTestsInOrder = (order.samples ?? []).flatMap((sample) => sample.orderTests ?? []);
 
     if (rows.length === 0) {
       return <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No tests found" />;
@@ -865,10 +976,58 @@ export function ReportsPage() {
         title: 'Result',
         dataIndex: 'resultPreview',
         key: 'result',
-        width: 180,
+        width: 220,
         render: (value: string, row: ExpandedOrderTestRow) => (
           <div>
-            <Text style={{ fontSize: 12 }}>{value}</Text>
+            {isEtaLoadingStatus(row.status) ? (
+              (() => {
+                const eta = computeEta({
+                  startMs: getStartTime(order),
+                  expectedMinutes: resolveExpectedMinutes(row, allTestsInOrder),
+                  nowMs,
+                  finishMs: getFinishTime(row, allTestsInOrder),
+                });
+                const panelChildProgress = getPanelChildProgress(row, allTestsInOrder);
+
+                if (!eta) {
+                  return (
+                    <div className="reports-eta-cell">
+                      <Text className="reports-eta-label">In progress</Text>
+                      {panelChildProgress && (
+                        <Text type="secondary" className="reports-eta-child-progress">
+                          {panelChildProgress}
+                        </Text>
+                      )}
+                    </div>
+                  );
+                }
+
+                return (
+                  <div className="reports-eta-cell">
+                    <Text className={`reports-eta-label ${eta.isOverdue ? 'overdue' : ''}`}>
+                      {eta.isOverdue ? `Overdue by ${eta.overdueMinutes}m` : `${eta.remainingMinutes}m left`}
+                    </Text>
+                    <Progress
+                      percent={eta.percent}
+                      size="small"
+                      showInfo={false}
+                      status={eta.isOverdue ? 'exception' : 'active'}
+                    />
+                    <div className="reports-eta-meta">
+                      <Text type="secondary">ETA {dayjs(eta.dueAtMs).format('HH:mm')}</Text>
+                      <Text type="secondary">{resolveExpectedMinutes(row, allTestsInOrder)}m target</Text>
+                    </div>
+                    {panelChildProgress && (
+                      <Text type="secondary" className="reports-eta-child-progress">
+                        {panelChildProgress}
+                      </Text>
+                    )}
+                  </div>
+                );
+              })()
+            ) : (
+              <Text style={{ fontSize: 12 }}>{value}</Text>
+            )}
             {row.raw.test?.type !== 'PANEL' &&
               (row.raw.test?.normalMin !== null ||
                 row.raw.test?.normalMax !== null ||
@@ -1267,6 +1426,40 @@ export function ReportsPage() {
         .reports-subtests-table .ant-table-tbody > tr > td {
           padding-top: 3px !important;
           padding-bottom: 3px !important;
+        }
+        .reports-eta-cell {
+          display: flex;
+          flex-direction: column;
+          gap: 2px;
+        }
+        .reports-eta-label {
+          font-size: 11px;
+          font-weight: 600;
+          line-height: 1.2;
+        }
+        .reports-eta-label.overdue {
+          color: #cf1322;
+        }
+        html[data-theme='dark'] .reports-eta-label.overdue {
+          color: #ff7875;
+        }
+        .reports-eta-meta {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          gap: 6px;
+          font-size: 10px;
+          line-height: 1.2;
+        }
+        .reports-eta-meta .ant-typography {
+          font-size: 10px;
+          margin: 0;
+          line-height: 1.2;
+        }
+        .reports-eta-child-progress {
+          font-size: 10px;
+          line-height: 1.2;
+          margin: 0;
         }
         .panel-entry-modal .ant-modal {
           max-width: calc(100vw - 24px) !important;

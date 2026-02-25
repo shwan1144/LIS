@@ -161,6 +161,20 @@ function getVerifiableIdsForPanelChildren(
     .map((child) => child.id);
 }
 
+/** Same eligibility as verify panel children: COMPLETED child IDs only. */
+function getRejectableIdsForPanelChildren(
+  group: VerificationOrderGroup,
+  panelRootId: string,
+): string[] {
+  return getPanelChildren(group.items, panelRootId)
+    .filter((child) => child.status === OrderTestStatus.COMPLETED)
+    .map((child) => child.id);
+}
+
+type RejectTarget =
+  | { mode: 'single'; item: WorklistItem }
+  | { mode: 'panel'; context: ResolvedPanelReviewContext; ids: string[] };
+
 export function VerificationPage() {
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState<WorklistItem[]>([]);
@@ -178,7 +192,7 @@ export function VerificationPage() {
   const [panelReviewContext, setPanelReviewContext] = useState<PanelReviewContext | null>(null);
 
   const [rejectModalOpen, setRejectModalOpen] = useState(false);
-  const [rejectingItem, setRejectingItem] = useState<WorklistItem | null>(null);
+  const [rejectTarget, setRejectTarget] = useState<RejectTarget | null>(null);
   const [rejectReason, setRejectReason] = useState('');
 
   const [detailModalOpen, setDetailModalOpen] = useState(false);
@@ -302,7 +316,18 @@ export function VerificationPage() {
   };
 
   const openRejectModal = (item: WorklistItem) => {
-    setRejectingItem(item);
+    setRejectTarget({ mode: 'single', item });
+    setRejectReason('');
+    setRejectModalOpen(true);
+  };
+
+  const openRejectAllPanelModal = (context: ResolvedPanelReviewContext) => {
+    const ids = getRejectableIdsForPanelChildren(context.group, context.panelRoot.id);
+    if (ids.length === 0) {
+      message.warning('No completed child results to reject.');
+      return;
+    }
+    setRejectTarget({ mode: 'panel', context, ids });
     setRejectReason('');
     setRejectModalOpen(true);
   };
@@ -382,21 +407,40 @@ export function VerificationPage() {
   };
 
   const handleReject = async () => {
-    if (!rejectingItem || !rejectReason.trim()) return;
-    try {
-      await rejectResult(rejectingItem.id, rejectReason.trim());
-      message.success('Result rejected');
-      setRejectModalOpen(false);
-      setRejectingItem(null);
-      setRejectReason('');
-      await reloadQueueAndStats();
-    } catch (err: unknown) {
-      const msg =
-        err && typeof err === 'object' && 'response' in err
-          ? (err as { response?: { data?: { message?: string } } }).response?.data?.message
-          : 'Failed to reject';
-      message.error(msg || 'Failed to reject');
+    if (!rejectTarget || !rejectReason.trim()) return;
+    const reason = rejectReason.trim();
+
+    if (rejectTarget.mode === 'single') {
+      try {
+        await rejectResult(rejectTarget.item.id, reason);
+        message.success('Result rejected');
+        setRejectModalOpen(false);
+        setRejectTarget(null);
+        setRejectReason('');
+        await reloadQueueAndStats();
+      } catch (err: unknown) {
+        const msg =
+          err && typeof err === 'object' && 'response' in err
+            ? (err as { response?: { data?: { message?: string } } }).response?.data?.message
+            : 'Failed to reject';
+        message.error(msg || 'Failed to reject');
+      }
+      return;
     }
+
+    const { ids } = rejectTarget;
+    const results = await Promise.allSettled(
+      ids.map((id) => rejectResult(id, reason)),
+    );
+    const successCount = results.filter((r) => r.status === 'fulfilled').length;
+    const failCount = results.filter((r) => r.status === 'rejected').length;
+    message.success(
+      `Rejected ${successCount} result(s)${failCount > 0 ? `, ${failCount} failed` : ''}`,
+    );
+    setRejectModalOpen(false);
+    setRejectTarget(null);
+    setRejectReason('');
+    await reloadQueueAndStats();
   };
 
   const formatRootResultPreview = (
@@ -945,15 +989,24 @@ export function VerificationPage() {
                   {dayjs(activePanelReview.group.registeredAt).format('YYYY-MM-DD HH:mm')}
                 </Text>
               </Space>
-              <Button
-                type="primary"
-                icon={<CheckCircleOutlined />}
-                onClick={() => {
-                  void handleVerifyPanelChildren(activePanelReview);
-                }}
-              >
-                Verify panel children
-              </Button>
+              <Space>
+                <Button
+                  danger
+                  icon={<CloseCircleOutlined />}
+                  onClick={() => openRejectAllPanelModal(activePanelReview)}
+                >
+                  Reject All
+                </Button>
+                <Button
+                  type="primary"
+                  icon={<CheckCircleOutlined />}
+                  onClick={() => {
+                    void handleVerifyPanelChildren(activePanelReview);
+                  }}
+                >
+                  Verify panel children
+                </Button>
+              </Space>
             </div>
 
             <Table<WorklistItem>
@@ -971,32 +1024,60 @@ export function VerificationPage() {
       </Modal>
 
       <Modal
-        title="Reject Result"
+        title={
+          rejectTarget?.mode === 'panel'
+            ? 'Reject All Panel Results'
+            : 'Reject Result'
+        }
         open={rejectModalOpen}
         onCancel={() => {
           setRejectModalOpen(false);
-          setRejectingItem(null);
+          setRejectTarget(null);
           setRejectReason('');
         }}
         onOk={() => {
           void handleReject();
         }}
-        okText="Reject"
+        okText={rejectTarget?.mode === 'panel' ? 'Reject All' : 'Reject'}
         okButtonProps={{ danger: true, disabled: !rejectReason.trim() }}
       >
-        {rejectingItem && (
+        {rejectTarget?.mode === 'single' && (
           <div>
             <p>
-              <strong>Test:</strong> {rejectingItem.testCode} - {rejectingItem.testName}
+              <strong>Test:</strong> {rejectTarget.item.testCode} - {rejectTarget.item.testName}
             </p>
             <p>
-              <strong>Patient:</strong> {rejectingItem.patientName}
+              <strong>Patient:</strong> {rejectTarget.item.patientName}
             </p>
             <p>
-              <strong>Result:</strong> {formatResult(rejectingItem)}
+              <strong>Result:</strong> {formatResult(rejectTarget.item)}
             </p>
             <Input.TextArea
               placeholder="Enter rejection reason..."
+              value={rejectReason}
+              onChange={(e) => setRejectReason(e.target.value)}
+              rows={3}
+              style={{ marginTop: 16 }}
+            />
+          </div>
+        )}
+        {rejectTarget?.mode === 'panel' && (
+          <div>
+            <p>
+              <strong>Panel:</strong> {rejectTarget.context.panelRoot.testCode} -{' '}
+              {rejectTarget.context.panelRoot.testName}
+            </p>
+            <p>
+              <strong>Patient:</strong> {rejectTarget.context.group.patientName}
+            </p>
+            <p>
+              <strong>Order #:</strong> {rejectTarget.context.group.orderNumber}
+            </p>
+            <p>
+              <strong>Rejecting:</strong> {rejectTarget.ids.length} child result(s)
+            </p>
+            <Input.TextArea
+              placeholder="Enter rejection reason (applies to all)..."
               value={rejectReason}
               onChange={(e) => setRejectReason(e.target.value)}
               rows={3}
