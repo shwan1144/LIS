@@ -587,10 +587,8 @@ export function WorklistPage() {
   };
 
   const renderExpandedTests = (group: WorklistOrderGroup) => {
-    // Show items that are root level, OR items whose parent is not in this list
-    const rootItems = group.items.filter(
-      (i) => !i.parentOrderTestId || !group.items.some((p) => p.id === i.parentOrderTestId)
-    );
+    // Do not show panel child tests in expandable rows; use popup entry flow for panel tests.
+    const rootItems = group.items.filter((i) => !i.parentOrderTestId);
 
     const compactStyle = { paddingTop: 6, paddingBottom: 6, fontSize: 12 };
 

@@ -235,27 +235,6 @@ export function VerificationPage() {
     }
   };
 
-  const handleVerifyGroupChildren = async (group: VerificationOrderGroup) => {
-    const childIds = group.items
-      .filter((item) => !!item.parentOrderTestId)
-      .map((item) => item.id);
-    if (childIds.length === 0) {
-      message.info('No child tests found in this order');
-      return;
-    }
-
-    try {
-      const result = await verifyMultipleResults(childIds);
-      message.success(
-        `Verified ${result.verified} child result(s)${result.failed > 0 ? `, ${result.failed} failed` : ''}`,
-      );
-      loadData();
-      loadStats();
-    } catch {
-      message.error('Failed to verify child tests');
-    }
-  };
-
   const handleReject = async () => {
     if (!rejectingItem || !rejectReason.trim()) return;
     try {
@@ -710,14 +689,6 @@ export function VerificationPage() {
                 <Text type="secondary">{dayjs(reviewGroup.registeredAt).format('YYYY-MM-DD HH:mm')}</Text>
               </Space>
               <Space wrap>
-                <Button
-                  onClick={() => {
-                    void handleVerifyGroupChildren(reviewGroup);
-                  }}
-                  disabled={!reviewGroup.items.some((item) => !!item.parentOrderTestId)}
-                >
-                  Verify child tests
-                </Button>
                 <Button
                   type="primary"
                   icon={<CheckCircleOutlined />}
