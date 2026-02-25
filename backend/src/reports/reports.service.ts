@@ -326,13 +326,20 @@ export class ReportsService implements OnModuleDestroy {
   }
 
   private getReportableOrderTests(orderTests: OrderTest[]): OrderTest[] {
+    const panelParentIdsWithChildren = new Set(
+      orderTests
+        .filter((ot) => !!ot.parentOrderTestId)
+        .map((ot) => ot.parentOrderTestId as string),
+    );
+
     return orderTests.filter((ot) => {
       const t = ot.test as Test | undefined;
       if (!t) return false;
       if (t.type === TestType.PANEL) {
         if (ot.parentOrderTestId) return true;
         const hasParams = Array.isArray(t.parameterDefinitions) && t.parameterDefinitions.length > 0;
-        return hasParams;
+        const hasChildren = panelParentIdsWithChildren.has(ot.id);
+        return hasParams || hasChildren;
       }
       return true;
     });

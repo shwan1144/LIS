@@ -596,18 +596,6 @@ export function WorklistPage() {
 
     return (
       <div className="worklist-expanded-panel" style={{ padding: '4px 16px 16px' }}>
-        <div style={{ marginBottom: 8, display: 'flex', justifyContent: 'flex-end' }}>
-          <Button
-            type="primary"
-            size="small"
-            ghost
-            icon={<EditOutlined />}
-            onClick={() => handleOpenOrderResultModal(group)}
-            style={{ fontSize: 11 }}
-          >
-            Enter Results for Order
-          </Button>
-        </div>
         <Table
           className="worklist-subtests-table"
           size="small"

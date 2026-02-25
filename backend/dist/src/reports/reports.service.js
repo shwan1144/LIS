@@ -265,6 +265,9 @@ let ReportsService = class ReportsService {
         }
     }
     getReportableOrderTests(orderTests) {
+        const panelParentIdsWithChildren = new Set(orderTests
+            .filter((ot) => !!ot.parentOrderTestId)
+            .map((ot) => ot.parentOrderTestId));
         return orderTests.filter((ot) => {
             const t = ot.test;
             if (!t)
@@ -273,7 +276,8 @@ let ReportsService = class ReportsService {
                 if (ot.parentOrderTestId)
                     return true;
                 const hasParams = Array.isArray(t.parameterDefinitions) && t.parameterDefinitions.length > 0;
-                return hasParams;
+                const hasChildren = panelParentIdsWithChildren.has(ot.id);
+                return hasParams || hasChildren;
             }
             return true;
         });
