@@ -113,7 +113,8 @@ export function VerificationPage() {
 
   // Selection for batch verify
   const [selectedRowKeys, setSelectedRowKeys] = useState<string[]>([]);
-  const [expandedRowIds, setExpandedRowIds] = useState<string[]>([]);
+  const [reviewModalOpen, setReviewModalOpen] = useState(false);
+  const [reviewGroup, setReviewGroup] = useState<VerificationOrderGroup | null>(null);
 
   // Reject modal
   const [rejectModalOpen, setRejectModalOpen] = useState(false);
@@ -175,12 +176,15 @@ export function VerificationPage() {
   const groupedData = useMemo(() => groupVerificationByOrder(data), [data]);
 
   useEffect(() => {
-    if (expandedRowIds.length === 0) return;
-    const expandedId = expandedRowIds[0];
-    if (!groupedData.some((group) => group.orderId === expandedId)) {
-      setExpandedRowIds([]);
+    if (!reviewModalOpen || !reviewGroup) return;
+    const latest = groupedData.find((group) => group.orderId === reviewGroup.orderId);
+    if (!latest) {
+      setReviewModalOpen(false);
+      setReviewGroup(null);
+      return;
     }
-  }, [groupedData, expandedRowIds]);
+    setReviewGroup(latest);
+  }, [groupedData, reviewModalOpen, reviewGroup]);
 
   useEffect(() => {
     setSelectedRowKeys((keys) => keys.filter((key) => groupedData.some((group) => group.orderId === key)));
@@ -231,6 +235,27 @@ export function VerificationPage() {
     }
   };
 
+  const handleVerifyGroupChildren = async (group: VerificationOrderGroup) => {
+    const childIds = group.items
+      .filter((item) => !!item.parentOrderTestId)
+      .map((item) => item.id);
+    if (childIds.length === 0) {
+      message.info('No child tests found in this order');
+      return;
+    }
+
+    try {
+      const result = await verifyMultipleResults(childIds);
+      message.success(
+        `Verified ${result.verified} child result(s)${result.failed > 0 ? `, ${result.failed} failed` : ''}`,
+      );
+      loadData();
+      loadStats();
+    } catch {
+      message.error('Failed to verify child tests');
+    }
+  };
+
   const handleReject = async () => {
     if (!rejectingItem || !rejectReason.trim()) return;
     try {
@@ -259,6 +284,11 @@ export function VerificationPage() {
   const openDetailModal = (item: WorklistItem) => {
     setDetailItem(item);
     setDetailModalOpen(true);
+  };
+
+  const openReviewModal = (group: VerificationOrderGroup) => {
+    setReviewGroup(group);
+    setReviewModalOpen(true);
   };
 
   const formatResult = (item: WorklistItem) => {
@@ -367,10 +397,19 @@ export function VerificationPage() {
     {
       title: 'Actions',
       key: 'actions',
-      width: 150,
+      width: 240,
       align: 'right',
       render: (_: unknown, group) => (
-        <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+          <Button
+            size="small"
+            onClick={(event) => {
+              event.stopPropagation();
+              openReviewModal(group);
+            }}
+          >
+            Review
+          </Button>
           <Tooltip title="Verify all tests in this order">
             <Button
               type="primary"
@@ -394,103 +433,100 @@ export function VerificationPage() {
     onChange: (keys: React.Key[]) => setSelectedRowKeys(keys as string[]),
   };
 
-  const renderExpandedResult = (group: VerificationOrderGroup) => (
-    <div className="verification-expanded-panel">
-      <Table
-        className="verification-subtests-table"
-        size="small"
-        pagination={false}
-        rowKey={(row) => row.id}
-        dataSource={group.items}
-        columns={[
-          {
-            title: 'Test',
-            key: 'test',
-            width: 220,
-            render: (_: unknown, row: WorklistItem) => (
-              <div style={{ lineHeight: '14px' }}>
-                <Text strong style={{ display: 'block', fontSize: 12 }}>{row.testCode}</Text>
-                <Text type="secondary" style={{ display: 'block', fontSize: 11 }}>{row.testName}</Text>
-              </div>
-            ),
-          },
-          {
-            title: 'Result',
-            key: 'result',
-            render: (_: unknown, row: WorklistItem) => <Text style={{ fontSize: 12 }}>{formatResult(row)}</Text>,
-          },
-          {
-            title: 'Flag',
-            key: 'flag',
-            width: 110,
-            render: (_: unknown, row: WorklistItem) =>
-              row.flag ? (
-                <Tag color={flagColors[row.flag] || 'default'} style={{ margin: 0, fontSize: 10, lineHeight: '14px', paddingInline: 4 }}>
-                  {flagLabels[row.flag] || row.flag}
-                </Tag>
-              ) : (
-                <Tag style={{ margin: 0, fontSize: 10, lineHeight: '14px', paddingInline: 4 }}>-</Tag>
-              ),
-          },
-          {
-            title: 'Status',
-            key: 'status',
-            width: 110,
-            render: (_: unknown, row: WorklistItem) => (
-              <Tag color="processing" style={{ margin: 0, fontSize: 10, lineHeight: '14px', paddingInline: 4 }}>
-                {row.status}
-              </Tag>
-            ),
-          },
-          {
-            title: 'Resulted At',
-            key: 'resultedAt',
-            width: 150,
-            render: (_: unknown, row: WorklistItem) => (
-              <Text style={{ fontSize: 12 }}>
-                {row.resultedAt ? dayjs(row.resultedAt).format('YYYY-MM-DD HH:mm') : '-'}
-              </Text>
-            ),
-          },
-          {
-            title: 'Actions',
-            key: 'actions',
-            width: 160,
-            align: 'right' as const,
-            render: (_: unknown, row: WorklistItem) => (
-              <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-                <Button
-                  type="link"
-                  size="small"
-                  icon={<CheckCircleOutlined />}
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    handleVerify(row.id);
-                  }}
-                >
-                  Verify
-                </Button>
-                <Button
-                  type="link"
-                  danger
-                  size="small"
-                  icon={<CloseCircleOutlined />}
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    openRejectModal(row);
-                  }}
-                >
-                  Reject
-                </Button>
-              </div>
-            ),
-          },
-        ]}
-        tableLayout="fixed"
-        scroll={{ x: 900 }}
-      />
-    </div>
-  );
+  const reviewTableColumns: ColumnsType<WorklistItem> = [
+    {
+      title: 'Scope',
+      key: 'scope',
+      width: 100,
+      render: (_: unknown, row: WorklistItem) => {
+        if (row.testType === 'PANEL') return <Tag color="purple">Panel</Tag>;
+        if (row.parentOrderTestId) return <Tag color="cyan">Child</Tag>;
+        return <Tag>Single</Tag>;
+      },
+    },
+    {
+      title: 'Test',
+      key: 'test',
+      width: 240,
+      render: (_: unknown, row: WorklistItem) => (
+        <div style={{ lineHeight: '14px' }}>
+          <Text strong style={{ display: 'block', fontSize: 12 }}>{row.testCode}</Text>
+          <Text type="secondary" style={{ display: 'block', fontSize: 11 }}>{row.testName}</Text>
+        </div>
+      ),
+    },
+    {
+      title: 'Result',
+      key: 'result',
+      render: (_: unknown, row: WorklistItem) => <Text style={{ fontSize: 12 }}>{formatResult(row)}</Text>,
+    },
+    {
+      title: 'Flag',
+      key: 'flag',
+      width: 110,
+      render: (_: unknown, row: WorklistItem) =>
+        row.flag ? (
+          <Tag color={flagColors[row.flag] || 'default'} style={{ margin: 0, fontSize: 10, lineHeight: '14px', paddingInline: 4 }}>
+            {flagLabels[row.flag] || row.flag}
+          </Tag>
+        ) : (
+          <Tag style={{ margin: 0, fontSize: 10, lineHeight: '14px', paddingInline: 4 }}>-</Tag>
+        ),
+    },
+    {
+      title: 'Status',
+      key: 'status',
+      width: 110,
+      render: (_: unknown, row: WorklistItem) => (
+        <Tag color="processing" style={{ margin: 0, fontSize: 10, lineHeight: '14px', paddingInline: 4 }}>
+          {row.status}
+        </Tag>
+      ),
+    },
+    {
+      title: 'Resulted At',
+      key: 'resultedAt',
+      width: 150,
+      render: (_: unknown, row: WorklistItem) => (
+        <Text style={{ fontSize: 12 }}>
+          {row.resultedAt ? dayjs(row.resultedAt).format('YYYY-MM-DD HH:mm') : '-'}
+        </Text>
+      ),
+    },
+    {
+      title: 'Actions',
+      key: 'actions',
+      width: 170,
+      align: 'right' as const,
+      render: (_: unknown, row: WorklistItem) => (
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+          <Button
+            type="link"
+            size="small"
+            icon={<CheckCircleOutlined />}
+            onClick={(event) => {
+              event.stopPropagation();
+              void handleVerify(row.id);
+            }}
+          >
+            Verify
+          </Button>
+          <Button
+            type="link"
+            danger
+            size="small"
+            icon={<CloseCircleOutlined />}
+            onClick={(event) => {
+              event.stopPropagation();
+              openRejectModal(row);
+            }}
+          >
+            Reject
+          </Button>
+        </div>
+      ),
+    },
+  ];
 
   return (
     <div>
@@ -503,58 +539,12 @@ export function VerificationPage() {
           padding-top: 5px !important;
           padding-bottom: 5px !important;
         }
-        .verification-orders-table .verification-order-row-expanded > td {
-          background: #f7fbff !important;
-          border-top: 1px solid #91caff !important;
-          border-bottom: 0 !important;
-        }
-        .verification-orders-table .verification-order-row-expanded > td:first-child {
-          border-left: 2px solid #1677ff !important;
-          border-top-left-radius: 8px !important;
-        }
-        .verification-orders-table .verification-order-row-expanded > td:last-child {
-          border-right: 1px solid #91caff !important;
-          border-top-right-radius: 8px !important;
-        }
-        .verification-orders-table .ant-table-expanded-row > td {
-          padding: 4px 10px 8px !important;
-          background: transparent !important;
-          border-left: 2px solid #1677ff !important;
-          border-right: 1px solid #91caff !important;
-          border-bottom: 1px solid #91caff !important;
-          border-bottom-left-radius: 8px !important;
-          border-bottom-right-radius: 8px !important;
-        }
-        .verification-expanded-panel {
-          border: 0;
-          border-radius: 0;
-          overflow: hidden;
-          background: transparent;
-        }
-        .verification-expanded-panel .ant-table-container {
-          border-radius: 0;
-        }
-        html[data-theme='dark'] .verification-orders-table .verification-order-row-expanded > td {
-          background: rgba(255, 255, 255, 0.04) !important;
-          border-top-color: rgba(100, 168, 255, 0.55) !important;
-        }
-        html[data-theme='dark'] .verification-orders-table .verification-order-row-expanded > td:first-child {
-          border-left-color: #3c89e8 !important;
-        }
-        html[data-theme='dark'] .verification-orders-table .verification-order-row-expanded > td:last-child {
-          border-right-color: rgba(100, 168, 255, 0.55) !important;
-        }
-        html[data-theme='dark'] .verification-orders-table .ant-table-expanded-row > td {
-          border-left-color: #3c89e8 !important;
-          border-right-color: rgba(100, 168, 255, 0.55) !important;
-          border-bottom-color: rgba(100, 168, 255, 0.55) !important;
-        }
-        .verification-subtests-table .ant-table-thead > tr > th {
+        .verification-review-table .ant-table-thead > tr > th {
           padding-top: 3px !important;
           padding-bottom: 3px !important;
           font-size: 11px;
         }
-        .verification-subtests-table .ant-table-tbody > tr > td {
+        .verification-review-table .ant-table-tbody > tr > td {
           padding-top: 3px !important;
           padding-bottom: 3px !important;
         }
@@ -652,17 +642,7 @@ export function VerificationPage() {
           dataSource={groupedData}
           rowKey="orderId"
           loading={loading}
-          rowClassName={(record) => (expandedRowIds.includes(record.orderId) ? 'verification-order-row-expanded' : '')}
           rowSelection={rowSelection}
-          expandable={{
-            expandedRowRender: (record) => renderExpandedResult(record),
-            expandRowByClick: true,
-            showExpandColumn: false,
-            expandedRowKeys: expandedRowIds,
-            onExpand: (expanded, record) => {
-              setExpandedRowIds(expanded ? [record.orderId] : []);
-            },
-          }}
           pagination={{
             current: page,
             pageSize: size,
@@ -675,6 +655,67 @@ export function VerificationPage() {
           size="small"
         />
       </Card>
+
+      <Modal
+        title={reviewGroup ? `Verify Order ${reviewGroup.orderNumber}` : 'Verify Order'}
+        open={reviewModalOpen}
+        onCancel={() => {
+          setReviewModalOpen(false);
+          setReviewGroup(null);
+        }}
+        footer={null}
+        width={1100}
+      >
+        {reviewGroup && (
+          <Space direction="vertical" style={{ width: '100%' }} size="middle">
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                gap: 12,
+                flexWrap: 'wrap',
+              }}
+            >
+              <Space size={[6, 6]} wrap>
+                <Tag style={{ margin: 0 }}>{reviewGroup.items.length} tests</Tag>
+                <Text strong>{reviewGroup.patientName}</Text>
+                <Text type="secondary">{dayjs(reviewGroup.registeredAt).format('YYYY-MM-DD HH:mm')}</Text>
+              </Space>
+              <Space wrap>
+                <Button
+                  onClick={() => {
+                    void handleVerifyGroupChildren(reviewGroup);
+                  }}
+                  disabled={!reviewGroup.items.some((item) => !!item.parentOrderTestId)}
+                >
+                  Verify child tests
+                </Button>
+                <Button
+                  type="primary"
+                  icon={<CheckCircleOutlined />}
+                  onClick={() => {
+                    void handleVerifyGroup(reviewGroup);
+                  }}
+                >
+                  Verify all
+                </Button>
+              </Space>
+            </div>
+
+            <Table
+              className="verification-review-table"
+              size="small"
+              pagination={false}
+              rowKey={(row) => row.id}
+              dataSource={reviewGroup.items}
+              columns={reviewTableColumns}
+              tableLayout="fixed"
+              scroll={{ x: 980 }}
+            />
+          </Space>
+        )}
+      </Modal>
 
       {/* Reject Modal */}
       <Modal
