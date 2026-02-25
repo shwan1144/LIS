@@ -989,7 +989,7 @@ export function VerificationPage() {
                   {dayjs(activePanelReview.group.registeredAt).format('YYYY-MM-DD HH:mm')}
                 </Text>
               </Space>
-              <Space>
+              <div style={{ display: 'flex', gap: 8, flexShrink: 0, alignItems: 'center' }}>
                 <Button
                   danger
                   icon={<CloseCircleOutlined />}
@@ -1006,7 +1006,7 @@ export function VerificationPage() {
                 >
                   Verify panel children
                 </Button>
-              </Space>
+              </div>
             </div>
 
             <Table<WorklistItem>
