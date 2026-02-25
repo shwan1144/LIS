@@ -709,7 +709,7 @@ export function OrdersPage() {
               }
               bodyStyle={{
                 padding: 12,
-                minHeight: 'calc(100vh - 200px)',
+                height: 'calc(100vh - 200px)',
                 display: 'flex',
                 flexDirection: 'column',
               }}
@@ -942,7 +942,7 @@ export function OrdersPage() {
 
           {/* Right: Test selection or order success */}
           <Col xs={24} md={12} lg={14}>
-            <Card bodyStyle={{ minHeight: 'calc(100vh - 200px)' }}>
+            <Card bodyStyle={{ height: 'calc(100vh - 200px)', overflowY: 'auto' }}>
               {!selectedPatient ? (
                 <Empty
                   image={Empty.PRESENTED_IMAGE_SIMPLE}

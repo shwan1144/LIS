@@ -676,16 +676,11 @@ export function VerificationPage() {
     {
       title: 'Test',
       key: 'test',
-      width: 250,
+      width: 340,
       render: (_: unknown, row) => (
-        <div style={{ lineHeight: '14px' }}>
-          <Text strong style={{ display: 'block', fontSize: 12 }}>
-            {row.testCode}
-          </Text>
-          <Text type="secondary" style={{ display: 'block', fontSize: 11 }}>
-            {row.testName}
-          </Text>
-        </div>
+        <Text strong style={{ display: 'block', fontSize: 12, lineHeight: '16px' }}>
+          {row.testName || '-'}
+        </Text>
       ),
     },
     {
@@ -804,7 +799,7 @@ export function VerificationPage() {
           padding-bottom: 3px !important;
         }
         .verification-review-modal .ant-modal {
-          max-width: calc(100vw - 24px) !important;
+          max-width: calc(100vw - 16px) !important;
         }
         .verification-review-modal .ant-modal-content {
           border-radius: 12px;
@@ -816,7 +811,7 @@ export function VerificationPage() {
         }
         .verification-review-modal .ant-modal-body {
           padding: 10px 12px 12px !important;
-          max-height: calc(100vh - 160px);
+          max-height: calc(100vh - 120px);
           overflow-y: auto;
         }
         @media (max-width: 992px) {
@@ -824,7 +819,7 @@ export function VerificationPage() {
             margin: 12px auto;
           }
           .verification-review-modal .ant-modal-body {
-            max-height: calc(100vh - 132px);
+            max-height: calc(100vh - 110px);
           }
         }
       `}</style>
@@ -928,7 +923,7 @@ export function VerificationPage() {
           setPanelReviewContext(null);
         }}
         footer={null}
-        width={1040}
+        width={1280}
         className="verification-review-modal"
       >
         {activePanelReview && (
@@ -969,7 +964,7 @@ export function VerificationPage() {
               dataSource={activePanelReview.children}
               columns={panelReviewColumns}
               tableLayout="fixed"
-              scroll={{ x: 980, y: 460 }}
+              scroll={{ x: 1120, y: 560 }}
             />
           </Space>
         )}
