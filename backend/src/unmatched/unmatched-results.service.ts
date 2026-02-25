@@ -207,27 +207,57 @@ export class UnmatchedResultsService {
   /**
    * Get statistics for unmatched results
    */
-  async getStats(labId: string): Promise<{
+  async getStats(
+    labId: string,
+    startDate?: Date,
+    endDate?: Date,
+  ): Promise<{
     pending: number;
     resolved: number;
     discarded: number;
     byReason: Record<UnmatchedReason, number>;
   }> {
-    const all = await this.unmatchedRepo
+    const qb = this.unmatchedRepo
       .createQueryBuilder('u')
       .innerJoin('u.instrument', 'i')
-      .where('i.labId = :labId', { labId })
-      .getMany();
+      .where('i.labId = :labId', { labId });
+
+    if (startDate && endDate) {
+      qb.andWhere('u.receivedAt BETWEEN :startDate AND :endDate', { startDate, endDate });
+    } else if (startDate) {
+      qb.andWhere('u.receivedAt >= :startDate', { startDate });
+    } else if (endDate) {
+      qb.andWhere('u.receivedAt <= :endDate', { endDate });
+    }
+
+    const rows = await qb
+      .select('u.status', 'status')
+      .addSelect('u.reason', 'reason')
+      .addSelect('COUNT(*)', 'count')
+      .groupBy('u.status')
+      .addGroupBy('u.reason')
+      .getRawMany<{ status: string; reason: UnmatchedReason; count: string }>();
 
     const stats = {
-      pending: all.filter(u => u.status === 'PENDING').length,
-      resolved: all.filter(u => u.status === 'RESOLVED').length,
-      discarded: all.filter(u => u.status === 'DISCARDED').length,
+      pending: 0,
+      resolved: 0,
+      discarded: 0,
       byReason: {} as Record<UnmatchedReason, number>,
     };
 
     for (const reason of Object.values(UnmatchedReason)) {
-      stats.byReason[reason] = all.filter(u => u.reason === reason).length;
+      stats.byReason[reason] = 0;
+    }
+
+    for (const row of rows) {
+      const count = parseInt(row.count, 10) || 0;
+      if (row.status === 'PENDING') stats.pending += count;
+      else if (row.status === 'RESOLVED') stats.resolved += count;
+      else if (row.status === 'DISCARDED') stats.discarded += count;
+
+      if (row.reason in stats.byReason) {
+        stats.byReason[row.reason] += count;
+      }
     }
 
     return stats;

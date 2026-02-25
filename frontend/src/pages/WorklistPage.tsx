@@ -54,6 +54,12 @@ const STATUS_OPTIONS = [
   { label: 'Verified', value: 'VERIFIED' },
   { label: 'Rejected', value: 'REJECTED' },
 ];
+const DEFAULT_STATUS_FILTER: OrderTestStatus[] = [
+  'PENDING',
+  'COMPLETED',
+  'VERIFIED',
+  'REJECTED',
+];
 
 const getFlagColor = (flag: ResultFlag | null): string => {
   switch (flag) {
@@ -149,11 +155,9 @@ export function WorklistPage() {
 
   // Filters
   const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState<OrderTestStatus[]>([
-    'PENDING',
-    'COMPLETED',
-    'REJECTED',
-  ]);
+  const [statusFilter, setStatusFilter] = useState<OrderTestStatus[]>(
+    DEFAULT_STATUS_FILTER,
+  );
   const [dateFilter, setDateFilter] = useState<dayjs.Dayjs | null>(dayjs());
   const [departmentId, setDepartmentId] = useState<string | ''>('');
   const [departments, setDepartments] = useState<DepartmentDto[]>([]);
@@ -912,7 +916,9 @@ export function WorklistPage() {
             mode="multiple"
             placeholder="Status"
             value={statusFilter}
-            onChange={setStatusFilter}
+            onChange={(values) =>
+              setStatusFilter(values.length ? (values as OrderTestStatus[]) : DEFAULT_STATUS_FILTER)
+            }
             style={{ width: 250 }}
             options={STATUS_OPTIONS}
             allowClear
