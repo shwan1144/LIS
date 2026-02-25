@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+﻿import { useState, useEffect } from 'react';
 import { Navigate } from 'react-router-dom';
 import {
   Card,
@@ -211,7 +211,7 @@ export function StatisticsPage() {
           <Card>
             <Statistic
               title="TAT median (min)"
-              value={tat.medianMinutes ?? '—'}
+              value={tat.medianMinutes ?? 'N/A'}
               prefix={<ThunderboltOutlined />}
             />
           </Card>
@@ -314,9 +314,9 @@ export function StatisticsPage() {
         <Col xs={24} lg={12}>
           <Card title="TAT & quality" size="small">
             <p>
-              <Text strong>Median TAT:</Text> {tat.medianMinutes != null ? `${tat.medianMinutes} min` : '—'}
-              {' · '}
-              <Text strong>P95:</Text> {tat.p95Minutes != null ? `${tat.p95Minutes} min` : '—'}
+              <Text strong>Median TAT:</Text> {tat.medianMinutes != null ? ${tat.medianMinutes} min : 'N/A'}
+              {' | '}
+              <Text strong>P95:</Text> {tat.p95Minutes != null ? ${tat.p95Minutes} min : 'N/A'}
             </p>
             <p>
               <Text strong>Within target ({tat.targetMinutes} min):</Text>{' '}
@@ -327,9 +327,9 @@ export function StatisticsPage() {
             </p>
             <p>
               <Text strong>Abnormal (H/L):</Text> {quality.abnormalCount}
-              {' · '}
+              {' | '}
               <Text strong>Critical (HH/LL):</Text> {quality.criticalCount}
-              {' · '}
+              {' | '}
               <Text strong>Verified:</Text> {quality.totalVerified}
             </p>
           </Card>
@@ -338,7 +338,7 @@ export function StatisticsPage() {
         <Col xs={24} lg={12}>
           <Card title="Unmatched results" size="small" extra={<WarningOutlined />}>
             <p>
-              Pending: <strong>{unmatched.pending}</strong> · Resolved: <strong>{unmatched.resolved}</strong> · Discarded: <strong>{unmatched.discarded}</strong>
+              Pending: <strong>{unmatched.pending}</strong> | Resolved: <strong>{unmatched.resolved}</strong> | Discarded: <strong>{unmatched.discarded}</strong>
             </p>
             {Object.keys(unmatched.byReason || {}).length > 0 && (
               <Table
