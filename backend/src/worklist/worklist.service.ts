@@ -57,6 +57,7 @@ export interface WorklistItem {
   departmentName: string | null;
   parameterDefinitions: TestParameterDefinition[] | null;
   resultParameters: Record<string, string> | null;
+  rejectionReason: string | null;
 }
 
 function parseJsonField(val: unknown): unknown {
@@ -105,10 +106,10 @@ export class WorklistService {
     const size = Math.min(100, Math.max(1, params.size ?? 50));
     const skip = (page - 1) * size;
 
-    // Default to PENDING and COMPLETED (not yet verified)
+    // Default to active work queue plus rejected tests needing re-entry.
     const statuses = params.status?.length
       ? params.status
-      : [OrderTestStatus.PENDING, OrderTestStatus.COMPLETED];
+      : [OrderTestStatus.PENDING, OrderTestStatus.COMPLETED, OrderTestStatus.REJECTED];
 
     // User department restriction: if user has department assignments for this lab, restrict worklist
     let allowedDepartmentIds: string[] | null = null;
@@ -199,6 +200,7 @@ export class WorklistService {
       'ot.resultValue AS "resultValue"',
       'ot.resultText AS "resultText"',
       'ot.resultParameters AS "resultParameters"',
+      'ot.rejectionReason AS "rejectionReason"',
       'ot.flag AS flag',
       'ot.resultedAt AS "resultedAt"',
       'ot.resultedBy AS "resultedBy"',
@@ -207,10 +209,15 @@ export class WorklistService {
       'test.parameterDefinitions AS "parameterDefinitions"',
       'ot.parentOrderTestId AS "parentOrderTestId"',
     ])
-      // Show newest registrations first so newly added patients/orders appear at the top.
-      .orderBy('order.registeredAt', 'DESC')
+      // Keep rejected tests at the top so they can be corrected first.
+      .orderBy(
+        'CASE WHEN ot.status = :rejectedStatus THEN 0 ELSE 1 END',
+        'ASC',
+      )
+      .addOrderBy('order.registeredAt', 'DESC')
       .addOrderBy('test.sortOrder', 'ASC')
-      .addOrderBy('test.code', 'ASC');
+      .addOrderBy('test.code', 'ASC')
+      .setParameter('rejectedStatus', OrderTestStatus.REJECTED);
 
     const total = await qb.getCount();
     const rawItems = await qb.offset(skip).limit(size).getRawMany();
@@ -275,6 +282,7 @@ export class WorklistService {
         departmentName: item.departmentName ?? null,
         parameterDefinitions: (parseJsonField(item.parameterDefinitions) as TestParameterDefinition[] | null) ?? null,
         resultParameters: (parseJsonField(item.resultParameters) as Record<string, string> | null) ?? null,
+        rejectionReason: item.rejectionReason ?? null,
       };
     });
 
@@ -410,6 +418,8 @@ export class WorklistService {
     orderTest.status = isVerifiedOverride
       ? OrderTestStatus.VERIFIED
       : OrderTestStatus.COMPLETED;
+    // Re-entry after rejection should clear the old rejection reason.
+    orderTest.rejectionReason = null;
     orderTest.resultedAt = new Date();
     orderTest.resultedBy = actor.userId ?? orderTest.resultedBy;
     if (isVerifiedOverride) {

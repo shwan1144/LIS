@@ -42,6 +42,7 @@ export interface WorklistItem {
     departmentName: string | null;
     parameterDefinitions: TestParameterDefinition[] | null;
     resultParameters: Record<string, string> | null;
+    rejectionReason: string | null;
 }
 export declare class WorklistService {
     private readonly orderTestRepo;

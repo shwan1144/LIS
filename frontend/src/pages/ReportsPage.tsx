@@ -162,8 +162,15 @@ function formatOrderTestResultPreview(orderTest: OrderTestDto, allTests: OrderTe
   return '-';
 }
 
+function getRootOrderTests(order: OrderDto): OrderTestDto[] {
+  return (order.samples ?? [])
+    .flatMap((sample) => sample.orderTests ?? [])
+    .filter((test) => !test.parentOrderTestId);
+}
+
 function getResultAvailability(order: OrderDto): { ready: boolean; completed: number; total: number } {
-  const tests = (order.samples ?? []).flatMap((sample) => sample.orderTests ?? []);
+  // Panel-aware availability: a panel parent counts as one report test.
+  const tests = getRootOrderTests(order);
   if (tests.length === 0) {
     return { ready: false, completed: 0, total: 0 };
   }
@@ -219,7 +226,7 @@ export function ReportsPage() {
     dayjs().endOf('day'),
   ]);
   const [searchText, setSearchText] = useState('');
-  const [statusFilter, setStatusFilter] = useState<OrderStatus | 'ALL'>('COMPLETED');
+  const [statusFilter, setStatusFilter] = useState<OrderStatus | 'ALL'>('ALL');
   const [downloading, setDownloading] = useState<string | null>(null);
 
   const [paymentModalOpen, setPaymentModalOpen] = useState(false);
@@ -1068,10 +1075,7 @@ export function ReportsPage() {
       width: 260,
       render: (_: unknown, record: OrderDto) => {
         const availability = getResultAvailability(record);
-        const testsCount =
-          typeof record.testsCount === 'number'
-            ? record.testsCount
-            : (record.samples ?? []).reduce((sum, sample) => sum + (sample.orderTests?.length || 0), 0);
+        const testsCount = getRootOrderTests(record).length;
 
         return (
           <Space size={[4, 4]} wrap>
@@ -1509,12 +1513,12 @@ export function ReportsPage() {
               onChange={(value) => setStatusFilter(value as OrderStatus | 'ALL')}
               style={{ width: 180 }}
               options={[
-                { value: 'COMPLETED', label: 'Completed (Default)' },
+                { value: 'ALL', label: 'All Statuses (Default)' },
+                { value: 'COMPLETED', label: 'Completed' },
                 { value: 'IN_PROGRESS', label: 'In Progress' },
                 { value: 'REGISTERED', label: 'Registered' },
                 { value: 'COLLECTED', label: 'Collected' },
                 { value: 'CANCELLED', label: 'Cancelled' },
-                { value: 'ALL', label: 'All Statuses' },
               ]}
             />
 
@@ -1562,6 +1566,7 @@ export function ReportsPage() {
               columns={columns}
               dataSource={orders}
               rowKey="id"
+              showHeader
               rowClassName={(record) => (expandedOrderIds.includes(record.id) ? 'reports-order-row-expanded' : '')}
               rowSelection={{
                 selectedRowKeys: selectedOrderIds,

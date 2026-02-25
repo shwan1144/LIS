@@ -57,7 +57,7 @@ let WorklistService = class WorklistService {
         const skip = (page - 1) * size;
         const statuses = params.status?.length
             ? params.status
-            : [order_test_entity_1.OrderTestStatus.PENDING, order_test_entity_1.OrderTestStatus.COMPLETED];
+            : [order_test_entity_1.OrderTestStatus.PENDING, order_test_entity_1.OrderTestStatus.COMPLETED, order_test_entity_1.OrderTestStatus.REJECTED];
         let allowedDepartmentIds = null;
         if (userId) {
             const assignments = await this.userDeptRepo.find({
@@ -136,6 +136,7 @@ let WorklistService = class WorklistService {
             'ot.resultValue AS "resultValue"',
             'ot.resultText AS "resultText"',
             'ot.resultParameters AS "resultParameters"',
+            'ot.rejectionReason AS "rejectionReason"',
             'ot.flag AS flag',
             'ot.resultedAt AS "resultedAt"',
             'ot.resultedBy AS "resultedBy"',
@@ -144,9 +145,11 @@ let WorklistService = class WorklistService {
             'test.parameterDefinitions AS "parameterDefinitions"',
             'ot.parentOrderTestId AS "parentOrderTestId"',
         ])
-            .orderBy('order.registeredAt', 'DESC')
+            .orderBy('CASE WHEN ot.status = :rejectedStatus THEN 0 ELSE 1 END', 'ASC')
+            .addOrderBy('order.registeredAt', 'DESC')
             .addOrderBy('test.sortOrder', 'ASC')
-            .addOrderBy('test.code', 'ASC');
+            .addOrderBy('test.code', 'ASC')
+            .setParameter('rejectedStatus', order_test_entity_1.OrderTestStatus.REJECTED);
         const total = await qb.getCount();
         const rawItems = await qb.offset(skip).limit(size).getRawMany();
         const items = rawItems.map((item) => {
@@ -199,6 +202,7 @@ let WorklistService = class WorklistService {
                 departmentName: item.departmentName ?? null,
                 parameterDefinitions: parseJsonField(item.parameterDefinitions) ?? null,
                 resultParameters: parseJsonField(item.resultParameters) ?? null,
+                rejectionReason: item.rejectionReason ?? null,
             };
         });
         return { items, total };
@@ -282,6 +286,7 @@ let WorklistService = class WorklistService {
         orderTest.status = isVerifiedOverride
             ? order_test_entity_1.OrderTestStatus.VERIFIED
             : order_test_entity_1.OrderTestStatus.COMPLETED;
+        orderTest.rejectionReason = null;
         orderTest.resultedAt = new Date();
         orderTest.resultedBy = actor.userId ?? orderTest.resultedBy;
         if (isVerifiedOverride) {

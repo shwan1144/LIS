@@ -119,18 +119,25 @@ function groupWorklistByOrder(items: WorklistItem[]): WorklistOrderGroup[] {
     list.push(item);
     byOrder.set(item.orderId, list);
   }
-  return Array.from(byOrder.entries()).map(([orderId, orderItems]) => {
-    const first = orderItems[0];
-    return {
-      orderId,
-      orderNumber: first.orderNumber,
-      patientName: first.patientName,
-      patientAge: first.patientAge,
-      patientSex: first.patientSex,
-      registeredAt: first.registeredAt,
-      items: orderItems,
-    };
-  });
+  return Array.from(byOrder.entries())
+    .map(([orderId, orderItems]) => {
+      const first = orderItems[0];
+      return {
+        orderId,
+        orderNumber: first.orderNumber,
+        patientName: first.patientName,
+        patientAge: first.patientAge,
+        patientSex: first.patientSex,
+        registeredAt: first.registeredAt,
+        items: orderItems,
+      };
+    })
+    .sort((a, b) => {
+      const aHasRejected = a.items.some((i) => i.status === 'REJECTED');
+      const bHasRejected = b.items.some((i) => i.status === 'REJECTED');
+      if (aHasRejected !== bHasRejected) return aHasRejected ? -1 : 1;
+      return dayjs(b.registeredAt).valueOf() - dayjs(a.registeredAt).valueOf();
+    });
 }
 
 export function WorklistPage() {
@@ -142,7 +149,11 @@ export function WorklistPage() {
 
   // Filters
   const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState<OrderTestStatus[]>(['PENDING', 'COMPLETED']);
+  const [statusFilter, setStatusFilter] = useState<OrderTestStatus[]>([
+    'PENDING',
+    'COMPLETED',
+    'REJECTED',
+  ]);
   const [dateFilter, setDateFilter] = useState<dayjs.Dayjs | null>(dayjs());
   const [departmentId, setDepartmentId] = useState<string | ''>('');
   const [departments, setDepartments] = useState<DepartmentDto[]>([]);
@@ -432,6 +443,9 @@ export function WorklistPage() {
         const completed = g.items.filter((i) => i.status === 'COMPLETED').length;
         const verified = g.items.filter((i) => i.status === 'VERIFIED').length;
         const rejected = g.items.filter((i) => i.status === 'REJECTED').length;
+        const firstRejectedReason = g.items.find(
+          (i) => i.status === 'REJECTED' && i.rejectionReason?.trim(),
+        )?.rejectionReason;
 
         return (
           <div
@@ -460,6 +474,11 @@ export function WorklistPage() {
               {completed > 0 && <Tag color="processing" style={{ margin: 0 }}>Completed {completed}</Tag>}
               {verified > 0 && <Tag color="success" style={{ margin: 0 }}>Verified {verified}</Tag>}
               {rejected > 0 && <Tag color="error" style={{ margin: 0 }}>Rejected {rejected}</Tag>}
+              {firstRejectedReason && (
+                <Text type="danger" style={{ fontSize: 11 }}>
+                  Reason: {firstRejectedReason}
+                </Text>
+              )}
             </Space>
 
             <Text type="secondary" style={{ fontSize: 12 }}>
@@ -587,8 +606,10 @@ export function WorklistPage() {
   };
 
   const renderExpandedTests = (group: WorklistOrderGroup) => {
-    // Do not show panel child tests in expandable rows; use popup entry flow for panel tests.
-    const rootItems = group.items.filter((i) => !i.parentOrderTestId);
+    // Keep the list compact with root tests, but always expose rejected child tests for correction.
+    const visibleItems = group.items.filter(
+      (i) => !i.parentOrderTestId || i.status === 'REJECTED',
+    );
 
     const compactStyle = { paddingTop: 6, paddingBottom: 6, fontSize: 12 };
 
@@ -598,7 +619,7 @@ export function WorklistPage() {
           className="worklist-subtests-table"
           size="small"
           rowKey="id"
-          dataSource={rootItems}
+          dataSource={visibleItems}
           pagination={false}
           columns={[
             {
@@ -676,9 +697,18 @@ export function WorklistPage() {
                   REJECTED: 'error',
                 };
                 return (
-                  <Tag color={colors[r.status]} style={{ margin: 0, fontSize: 10 }}>
-                    {r.status}
-                  </Tag>
+                  <div>
+                    <Tag color={colors[r.status]} style={{ margin: 0, fontSize: 10 }}>
+                      {r.status}
+                    </Tag>
+                    {r.status === 'REJECTED' && r.rejectionReason?.trim() && (
+                      <div style={{ marginTop: 2 }}>
+                        <Text type="danger" style={{ fontSize: 10 }}>
+                          {r.rejectionReason}
+                        </Text>
+                      </div>
+                    )}
+                  </div>
                 );
               },
               onCell: () => ({ style: compactStyle }),
@@ -690,7 +720,7 @@ export function WorklistPage() {
               align: 'right',
               render: (_: unknown, r: WorklistItem) => (
                 <Space size="small">
-                  {r.status !== 'VERIFIED' && r.status !== 'REJECTED' && (
+                  {r.status !== 'VERIFIED' && (
                     <Button
                       type="primary"
                       size="small"
@@ -698,7 +728,11 @@ export function WorklistPage() {
                       onClick={() => handleOpenResultModal(r)}
                       style={{ fontSize: 11, height: 24 }}
                     >
-                      {r.resultValue !== null || r.resultText ? 'Edit' : 'Enter'}
+                      {r.status === 'REJECTED'
+                        ? 'Re-enter'
+                        : r.resultValue !== null || r.resultText
+                          ? 'Edit'
+                          : 'Enter'}
                     </Button>
                   )}
                   {r.status === 'COMPLETED' && (
@@ -736,7 +770,7 @@ export function WorklistPage() {
                   )}
                   {r.status === 'REJECTED' && (
                     <Text type="danger" style={{ fontSize: 11 }}>
-                      <CloseCircleOutlined /> Rejected
+                      <CloseCircleOutlined /> Re-entry required
                     </Text>
                   )}
                 </Space>
