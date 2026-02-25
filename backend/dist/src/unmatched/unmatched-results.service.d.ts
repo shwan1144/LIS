@@ -44,7 +44,7 @@ export declare class UnmatchedResultsService {
     }>;
     findOne(id: string, labId: string): Promise<UnmatchedInstrumentResult>;
     resolve(id: string, labId: string, actor: LabActorContext, dto: ResolveUnmatchedDto): Promise<UnmatchedInstrumentResult>;
-    getStats(labId: string): Promise<{
+    getStats(labId: string, startDate?: Date, endDate?: Date): Promise<{
         pending: number;
         resolved: number;
         discarded: number;

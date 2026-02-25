@@ -63,7 +63,7 @@ let DashboardService = class DashboardService {
             this.getTestsStatsForPeriod(labId, startDate, endDate),
             this.getTatForPeriod(labId, startDate, endDate),
             this.getQualityForPeriod(labId, startDate, endDate),
-            this.unmatchedService.getStats(labId),
+            this.unmatchedService.getStats(labId, startDate, endDate),
             this.unmatchedService.getCountByInstrumentInPeriod(labId, startDate, endDate),
         ]);
         return {

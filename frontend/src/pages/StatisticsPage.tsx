@@ -314,9 +314,9 @@ export function StatisticsPage() {
         <Col xs={24} lg={12}>
           <Card title="TAT & quality" size="small">
             <p>
-              <Text strong>Median TAT:</Text> {tat.medianMinutes != null ? ${tat.medianMinutes} min : 'N/A'}
+              <Text strong>Median TAT:</Text> {tat.medianMinutes != null ? `${tat.medianMinutes} min` : 'N/A'}
               {' | '}
-              <Text strong>P95:</Text> {tat.p95Minutes != null ? ${tat.p95Minutes} min : 'N/A'}
+              <Text strong>P95:</Text> {tat.p95Minutes != null ? `${tat.p95Minutes} min` : 'N/A'}
             </p>
             <p>
               <Text strong>Within target ({tat.targetMinutes} min):</Text>{' '}

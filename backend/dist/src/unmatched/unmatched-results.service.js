@@ -136,20 +136,47 @@ let UnmatchedResultsService = class UnmatchedResultsService {
         }
         return this.unmatchedRepo.save(unmatched);
     }
-    async getStats(labId) {
-        const all = await this.unmatchedRepo
+    async getStats(labId, startDate, endDate) {
+        const qb = this.unmatchedRepo
             .createQueryBuilder('u')
             .innerJoin('u.instrument', 'i')
-            .where('i.labId = :labId', { labId })
-            .getMany();
+            .where('i.labId = :labId', { labId });
+        if (startDate && endDate) {
+            qb.andWhere('u.receivedAt BETWEEN :startDate AND :endDate', { startDate, endDate });
+        }
+        else if (startDate) {
+            qb.andWhere('u.receivedAt >= :startDate', { startDate });
+        }
+        else if (endDate) {
+            qb.andWhere('u.receivedAt <= :endDate', { endDate });
+        }
+        const rows = await qb
+            .select('u.status', 'status')
+            .addSelect('u.reason', 'reason')
+            .addSelect('COUNT(*)', 'count')
+            .groupBy('u.status')
+            .addGroupBy('u.reason')
+            .getRawMany();
         const stats = {
-            pending: all.filter(u => u.status === 'PENDING').length,
-            resolved: all.filter(u => u.status === 'RESOLVED').length,
-            discarded: all.filter(u => u.status === 'DISCARDED').length,
+            pending: 0,
+            resolved: 0,
+            discarded: 0,
             byReason: {},
         };
         for (const reason of Object.values(unmatched_instrument_result_entity_1.UnmatchedReason)) {
-            stats.byReason[reason] = all.filter(u => u.reason === reason).length;
+            stats.byReason[reason] = 0;
+        }
+        for (const row of rows) {
+            const count = parseInt(row.count, 10) || 0;
+            if (row.status === 'PENDING')
+                stats.pending += count;
+            else if (row.status === 'RESOLVED')
+                stats.resolved += count;
+            else if (row.status === 'DISCARDED')
+                stats.discarded += count;
+            if (row.reason in stats.byReason) {
+                stats.byReason[row.reason] += count;
+            }
         }
         return stats;
     }
