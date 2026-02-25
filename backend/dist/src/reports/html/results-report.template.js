@@ -262,7 +262,7 @@ function buildResultsReportHtml(input) {
     const isPanelParent = (ot) => !ot.parentOrderTestId && ot.test?.type === test_entity_1.TestType.PANEL;
     const panelTests = flattenedTests.filter(isPanelParent);
     const regularTests = flattenedTests.filter((ot) => ot.parentOrderTestId || ot.test?.type !== test_entity_1.TestType.PANEL);
-    let panelContentHtml = '';
+    const panelPageSections = [];
     for (let i = 0; i < panelTests.length; i++) {
         const ot = panelTests[i];
         const t = ot.test;
@@ -347,12 +347,27 @@ function buildResultsReportHtml(input) {
         else {
             contentHtml = '<table class="gue-gse-table"><tbody><tr><td colspan="2">No data</td></tr></tbody></table>';
         }
-        panelContentHtml += `
-      <div class="panel-section" style="margin-top: 20px;">
+        panelPageSections.push(`
+      <div class="panel-section">
         <div class="panel-page-title">${escapeHtml(testName)}</div>
         ${contentHtml}
-      </div>`;
+      </div>`);
     }
+    const panelPagesHtml = panelPageSections
+        .map((panelSectionHtml, index) => {
+        const shouldBreakBefore = regularTests.length > 0 || index > 0;
+        const showComments = Boolean(commentsText) && index === panelPageSections.length - 1;
+        return `
+    <div class="page panel-page" style="page-break-before: ${shouldBreakBefore ? 'always' : 'auto'};">
+      ${pageHeaderHtml}
+      <div class="content">
+        ${panelSectionHtml}
+        ${showComments ? `<div class="comments" style="margin-top:8px;font-size:11px;font-weight:700;"><strong>Comments:</strong> ${escapeHtml(commentsText)}</div>` : ''}
+      </div>
+      ${pageFooterHtml}
+    </div>`;
+    })
+        .join('');
     const deptCatMap = new Map();
     for (const ot of regularTests) {
         const t = ot.test;
@@ -408,16 +423,8 @@ function buildResultsReportHtml(input) {
       ${pageFooterHtml}
     </div>`;
     }
-    if (panelContentHtml) {
-        pagesHtml += `
-    <div class="page" style="page-break-before: ${regularTests.length > 0 ? 'always' : 'auto'};">
-      ${pageHeaderHtml}
-      <div class="content">
-        ${panelContentHtml}
-        ${commentsText ? `<div class="comments" style="margin-top:8px;font-size:11px;font-weight:700;"><strong>Comments:</strong> ${escapeHtml(commentsText)}</div>` : ''}
-      </div>
-      ${pageFooterHtml}
-    </div>`;
+    if (panelPagesHtml) {
+        pagesHtml += panelPagesHtml;
     }
     if (regularTests.length === 0 && panelTests.length === 0) {
         pagesHtml += `

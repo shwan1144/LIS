@@ -12,7 +12,6 @@ import {
   DatePicker,
   Button,
   Space,
-  Input,
   Tabs,
 } from 'antd';
 import {
@@ -20,9 +19,7 @@ import {
   DollarOutlined,
   ExperimentOutlined,
   ThunderboltOutlined,
-  WarningOutlined,
   DownloadOutlined,
-  ApiOutlined,
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { getStatistics, type StatisticsDto } from '../api/client';
@@ -43,7 +40,6 @@ export function StatisticsPage() {
   const canViewStatistics = user?.role === 'LAB_ADMIN' || user?.role === 'SUPER_ADMIN';
   const [data, setData] = useState<StatisticsDto | null>(null);
   const [loading, setLoading] = useState(true);
-  const [testFilter, setTestFilter] = useState('');
   const [range, setRange] = useState<[dayjs.Dayjs, dayjs.Dayjs]>([
     dayjs().subtract(30, 'day'),
     dayjs(),
@@ -135,12 +131,6 @@ export function StatisticsPage() {
   const s = data ?? ({} as StatisticsDto);
   const orders = s.orders ?? { total: 0, byStatus: {}, byShift: [] };
   const tests = s.tests ?? { total: 0, byDepartment: [], byTest: [], byShift: [] };
-  const byTestFiltered = (tests.byTest ?? []).filter(
-    (t) =>
-      !testFilter.trim() ||
-      t.testCode.toLowerCase().includes(testFilter.toLowerCase()) ||
-      t.testName.toLowerCase().includes(testFilter.toLowerCase()),
-  );
   const tat = s.tat ?? {
     medianMinutes: null,
     p95Minutes: null,
@@ -148,9 +138,6 @@ export function StatisticsPage() {
     withinTargetTotal: 0,
     targetMinutes: 60,
   };
-  const quality = s.quality ?? { abnormalCount: 0, criticalCount: 0, totalVerified: 0 };
-  const unmatched = s.unmatched ?? { pending: 0, resolved: 0, discarded: 0, byReason: {} };
-  const instrumentWorkload = s.instrumentWorkload ?? [];
 
   return (
     <div>
@@ -218,163 +205,6 @@ export function StatisticsPage() {
         </Col>
       </Row>
 
-      <Row gutter={[16, 16]}>
-        <Col xs={24} lg={12}>
-          <Card title="Orders by status" size="small">
-            <Table
-              size="small"
-              dataSource={Object.entries(orders.byStatus || {}).map(([status, count]) => ({
-                key: status,
-                status,
-                count,
-              }))}
-              columns={[
-                { title: 'Status', dataIndex: 'status', key: 'status' },
-                { title: 'Count', dataIndex: 'count', key: 'count', width: 100 },
-              ]}
-              pagination={false}
-            />
-          </Card>
-        </Col>
-        <Col xs={24} lg={12}>
-          <Card title="Orders by shift" size="small">
-            {orders.byShift?.length ? (
-              <Table
-                size="small"
-                dataSource={orders.byShift.map((r, i) => ({ ...r, key: r.shiftId ?? `null-${i}` }))}
-                columns={[
-                  { title: 'Shift', dataIndex: 'shiftName', key: 'shiftName' },
-                  { title: 'Count', dataIndex: 'count', key: 'count', width: 100 },
-                ]}
-                pagination={false}
-              />
-            ) : (
-              <Text type="secondary">No data</Text>
-            )}
-          </Card>
-        </Col>
-
-        <Col xs={24} lg={12}>
-          <Card title="Tests by department" size="small">
-            {tests.byDepartment?.length ? (
-              <Table
-                size="small"
-                dataSource={tests.byDepartment.map((d, i) => ({
-                  key: d.departmentId ?? `u-${i}`,
-                  departmentName: d.departmentName,
-                  count: d.count,
-                }))}
-                columns={[
-                  { title: 'Department', dataIndex: 'departmentName', key: 'departmentName' },
-                  { title: 'Count', dataIndex: 'count', key: 'count', width: 100 },
-                ]}
-                pagination={false}
-              />
-            ) : (
-              <Text type="secondary">No data</Text>
-            )}
-          </Card>
-        </Col>
-
-        <Col xs={24}>
-          <Card
-            title="Test volume by test (e.g. CBC)"
-            size="small"
-            extra={
-              <Input.Search
-                placeholder="Search by code or name (e.g. CBC)"
-                allowClear
-                value={testFilter}
-                onChange={(e) => setTestFilter(e.target.value)}
-                style={{ width: 240 }}
-              />
-            }
-          >
-            {byTestFiltered.length ? (
-              <Table
-                size="small"
-                dataSource={byTestFiltered.map((t) => ({ ...t, key: t.testId }))}
-                columns={[
-                  { title: 'Code', dataIndex: 'testCode', key: 'testCode', width: 120 },
-                  { title: 'Test name', dataIndex: 'testName', key: 'testName' },
-                  { title: 'Count', dataIndex: 'count', key: 'count', width: 100 },
-                ]}
-                pagination={byTestFiltered.length > 10 ? { pageSize: 10 } : false}
-              />
-            ) : (
-              <Text type="secondary">
-                {tests.byTest?.length
-                  ? 'No tests match the search.'
-                  : 'No test volume data for this period.'}
-              </Text>
-            )}
-          </Card>
-        </Col>
-
-        <Col xs={24} lg={12}>
-          <Card title="TAT & quality" size="small">
-            <p>
-              <Text strong>Median TAT:</Text> {tat.medianMinutes != null ? `${tat.medianMinutes} min` : 'N/A'}
-              {' | '}
-              <Text strong>P95:</Text> {tat.p95Minutes != null ? `${tat.p95Minutes} min` : 'N/A'}
-            </p>
-            <p>
-              <Text strong>Within target ({tat.targetMinutes} min):</Text>{' '}
-              {tat.withinTargetCount} / {tat.withinTargetTotal}
-              {tat.withinTargetTotal > 0
-                ? ` (${Math.round((100 * tat.withinTargetCount) / tat.withinTargetTotal)}%)`
-                : ''}
-            </p>
-            <p>
-              <Text strong>Abnormal (H/L):</Text> {quality.abnormalCount}
-              {' | '}
-              <Text strong>Critical (HH/LL):</Text> {quality.criticalCount}
-              {' | '}
-              <Text strong>Verified:</Text> {quality.totalVerified}
-            </p>
-          </Card>
-        </Col>
-
-        <Col xs={24} lg={12}>
-          <Card title="Unmatched results" size="small" extra={<WarningOutlined />}>
-            <p>
-              Pending: <strong>{unmatched.pending}</strong> | Resolved: <strong>{unmatched.resolved}</strong> | Discarded: <strong>{unmatched.discarded}</strong>
-            </p>
-            {Object.keys(unmatched.byReason || {}).length > 0 && (
-              <Table
-                size="small"
-                dataSource={Object.entries(unmatched.byReason).map(([reason, count]) => ({
-                  key: reason,
-                  reason,
-                  count,
-                }))}
-                columns={[
-                  { title: 'Reason', dataIndex: 'reason', key: 'reason' },
-                  { title: 'Count', dataIndex: 'count', key: 'count', width: 80 },
-                ]}
-                pagination={false}
-              />
-            )}
-          </Card>
-        </Col>
-        <Col xs={24} lg={12}>
-          <Card title="Instrument workload (unmatched received)" size="small" extra={<ApiOutlined />}>
-            {instrumentWorkload.length ? (
-              <Table
-                size="small"
-                dataSource={instrumentWorkload.map((i) => ({ ...i, key: i.instrumentId }))}
-                columns={[
-                  { title: 'Instrument', dataIndex: 'instrumentName', key: 'instrumentName' },
-                  { title: 'Count', dataIndex: 'count', key: 'count', width: 100 },
-                ]}
-                pagination={false}
-              />
-            ) : (
-              <Text type="secondary">No unmatched results in period</Text>
-            )}
-          </Card>
-        </Col>
-      </Row>
               </>
             ),
           },

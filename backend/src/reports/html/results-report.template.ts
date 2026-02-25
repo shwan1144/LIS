@@ -322,8 +322,8 @@ export function buildResultsReportHtml(input: {
     (ot) => ot.parentOrderTestId || (ot.test as any)?.type !== TestType.PANEL
   );
 
-  // Build panel content HTML to add to main content
-  let panelContentHtml = '';
+  // Build panel content with one panel per page.
+  const panelPageSections: string[] = [];
   for (let i = 0; i < panelTests.length; i++) {
     const ot = panelTests[i];
     const t: any = ot.test;
@@ -405,12 +405,28 @@ export function buildResultsReportHtml(input: {
     } else {
       contentHtml = '<table class="gue-gse-table"><tbody><tr><td colspan="2">No data</td></tr></tbody></table>';
     }
-    panelContentHtml += `
-      <div class="panel-section" style="margin-top: 20px;">
+    panelPageSections.push(`
+      <div class="panel-section">
         <div class="panel-page-title">${escapeHtml(testName)}</div>
         ${contentHtml}
-      </div>`;
+      </div>`);
   }
+
+  const panelPagesHtml = panelPageSections
+    .map((panelSectionHtml, index) => {
+      const shouldBreakBefore = regularTests.length > 0 || index > 0;
+      const showComments = Boolean(commentsText) && index === panelPageSections.length - 1;
+      return `
+    <div class="page panel-page" style="page-break-before: ${shouldBreakBefore ? 'always' : 'auto'};">
+      ${pageHeaderHtml}
+      <div class="content">
+        ${panelSectionHtml}
+        ${showComments ? `<div class="comments" style="margin-top:8px;font-size:11px;font-weight:700;"><strong>Comments:</strong> ${escapeHtml(commentsText)}</div>` : ''}
+      </div>
+      ${pageFooterHtml}
+    </div>`;
+    })
+    .join('');
 
   // Group regular tests by department then category
   const deptCatMap = new Map<string, Map<string, OrderTest[]>>();
@@ -470,17 +486,9 @@ export function buildResultsReportHtml(input: {
     </div>`;
   }
 
-  // Page 2: Panel tests (if any)
-  if (panelContentHtml) {
-    pagesHtml += `
-    <div class="page" style="page-break-before: ${regularTests.length > 0 ? 'always' : 'auto'};">
-      ${pageHeaderHtml}
-      <div class="content">
-        ${panelContentHtml}
-        ${commentsText ? `<div class="comments" style="margin-top:8px;font-size:11px;font-weight:700;"><strong>Comments:</strong> ${escapeHtml(commentsText)}</div>` : ''}
-      </div>
-      ${pageFooterHtml}
-    </div>`;
+  // Panel pages (one panel section per page).
+  if (panelPagesHtml) {
+    pagesHtml += panelPagesHtml;
   }
 
   // If no tests at all

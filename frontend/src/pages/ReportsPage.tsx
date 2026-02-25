@@ -61,6 +61,7 @@ const { useBreakpoint } = Grid;
 
 type DeliveryChannel = 'WHATSAPP' | 'VIBER';
 type EditResultMode = 'SINGLE' | 'PANEL';
+type ReportStatusFilter = 'ALL' | 'PENDING' | 'COMPLETED' | 'VERIFIED' | 'REJECTED';
 
 type EditResultContext = {
   editMode: EditResultMode;
@@ -185,6 +186,17 @@ function getResultAvailability(order: OrderDto): { ready: boolean; completed: nu
   };
 }
 
+function getReportStatus(order: OrderDto): Exclude<ReportStatusFilter, 'ALL'> {
+  const tests = getRootOrderTests(order);
+  if (tests.length === 0) return 'PENDING';
+
+  const statuses = tests.map((t) => t.status);
+  if (statuses.some((s) => s === 'REJECTED')) return 'REJECTED';
+  if (statuses.every((s) => s === 'VERIFIED')) return 'VERIFIED';
+  if (statuses.every((s) => s === 'COMPLETED' || s === 'VERIFIED')) return 'COMPLETED';
+  return 'PENDING';
+}
+
 function getOrderTestRows(order: OrderDto): ExpandedOrderTestRow[] {
   const rows: ExpandedOrderTestRow[] = [];
   const allTestsInOrder = (order.samples ?? []).flatMap((s) => s.orderTests ?? []);
@@ -226,7 +238,7 @@ export function ReportsPage() {
     dayjs().endOf('day'),
   ]);
   const [searchText, setSearchText] = useState('');
-  const [statusFilter, setStatusFilter] = useState<OrderStatus | 'ALL'>('ALL');
+  const [statusFilter, setStatusFilter] = useState<ReportStatusFilter>('ALL');
   const [downloading, setDownloading] = useState<string | null>(null);
 
   const [paymentModalOpen, setPaymentModalOpen] = useState(false);
@@ -240,9 +252,14 @@ export function ReportsPage() {
   const [editResultForm] = Form.useForm<any>();
   const compactCellStyle = { paddingTop: 6, paddingBottom: 6, fontSize: 12 };
 
+  const filteredOrders = useMemo(() => {
+    if (statusFilter === 'ALL') return orders;
+    return orders.filter((order) => getReportStatus(order) === statusFilter);
+  }, [orders, statusFilter]);
+
   const selectedOrders = useMemo(
-    () => orders.filter((order) => selectedOrderIds.includes(order.id)),
-    [orders, selectedOrderIds],
+    () => filteredOrders.filter((order) => selectedOrderIds.includes(order.id)),
+    [filteredOrders, selectedOrderIds],
   );
 
   const currentUserRole = useMemo(() => {
@@ -273,7 +290,6 @@ export function ReportsPage() {
         startDate: dateRange[0].format('YYYY-MM-DD'),
         endDate: dateRange[1].format('YYYY-MM-DD'),
         search: searchText.trim() || undefined,
-        status: statusFilter === 'ALL' ? undefined : statusFilter,
         size: 1000,
       });
       setOrders(result?.items || []);
@@ -295,10 +311,10 @@ export function ReportsPage() {
   useEffect(() => {
     if (expandedOrderIds.length === 0) return;
     const expandedId = expandedOrderIds[0];
-    if (!orders.some((order) => order.id === expandedId)) {
+    if (!filteredOrders.some((order) => order.id === expandedId)) {
       setExpandedOrderIds([]);
     }
-  }, [expandedOrderIds, orders]);
+  }, [expandedOrderIds, filteredOrders]);
 
   const triggerPdfDownload = (blob: Blob, filename: string) => {
     const url = window.URL.createObjectURL(blob);
@@ -1163,7 +1179,19 @@ export function ReportsPage() {
   return (
     <div>
       <style>{`
+        .reports-orders-table .ant-table-thead {
+          display: table-header-group !important;
+          visibility: visible !important;
+        }
+        .reports-orders-table .ant-table-thead > tr {
+          display: table-row !important;
+        }
         .reports-orders-table .ant-table-thead > tr > th {
+          background: ${isDark ? 'rgba(255,255,255,0.06)' : '#f5f8ff'} !important;
+          color: ${isDark ? 'rgba(255,255,255,0.9)' : 'rgba(0,0,0,0.88)'} !important;
+          border-bottom: 1px solid ${isDark ? 'rgba(255,255,255,0.14)' : '#d9e5ff'} !important;
+          font-weight: 700;
+          font-size: 12px;
           padding-top: 5px !important;
           padding-bottom: 5px !important;
         }
@@ -1510,15 +1538,16 @@ export function ReportsPage() {
 
             <Select
               value={statusFilter}
-              onChange={(value) => setStatusFilter(value as OrderStatus | 'ALL')}
+              onChange={(value) => setStatusFilter(value as ReportStatusFilter)}
+              placeholder="Status"
+              allowClear={false}
               style={{ width: 180 }}
               options={[
-                { value: 'ALL', label: 'All Statuses (Default)' },
+                { value: 'ALL', label: 'All statuses' },
+                { value: 'PENDING', label: 'Pending' },
                 { value: 'COMPLETED', label: 'Completed' },
-                { value: 'IN_PROGRESS', label: 'In Progress' },
-                { value: 'REGISTERED', label: 'Registered' },
-                { value: 'COLLECTED', label: 'Collected' },
-                { value: 'CANCELLED', label: 'Cancelled' },
+                { value: 'VERIFIED', label: 'Verified' },
+                { value: 'REJECTED', label: 'Rejected' },
               ]}
             />
 
@@ -1558,13 +1587,13 @@ export function ReportsPage() {
             <div style={{ textAlign: 'center', padding: 40 }}>
               <Spin size="large" />
             </div>
-          ) : orders.length === 0 ? (
+          ) : filteredOrders.length === 0 ? (
             <Empty description="No orders found" />
           ) : (
             <Table
               className="reports-orders-table"
               columns={columns}
-              dataSource={orders}
+              dataSource={filteredOrders}
               rowKey="id"
               showHeader
               rowClassName={(record) => (expandedOrderIds.includes(record.id) ? 'reports-order-row-expanded' : '')}
