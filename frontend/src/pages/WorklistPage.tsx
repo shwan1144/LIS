@@ -430,9 +430,18 @@ export function WorklistPage() {
     }
   };
 
+  const queueGridTemplate = 'minmax(220px, 1.8fr) minmax(180px, 1.4fr) 120px 140px';
+
   const orderColumns: ColumnsType<WorklistOrderGroup> = [
     {
-      title: 'Queue',
+      title: (
+        <div className="worklist-queue-header" style={{ gridTemplateColumns: queueGridTemplate }}>
+          <span className="worklist-queue-header-item worklist-queue-header-item-patient">Patient</span>
+          <span className="worklist-queue-header-item">Progress</span>
+          <span className="worklist-queue-header-item">Order #</span>
+          <span className="worklist-queue-header-item">Date/Time</span>
+        </div>
+      ),
       key: 'queue',
       render: (_, g) => {
         const pending = g.items.filter((i) => i.status === 'PENDING' || i.status === 'IN_PROGRESS').length;
@@ -447,7 +456,7 @@ export function WorklistPage() {
           <div
             style={{
               display: 'grid',
-              gridTemplateColumns: 'minmax(220px, 1.8fr) minmax(180px, 1.4fr) 120px 140px',
+              gridTemplateColumns: queueGridTemplate,
               alignItems: 'center',
               columnGap: 8,
             }}
@@ -799,6 +808,23 @@ export function WorklistPage() {
           padding-top: 5px !important;
           padding-bottom: 5px !important;
         }
+        .worklist-queue-header {
+          display: grid;
+          align-items: center;
+          column-gap: 8px;
+          width: 100%;
+        }
+        .worklist-queue-header-item {
+          font-size: 11px;
+          font-weight: 700;
+          line-height: 14px;
+          text-transform: uppercase;
+          letter-spacing: 0.2px;
+          white-space: nowrap;
+        }
+        .worklist-queue-header-item-patient {
+          padding-left: 22px;
+        }
         .worklist-orders-table .ant-table-tbody > tr > td {
           padding-top: 5px !important;
           padding-bottom: 5px !important;
@@ -1073,10 +1099,10 @@ export function WorklistPage() {
                         letterSpacing: '0.5px'
                       }}
                       >
-                        <div style={{ flex: '1 1 30%' }}>Test</div>
-                        <div style={{ flex: '1 1 30%' }}>Result</div>
-                        <div style={{ flex: '1 1 15%', textAlign: 'center' }}>Unit</div>
-                        <div style={{ flex: '1 1 25%', textAlign: 'right' }}>Ref. Range</div>
+                        <div style={{ flex: '1 1 24%' }}>Test</div>
+                        <div style={{ flex: '1 1 40%' }}>Result</div>
+                        <div style={{ flex: '1 1 14%', textAlign: 'center' }}>Unit</div>
+                        <div style={{ flex: '1 1 22%', textAlign: 'right' }}>Ref. Range</div>
                       </div>
                     )}
 
@@ -1090,11 +1116,11 @@ export function WorklistPage() {
                           borderBottom: isPanel && idx < targetItems.length - 1 ? (isDark ? '1px solid rgba(255,255,255,0.05)' : '1px solid #f0f0f0') : 'none'
                         }}>
                           <div style={{ display: 'flex', alignItems: 'flex-start', flexWrap: 'wrap' }}>
-                            <div style={{ flex: isPanel ? '1 1 30%' : '1 1 100%', marginBottom: isPanel ? 0 : 8 }}>
+                            <div style={{ flex: isPanel ? '1 1 24%' : '1 1 100%', marginBottom: isPanel ? 0 : 8 }}>
                               <Text strong={!isPanel} style={{ fontSize: isPanel ? 12 : 14 }}>{target.testName}</Text>
                             </div>
 
-                            <div style={{ flex: isPanel ? '1 1 30%' : '1 1 100%' }}>
+                            <div style={{ flex: isPanel ? '1 1 40%' : '1 1 100%' }}>
                               {!hasParams ? (
                                 <Form.Item
                                   name={[target.id, 'resultText']}
@@ -1135,10 +1161,10 @@ export function WorklistPage() {
 
                             {isPanel && (
                               <>
-                                <div style={{ flex: '1 1 15%', textAlign: 'center', fontSize: 12 }}>
+                                <div style={{ flex: '1 1 14%', textAlign: 'center', fontSize: 12 }}>
                                   {target.testUnit || '-'}
                                 </div>
-                                <div style={{ flex: '1 1 25%', textAlign: 'right', fontSize: 12, color: 'rgba(128,128,128,0.8)' }}>
+                                <div style={{ flex: '1 1 22%', textAlign: 'right', fontSize: 12, color: 'rgba(128,128,128,0.8)' }}>
                                   {target.normalText || `${target.normalMin ?? '-'} - ${target.normalMax ?? '-'}`}
                                 </div>
                               </>

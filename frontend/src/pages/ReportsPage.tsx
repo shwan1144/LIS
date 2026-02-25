@@ -1451,10 +1451,10 @@ export function ReportsPage() {
                         letterSpacing: '0.5px'
                       }}
                       >
-                        <div style={{ flex: '1 1 30%' }}>Test</div>
-                        <div style={{ flex: '1 1 30%' }}>Result</div>
-                        <div style={{ flex: '1 1 15%', textAlign: 'center' }}>Unit</div>
-                        <div style={{ flex: '1 1 25%', textAlign: 'right' }}>Ref. Range</div>
+                        <div style={{ flex: '1 1 24%' }}>Test</div>
+                        <div style={{ flex: '1 1 40%' }}>Result</div>
+                        <div style={{ flex: '1 1 14%', textAlign: 'center' }}>Unit</div>
+                        <div style={{ flex: '1 1 22%', textAlign: 'right' }}>Ref. Range</div>
                       </div>
                     )}
 
@@ -1468,11 +1468,11 @@ export function ReportsPage() {
                           borderBottom: isPanel && idx < targetItems.length - 1 ? (isDark ? '1px solid rgba(255,255,255,0.05)' : '1px solid #f0f0f0') : 'none'
                         }}>
                           <div style={{ display: 'flex', alignItems: 'flex-start', flexWrap: 'wrap' }}>
-                            <div style={{ flex: isPanel ? '1 1 30%' : '1 1 100%', marginBottom: isPanel ? 0 : 8 }}>
+                            <div style={{ flex: isPanel ? '1 1 24%' : '1 1 100%', marginBottom: isPanel ? 0 : 8 }}>
                               <Text strong={!isPanel} style={{ fontSize: isPanel ? 12 : 14 }}>{target.test?.name}</Text>
                             </div>
 
-                            <div style={{ flex: isPanel ? '1 1 30%' : '1 1 100%' }}>
+                            <div style={{ flex: isPanel ? '1 1 40%' : '1 1 100%' }}>
                               {!hasParams ? (
                                 <Form.Item
                                   name={[target.id, 'resultText']}
@@ -1507,10 +1507,10 @@ export function ReportsPage() {
 
                             {isPanel && (
                               <>
-                                <div style={{ flex: '1 1 15%', textAlign: 'center', fontSize: 12 }}>
+                                <div style={{ flex: '1 1 14%', textAlign: 'center', fontSize: 12 }}>
                                   {target.test?.unit || '-'}
                                 </div>
-                                <div style={{ flex: '1 1 25%', textAlign: 'right', fontSize: 12, color: 'rgba(128,128,128,0.8)' }}>
+                                <div style={{ flex: '1 1 22%', textAlign: 'right', fontSize: 12, color: 'rgba(128,128,128,0.8)' }}>
                                   {target.test?.normalText || `${target.test?.normalMin ?? '-'} - ${target.test?.normalMax ?? '-'}`}
                                 </div>
                               </>

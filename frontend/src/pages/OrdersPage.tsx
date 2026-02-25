@@ -707,9 +707,23 @@ export function OrdersPage() {
                   </Button>
                 </Space>
               }
-              bodyStyle={{ padding: 12 }}
+              bodyStyle={{
+                padding: 12,
+                minHeight: 'calc(100vh - 200px)',
+                display: 'flex',
+                flexDirection: 'column',
+              }}
             >
-              <Space direction="vertical" style={{ width: '100%' }} size={12}>
+              <div
+                style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  flex: 1,
+                  minHeight: 0,
+                  width: '100%',
+                }}
+              >
+              <Space direction="vertical" style={{ width: '100%', flexShrink: 0 }} size={12}>
                 <Input
                   placeholder="Search order #, patient, phone"
                   value={listQueryInput}
@@ -735,39 +749,46 @@ export function OrdersPage() {
               </Space>
 
               {patientList.length > 0 ? (
+                <>
                 <div
                   style={{
                     marginTop: 10,
-                    padding: '4px 8px 6px',
-                    borderBottom: styles.border,
+                    flex: 1,
+                    minHeight: 0,
+                    overflowY: 'auto',
                   }}
                 >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <div style={{ width: 14 }} />
-                    <div
-                      style={{
-                        minWidth: 0,
-                        flex: 1,
-                        display: 'grid',
-                        gridTemplateColumns: orderHistoryGridTemplate,
-                        columnGap: 6,
-                      }}
-                    >
-                      <Text type="secondary" style={{ fontSize: 11, fontWeight: 600 }}>Patient</Text>
-                      <Text type="secondary" style={{ fontSize: 11, fontWeight: 600 }}>Status</Text>
-                      <Text type="secondary" style={{ fontSize: 11, fontWeight: 600 }}>Order</Text>
-                      <Text type="secondary" style={{ fontSize: 11, fontWeight: 600 }}>Shift</Text>
-                      <Text type="secondary" style={{ fontSize: 11, fontWeight: 600 }}>Time</Text>
+                  <div
+                    style={{
+                      padding: '4px 8px 6px',
+                      borderBottom: styles.border,
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <div style={{ width: 14 }} />
+                      <div
+                        style={{
+                          minWidth: 0,
+                          flex: 1,
+                          display: 'grid',
+                          gridTemplateColumns: orderHistoryGridTemplate,
+                          columnGap: 6,
+                        }}
+                      >
+                        <Text type="secondary" style={{ fontSize: 11, fontWeight: 600 }}>Patient</Text>
+                        <Text type="secondary" style={{ fontSize: 11, fontWeight: 600 }}>Status</Text>
+                        <Text type="secondary" style={{ fontSize: 11, fontWeight: 600 }}>Order</Text>
+                        <Text type="secondary" style={{ fontSize: 11, fontWeight: 600 }}>Shift</Text>
+                        <Text type="secondary" style={{ fontSize: 11, fontWeight: 600 }}>Time</Text>
+                      </div>
+                      <div style={{ width: 24 }} />
                     </div>
-                    <div style={{ width: 24 }} />
                   </div>
-                </div>
-              ) : null}
 
-              <List
-                size="small"
-                dataSource={patientList}
-                renderItem={(row) => {
+                  <List
+                    size="small"
+                    dataSource={patientList}
+                    renderItem={(row) => {
                   const isLocked = row.createdOrder != null;
                   const isSelected = selectedRowId === row.rowId;
                   const name = getPatientName(row.patient);
@@ -877,26 +898,44 @@ export function OrdersPage() {
                     </List.Item>
                   );
                 }}
-              />
-              {patientList.length === 0 ? (
+                  />
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 8, flexShrink: 0 }}>
+                  <Text type="secondary">
+                    Page {listPage} of {totalPages}
+                  </Text>
+                  <Pagination
+                    size="small"
+                    current={listPage}
+                    total={listTotal}
+                    pageSize={ORDER_PAGE_SIZE}
+                    showSizeChanger={false}
+                    onChange={(page) => setListPage(page)}
+                  />
+                </div>
+                </>
+              ) : (
+                <>
                 <Empty
                   image={Empty.PRESENTED_IMAGE_SIMPLE}
                   description="No orders found"
-                  style={{ padding: 24 }}
+                  style={{ padding: 24, marginTop: 10 }}
                 />
-              ) : null}
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 8 }}>
-                <Text type="secondary">
-                  Page {listPage} of {totalPages}
-                </Text>
-                <Pagination
-                  size="small"
-                  current={listPage}
-                  total={listTotal}
-                  pageSize={ORDER_PAGE_SIZE}
-                  showSizeChanger={false}
-                  onChange={(page) => setListPage(page)}
-                />
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 8 }}>
+                  <Text type="secondary">
+                    Page {listPage} of {totalPages}
+                  </Text>
+                  <Pagination
+                    size="small"
+                    current={listPage}
+                    total={listTotal}
+                    pageSize={ORDER_PAGE_SIZE}
+                    showSizeChanger={false}
+                    onChange={(page) => setListPage(page)}
+                  />
+                </div>
+                </>
+              )}
               </div>
             </Card>
           </Col>
