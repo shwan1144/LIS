@@ -133,8 +133,10 @@ function groupWorklistByOrder(items: WorklistItem[]): WorklistOrderGroup[] {
       };
     })
     .sort((a, b) => {
-      const aHasRejected = a.items.some((i) => i.status === 'REJECTED');
-      const bHasRejected = b.items.some((i) => i.status === 'REJECTED');
+      const aTop = a.items.filter((i) => !i.parentOrderTestId);
+      const bTop = b.items.filter((i) => !i.parentOrderTestId);
+      const aHasRejected = aTop.some((i) => i.status === 'REJECTED');
+      const bHasRejected = bTop.some((i) => i.status === 'REJECTED');
       if (aHasRejected !== bHasRejected) return aHasRejected ? -1 : 1;
       return dayjs(b.registeredAt).valueOf() - dayjs(a.registeredAt).valueOf();
     });
@@ -444,11 +446,12 @@ export function WorklistPage() {
       ),
       key: 'queue',
       render: (_, g) => {
-        const pending = g.items.filter((i) => i.status === 'PENDING' || i.status === 'IN_PROGRESS').length;
-        const completed = g.items.filter((i) => i.status === 'COMPLETED').length;
-        const verified = g.items.filter((i) => i.status === 'VERIFIED').length;
-        const rejected = g.items.filter((i) => i.status === 'REJECTED').length;
-        const firstRejectedReason = g.items.find(
+        const topLevelItems = g.items.filter((i) => !i.parentOrderTestId);
+        const pending = topLevelItems.filter((i) => i.status === 'PENDING' || i.status === 'IN_PROGRESS').length;
+        const completed = topLevelItems.filter((i) => i.status === 'COMPLETED').length;
+        const verified = topLevelItems.filter((i) => i.status === 'VERIFIED').length;
+        const rejected = topLevelItems.filter((i) => i.status === 'REJECTED').length;
+        const firstRejectedReason = topLevelItems.find(
           (i) => i.status === 'REJECTED' && i.rejectionReason?.trim(),
         )?.rejectionReason;
 
@@ -474,7 +477,7 @@ export function WorklistPage() {
             </Space>
 
             <Space size={[4, 4]} wrap>
-              <Tag style={{ margin: 0 }}>{g.items.length} test{g.items.length !== 1 ? 's' : ''}</Tag>
+              <Tag style={{ margin: 0 }}>{topLevelItems.length} test{topLevelItems.length !== 1 ? 's' : ''}</Tag>
               {pending > 0 && <Tag color="default" style={{ margin: 0 }}>Pending {pending}</Tag>}
               {completed > 0 && <Tag color="processing" style={{ margin: 0 }}>Completed {completed}</Tag>}
               {verified > 0 && <Tag color="success" style={{ margin: 0 }}>Verified {verified}</Tag>}
@@ -502,9 +505,10 @@ export function WorklistPage() {
   const rowSelection = {
     selectedRowKeys,
     onChange: (keys: React.Key[]) => setSelectedRowKeys(keys as string[]),
-    getCheckboxProps: (record: WorklistOrderGroup) => ({
-      disabled: !record.items.some((i) => i.status === 'COMPLETED'),
-    }),
+    getCheckboxProps: (record: WorklistOrderGroup) => {
+      const topLevel = record.items.filter((i) => !i.parentOrderTestId);
+      return { disabled: !topLevel.some((i) => i.status === 'COMPLETED') };
+    },
   };
 
   const formatWorklistResultPreview = (item: WorklistItem, allItems: WorklistItem[]): React.ReactNode => {
@@ -1108,6 +1112,7 @@ export function WorklistPage() {
 
                     {targetItems.map((target, idx) => {
                       const hasParams = (target.parameterDefinitions?.length ?? 0) > 0;
+                      const panelResultControlStyle = isPanel ? { width: '100%' } : undefined;
 
                       return (
                         <div key={target.id} className={isPanel ? 'panel-entry-grid-row' : undefined} style={{
@@ -1128,7 +1133,7 @@ export function WorklistPage() {
                                   rules={target.resultEntryType === 'QUALITATIVE' ? [{ required: true, message: 'Required' }] : []}
                                 >
                                   {target.resultEntryType === 'NUMERIC' ? (
-                                    <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                                    <div style={{ display: 'flex', gap: 8, alignItems: 'center', width: isPanel ? '100%' : undefined }}>
                                       <Form.Item name={[target.id, 'resultValue']} noStyle>
                                         <InputNumber
                                           style={{ width: '100%' }}
@@ -1143,6 +1148,7 @@ export function WorklistPage() {
                                     <Select
                                       allowClear
                                       showSearch
+                                      style={panelResultControlStyle}
                                       size={isPanel ? "small" : "large"}
                                       placeholder="Select"
                                       options={[
@@ -1151,7 +1157,7 @@ export function WorklistPage() {
                                       ]}
                                     />
                                   ) : (
-                                    <Input size={isPanel ? "small" : "large"} placeholder="Result text" />
+                                    <Input style={panelResultControlStyle} size={isPanel ? "small" : "large"} placeholder="Result text" />
                                   )}
                                 </Form.Item>
                               ) : (
@@ -1181,7 +1187,7 @@ export function WorklistPage() {
                                     rules={[{ required: true, message: 'Enter custom text' }]}
                                     label={isPanel ? null : "Custom text"}
                                   >
-                                    <Input placeholder="Specify custom result..." size="small" />
+                                    <Input style={panelResultControlStyle} placeholder="Specify custom result..." size="small" />
                                   </Form.Item>
                                 </div>
                               )}

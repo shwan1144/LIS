@@ -1460,6 +1460,7 @@ export function ReportsPage() {
 
                     {targetItems.map((target, idx) => {
                       const hasParams = (target.test?.parameterDefinitions?.length ?? 0) > 0;
+                      const panelResultControlStyle = isPanel ? { width: '100%' } : undefined;
 
                       return (
                         <div key={target.id} className={isPanel ? 'panel-entry-grid-row' : undefined} style={{
@@ -1480,7 +1481,7 @@ export function ReportsPage() {
                                   rules={target.test?.resultEntryType === 'QUALITATIVE' ? [{ required: true, message: 'Required' }] : []}
                                 >
                                   {target.test?.resultEntryType === 'NUMERIC' ? (
-                                    <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                                    <div style={{ display: 'flex', gap: 8, alignItems: 'center', width: isPanel ? '100%' : undefined }}>
                                       <Form.Item name={[target.id, 'resultValue']} noStyle>
                                         <InputNumber
                                           style={{ width: '100%' }}
@@ -1493,11 +1494,12 @@ export function ReportsPage() {
                                     </div>
                                   ) : target.test?.resultEntryType === 'QUALITATIVE' ? (
                                     <Input
+                                      style={panelResultControlStyle}
                                       size={isPanel ? "small" : "large"}
                                       placeholder="Result text"
                                     />
                                   ) : (
-                                    <Input size={isPanel ? "small" : "large"} placeholder="Result text" />
+                                    <Input style={panelResultControlStyle} size={isPanel ? "small" : "large"} placeholder="Result text" />
                                   )}
                                 </Form.Item>
                               ) : (
