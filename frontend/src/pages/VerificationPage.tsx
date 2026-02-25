@@ -399,32 +399,59 @@ export function VerificationPage() {
       key: 'actions',
       width: 240,
       align: 'right',
-      render: (_: unknown, group) => (
-        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
-          <Button
-            size="small"
-            onClick={(event) => {
-              event.stopPropagation();
-              openReviewModal(group);
-            }}
-          >
-            Review
-          </Button>
-          <Tooltip title="Verify all tests in this order">
+      render: (_: unknown, group) => {
+        const isPanelOrder = group.items.some(
+          (item) => item.testType === 'PANEL' || !!item.parentOrderTestId,
+        );
+        const isSingleTestOrder = group.items.length === 1;
+
+        if (!isPanelOrder) {
+          return (
+            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+              <Tooltip title={isSingleTestOrder ? 'Verify this test' : 'Verify all tests in this order'}>
+                <Button
+                  type="primary"
+                  size="small"
+                  icon={<CheckCircleOutlined />}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    void handleVerifyGroup(group);
+                  }}
+                >
+                  {isSingleTestOrder ? 'Verify' : 'Verify all'}
+                </Button>
+              </Tooltip>
+            </div>
+          );
+        }
+
+        return (
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
             <Button
-              type="primary"
               size="small"
-              icon={<CheckCircleOutlined />}
               onClick={(event) => {
                 event.stopPropagation();
-                void handleVerifyGroup(group);
+                openReviewModal(group);
               }}
             >
-              Verify all
+              Review
             </Button>
-          </Tooltip>
-        </div>
-      ),
+            <Tooltip title="Verify all tests in this order">
+              <Button
+                type="primary"
+                size="small"
+                icon={<CheckCircleOutlined />}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  void handleVerifyGroup(group);
+                }}
+              >
+                Verify all
+              </Button>
+            </Tooltip>
+          </div>
+        );
+      },
     },
   ];
 
