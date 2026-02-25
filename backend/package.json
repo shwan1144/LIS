@@ -19,6 +19,8 @@
     "migrate:sql": "node scripts/run-sql-migrations.js",
     "fix:tenant-grants": "node scripts/fix-tenant-grants.js",
     "fix:order-number-counters": "node scripts/fix-order-number-counters.js",
+    "check:order-number-duplicates": "node scripts/check-order-number-duplicates.js",
+    "reset:platform-admin": "node scripts/reset-platform-admin.js",
     "connector:start": "node scripts/instrument-connector.js",
     "connector:doctor": "node scripts/instrument-connector.js --doctor",
     "connector:list-instruments": "node scripts/instrument-connector.js --list-instruments",
