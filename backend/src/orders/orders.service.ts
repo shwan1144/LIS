@@ -972,7 +972,7 @@ export class OrdersService {
     const startDateKey = addDaysToDateKey(todayDateKey, -(days - 1));
     const { startDate } = getUtcRangeForLabDate(startDateKey, timeZone);
     const { endDate } = getUtcRangeForLabDate(todayDateKey, timeZone);
-    const dateExpr = `(order."registeredAt" AT TIME ZONE 'UTC' AT TIME ZONE :timeZone)::date`;
+    const dateExpr = `("order"."registeredAt" AT TIME ZONE 'UTC' AT TIME ZONE :timeZone)::date`;
 
     const orders = await this.orderRepo
       .createQueryBuilder('order')
