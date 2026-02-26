@@ -615,9 +615,9 @@ export function WorklistPage() {
   };
 
   const renderExpandedTests = (group: WorklistOrderGroup) => {
-    // Keep the list compact with root tests, but always expose rejected child tests for correction.
+    // Keep the list compact with root tests only. Panel child tests will be entered via the panel's modal.
     const visibleItems = group.items.filter(
-      (i) => !i.parentOrderTestId || i.status === 'REJECTED',
+      (i) => !i.parentOrderTestId
     );
 
     const compactStyle = { paddingTop: 6, paddingBottom: 6, fontSize: 12 };
