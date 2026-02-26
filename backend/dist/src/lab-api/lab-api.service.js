@@ -22,6 +22,7 @@ const result_entity_1 = require("../entities/result.entity");
 const sample_entity_1 = require("../entities/sample.entity");
 const test_entity_1 = require("../entities/test.entity");
 const lab_counter_util_1 = require("../database/lab-counter.util");
+const PATIENT_NUMBER_LOCK_KEY = 620001;
 let LabApiService = class LabApiService {
     constructor(rlsSessionService, auditService) {
         this.rlsSessionService = rlsSessionService;
@@ -65,7 +66,21 @@ let LabApiService = class LabApiService {
                 sex: dto.sex?.trim() || null,
                 address: dto.address?.trim() || null,
             });
-            const saved = await patientRepo.save(patient);
+            let saved;
+            try {
+                saved = await patientRepo.save(patient);
+            }
+            catch (error) {
+                const code = error?.code;
+                if (code === '23505') {
+                    const conflicted = await this.findExistingPatient(patientRepo.manager, dto);
+                    if (conflicted) {
+                        return { patient: conflicted, reused: true };
+                    }
+                    throw new common_1.ConflictException('Patient already exists');
+                }
+                throw error;
+            }
             const impersonationAudit = actor?.isImpersonation && actor.platformUserId
                 ? {
                     impersonation: {
@@ -309,6 +324,7 @@ let LabApiService = class LabApiService {
         return qb.getOne();
     }
     async generatePatientNumber(manager) {
+        await manager.query('SELECT pg_advisory_xact_lock($1)', [PATIENT_NUMBER_LOCK_KEY]);
         const raw = await manager
             .getRepository(patient_entity_1.Patient)
             .createQueryBuilder('p')

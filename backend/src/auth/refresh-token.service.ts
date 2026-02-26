@@ -45,13 +45,27 @@ export class RefreshTokenService {
     ipAddress?: string | null;
     userAgent?: string | null;
   }): Promise<RefreshTokenIssueResult> {
+    return this.issueWithRepository(this.refreshTokenRepo, params);
+  }
+
+  private async issueWithRepository(
+    repo: Repository<RefreshToken>,
+    params: {
+      actorType: RefreshTokenActorType;
+      actorId: string;
+      familyId?: string;
+      context?: Record<string, unknown> | null;
+      ipAddress?: string | null;
+      userAgent?: string | null;
+    },
+  ): Promise<RefreshTokenIssueResult> {
     const tokenId = randomUUID();
     const familyId = params.familyId ?? randomUUID();
     const tokenSecret = this.generateTokenSecret();
     const tokenHash = await hashPassword(tokenSecret);
     const expiresAt = this.buildExpiryDate();
 
-    const tokenRecord = this.refreshTokenRepo.create({
+    const tokenRecord = repo.create({
       id: tokenId,
       actorType: params.actorType,
       actorId: params.actorId,
@@ -64,7 +78,7 @@ export class RefreshTokenService {
       createdIp: params.ipAddress ?? null,
       createdUserAgent: params.userAgent ?? null,
     });
-    await this.refreshTokenRepo.save(tokenRecord);
+    await repo.save(tokenRecord);
 
     return {
       token: this.composeRawToken(tokenId, tokenSecret),
@@ -79,46 +93,55 @@ export class RefreshTokenService {
     meta?: { ipAddress?: string | null; userAgent?: string | null },
   ): Promise<RefreshTokenRotationResult> {
     const { tokenId, tokenSecret } = this.parseRawToken(rawToken);
-    const existing = await this.refreshTokenRepo.findOne({ where: { id: tokenId } });
-    if (!existing) {
-      throw new UnauthorizedException('Invalid refresh token');
-    }
+    return this.refreshTokenRepo.manager.transaction(async (manager) => {
+      const repo = manager.getRepository(RefreshToken);
+      const existing = await repo
+        .createQueryBuilder('token')
+        .setLock('pessimistic_write')
+        .where('token.id = :id', { id: tokenId })
+        .getOne();
 
-    if (existing.revokedAt) {
-      // Reuse attempt: revoke entire family.
-      await this.revokeFamily(existing.familyId);
-      throw new UnauthorizedException('Refresh token reuse detected');
-    }
+      if (!existing) {
+        throw new UnauthorizedException('Invalid refresh token');
+      }
 
-    if (existing.expiresAt.getTime() <= Date.now()) {
-      await this.revokeToken(existing.id);
-      throw new UnauthorizedException('Refresh token expired');
-    }
+      if (existing.revokedAt) {
+        // Reuse attempt: revoke entire family.
+        await this.revokeFamilyWithRepository(repo, existing.familyId);
+        throw new UnauthorizedException('Refresh token reuse detected');
+      }
 
-    const isValid = await verifyPassword(tokenSecret, existing.tokenHash);
-    if (!isValid) {
-      throw new UnauthorizedException('Invalid refresh token');
-    }
+      if (existing.expiresAt.getTime() <= Date.now()) {
+        existing.revokedAt = new Date();
+        await repo.save(existing);
+        throw new UnauthorizedException('Refresh token expired');
+      }
 
-    const next = await this.issue({
-      actorType: existing.actorType,
-      actorId: existing.actorId,
-      familyId: existing.familyId,
-      context: existing.context ?? null,
-      ipAddress: meta?.ipAddress ?? null,
-      userAgent: meta?.userAgent ?? null,
+      const isValid = await verifyPassword(tokenSecret, existing.tokenHash);
+      if (!isValid) {
+        throw new UnauthorizedException('Invalid refresh token');
+      }
+
+      const next = await this.issueWithRepository(repo, {
+        actorType: existing.actorType,
+        actorId: existing.actorId,
+        familyId: existing.familyId,
+        context: existing.context ?? null,
+        ipAddress: meta?.ipAddress ?? null,
+        userAgent: meta?.userAgent ?? null,
+      });
+
+      existing.revokedAt = new Date();
+      existing.replacedByTokenId = next.tokenId;
+      await repo.save(existing);
+
+      return {
+        actorType: existing.actorType,
+        actorId: existing.actorId,
+        context: existing.context ?? null,
+        issued: next,
+      };
     });
-
-    existing.revokedAt = new Date();
-    existing.replacedByTokenId = next.tokenId;
-    await this.refreshTokenRepo.save(existing);
-
-    return {
-      actorType: existing.actorType,
-      actorId: existing.actorId,
-      context: existing.context ?? null,
-      issued: next,
-    };
   }
 
   async revoke(rawToken: string): Promise<void> {
@@ -158,10 +181,14 @@ export class RefreshTokenService {
   }
 
   async revokeFamily(familyId: string): Promise<void> {
-    await this.refreshTokenRepo.update(
-      { familyId, revokedAt: IsNull() },
-      { revokedAt: new Date() },
-    );
+    await this.revokeFamilyWithRepository(this.refreshTokenRepo, familyId);
+  }
+
+  private async revokeFamilyWithRepository(
+    repo: Repository<RefreshToken>,
+    familyId: string,
+  ): Promise<void> {
+    await repo.update({ familyId, revokedAt: IsNull() }, { revokedAt: new Date() });
   }
 
   private async revokeToken(tokenId: string): Promise<void> {

@@ -501,18 +501,18 @@ let ReportsService = class ReportsService {
                     yPos = doc.page.margins.top;
                 }
                 doc.text(`${test.code} - ${test.name}`, startX, yPos, { width: testWidth });
-                doc.text(test.price !== null ? `$${parseFloat(test.price.toString()).toFixed(2)}` : '-', startX + testWidth, yPos, { width: priceWidth, align: 'right' });
+                doc.text(test.price !== null ? `${parseFloat(test.price.toString()).toFixed(0)} IQD` : '-', startX + testWidth, yPos, { width: priceWidth, align: 'right' });
                 yPos += 15;
             });
             doc.moveDown(1);
             doc.font('Helvetica');
-            doc.text(`Subtotal: $${parseFloat(order.totalAmount.toString()).toFixed(2)}`, {
+            doc.text(`Subtotal: ${parseFloat(order.totalAmount.toString()).toFixed(0)} IQD`, {
                 align: 'right',
             });
             if (order.discountPercent != null && Number(order.discountPercent) > 0) {
                 const discountAmount = parseFloat(order.totalAmount.toString()) -
                     parseFloat((order.finalAmount ?? order.totalAmount).toString());
-                doc.text(`Discount (${order.discountPercent}%): -$${discountAmount.toFixed(2)}`, {
+                doc.text(`Discount (${order.discountPercent}%): -${discountAmount.toFixed(0)} IQD`, {
                     align: 'right',
                 });
             }
@@ -520,7 +520,7 @@ let ReportsService = class ReportsService {
             const finalAmount = order.finalAmount != null
                 ? parseFloat(order.finalAmount.toString())
                 : parseFloat(order.totalAmount.toString());
-            doc.text(`TOTAL: $${finalAmount.toFixed(2)}`, { align: 'right' });
+            doc.text(`TOTAL: ${finalAmount.toFixed(0)} IQD`, { align: 'right' });
             doc.moveDown(1);
             doc.fontSize(10).font('Helvetica');
             doc.text(`Samples: ${order.samples.length} sample(s)`, { align: 'left' });

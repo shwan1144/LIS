@@ -15,6 +15,16 @@ function normalizeFloorValue(value) {
     }
     return Math.floor(value);
 }
+function normalizeIncrementValue(value) {
+    if (!Number.isFinite(value)) {
+        throw new Error('Lab counter increment must be a finite number');
+    }
+    const normalized = Math.floor(value);
+    if (normalized <= 0) {
+        throw new Error('Lab counter increment must be greater than zero');
+    }
+    return normalized;
+}
 async function nextLabCounterValue(manager, input) {
     return nextLabCounterValueWithFloor(manager, input, 0);
 }
@@ -25,6 +35,7 @@ async function nextLabCounterValueWithFloor(manager, input, floorValue, incremen
     const shiftId = input.shiftId ?? null;
     const shiftScopeKey = shiftId ?? '';
     const floor = normalizeFloorValue(floorValue);
+    const normalizedIncrement = normalizeIncrementValue(increment);
     const rows = await manager.query(`
       INSERT INTO "lab_counters" (
         "labId",
@@ -42,12 +53,12 @@ async function nextLabCounterValueWithFloor(manager, input, floorValue, incremen
             "shiftId" = EXCLUDED."shiftId",
             "updatedAt" = CURRENT_TIMESTAMP
       RETURNING "value"
-    `, [input.labId, input.counterType, scopeKey, dateKey, shiftId, shiftScopeKey, floor, increment]);
+    `, [input.labId, input.counterType, scopeKey, dateKey, shiftId, shiftScopeKey, floor, normalizedIncrement]);
     const value = Number(rows?.[0]?.value);
     if (!Number.isFinite(value) || value <= 0) {
         throw new Error(`Failed to increment lab counter ${input.counterType} for lab ${input.labId}`);
     }
-    return Math.floor(value) - increment + 1;
+    return Math.floor(value) - normalizedIncrement + 1;
 }
 async function peekNextLabCounterValue(manager, input) {
     const date = input.date ?? new Date();

@@ -31,6 +31,7 @@ export declare class RefreshTokenService {
         ipAddress?: string | null;
         userAgent?: string | null;
     }): Promise<RefreshTokenIssueResult>;
+    private issueWithRepository;
     rotate(rawToken: string, meta?: {
         ipAddress?: string | null;
         userAgent?: string | null;
@@ -38,6 +39,7 @@ export declare class RefreshTokenService {
     revoke(rawToken: string): Promise<void>;
     validate(rawToken: string): Promise<RefreshTokenValidationResult>;
     revokeFamily(familyId: string): Promise<void>;
+    private revokeFamilyWithRepository;
     private revokeToken;
     private composeRawToken;
     private parseRawToken;

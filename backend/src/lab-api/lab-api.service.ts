@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -27,6 +28,8 @@ import { CreateLabOrderDto } from './dto/create-lab-order.dto';
 import { EnterResultDto } from './dto/enter-result.dto';
 import { UpsertPatientDto } from './dto/upsert-patient.dto';
 import { nextLabCounterValueWithFloor } from '../database/lab-counter.util';
+
+const PATIENT_NUMBER_LOCK_KEY = 620001;
 
 @Injectable()
 export class LabApiService {
@@ -87,7 +90,20 @@ export class LabApiService {
         sex: dto.sex?.trim() || null,
         address: dto.address?.trim() || null,
       });
-      const saved = await patientRepo.save(patient);
+      let saved: Patient;
+      try {
+        saved = await patientRepo.save(patient);
+      } catch (error) {
+        const code = (error as { code?: string })?.code;
+        if (code === '23505') {
+          const conflicted = await this.findExistingPatient(patientRepo.manager, dto);
+          if (conflicted) {
+            return { patient: conflicted, reused: true };
+          }
+          throw new ConflictException('Patient already exists');
+        }
+        throw error;
+      }
 
       const impersonationAudit =
         actor?.isImpersonation && actor.platformUserId
@@ -384,6 +400,8 @@ export class LabApiService {
   }
 
   private async generatePatientNumber(manager: EntityManager): Promise<string> {
+    await manager.query('SELECT pg_advisory_xact_lock($1)', [PATIENT_NUMBER_LOCK_KEY]);
+
     const raw = await manager
       .getRepository(Patient)
       .createQueryBuilder('p')

@@ -94,18 +94,17 @@ export class OrdersService {
 
     // Calculate pricing
     const patientType = dto.patientType || PatientType.WALK_IN;
-    let totalAmount = 0;
-
-    // Get pricing for each test
-    for (const testId of uniqueTestIds) {
-      const pricing = await this.findPricing(
-        labId,
-        testId,
-        dto.shiftId || null,
-        patientType,
-      );
-      totalAmount += pricing;
-    }
+    const pricingValues = await Promise.all(
+      uniqueTestIds.map((testId) =>
+        this.findPricing(
+          labId,
+          testId,
+          dto.shiftId || null,
+          patientType,
+        ),
+      ),
+    );
+    const totalAmount = pricingValues.reduce((sum, value) => sum + value, 0);
 
     const discountPercent = Math.min(100, Math.max(0, dto.discountPercent ?? 0));
     const finalAmount = Math.round(totalAmount * (1 - discountPercent / 100) * 100) / 100;
@@ -119,77 +118,88 @@ export class OrdersService {
         ? this.splitSamplesForDepartmentLabels(dto.samples, testMap)
         : dto.samples;
 
-    // Generate order number (sequential per lab, per day, per shift; restarts when shift or day changes)
-    const sequencesNeeded = Math.max(1, samplesToCreate.length);
-    const orderNumber = await this.generateOrderNumber(labId, dto.shiftId || null, sequencesNeeded);
+    return this.orderRepo.manager.transaction(async (manager) => {
+      const orderRepo = manager.getRepository(Order);
+      const sampleRepo = manager.getRepository(Sample);
 
-    // Create order
-    const order = this.orderRepo.create({
-      patientId: dto.patientId,
-      labId,
-      shiftId: dto.shiftId || null,
-      orderNumber,
-      status: OrderStatus.REGISTERED,
-      patientType,
-      notes: dto.notes || null,
-      totalAmount,
-      discountPercent,
-      finalAmount,
-      registeredAt: new Date(),
-    });
-
-    const savedOrder = await this.orderRepo.save(order);
-
-    // Create samples and order tests (compact barcode: YYMMDD + 3-digit sequence per sample)
-    const datePart = orderNumber.slice(0, 6);
-    let seq = parseInt(orderNumber.slice(-3), 10);
-    for (let i = 0; i < samplesToCreate.length; i++) {
-      const sampleDto = samplesToCreate[i];
-      const sampleBarcode = `${datePart}${String(seq + i).padStart(3, '0')}`;
-      const scopeKey =
-        labelSequenceBy === 'department'
-          ? this.resolveSampleDepartmentScope(sampleDto.tests, testMap)
-          : (sampleDto.tubeType ?? null);
-      const sequenceNumber = await this.getNextSequenceForScope(
+      // Generate order number (sequential per lab, per day, per shift; restarts when shift or day changes)
+      const sequencesNeeded = Math.max(1, samplesToCreate.length);
+      const orderNumber = await this.generateOrderNumber(
         labId,
-        sequenceResetBy,
-        effectiveShiftId,
-        scopeKey,
-        labelSequenceBy,
+        dto.shiftId || null,
+        sequencesNeeded,
+        manager,
       );
-      const sample = this.orderRepo.manager.create(Sample, {
+
+      // Create order
+      const order = orderRepo.create({
+        patientId: dto.patientId,
         labId,
-        orderId: savedOrder.id,
-        sampleId: null,
-        tubeType: sampleDto.tubeType || null,
-        barcode: sampleBarcode,
-        sequenceNumber,
-        qrCode: null,
+        shiftId: dto.shiftId || null,
+        orderNumber,
+        status: OrderStatus.REGISTERED,
+        patientType,
+        notes: dto.notes || null,
+        totalAmount,
+        discountPercent,
+        finalAmount,
+        registeredAt: new Date(),
       });
-      const savedSample = await this.orderRepo.manager.save(sample);
 
-      for (const testDto of sampleDto.tests) {
-        const test = testMap.get(testDto.testId);
-        if (!test) {
-          // Should not happen due to earlier validation
-          continue;
-        }
-        await this.createOrderTestsForSample(
-          this.orderRepo.manager,
+      const savedOrder = await orderRepo.save(order);
+
+      // Create samples and order tests (compact barcode: YYMMDD + 3-digit sequence per sample)
+      const datePart = orderNumber.slice(0, 6);
+      const seq = parseInt(orderNumber.slice(-3), 10);
+      for (let i = 0; i < samplesToCreate.length; i++) {
+        const sampleDto = samplesToCreate[i];
+        const sampleBarcode = `${datePart}${String(seq + i).padStart(3, '0')}`;
+        const scopeKey =
+          labelSequenceBy === 'department'
+            ? this.resolveSampleDepartmentScope(sampleDto.tests, testMap)
+            : (sampleDto.tubeType ?? null);
+        const sequenceNumber = await this.getNextSequenceForScope(
           labId,
-          savedSample.id,
-          test,
-          dto.shiftId ?? null,
-          patientType,
+          sequenceResetBy,
+          effectiveShiftId,
+          scopeKey,
+          labelSequenceBy,
+          manager,
         );
-      }
-    }
+        const sample = sampleRepo.create({
+          labId,
+          orderId: savedOrder.id,
+          sampleId: null,
+          tubeType: sampleDto.tubeType || null,
+          barcode: sampleBarcode,
+          sequenceNumber,
+          qrCode: null,
+        });
+        const savedSample = await sampleRepo.save(sample);
 
-    // Reload order with relations
-    return this.orderRepo.findOne({
-      where: { id: savedOrder.id },
-      relations: ['patient', 'lab', 'shift', 'samples', 'samples.orderTests', 'samples.orderTests.test'],
-    }) as Promise<Order>;
+        for (const testDto of sampleDto.tests) {
+          const test = testMap.get(testDto.testId);
+          if (!test) {
+            // Should not happen due to earlier validation
+            continue;
+          }
+          await this.createOrderTestsForSample(
+            manager,
+            labId,
+            savedSample.id,
+            test,
+            dto.shiftId ?? null,
+            patientType,
+          );
+        }
+      }
+
+      // Reload order with relations
+      return (await orderRepo.findOne({
+        where: { id: savedOrder.id },
+        relations: ['patient', 'lab', 'shift', 'samples', 'samples.orderTests', 'samples.orderTests.test'],
+      })) as Order;
+    });
   }
 
   async findAll(labId: string, params: {
@@ -530,9 +540,10 @@ export class OrdersService {
             effectiveShiftId,
             scopeKey,
             labelSequenceBy,
+            manager,
           );
 
-          const newBarcode = await this.generateOrderNumber(labId, order.shiftId ?? null, 1);
+          const newBarcode = await this.generateOrderNumber(labId, order.shiftId ?? null, 1, manager);
 
           const createdSample = sampleRepo.create({
             labId,
@@ -797,14 +808,19 @@ export class OrdersService {
    * Generates a unique order number stored in the database as orderNumber.
    * Uses same logic as getNextOrderNumber. First sample of the order gets this as barcode.
    */
-  private async generateOrderNumber(labId: string, _shiftId: string | null, increment: number = 1): Promise<string> {
+  private async generateOrderNumber(
+    labId: string,
+    _shiftId: string | null,
+    increment: number = 1,
+    manager: EntityManager = this.orderRepo.manager,
+  ): Promise<string> {
     const today = new Date();
     const yy = String(today.getFullYear() % 100).padStart(2, '0');
     const mm = String(today.getMonth() + 1).padStart(2, '0');
     const dd = String(today.getDate()).padStart(2, '0');
     const dateStr = `${yy}${mm}${dd}`;
-    const floor = await this.getMaxOrderSequenceForDate(labId, dateStr);
-    const nextSeq = await nextLabCounterValueWithFloor(this.orderRepo.manager, {
+    const floor = await this.getMaxOrderSequenceForDate(labId, dateStr, manager);
+    const nextSeq = await nextLabCounterValueWithFloor(manager, {
       labId,
       counterType: 'ORDER_NUMBER',
       scopeKey: 'ORDER',
@@ -832,9 +848,13 @@ export class OrdersService {
     return `${dateStr}${String(nextSeq).padStart(3, '0')}`;
   }
 
-  private async getMaxOrderSequenceForDate(labId: string, datePrefix: string): Promise<number> {
+  private async getMaxOrderSequenceForDate(
+    labId: string,
+    datePrefix: string,
+    manager: EntityManager = this.orderRepo.manager,
+  ): Promise<number> {
     const pattern = `^${datePrefix}[0-9]{3}$`;
-    const rows = await this.orderRepo.manager.query(
+    const rows = await manager.query(
       `
         SELECT GREATEST(
           COALESCE((
@@ -869,11 +889,12 @@ export class OrdersService {
     shiftId: string | null,
     scopeKey: string | null,
     labelSequenceBy: 'tube_type' | 'department',
+    manager: EntityManager = this.orderRepo.manager,
   ): Promise<number> {
     const counterType =
       labelSequenceBy === 'department' ? 'SAMPLE_SEQUENCE_DEPARTMENT' : 'SAMPLE_SEQUENCE_TUBE';
     const scopedShiftId = sequenceResetBy === 'shift' ? shiftId ?? null : null;
-    return nextLabCounterValue(this.orderRepo.manager, {
+    return nextLabCounterValue(manager, {
       labId,
       counterType,
       scopeKey: scopeKey ?? '__none__',
@@ -888,12 +909,11 @@ export class OrdersService {
   ): Promise<{ subtotal: number }> {
     if (!testIds?.length) return { subtotal: 0 };
     const uniqueTestIds = [...new Set(testIds)];
-    let subtotal = 0;
     const patientType = PatientType.WALK_IN;
-    for (const testId of uniqueTestIds) {
-      const price = await this.findPricing(labId, testId, shiftId, patientType);
-      subtotal += price;
-    }
+    const prices = await Promise.all(
+      uniqueTestIds.map((testId) => this.findPricing(labId, testId, shiftId, patientType)),
+    );
+    const subtotal = prices.reduce((sum, value) => sum + value, 0);
     return { subtotal };
   }
 
@@ -1115,20 +1135,6 @@ export class OrdersService {
   async saveWorklist(labId: string, shiftId: string | null, items: WorklistItemStored[]): Promise<void> {
     const shiftKey = shiftId ?? '';
     const itemsJson = JSON.stringify(items);
-    const existing = await this.worklistRepo.findOne({ where: { labId, shiftId: shiftKey } });
-    if (existing) {
-      await this.worklistRepo.update({ labId, shiftId: shiftKey }, { itemsJson });
-      return;
-    }
-    try {
-      await this.worklistRepo.insert({ labId, shiftId: shiftKey, itemsJson });
-    } catch (err: unknown) {
-      const code = (err as { code?: string })?.code;
-      if (code === '23505') {
-        await this.worklistRepo.update({ labId }, { shiftId: shiftKey, itemsJson });
-      } else {
-        throw err;
-      }
-    }
+    await this.worklistRepo.upsert({ labId, shiftId: shiftKey, itemsJson }, ['labId', 'shiftId']);
   }
 }

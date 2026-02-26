@@ -17,6 +17,7 @@ const common_1 = require("@nestjs/common");
 const typeorm_1 = require("@nestjs/typeorm");
 const typeorm_2 = require("typeorm");
 const patient_entity_1 = require("../entities/patient.entity");
+const PATIENT_NUMBER_LOCK_KEY = 620001;
 let PatientsService = class PatientsService {
     constructor(patientRepo) {
         this.patientRepo = patientRepo;
@@ -55,21 +56,35 @@ let PatientsService = class PatientsService {
     }
     async create(dto) {
         await this.checkDuplicates(dto.nationalId ?? null, dto.phone ?? null, null);
-        const patientNumber = await this.generatePatientNumber();
-        const patient = this.patientRepo.create({
-            patientNumber,
-            nationalId: dto.nationalId?.trim() || null,
-            phone: dto.phone?.trim() || null,
-            externalId: dto.externalId?.trim() || null,
-            fullName: dto.fullName.trim(),
-            dateOfBirth: dto.dateOfBirth || null,
-            sex: dto.sex || null,
-            address: dto.address?.trim() || null,
+        return this.patientRepo.manager.transaction(async (manager) => {
+            const patientRepo = manager.getRepository(patient_entity_1.Patient);
+            const patientNumber = await this.generatePatientNumber(manager);
+            const patient = patientRepo.create({
+                patientNumber,
+                nationalId: dto.nationalId?.trim() || null,
+                phone: dto.phone?.trim() || null,
+                externalId: dto.externalId?.trim() || null,
+                fullName: dto.fullName.trim(),
+                dateOfBirth: dto.dateOfBirth || null,
+                sex: dto.sex || null,
+                address: dto.address?.trim() || null,
+            });
+            try {
+                return await patientRepo.save(patient);
+            }
+            catch (error) {
+                const code = error?.code;
+                if (code === '23505') {
+                    throw new common_1.ConflictException('A patient with this identifier already exists');
+                }
+                throw error;
+            }
         });
-        return this.patientRepo.save(patient);
     }
-    async generatePatientNumber() {
-        const result = await this.patientRepo
+    async generatePatientNumber(manager) {
+        await manager.query('SELECT pg_advisory_xact_lock($1)', [PATIENT_NUMBER_LOCK_KEY]);
+        const result = await manager
+            .getRepository(patient_entity_1.Patient)
             .createQueryBuilder('p')
             .select('MAX(p.patientNumber)', 'maxNum')
             .where("p.patientNumber LIKE 'P-%'")

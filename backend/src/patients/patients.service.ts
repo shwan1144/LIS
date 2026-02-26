@@ -1,9 +1,11 @@
 import { Injectable, ConflictException, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, Between } from 'typeorm';
+import { Repository, Between, EntityManager } from 'typeorm';
 import { Patient } from '../entities/patient.entity';
 import { CreatePatientDto } from './dto/create-patient.dto';
 import { UpdatePatientDto } from './dto/update-patient.dto';
+
+const PATIENT_NUMBER_LOCK_KEY = 620001;
 
 @Injectable()
 export class PatientsService {
@@ -62,22 +64,36 @@ export class PatientsService {
   async create(dto: CreatePatientDto): Promise<Patient> {
     await this.checkDuplicates(dto.nationalId ?? null, dto.phone ?? null, null);
 
-    const patientNumber = await this.generatePatientNumber();
-    const patient = this.patientRepo.create({
-      patientNumber,
-      nationalId: dto.nationalId?.trim() || null,
-      phone: dto.phone?.trim() || null,
-      externalId: dto.externalId?.trim() || null,
-      fullName: dto.fullName.trim(),
-      dateOfBirth: dto.dateOfBirth || null,
-      sex: dto.sex || null,
-      address: dto.address?.trim() || null,
+    return this.patientRepo.manager.transaction(async (manager) => {
+      const patientRepo = manager.getRepository(Patient);
+      const patientNumber = await this.generatePatientNumber(manager);
+      const patient = patientRepo.create({
+        patientNumber,
+        nationalId: dto.nationalId?.trim() || null,
+        phone: dto.phone?.trim() || null,
+        externalId: dto.externalId?.trim() || null,
+        fullName: dto.fullName.trim(),
+        dateOfBirth: dto.dateOfBirth || null,
+        sex: dto.sex || null,
+        address: dto.address?.trim() || null,
+      });
+      try {
+        return await patientRepo.save(patient);
+      } catch (error) {
+        const code = (error as { code?: string })?.code;
+        if (code === '23505') {
+          throw new ConflictException('A patient with this identifier already exists');
+        }
+        throw error;
+      }
     });
-    return this.patientRepo.save(patient);
   }
 
-  private async generatePatientNumber(): Promise<string> {
-    const result = await this.patientRepo
+  private async generatePatientNumber(manager: EntityManager): Promise<string> {
+    await manager.query('SELECT pg_advisory_xact_lock($1)', [PATIENT_NUMBER_LOCK_KEY]);
+
+    const result = await manager
+      .getRepository(Patient)
       .createQueryBuilder('p')
       .select('MAX(p.patientNumber)', 'maxNum')
       .where("p.patientNumber LIKE 'P-%'")

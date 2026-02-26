@@ -22,6 +22,17 @@ function normalizeFloorValue(value: number): number {
   return Math.floor(value);
 }
 
+function normalizeIncrementValue(value: number): number {
+  if (!Number.isFinite(value)) {
+    throw new Error('Lab counter increment must be a finite number');
+  }
+  const normalized = Math.floor(value);
+  if (normalized <= 0) {
+    throw new Error('Lab counter increment must be greater than zero');
+  }
+  return normalized;
+}
+
 export async function nextLabCounterValue(
   manager: EntityManager,
   input: LabCounterNextValueInput,
@@ -41,6 +52,7 @@ export async function nextLabCounterValueWithFloor(
   const shiftId = input.shiftId ?? null;
   const shiftScopeKey = shiftId ?? '';
   const floor = normalizeFloorValue(floorValue);
+  const normalizedIncrement = normalizeIncrementValue(increment);
 
   const rows = await manager.query(
     `
@@ -61,7 +73,7 @@ export async function nextLabCounterValueWithFloor(
             "updatedAt" = CURRENT_TIMESTAMP
       RETURNING "value"
     `,
-    [input.labId, input.counterType, scopeKey, dateKey, shiftId, shiftScopeKey, floor, increment],
+    [input.labId, input.counterType, scopeKey, dateKey, shiftId, shiftScopeKey, floor, normalizedIncrement],
   ) as Array<{ value: string | number }>;
 
   const value = Number(rows?.[0]?.value);
@@ -69,7 +81,7 @@ export async function nextLabCounterValueWithFloor(
     throw new Error(`Failed to increment lab counter ${input.counterType} for lab ${input.labId}`);
   }
 
-  return Math.floor(value) - increment + 1;
+  return Math.floor(value) - normalizedIncrement + 1;
 }
 
 export async function peekNextLabCounterValue(
