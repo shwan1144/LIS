@@ -880,6 +880,9 @@ export class ReportsService implements OnModuleDestroy {
         ],
       );
 
+      const { regularTests, panelParents, panelChildrenByParent } =
+        this.classifyOrderTestsForReport(orderTests);
+
       const leftX = doc.page.margins.left;
       const usableWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right;
       const widths = {
@@ -890,6 +893,7 @@ export class ReportsService implements OnModuleDestroy {
       };
       widths.range = usableWidth - widths.test - widths.result - widths.unit;
       const tableWidth = widths.test + widths.result + widths.unit + widths.range;
+
       const drawTableHeader = () => {
         doc.font('Helvetica-Bold').fontSize(10).fillColor('#111827');
         doc.text('Test', leftX, doc.y, { width: widths.test });
@@ -911,28 +915,23 @@ export class ReportsService implements OnModuleDestroy {
         doc.moveDown(0.5);
       };
 
-      drawTableHeader();
-
-      doc.font('Helvetica').fontSize(9).fillColor('#111827');
-      for (const ot of orderTests) {
-        const t = ot.test as Test | undefined;
-        const testName = t?.name || 'Unknown test';
-        const testCode = t?.code ? ` (${t.code})` : '';
-        const result = formatResultValue(ot);
-        const unit = t?.unit || '-';
-        const reference = t
-          ? getNormalRange(t, patient?.sex ?? null, patientAgeYears)
-          : '-';
-        const params = formatResultParameters(ot.resultParameters);
-
-        ensureSpace(doc, params.length > 0 ? 48 : 28, drawTableHeader);
+      const drawResultRow = (row: {
+        testLabel: string;
+        result: string;
+        unit: string;
+        reference: string;
+        extraParams?: string[];
+      }) => {
+        const extraParams = row.extraParams ?? [];
+        ensureSpace(doc, extraParams.length > 0 ? 48 : 28, drawTableHeader);
         const rowY = doc.y;
 
-        doc.text(`${testName}${testCode}`, leftX, rowY, { width: widths.test });
-        doc.text(result, leftX + widths.test, rowY, { width: widths.result });
-        doc.text(unit, leftX + widths.test + widths.result, rowY, { width: widths.unit });
+        doc.font('Helvetica').fontSize(9).fillColor('#111827');
+        doc.text(row.testLabel, leftX, rowY, { width: widths.test });
+        doc.text(row.result, leftX + widths.test, rowY, { width: widths.result });
+        doc.text(row.unit, leftX + widths.test + widths.result, rowY, { width: widths.unit });
         doc.text(
-          reference,
+          row.reference,
           leftX + widths.test + widths.result + widths.unit,
           rowY,
           { width: widths.range },
@@ -940,13 +939,13 @@ export class ReportsService implements OnModuleDestroy {
 
         let bottomY = Math.max(
           doc.y,
-          doc.heightOfString(`${testName}${testCode}`, { width: widths.test }) + rowY,
-          doc.heightOfString(result, { width: widths.result }) + rowY,
-          doc.heightOfString(reference, { width: widths.range }) + rowY,
+          doc.heightOfString(row.testLabel, { width: widths.test }) + rowY,
+          doc.heightOfString(row.result, { width: widths.result }) + rowY,
+          doc.heightOfString(row.reference, { width: widths.range }) + rowY,
         );
 
-        if (params.length > 0) {
-          const paramText = params.slice(0, 6).join(' | ');
+        if (extraParams.length > 0) {
+          const paramText = extraParams.slice(0, 6).join(' | ');
           doc
             .font('Helvetica-Oblique')
             .fontSize(8)
@@ -968,6 +967,94 @@ export class ReportsService implements OnModuleDestroy {
           .lineTo(leftX + tableWidth, bottomY + 4)
           .stroke();
         doc.y = bottomY + 8;
+      };
+
+      const drawOrderTestRow = (ot: OrderTest) => {
+        const t = ot.test as Test | undefined;
+        const testName = t?.name || 'Unknown test';
+        const testCode = t?.code ? ` (${t.code})` : '';
+        drawResultRow({
+          testLabel: `${testName}${testCode}`,
+          result: formatResultValue(ot),
+          unit: t?.unit || '-',
+          reference: t ? getNormalRange(t, patient?.sex ?? null, patientAgeYears) : '-',
+          extraParams: formatResultParameters(ot.resultParameters),
+        });
+      };
+
+      if (regularTests.length > 0) {
+        drawTableHeader();
+        for (const ot of regularTests) {
+          drawOrderTestRow(ot);
+        }
+      }
+
+      for (let panelIndex = 0; panelIndex < panelParents.length; panelIndex++) {
+        const panelParent = panelParents[panelIndex];
+        const shouldStartNewPage = regularTests.length > 0 || panelIndex > 0;
+        if (shouldStartNewPage) {
+          doc.addPage();
+        }
+
+        ensureSpace(doc, 36);
+        const panelTest = panelParent.test as (Test & {
+          parameterDefinitions?: Array<{ code?: string; label?: string; normalOptions?: string[] }>;
+        }) | undefined;
+        const panelTitle = panelTest?.name || panelTest?.code || `Panel ${panelIndex + 1}`;
+        doc.font('Helvetica-Bold').fontSize(14).fillColor('#111827').text(panelTitle);
+        doc.moveDown(0.4);
+
+        drawTableHeader();
+
+        const panelChildren = panelChildrenByParent.get(panelParent.id) ?? [];
+        const panelResultParams = panelParent.resultParameters ?? {};
+        const parameterDefinitions = Array.isArray(panelTest?.parameterDefinitions)
+          ? panelTest.parameterDefinitions
+          : [];
+
+        if (parameterDefinitions.length > 0 || Object.keys(panelResultParams).length > 0) {
+          const renderedCodes = new Set<string>();
+
+          for (const def of parameterDefinitions) {
+            const code = (def?.code ?? '').trim();
+            if (code) renderedCodes.add(code);
+            const rawValue = code ? panelResultParams[code] : undefined;
+            const normalizedValue =
+              rawValue != null && String(rawValue).trim() ? String(rawValue).trim() : '-';
+            const reference =
+              Array.isArray(def?.normalOptions) && def.normalOptions.length > 0
+                ? def.normalOptions.join(', ')
+                : '-';
+
+            drawResultRow({
+              testLabel: def?.label || code || 'Parameter',
+              result: normalizedValue,
+              unit: '-',
+              reference,
+            });
+          }
+
+          for (const [code, value] of Object.entries(panelResultParams)) {
+            if (renderedCodes.has(code)) continue;
+            drawResultRow({
+              testLabel: code,
+              result: value != null && String(value).trim() ? String(value).trim() : '-',
+              unit: '-',
+              reference: '-',
+            });
+          }
+        } else if (panelChildren.length > 0) {
+          for (const child of panelChildren) {
+            drawOrderTestRow(child);
+          }
+        } else {
+          drawResultRow({
+            testLabel: 'No data',
+            result: '-',
+            unit: '-',
+            reference: '-',
+          });
+        }
       }
 
       if (comments.length > 0) {
