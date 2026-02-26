@@ -81,8 +81,7 @@ let OrdersService = class OrdersService {
         return this.orderRepo.manager.transaction(async (manager) => {
             const orderRepo = manager.getRepository(order_entity_1.Order);
             const sampleRepo = manager.getRepository(sample_entity_1.Sample);
-            const sequencesNeeded = Math.max(1, samplesToCreate.length);
-            const orderNumber = await this.generateOrderNumber(labId, dto.shiftId || null, sequencesNeeded, manager);
+            const orderNumber = await this.generateOrderNumber(labId, dto.shiftId || null, 1, manager);
             const order = orderRepo.create({
                 patientId: dto.patientId,
                 labId,
@@ -97,11 +96,9 @@ let OrdersService = class OrdersService {
                 registeredAt: new Date(),
             });
             const savedOrder = await orderRepo.save(order);
-            const datePart = orderNumber.slice(0, 6);
-            const seq = parseInt(orderNumber.slice(-3), 10);
             for (let i = 0; i < samplesToCreate.length; i++) {
                 const sampleDto = samplesToCreate[i];
-                const sampleBarcode = `${datePart}${String(seq + i).padStart(3, '0')}`;
+                const sampleBarcode = orderNumber;
                 const scopeKey = labelSequenceBy === 'department'
                     ? this.resolveSampleDepartmentScope(sampleDto.tests, testMap)
                     : (sampleDto.tubeType ?? null);
@@ -387,13 +384,12 @@ let OrdersService = class OrdersService {
                         ? (test.departmentId ?? null)
                         : (test.tubeType ?? null);
                     const sequenceNumber = await this.getNextSequenceForScope(labId, sequenceResetBy, effectiveShiftId, scopeKey, labelSequenceBy, manager);
-                    const newBarcode = await this.generateOrderNumber(labId, order.shiftId ?? null, 1, manager);
                     const createdSample = sampleRepo.create({
                         labId,
                         orderId: order.id,
                         sampleId: null,
                         tubeType: testTubeType,
-                        barcode: newBarcode,
+                        barcode: order.orderNumber ?? null,
                         sequenceNumber,
                         qrCode: null,
                     });
@@ -597,18 +593,11 @@ let OrdersService = class OrdersService {
     async getMaxOrderSequenceForDate(labId, datePrefix, manager = this.orderRepo.manager) {
         const pattern = `^${datePrefix}[0-9]{3}$`;
         const rows = await manager.query(`
-        SELECT GREATEST(
-          COALESCE((
-            SELECT MAX(CAST(SUBSTRING("orderNumber" FROM 7 FOR 3) AS integer))
-            FROM "orders"
-            WHERE "labId" = $1 AND "orderNumber" ~ $2
-          ), 0),
-          COALESCE((
-            SELECT MAX(CAST(SUBSTRING("barcode" FROM 7 FOR 3) AS integer))
-            FROM "samples"
-            WHERE "labId" = $1 AND "barcode" ~ $2
-          ), 0)
-        ) AS "maxSeq"
+        SELECT COALESCE((
+          SELECT MAX(CAST(SUBSTRING("orderNumber" FROM 7 FOR 3) AS integer))
+          FROM "orders"
+          WHERE "labId" = $1 AND "orderNumber" ~ $2
+        ), 0) AS "maxSeq"
       `, [labId, pattern]);
         const maxSeq = Number(rows?.[0]?.maxSeq ?? 0);
         if (!Number.isFinite(maxSeq) || maxSeq < 0) {

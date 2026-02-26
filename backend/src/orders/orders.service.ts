@@ -122,12 +122,11 @@ export class OrdersService {
       const orderRepo = manager.getRepository(Order);
       const sampleRepo = manager.getRepository(Sample);
 
-      // Generate order number (sequential per lab, per day, per shift; restarts when shift or day changes)
-      const sequencesNeeded = Math.max(1, samplesToCreate.length);
+      // Generate order number once per order (sequential per lab, per day).
       const orderNumber = await this.generateOrderNumber(
         labId,
         dto.shiftId || null,
-        sequencesNeeded,
+        1,
         manager,
       );
 
@@ -148,12 +147,11 @@ export class OrdersService {
 
       const savedOrder = await orderRepo.save(order);
 
-      // Create samples and order tests (compact barcode: YYMMDD + 3-digit sequence per sample)
-      const datePart = orderNumber.slice(0, 6);
-      const seq = parseInt(orderNumber.slice(-3), 10);
+      // Create samples and order tests.
+      // Barcode is order-level and reused across all tubes/samples in the order.
       for (let i = 0; i < samplesToCreate.length; i++) {
         const sampleDto = samplesToCreate[i];
-        const sampleBarcode = `${datePart}${String(seq + i).padStart(3, '0')}`;
+        const sampleBarcode = orderNumber;
         const scopeKey =
           labelSequenceBy === 'department'
             ? this.resolveSampleDepartmentScope(sampleDto.tests, testMap)
@@ -543,14 +541,13 @@ export class OrdersService {
             manager,
           );
 
-          const newBarcode = await this.generateOrderNumber(labId, order.shiftId ?? null, 1, manager);
-
           const createdSample = sampleRepo.create({
             labId,
             orderId: order.id,
             sampleId: null,
             tubeType: testTubeType,
-            barcode: newBarcode,
+            // Barcode stays order-level even when additional samples are created later.
+            barcode: order.orderNumber ?? null,
             sequenceNumber,
             qrCode: null,
           });
@@ -797,7 +794,7 @@ export class OrdersService {
 
   /**
    * Returns the next order number that would be assigned (preview only; actual number is set at create).
-   * Logic: sequential per lab, per calendar day; one number per sample so barcodes are unique.
+   * Logic: sequential per lab, per calendar day; one number per order.
    * Format: YYMMDD + 3-digit sequence (e.g. 260216001).
    */
   async getNextOrderNumber(labId: string, shiftId: string | null): Promise<string> {
@@ -806,7 +803,7 @@ export class OrdersService {
 
   /**
    * Generates a unique order number stored in the database as orderNumber.
-   * Uses same logic as getNextOrderNumber. First sample of the order gets this as barcode.
+   * Uses same logic as getNextOrderNumber. All samples of the order share this barcode value.
    */
   private async generateOrderNumber(
     labId: string,
@@ -856,18 +853,11 @@ export class OrdersService {
     const pattern = `^${datePrefix}[0-9]{3}$`;
     const rows = await manager.query(
       `
-        SELECT GREATEST(
-          COALESCE((
-            SELECT MAX(CAST(SUBSTRING("orderNumber" FROM 7 FOR 3) AS integer))
-            FROM "orders"
-            WHERE "labId" = $1 AND "orderNumber" ~ $2
-          ), 0),
-          COALESCE((
-            SELECT MAX(CAST(SUBSTRING("barcode" FROM 7 FOR 3) AS integer))
-            FROM "samples"
-            WHERE "labId" = $1 AND "barcode" ~ $2
-          ), 0)
-        ) AS "maxSeq"
+        SELECT COALESCE((
+          SELECT MAX(CAST(SUBSTRING("orderNumber" FROM 7 FOR 3) AS integer))
+          FROM "orders"
+          WHERE "labId" = $1 AND "orderNumber" ~ $2
+        ), 0) AS "maxSeq"
       `,
       [labId, pattern],
     ) as Array<{ maxSeq: string | number | null }>;

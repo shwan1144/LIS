@@ -95,8 +95,7 @@ __decorate([
 ], Sample.prototype, "orderTests", void 0);
 exports.Sample = Sample = __decorate([
     (0, typeorm_1.Entity)('samples'),
-    (0, typeorm_1.Index)('UQ_samples_lab_barcode', ['labId', 'barcode'], {
-        unique: true,
+    (0, typeorm_1.Index)('IDX_samples_lab_barcode', ['labId', 'barcode'], {
         where: '"barcode" IS NOT NULL',
     })
 ], Sample);

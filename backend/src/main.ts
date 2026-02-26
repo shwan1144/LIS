@@ -115,6 +115,17 @@ async function ensureReportBrandingColumns(dataSource: DataSource): Promise<void
     'ALTER TABLE IF EXISTS "labs" ADD COLUMN IF NOT EXISTS "labelsPrinterName" varchar(128)',
     'ALTER TABLE IF EXISTS "labs" ADD COLUMN IF NOT EXISTS "reportPrinterName" varchar(128)',
     `UPDATE "labs" SET "printMethod" = 'browser' WHERE "printMethod" IS NULL`,
+    `
+      DO $$
+      BEGIN
+        IF to_regclass('public.samples') IS NOT NULL THEN
+          DROP INDEX IF EXISTS "UQ_samples_lab_barcode";
+          CREATE INDEX IF NOT EXISTS "IDX_samples_lab_barcode"
+            ON "samples" ("labId", "barcode")
+            WHERE "barcode" IS NOT NULL;
+        END IF;
+      END $$;
+    `,
     'ALTER TABLE IF EXISTS "tests" ADD COLUMN IF NOT EXISTS "numericAgeRanges" jsonb',
     `ALTER TABLE IF EXISTS "tests" ADD COLUMN IF NOT EXISTS "resultEntryType" varchar(16) NOT NULL DEFAULT 'NUMERIC'`,
     'ALTER TABLE IF EXISTS "tests" ADD COLUMN IF NOT EXISTS "resultTextOptions" jsonb',
