@@ -467,15 +467,13 @@ export function OrdersPage() {
 
     setSavingGroup(true);
     try {
-      const currentSettings = await getLabSettings();
       const newGroup = {
         id: Math.random().toString(36).substring(2, 9),
         name: newGroupName.trim(),
         testIds: groupTests.map(t => t.testId)
       };
 
-      const existingGroups = currentSettings.uiTestGroups || [];
-      const updatedGroups = [...existingGroups, newGroup];
+      const updatedGroups = [...uiTestGroups, newGroup];
 
       await updateLabSettings({ uiTestGroups: updatedGroups });
       setUiTestGroups(updatedGroups);
