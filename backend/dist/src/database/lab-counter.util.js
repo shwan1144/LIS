@@ -46,10 +46,10 @@ async function nextLabCounterValueWithFloor(manager, input, floorValue, incremen
         "shiftScopeKey",
         "value"
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7 + $8)
+      VALUES ($1, $2, $3, $4, $5, $6, $7::bigint + $8::bigint)
       ON CONFLICT ("labId", "counterType", "scopeKey", "dateKey", "shiftScopeKey")
       DO UPDATE
-        SET "value" = GREATEST("lab_counters"."value", $7) + $8,
+        SET "value" = GREATEST("lab_counters"."value", $7::bigint) + $8::bigint,
             "shiftId" = EXCLUDED."shiftId",
             "updatedAt" = CURRENT_TIMESTAMP
       RETURNING "value"
