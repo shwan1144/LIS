@@ -100,6 +100,7 @@ export function TestsPage() {
   const [showAll, setShowAll] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
   const [editingTest, setEditingTest] = useState<TestDto | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [form] = Form.useForm();
   const [shifts, setShifts] = useState<ShiftDto[]>([]);
@@ -792,6 +793,13 @@ export function TestsPage() {
           Tests Management
         </Title>
         <Space>
+          <Input.Search
+            placeholder="Search tests..."
+            allowClear
+            onChange={(e) => setSearchQuery(e.target.value)}
+            style={{ width: 250 }}
+            value={searchQuery}
+          />
           <Switch
             checked={showAll}
             onChange={setShowAll}
@@ -819,7 +827,16 @@ export function TestsPage() {
         <Table
           rowKey="id"
           columns={columns}
-          dataSource={tests}
+          dataSource={tests.filter((t) => {
+            if (!searchQuery) return true;
+            const q = searchQuery.toLowerCase();
+            return (
+              t.name?.toLowerCase().includes(q) ||
+              t.code?.toLowerCase().includes(q) ||
+              t.abbreviation?.toLowerCase().includes(q) ||
+              t.category?.toLowerCase().includes(q)
+            );
+          })}
           loading={loading}
           tableLayout="fixed"
           scroll={{ x: 1500 }}
@@ -1203,199 +1220,59 @@ export function TestsPage() {
               }
 
               return (
-                <Row gutter={16} align="stretch">
-                  <Col span={10}>
-                    <div style={panelCardStyle}>
-                      <Text strong style={{ display: 'block', marginBottom: 12 }}>Test information</Text>
-                      <div className="tests-editor-table single-col">
-                        <Form.Item name="code" label="Test Code" rules={[{ required: true, message: 'Code is required' }]}>
-                          <Input placeholder="e.g., GLU, CBC" style={{ textTransform: 'uppercase' }} />
-                        </Form.Item>
-                        <Form.Item name="name" label="Test Name" rules={[{ required: true, message: 'Name is required' }]}>
-                          <Input placeholder="e.g., Blood Glucose, Complete Blood Count" />
-                        </Form.Item>
-                        <Form.Item name="abbreviation" label="Abbreviation">
-                          <Input placeholder="e.g., GUE" style={{ textTransform: 'uppercase' }} />
-                        </Form.Item>
-                        <Form.Item name="category" label="Category">
-                          <Select
-                            allowClear
-                            mode="tags"
-                            placeholder="e.g., Liver Function"
-                            options={categories.map((c) => ({ label: c, value: c }))}
-                          />
-                        </Form.Item>
-                        <Form.Item name="type" label="Type">
-                          <Select options={TEST_TYPES} />
-                        </Form.Item>
-                        <Form.Item name="tubeType" label="Tube Type">
-                          <Select options={TUBE_TYPES} />
-                        </Form.Item>
-                        <Form.Item name="departmentId" label="Department">
-                          <Select
-                            placeholder="Select department"
-                            allowClear
-                            options={departments.map((d) => ({ label: `${d.code} – ${d.name}`, value: d.id }))}
-                          />
-                        </Form.Item>
-                      </div>
-                      
-                      <Form.Item
-                        name="panelComponentTestIds"
-                        label="Panel subtests"
-                        style={{ marginBottom: 12 }}
-                        extra="Choose the child tests included in this panel (for example CBC and GUE analytes)."
-                      >
-                        <Select
-                          mode="multiple"
-                          placeholder="Select subtests"
-                          showSearch
-                          optionFilterProp="label"
-                          options={panelComponentOptions.filter((option) => option.value !== editingTest?.id)}
-                        />
-                      </Form.Item>
-                      <Form.Item name="description" label="Description" style={{ marginBottom: 0 }}>
-                        <Input.TextArea rows={3} placeholder="Optional description or notes" />
-                      </Form.Item>
-                    </div>
-                  </Col>
-                  <Col span={14}>
-                    <div style={panelCardStyle}>
-                      <Text strong style={{ display: 'block', marginBottom: 4 }}>Result parameters (for panel tests)</Text>
-                      <Text style={{ marginBottom: 8, display: 'block' }}>
-                        Define dropdown or text fields shown when entering results in the worklist (e.g. color: yellow, red, dark).
-                      </Text>
-                      <div className="tests-editor-params-scroll">
-                        <Form.List name="parameterDefinitions">
-                          {(fields, { add, remove }) => (
-                            <>
-                              {fields.map(({ key, name, ...rest }) => (
-                                <div
-                                  key={key}
-                                  style={{
-                                    marginBottom: 10,
-                                    padding: '8px 0',
-                                    borderBottom: panelCardStyle.border,
-                                  }}
-                                >
-                                  <div
-                                    className="tests-editor-param-grid"
-                                    style={{
-                                      display: 'grid',
-                                      gridTemplateColumns: '96px minmax(120px, 1fr) 128px minmax(200px, 1.6fr) auto',
-                                      gap: 8,
-                                      alignItems: 'start',
-                                    }}
-                                  >
-                                    <Form.Item
-                                      {...rest}
-                                      name={[name, 'code']}
-                                      label="Code"
-                                      rules={[{ required: true }]}
-                                      style={{ minWidth: 90 }}
-                                    >
-                                      <Input placeholder="e.g. color" />
-                                    </Form.Item>
-                                    <Form.Item
-                                      {...rest}
-                                      name={[name, 'label']}
-                                      label="Label"
-                                      rules={[{ required: true }]}
-                                      style={{ minWidth: 120 }}
-                                    >
-                                      <Input placeholder="e.g. Color" />
-                                    </Form.Item>
-                                    <Form.Item
-                                      {...rest}
-                                      name={[name, 'type']}
-                                      label="Type"
-                                      style={{ minWidth: 110 }}
-                                    >
-                                      <Select options={[{ label: 'Dropdown', value: 'select' }, { label: 'Text', value: 'text' }]} />
-                                    </Form.Item>
-                                    <Form.Item
-                                      {...rest}
-                                      name={[name, 'options']}
-                                      label="Options (for dropdown)"
-                                      style={{ minWidth: 200 }}
-                                    >
-                                      <Input placeholder="Comma-separated, e.g. yellow, red, dark" />
-                                    </Form.Item>
-                                    <Button
-                                      type="text"
-                                      danger
-                                      onClick={() => remove(name)}
-                                      style={{ marginTop: 24, paddingInline: 4, alignSelf: 'start' }}
-                                    >
-                                      Remove
-                                    </Button>
-                                  </div>
-                                  <Form.Item noStyle shouldUpdate={(prev, curr) => prev?.parameterDefinitions !== curr?.parameterDefinitions}>
-                                    {() => {
-                                      const optsStr = form.getFieldValue(['parameterDefinitions', name, 'options']);
-                                      const optionList = typeof optsStr === 'string' ? optsStr.split(',').map((s: string) => s.trim()).filter(Boolean) : [];
-                                      const paramType = form.getFieldValue(['parameterDefinitions', name, 'type']);
-                                      const isSelect = paramType === 'select';
-                                      return (
-                                        <div
-                                          className="tests-editor-param-meta"
-                                          style={{
-                                            display: 'grid',
-                                            gridTemplateColumns: 'minmax(220px, 1fr) minmax(190px, 1fr)',
-                                            gap: 12,
-                                            alignItems: 'start',
-                                          }}
-                                        >
-                                          {isSelect && optionList.length > 0 && (
-                                            <Form.Item
-                                              {...rest}
-                                              name={[name, 'normalOptions']}
-                                              label="Normal range"
-                                              style={{ minWidth: 200 }}
-                                            >
-                                              <Select
-                                                mode="multiple"
-                                                size="small"
-                                                placeholder="Which options are normal (e.g. yellow)"
-                                                options={optionList.map((o: string) => ({ label: o, value: o }))}
-                                              />
-                                            </Form.Item>
-                                          )}
-                                          <Form.Item
-                                            {...rest}
-                                            name={[name, 'defaultValue']}
-                                            label="Default value"
-                                            style={{ minWidth: 180 }}
-                                          >
-                                            {isSelect && optionList.length > 0 ? (
-                                              <Select
-                                                allowClear
-                                                size="small"
-                                                placeholder="Pre-fill when entering result (e.g. nil)"
-                                                options={[{ label: '— None —', value: '' }, ...optionList.map((o: string) => ({ label: o, value: o }))]}
-                                              />
-                                            ) : (
-                                              <Input size="small" placeholder="Pre-fill when entering result" style={{ width: 200 }} />
-                                            )}
-                                          </Form.Item>
-                                        </div>
-                                      );
-                                    }}
-                                  </Form.Item>
-                                </div>
-                              ))}
-                              <Form.Item style={{ marginBottom: 0 }}>
-                                <Button type="dashed" onClick={() => add({ type: 'select', options: '', normalOptions: [], defaultValue: undefined })} block>
-                                  + Add parameter
-                                </Button>
-                              </Form.Item>
-                            </>
-                          )}
-                        </Form.List>
-                      </div>
-                    </div>
-                  </Col>
-                </Row>
+                <div style={panelCardStyle} className="tests-editor-panel">
+                  <Text strong style={{ display: 'block', marginBottom: 12 }}>Test information</Text>
+                  <div className="tests-editor-table single-col">
+                    <Form.Item name="code" label="Test Code" rules={[{ required: true, message: 'Code is required' }]}>
+                      <Input placeholder="e.g., GLU, CBC" style={{ textTransform: 'uppercase' }} />
+                    </Form.Item>
+                    <Form.Item name="name" label="Test Name" rules={[{ required: true, message: 'Name is required' }]}>
+                      <Input placeholder="e.g., Blood Glucose, Complete Blood Count" />
+                    </Form.Item>
+                    <Form.Item name="abbreviation" label="Abbreviation">
+                      <Input placeholder="e.g., GUE" style={{ textTransform: 'uppercase' }} />
+                    </Form.Item>
+                    <Form.Item name="category" label="Category">
+                      <Select
+                        allowClear
+                        mode="tags"
+                        placeholder="e.g., Liver Function"
+                        options={categories.map((c) => ({ label: c, value: c }))}
+                      />
+                    </Form.Item>
+                    <Form.Item name="type" label="Type">
+                      <Select options={TEST_TYPES} />
+                    </Form.Item>
+                    <Form.Item name="tubeType" label="Tube Type">
+                      <Select options={TUBE_TYPES} />
+                    </Form.Item>
+                    <Form.Item name="departmentId" label="Department">
+                      <Select
+                        placeholder="Select department"
+                        allowClear
+                        options={departments.map((d) => ({ label: `${d.code} – ${d.name}`, value: d.id }))}
+                      />
+                    </Form.Item>
+                  </div>
+                  
+                  <Form.Item
+                    name="panelComponentTestIds"
+                    label="Panel subtests"
+                    style={{ marginBottom: 12 }}
+                    extra="Choose the child tests included in this panel (for example CBC and GUE analytes)."
+                  >
+                    <Select
+                      mode="multiple"
+                      placeholder="Select subtests"
+                      showSearch
+                      optionFilterProp="label"
+                      options={panelComponentOptions.filter((option) => option.value !== editingTest?.id)}
+                    />
+                  </Form.Item>
+                  <Form.Item name="description" label="Description" style={{ marginBottom: 0 }}>
+                    <Input.TextArea rows={3} placeholder="Optional description or notes" />
+                  </Form.Item>
+                </div>
               );
             }}
           </Form.Item>
