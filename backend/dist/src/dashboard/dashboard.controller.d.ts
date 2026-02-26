@@ -26,7 +26,6 @@ export declare class DashboardController {
     getStatisticsPdf(req: RequestWithUser, query: StatisticsQueryDto, res: Response): Promise<Response<any, Record<string, any>>>;
     private emptyStatistics;
     private resolveRange;
-    private formatDateLabel;
     private toSafeFileToken;
 }
 export {};

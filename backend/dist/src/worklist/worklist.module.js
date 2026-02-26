@@ -14,6 +14,7 @@ const worklist_controller_1 = require("./worklist.controller");
 const order_test_entity_1 = require("../entities/order-test.entity");
 const order_entity_1 = require("../entities/order.entity");
 const test_entity_1 = require("../entities/test.entity");
+const lab_entity_1 = require("../entities/lab.entity");
 const user_department_assignment_entity_1 = require("../entities/user-department-assignment.entity");
 const department_entity_1 = require("../entities/department.entity");
 const panels_module_1 = require("../panels/panels.module");
@@ -28,6 +29,7 @@ exports.WorklistModule = WorklistModule = __decorate([
                 order_test_entity_1.OrderTest,
                 order_entity_1.Order,
                 test_entity_1.Test,
+                lab_entity_1.Lab,
                 user_department_assignment_entity_1.UserDepartmentAssignment,
                 department_entity_1.Department,
             ]),

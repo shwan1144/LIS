@@ -8,6 +8,7 @@ import { Repository, In } from 'typeorm';
 import { OrderTest, OrderTestStatus, ResultFlag } from '../entities/order-test.entity';
 import { Order } from '../entities/order.entity';
 import { Test } from '../entities/test.entity';
+import { Lab } from '../entities/lab.entity';
 import { UserDepartmentAssignment } from '../entities/user-department-assignment.entity';
 import { Department } from '../entities/department.entity';
 import type {
@@ -22,6 +23,11 @@ import { PanelStatusService } from '../panels/panel-status.service';
 import { LabActorContext } from '../types/lab-actor-context';
 import { resolveNumericRange } from '../tests/normal-range.util';
 import type { TestNumericAgeRange } from '../entities/test.entity';
+import {
+  formatDateKeyForTimeZone,
+  getUtcRangeForLabDate,
+  normalizeLabTimeZone,
+} from '../database/lab-timezone.util';
 
 export interface WorklistItem {
   id: string;
@@ -82,6 +88,8 @@ export class WorklistService {
     private readonly orderRepo: Repository<Order>,
     @InjectRepository(Test)
     private readonly testRepo: Repository<Test>,
+    @InjectRepository(Lab)
+    private readonly labRepo: Repository<Lab>,
     @InjectRepository(UserDepartmentAssignment)
     private readonly userDeptRepo: Repository<UserDepartmentAssignment>,
     @InjectRepository(Department)
@@ -148,10 +156,8 @@ export class WorklistService {
 
     // Filter by date
     if (params.date) {
-      const startDate = new Date(params.date);
-      startDate.setHours(0, 0, 0, 0);
-      const endDate = new Date(params.date);
-      endDate.setHours(23, 59, 59, 999);
+      const labTimeZone = await this.getLabTimeZone(labId);
+      const { startDate, endDate } = this.getDateRangeOrThrow(params.date, labTimeZone, 'date');
       qb.andWhere('order.registeredAt BETWEEN :startDate AND :endDate', {
         startDate,
         endDate,
@@ -758,10 +764,12 @@ export class WorklistService {
     verified: number;
     rejected: number;
   }> {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const tomorrow = new Date(today);
-    tomorrow.setDate(tomorrow.getDate() + 1);
+    const labTimeZone = await this.getLabTimeZone(labId);
+    const todayDateKey = formatDateKeyForTimeZone(new Date(), labTimeZone);
+    const { startDate: today, endExclusive: tomorrow } = getUtcRangeForLabDate(
+      todayDateKey,
+      labTimeZone,
+    );
 
     const qb = this.orderTestRepo
       .createQueryBuilder('ot')
@@ -803,6 +811,24 @@ export class WorklistService {
     }
 
     return stats;
+  }
+
+  private async getLabTimeZone(labId: string): Promise<string> {
+    const lab = await this.labRepo.findOne({ where: { id: labId } });
+    return normalizeLabTimeZone(lab?.timezone);
+  }
+
+  private getDateRangeOrThrow(
+    dateValue: string,
+    timeZone: string,
+    paramName: string,
+  ): { startDate: Date; endDate: Date } {
+    try {
+      const { startDate, endDate } = getUtcRangeForLabDate(dateValue, timeZone);
+      return { startDate, endDate };
+    } catch {
+      throw new BadRequestException(`Invalid ${paramName}. Expected YYYY-MM-DD.`);
+    }
   }
 
   private async syncOrderStatus(orderId: string): Promise<void> {

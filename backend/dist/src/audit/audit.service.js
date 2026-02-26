@@ -18,10 +18,13 @@ const typeorm_1 = require("@nestjs/typeorm");
 const typeorm_2 = require("typeorm");
 const audit_log_entity_1 = require("../entities/audit-log.entity");
 const user_entity_1 = require("../entities/user.entity");
+const lab_entity_1 = require("../entities/lab.entity");
+const lab_timezone_util_1 = require("../database/lab-timezone.util");
 let AuditService = class AuditService {
-    constructor(auditLogRepo, userRepo) {
+    constructor(auditLogRepo, userRepo, labRepo) {
         this.auditLogRepo = auditLogRepo;
         this.userRepo = userRepo;
+        this.labRepo = labRepo;
     }
     async log(dto) {
         let normalizedUserId = dto.userId ?? null;
@@ -83,6 +86,7 @@ let AuditService = class AuditService {
             .createQueryBuilder('audit')
             .leftJoinAndSelect('audit.user', 'user')
             .where('audit."labId" = :labId', { labId });
+        const labTimeZone = await this.getLabTimeZone(labId);
         if (params.userId) {
             qb.andWhere('audit."userId" = :userId', { userId: params.userId });
         }
@@ -101,19 +105,26 @@ let AuditService = class AuditService {
             qb.andWhere('audit."entityId" = :entityId', { entityId: params.entityId });
         }
         if (params.startDate && params.endDate) {
+            const { startDate } = this.getDateRangeOrThrow(params.startDate, labTimeZone, 'startDate');
+            const { endDate } = this.getDateRangeOrThrow(params.endDate, labTimeZone, 'endDate');
+            if (startDate.getTime() > endDate.getTime()) {
+                throw new common_1.BadRequestException('startDate cannot be after endDate');
+            }
             qb.andWhere('audit."createdAt" BETWEEN :startDate AND :endDate', {
-                startDate: new Date(params.startDate),
-                endDate: new Date(params.endDate + 'T23:59:59.999Z'),
+                startDate,
+                endDate,
             });
         }
         else if (params.startDate) {
+            const { startDate } = this.getDateRangeOrThrow(params.startDate, labTimeZone, 'startDate');
             qb.andWhere('audit."createdAt" >= :startDate', {
-                startDate: new Date(params.startDate),
+                startDate,
             });
         }
         else if (params.endDate) {
+            const { endDate } = this.getDateRangeOrThrow(params.endDate, labTimeZone, 'endDate');
             qb.andWhere('audit."createdAt" <= :endDate', {
-                endDate: new Date(params.endDate + 'T23:59:59.999Z'),
+                endDate,
             });
         }
         if (params.search) {
@@ -127,6 +138,19 @@ let AuditService = class AuditService {
             .take(size)
             .getMany();
         return { items, total };
+    }
+    async getLabTimeZone(labId) {
+        const lab = await this.labRepo.findOne({ where: { id: labId } });
+        return (0, lab_timezone_util_1.normalizeLabTimeZone)(lab?.timezone);
+    }
+    getDateRangeOrThrow(dateValue, timeZone, paramName) {
+        try {
+            const { startDate, endDate } = (0, lab_timezone_util_1.getUtcRangeForLabDate)(dateValue, timeZone);
+            return { startDate, endDate };
+        }
+        catch {
+            throw new common_1.BadRequestException(`Invalid ${paramName}. Expected YYYY-MM-DD.`);
+        }
     }
     async getActions() {
         return Object.values(audit_log_entity_1.AuditAction);
@@ -146,7 +170,9 @@ exports.AuditService = AuditService = __decorate([
     (0, common_1.Injectable)(),
     __param(0, (0, typeorm_1.InjectRepository)(audit_log_entity_1.AuditLog)),
     __param(1, (0, typeorm_1.InjectRepository)(user_entity_1.User)),
+    __param(2, (0, typeorm_1.InjectRepository)(lab_entity_1.Lab)),
     __metadata("design:paramtypes", [typeorm_2.Repository,
+        typeorm_2.Repository,
         typeorm_2.Repository])
 ], AuditService);
 //# sourceMappingURL=audit.service.js.map

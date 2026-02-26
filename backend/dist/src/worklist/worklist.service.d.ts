@@ -2,6 +2,7 @@ import { Repository } from 'typeorm';
 import { OrderTest, OrderTestStatus, ResultFlag } from '../entities/order-test.entity';
 import { Order } from '../entities/order.entity';
 import { Test } from '../entities/test.entity';
+import { Lab } from '../entities/lab.entity';
 import { UserDepartmentAssignment } from '../entities/user-department-assignment.entity';
 import { Department } from '../entities/department.entity';
 import type { TestParameterDefinition, TestResultEntryType, TestResultTextOption } from '../entities/test.entity';
@@ -48,11 +49,12 @@ export declare class WorklistService {
     private readonly orderTestRepo;
     private readonly orderRepo;
     private readonly testRepo;
+    private readonly labRepo;
     private readonly userDeptRepo;
     private readonly departmentRepo;
     private readonly panelStatusService;
     private readonly auditService;
-    constructor(orderTestRepo: Repository<OrderTest>, orderRepo: Repository<Order>, testRepo: Repository<Test>, userDeptRepo: Repository<UserDepartmentAssignment>, departmentRepo: Repository<Department>, panelStatusService: PanelStatusService, auditService: AuditService);
+    constructor(orderTestRepo: Repository<OrderTest>, orderRepo: Repository<Order>, testRepo: Repository<Test>, labRepo: Repository<Lab>, userDeptRepo: Repository<UserDepartmentAssignment>, departmentRepo: Repository<Department>, panelStatusService: PanelStatusService, auditService: AuditService);
     getWorklist(labId: string, params: {
         status?: OrderTestStatus[];
         search?: string;
@@ -91,5 +93,7 @@ export declare class WorklistService {
         verified: number;
         rejected: number;
     }>;
+    private getLabTimeZone;
+    private getDateRangeOrThrow;
     private syncOrderStatus;
 }

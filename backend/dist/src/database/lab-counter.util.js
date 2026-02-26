@@ -9,6 +9,19 @@ function toLocalDateKey(date) {
     const day = String(date.getDate()).padStart(2, '0');
     return `${year}-${month}-${day}`;
 }
+function normalizeDateKey(value) {
+    if (!value)
+        return null;
+    const trimmed = value.trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+        throw new Error(`Invalid counter dateKey "${value}". Expected YYYY-MM-DD.`);
+    }
+    const probe = new Date(`${trimmed}T00:00:00.000Z`);
+    if (Number.isNaN(probe.getTime()) || probe.toISOString().slice(0, 10) !== trimmed) {
+        throw new Error(`Invalid counter dateKey "${value}". Expected YYYY-MM-DD.`);
+    }
+    return trimmed;
+}
 function normalizeFloorValue(value) {
     if (!Number.isFinite(value) || value < 0) {
         return 0;
@@ -30,7 +43,7 @@ async function nextLabCounterValue(manager, input) {
 }
 async function nextLabCounterValueWithFloor(manager, input, floorValue, increment = 1) {
     const date = input.date ?? new Date();
-    const dateKey = toLocalDateKey(date);
+    const dateKey = normalizeDateKey(input.dateKey) ?? toLocalDateKey(date);
     const scopeKey = (input.scopeKey ?? '').trim() || '__default__';
     const shiftId = input.shiftId ?? null;
     const shiftScopeKey = shiftId ?? '';
@@ -62,7 +75,7 @@ async function nextLabCounterValueWithFloor(manager, input, floorValue, incremen
 }
 async function peekNextLabCounterValue(manager, input) {
     const date = input.date ?? new Date();
-    const dateKey = toLocalDateKey(date);
+    const dateKey = normalizeDateKey(input.dateKey) ?? toLocalDateKey(date);
     const scopeKey = (input.scopeKey ?? '').trim() || '__default__';
     const shiftScopeKey = input.shiftId ?? '';
     const rows = await manager.query(`

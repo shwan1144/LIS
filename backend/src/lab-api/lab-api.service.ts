@@ -28,6 +28,11 @@ import { CreateLabOrderDto } from './dto/create-lab-order.dto';
 import { EnterResultDto } from './dto/enter-result.dto';
 import { UpsertPatientDto } from './dto/upsert-patient.dto';
 import { nextLabCounterValueWithFloor } from '../database/lab-counter.util';
+import {
+  formatDateKeyForTimeZone,
+  formatOrderDatePrefixForTimeZone,
+  normalizeLabTimeZone,
+} from '../database/lab-timezone.util';
 
 const PATIENT_NUMBER_LOCK_KEY = 620001;
 
@@ -155,7 +160,12 @@ export class LabApiService {
         throw new BadRequestException('One or more tests are invalid');
       }
 
-      const orderNumber = await this.generateOrderNumber(manager, labId, dto.shiftId ?? null);
+      const orderNumber = await this.generateOrderNumber(
+        manager,
+        labId,
+        dto.shiftId ?? null,
+        lab.timezone,
+      );
       const order = manager.getRepository(Order).create({
         patientId: patient.id,
         labId,
@@ -417,22 +427,31 @@ export class LabApiService {
     manager: EntityManager,
     labId: string,
     _shiftId: string | null,
+    timeZoneHint?: string | null,
   ): Promise<string> {
-    const today = new Date();
-    const yy = String(today.getFullYear() % 100).padStart(2, '0');
-    const mm = String(today.getMonth() + 1).padStart(2, '0');
-    const dd = String(today.getDate()).padStart(2, '0');
-    const datePrefix = `${yy}${mm}${dd}`;
+    const now = new Date();
+    const timeZone =
+      timeZoneHint !== undefined
+        ? normalizeLabTimeZone(timeZoneHint)
+        : await this.getLabTimeZone(manager, labId);
+    const datePrefix = formatOrderDatePrefixForTimeZone(now, timeZone);
+    const dateKey = formatDateKeyForTimeZone(now, timeZone);
     const floor = await this.getMaxOrderSequenceForDate(manager, labId, datePrefix);
     const seq = await nextLabCounterValueWithFloor(manager, {
       labId,
       counterType: 'ORDER_NUMBER',
       scopeKey: 'ORDER',
-      date: today,
+      date: now,
+      dateKey,
       shiftId: null,
     }, floor);
     const sequence = String(seq).padStart(3, '0');
     return `${datePrefix}${sequence}`;
+  }
+
+  private async getLabTimeZone(manager: EntityManager, labId: string): Promise<string> {
+    const lab = await manager.getRepository(Lab).findOne({ where: { id: labId } });
+    return normalizeLabTimeZone(lab?.timezone);
   }
 
   private async getMaxOrderSequenceForDate(

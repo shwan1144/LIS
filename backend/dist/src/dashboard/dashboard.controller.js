@@ -22,6 +22,7 @@ const statistics_query_dto_1 = require("./dto/statistics-query.dto");
 const audit_service_1 = require("../audit/audit.service");
 const audit_log_entity_1 = require("../entities/audit-log.entity");
 const lab_actor_context_1 = require("../types/lab-actor-context");
+const lab_timezone_util_1 = require("../database/lab-timezone.util");
 let DashboardController = class DashboardController {
     constructor(dashboardService, auditService) {
         this.dashboardService = dashboardService;
@@ -53,7 +54,8 @@ let DashboardController = class DashboardController {
         if (!labId) {
             return this.emptyStatistics();
         }
-        const { startDate, endDate } = this.resolveRange(query.startDate, query.endDate);
+        const timeZone = await this.dashboardService.getLabTimeZone(labId);
+        const { startDate, endDate } = this.resolveRange(timeZone, query.startDate, query.endDate);
         return this.dashboardService.getStatistics(labId, startDate, endDate, {
             shiftId: query.shiftId ?? null,
             departmentId: query.departmentId ?? null,
@@ -64,10 +66,11 @@ let DashboardController = class DashboardController {
         if (!labId) {
             return res.status(401).json({ message: 'Lab ID not found in token' });
         }
-        const { startDate, endDate } = this.resolveRange(query.startDate, query.endDate);
+        const timeZone = await this.dashboardService.getLabTimeZone(labId);
+        const { startDate, endDate, startDateLabel, endDateLabel } = this.resolveRange(timeZone, query.startDate, query.endDate);
         const shiftToken = query.shiftId ? this.toSafeFileToken(query.shiftId) : 'all';
         const departmentToken = query.departmentId ? this.toSafeFileToken(query.departmentId) : 'all';
-        const fileName = `statistics-${this.formatDateLabel(startDate)}-to-${this.formatDateLabel(endDate)}-${shiftToken}-${departmentToken}.pdf`;
+        const fileName = `statistics-${startDateLabel}-to-${endDateLabel}-${shiftToken}-${departmentToken}.pdf`;
         const actor = (0, lab_actor_context_1.buildLabActorContext)(req.user);
         try {
             const pdfBuffer = await this.dashboardService.generateStatisticsPdf(labId, startDate, endDate, {
@@ -92,8 +95,8 @@ let DashboardController = class DashboardController {
                 entityId: null,
                 description: 'Exported statistics PDF',
                 newValues: {
-                    startDate: this.formatDateLabel(startDate),
-                    endDate: this.formatDateLabel(endDate),
+                    startDate: startDateLabel,
+                    endDate: endDateLabel,
                     shiftId: query.shiftId ?? null,
                     departmentId: query.departmentId ?? null,
                     ...impersonationAudit,
@@ -131,30 +134,24 @@ let DashboardController = class DashboardController {
             instrumentWorkload: [],
         };
     }
-    resolveRange(startDateStr, endDateStr) {
-        const endDate = endDateStr ? new Date(endDateStr) : new Date();
-        if (Number.isNaN(endDate.getTime())) {
-            throw new common_1.BadRequestException('Invalid endDate');
+    resolveRange(timeZone, startDateStr, endDateStr) {
+        let startDateLabel = startDateStr?.trim() ?? '';
+        let endDateLabel = endDateStr?.trim() ?? '';
+        let startDate;
+        let endDate;
+        try {
+            endDateLabel = endDateLabel || (0, lab_timezone_util_1.formatDateKeyForTimeZone)(new Date(), timeZone);
+            startDateLabel = startDateLabel || (0, lab_timezone_util_1.addDaysToDateKey)(endDateLabel, -30);
+            ({ startDate } = (0, lab_timezone_util_1.getUtcRangeForLabDate)(startDateLabel, timeZone));
+            ({ endDate } = (0, lab_timezone_util_1.getUtcRangeForLabDate)(endDateLabel, timeZone));
         }
-        endDate.setHours(23, 59, 59, 999);
-        const startDate = startDateStr ? new Date(startDateStr) : new Date(endDate);
-        if (Number.isNaN(startDate.getTime())) {
-            throw new common_1.BadRequestException('Invalid startDate');
+        catch {
+            throw new common_1.BadRequestException('Invalid date range. Expected YYYY-MM-DD.');
         }
-        if (!startDateStr) {
-            startDate.setDate(startDate.getDate() - 30);
-        }
-        startDate.setHours(0, 0, 0, 0);
         if (startDate.getTime() > endDate.getTime()) {
             throw new common_1.BadRequestException('startDate cannot be after endDate');
         }
-        return { startDate, endDate };
-    }
-    formatDateLabel(date) {
-        const y = date.getFullYear();
-        const m = String(date.getMonth() + 1).padStart(2, '0');
-        const d = String(date.getDate()).padStart(2, '0');
-        return `${y}-${m}-${d}`;
+        return { startDate, endDate, startDateLabel, endDateLabel };
     }
     toSafeFileToken(value) {
         return value

@@ -27,6 +27,7 @@ const pricing_entity_1 = require("../entities/pricing.entity");
 const test_component_entity_1 = require("../entities/test-component.entity");
 const lab_orders_worklist_entity_1 = require("../entities/lab-orders-worklist.entity");
 const lab_counter_util_1 = require("../database/lab-counter.util");
+const lab_timezone_util_1 = require("../database/lab-timezone.util");
 let OrdersService = class OrdersService {
     constructor(orderRepo, patientRepo, labRepo, shiftRepo, testRepo, pricingRepo, testComponentRepo, worklistRepo) {
         this.orderRepo = orderRepo;
@@ -81,7 +82,14 @@ let OrdersService = class OrdersService {
         return this.orderRepo.manager.transaction(async (manager) => {
             const orderRepo = manager.getRepository(order_entity_1.Order);
             const sampleRepo = manager.getRepository(sample_entity_1.Sample);
-            const orderNumber = await this.generateOrderNumber(labId, dto.shiftId || null, 1, manager);
+            const now = new Date();
+            const labTimeZone = (0, lab_timezone_util_1.normalizeLabTimeZone)(lab.timezone);
+            const counterDateKey = (0, lab_timezone_util_1.formatDateKeyForTimeZone)(now, labTimeZone);
+            const orderNumber = await this.generateOrderNumber(labId, dto.shiftId || null, 1, manager, {
+                now,
+                timeZone: labTimeZone,
+                dateKey: counterDateKey,
+            });
             const order = orderRepo.create({
                 patientId: dto.patientId,
                 labId,
@@ -102,7 +110,7 @@ let OrdersService = class OrdersService {
                 const scopeKey = labelSequenceBy === 'department'
                     ? this.resolveSampleDepartmentScope(sampleDto.tests, testMap)
                     : (sampleDto.tubeType ?? null);
-                const sequenceNumber = await this.getNextSequenceForScope(labId, sequenceResetBy, effectiveShiftId, scopeKey, labelSequenceBy, manager);
+                const sequenceNumber = await this.getNextSequenceForScope(labId, sequenceResetBy, effectiveShiftId, scopeKey, labelSequenceBy, counterDateKey, manager);
                 const sample = sampleRepo.create({
                     labId,
                     orderId: savedOrder.id,
@@ -168,24 +176,24 @@ let OrdersService = class OrdersService {
             const exactSearch = params.search.trim();
             qb.andWhere('(order.orderNumber ILIKE :term OR patient.fullName ILIKE :term OR patient.patientNumber = :exactSearch OR patient.phone ILIKE :term)', { term, exactSearch });
         }
-        if (params.startDate && params.endDate) {
-            const startDate = new Date(params.startDate);
-            startDate.setHours(0, 0, 0, 0);
-            const endDate = new Date(params.endDate);
-            endDate.setHours(23, 59, 59, 999);
+        const labTimeZone = params.startDate || params.endDate ? await this.getLabTimeZone(labId) : null;
+        if (params.startDate && params.endDate && labTimeZone) {
+            const { startDate } = this.getDateRangeOrThrow(params.startDate, labTimeZone, 'startDate');
+            const { endDate } = this.getDateRangeOrThrow(params.endDate, labTimeZone, 'endDate');
+            if (startDate.getTime() > endDate.getTime()) {
+                throw new common_1.BadRequestException('startDate cannot be after endDate');
+            }
             qb.andWhere('order.registeredAt BETWEEN :startDate AND :endDate', {
                 startDate,
                 endDate,
             });
         }
-        else if (params.startDate) {
-            const startDate = new Date(params.startDate);
-            startDate.setHours(0, 0, 0, 0);
+        else if (params.startDate && labTimeZone) {
+            const { startDate } = this.getDateRangeOrThrow(params.startDate, labTimeZone, 'startDate');
             qb.andWhere('order.registeredAt >= :startDate', { startDate });
         }
-        else if (params.endDate) {
-            const endDate = new Date(params.endDate);
-            endDate.setHours(23, 59, 59, 999);
+        else if (params.endDate && labTimeZone) {
+            const { endDate } = this.getDateRangeOrThrow(params.endDate, labTimeZone, 'endDate');
             qb.andWhere('order.registeredAt <= :endDate', { endDate });
         }
         qb.orderBy('order.registeredAt', 'DESC').skip(skip).take(size);
@@ -358,6 +366,7 @@ let OrdersService = class OrdersService {
             const labelSequenceBy = order.lab?.labelSequenceBy === 'department' ? 'department' : 'tube_type';
             const sequenceResetBy = order.lab?.sequenceResetBy === 'shift' ? 'shift' : 'day';
             const effectiveShiftId = sequenceResetBy === 'shift' ? order.shiftId ?? null : null;
+            const counterDateKey = (0, lab_timezone_util_1.formatDateKeyForTimeZone)(new Date(), (0, lab_timezone_util_1.normalizeLabTimeZone)(order.lab?.timezone));
             const sampleByScope = new Map();
             for (const sample of refreshedSamples) {
                 const departmentIds = Array.from(new Set((sample.orderTests ?? []).map((orderTest) => orderTest.test?.departmentId ?? null)));
@@ -383,7 +392,7 @@ let OrdersService = class OrdersService {
                     const scopeKey = labelSequenceBy === 'department'
                         ? (test.departmentId ?? null)
                         : (test.tubeType ?? null);
-                    const sequenceNumber = await this.getNextSequenceForScope(labId, sequenceResetBy, effectiveShiftId, scopeKey, labelSequenceBy, manager);
+                    const sequenceNumber = await this.getNextSequenceForScope(labId, sequenceResetBy, effectiveShiftId, scopeKey, labelSequenceBy, counterDateKey, manager);
                     const createdSample = sampleRepo.create({
                         labId,
                         orderId: order.id,
@@ -557,34 +566,34 @@ let OrdersService = class OrdersService {
     async getNextOrderNumber(labId, shiftId) {
         return this.computeNextOrderNumber(labId, shiftId);
     }
-    async generateOrderNumber(labId, _shiftId, increment = 1, manager = this.orderRepo.manager) {
-        const today = new Date();
-        const yy = String(today.getFullYear() % 100).padStart(2, '0');
-        const mm = String(today.getMonth() + 1).padStart(2, '0');
-        const dd = String(today.getDate()).padStart(2, '0');
-        const dateStr = `${yy}${mm}${dd}`;
+    async generateOrderNumber(labId, _shiftId, increment = 1, manager = this.orderRepo.manager, options) {
+        const now = options?.now ?? new Date();
+        const timeZone = options?.timeZone ?? (await this.getLabTimeZone(labId, manager));
+        const dateKey = options?.dateKey ?? (0, lab_timezone_util_1.formatDateKeyForTimeZone)(now, timeZone);
+        const dateStr = (0, lab_timezone_util_1.formatOrderDatePrefixForTimeZone)(now, timeZone);
         const floor = await this.getMaxOrderSequenceForDate(labId, dateStr, manager);
         const nextSeq = await (0, lab_counter_util_1.nextLabCounterValueWithFloor)(manager, {
             labId,
             counterType: 'ORDER_NUMBER',
             scopeKey: 'ORDER',
-            date: today,
+            date: now,
+            dateKey,
             shiftId: null,
         }, floor, increment);
         return `${dateStr}${String(nextSeq).padStart(3, '0')}`;
     }
     async computeNextOrderNumber(labId, _shiftId) {
-        const today = new Date();
-        const yy = String(today.getFullYear() % 100).padStart(2, '0');
-        const mm = String(today.getMonth() + 1).padStart(2, '0');
-        const dd = String(today.getDate()).padStart(2, '0');
-        const dateStr = `${yy}${mm}${dd}`;
+        const now = new Date();
+        const timeZone = await this.getLabTimeZone(labId);
+        const dateKey = (0, lab_timezone_util_1.formatDateKeyForTimeZone)(now, timeZone);
+        const dateStr = (0, lab_timezone_util_1.formatOrderDatePrefixForTimeZone)(now, timeZone);
         const floor = await this.getMaxOrderSequenceForDate(labId, dateStr);
         const counterNextSeq = await (0, lab_counter_util_1.peekNextLabCounterValue)(this.orderRepo.manager, {
             labId,
             counterType: 'ORDER_NUMBER',
             scopeKey: 'ORDER',
-            date: today,
+            date: now,
+            dateKey,
             shiftId: null,
         });
         const nextSeq = Math.max(counterNextSeq, floor + 1);
@@ -605,13 +614,14 @@ let OrdersService = class OrdersService {
         }
         return Math.floor(maxSeq);
     }
-    async getNextSequenceForScope(labId, sequenceResetBy, shiftId, scopeKey, labelSequenceBy, manager = this.orderRepo.manager) {
+    async getNextSequenceForScope(labId, sequenceResetBy, shiftId, scopeKey, labelSequenceBy, dateKey = null, manager = this.orderRepo.manager) {
         const counterType = labelSequenceBy === 'department' ? 'SAMPLE_SEQUENCE_DEPARTMENT' : 'SAMPLE_SEQUENCE_TUBE';
         const scopedShiftId = sequenceResetBy === 'shift' ? shiftId ?? null : null;
         return (0, lab_counter_util_1.nextLabCounterValue)(manager, {
             labId,
             counterType,
             scopeKey: scopeKey ?? '__none__',
+            dateKey: dateKey ?? undefined,
             shiftId: scopedShiftId,
         });
     }
@@ -625,11 +635,8 @@ let OrdersService = class OrdersService {
         return { subtotal };
     }
     async getOrdersTodayCount(labId) {
-        const today = new Date();
-        const startOfDay = new Date(today);
-        startOfDay.setHours(0, 0, 0, 0);
-        const endOfDay = new Date(today);
-        endOfDay.setHours(23, 59, 59, 999);
+        const timeZone = await this.getLabTimeZone(labId);
+        const { startDate: startOfDay, endDate: endOfDay } = this.getDateRangeOrThrow((0, lab_timezone_util_1.formatDateKeyForTimeZone)(new Date(), timeZone), timeZone, 'today');
         return this.orderRepo.count({
             where: {
                 labId,
@@ -638,11 +645,8 @@ let OrdersService = class OrdersService {
         });
     }
     async getTodayPatients(labId) {
-        const today = new Date();
-        const startOfDay = new Date(today);
-        startOfDay.setHours(0, 0, 0, 0);
-        const endOfDay = new Date(today);
-        endOfDay.setHours(23, 59, 59, 999);
+        const timeZone = await this.getLabTimeZone(labId);
+        const { startDate: startOfDay, endDate: endOfDay } = this.getDateRangeOrThrow((0, lab_timezone_util_1.formatDateKeyForTimeZone)(new Date(), timeZone), timeZone, 'today');
         const orders = await this.orderRepo.find({
             where: {
                 labId,
@@ -678,35 +682,32 @@ let OrdersService = class OrdersService {
         });
     }
     async getOrdersTrend(labId, days) {
-        const endDate = new Date();
-        endDate.setHours(23, 59, 59, 999);
-        const startDate = new Date(endDate);
-        startDate.setDate(startDate.getDate() - days + 1);
-        startDate.setHours(0, 0, 0, 0);
+        const timeZone = await this.getLabTimeZone(labId);
+        const todayDateKey = (0, lab_timezone_util_1.formatDateKeyForTimeZone)(new Date(), timeZone);
+        const startDateKey = (0, lab_timezone_util_1.addDaysToDateKey)(todayDateKey, -(days - 1));
+        const { startDate } = (0, lab_timezone_util_1.getUtcRangeForLabDate)(startDateKey, timeZone);
+        const { endDate } = (0, lab_timezone_util_1.getUtcRangeForLabDate)(todayDateKey, timeZone);
+        const dateExpr = `(order."registeredAt" AT TIME ZONE 'UTC' AT TIME ZONE :timeZone)::date`;
         const orders = await this.orderRepo
             .createQueryBuilder('order')
-            .select("DATE(order.registeredAt)", "date")
-            .addSelect("COUNT(*)", "count")
+            .select(`TO_CHAR(${dateExpr}, 'YYYY-MM-DD')`, 'date')
+            .addSelect('COUNT(*)', 'count')
             .where('order.labId = :labId', { labId })
             .andWhere('order.registeredAt BETWEEN :startDate AND :endDate', {
             startDate,
             endDate,
         })
-            .groupBy("DATE(order.registeredAt)")
-            .orderBy("DATE(order.registeredAt)", "ASC")
+            .setParameter('timeZone', timeZone)
+            .groupBy(dateExpr)
+            .orderBy(dateExpr, 'ASC')
             .getRawMany();
         const resultMap = new Map();
-        const currentDate = new Date(startDate);
-        while (currentDate <= endDate) {
-            const dateStr = currentDate.toISOString().slice(0, 10);
-            resultMap.set(dateStr, 0);
-            currentDate.setDate(currentDate.getDate() + 1);
+        for (let offset = 0; offset < days; offset++) {
+            resultMap.set((0, lab_timezone_util_1.addDaysToDateKey)(startDateKey, offset), 0);
         }
         orders.forEach((row) => {
-            const dateStr = row.date instanceof Date
-                ? row.date.toISOString().slice(0, 10)
-                : row.date.slice(0, 10);
-            resultMap.set(dateStr, parseInt(row.count, 10));
+            const dateStr = String(row.date).slice(0, 10);
+            resultMap.set(dateStr, parseInt(row.count, 10) || 0);
         });
         return Array.from(resultMap.entries()).map(([date, count]) => ({
             date,
@@ -762,6 +763,19 @@ let OrdersService = class OrdersService {
         }));
         const revenue = parseFloat(revenueRow?.revenue ?? '0');
         return { total, byStatus, byShift, revenue };
+    }
+    async getLabTimeZone(labId, manager = this.orderRepo.manager) {
+        const lab = await manager.getRepository(lab_entity_1.Lab).findOne({ where: { id: labId } });
+        return (0, lab_timezone_util_1.normalizeLabTimeZone)(lab?.timezone);
+    }
+    getDateRangeOrThrow(dateValue, timeZone, paramName) {
+        try {
+            const { startDate, endDate } = (0, lab_timezone_util_1.getUtcRangeForLabDate)(dateValue, timeZone);
+            return { startDate, endDate };
+        }
+        catch {
+            throw new common_1.BadRequestException(`Invalid ${paramName}. Expected YYYY-MM-DD.`);
+        }
     }
     async getWorklist(labId, shiftId) {
         const shiftKey = shiftId ?? '';

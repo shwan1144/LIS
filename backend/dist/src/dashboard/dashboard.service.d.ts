@@ -89,6 +89,7 @@ export declare class DashboardService {
     private readonly unmatchedService;
     constructor(patientRepo: Repository<Patient>, orderTestRepo: Repository<OrderTest>, orderRepo: Repository<Order>, labRepo: Repository<Lab>, shiftRepo: Repository<Shift>, departmentRepo: Repository<Department>, ordersService: OrdersService, unmatchedService: UnmatchedResultsService);
     getKpis(labId: string): Promise<DashboardKpis>;
+    getLabTimeZone(labId: string): Promise<string>;
     getOrdersTrend(labId: string, days: number): Promise<OrdersTrendPoint[]>;
     getStatistics(labId: string, startDate: Date, endDate: Date, filters?: StatisticsFilterOptions): Promise<StatisticsDto>;
     generateStatisticsPdf(labId: string, startDate: Date, endDate: Date, filters?: StatisticsFilterOptions): Promise<Buffer>;

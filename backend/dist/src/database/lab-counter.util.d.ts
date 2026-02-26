@@ -4,6 +4,7 @@ export interface LabCounterNextValueInput {
     counterType: string;
     scopeKey?: string | null;
     date?: Date;
+    dateKey?: string;
     shiftId?: string | null;
 }
 export declare function nextLabCounterValue(manager: EntityManager, input: LabCounterNextValueInput): Promise<number>;

@@ -84,6 +84,8 @@ export declare class OrdersService {
         }[];
         revenue: number;
     }>;
+    private getLabTimeZone;
+    private getDateRangeOrThrow;
     getWorklist(labId: string, shiftId: string | null): Promise<WorklistItemResponse[]>;
     saveWorklist(labId: string, shiftId: string | null, items: WorklistItemStored[]): Promise<void>;
 }

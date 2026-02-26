@@ -19,6 +19,7 @@ const typeorm_2 = require("typeorm");
 const order_test_entity_1 = require("../entities/order-test.entity");
 const order_entity_1 = require("../entities/order.entity");
 const test_entity_1 = require("../entities/test.entity");
+const lab_entity_1 = require("../entities/lab.entity");
 const user_department_assignment_entity_1 = require("../entities/user-department-assignment.entity");
 const department_entity_1 = require("../entities/department.entity");
 const audit_service_1 = require("../audit/audit.service");
@@ -26,6 +27,7 @@ const audit_log_entity_1 = require("../entities/audit-log.entity");
 const order_entity_2 = require("../entities/order.entity");
 const panel_status_service_1 = require("../panels/panel-status.service");
 const normal_range_util_1 = require("../tests/normal-range.util");
+const lab_timezone_util_1 = require("../database/lab-timezone.util");
 function parseJsonField(val) {
     if (val == null)
         return null;
@@ -42,10 +44,11 @@ function parseJsonField(val) {
     return null;
 }
 let WorklistService = class WorklistService {
-    constructor(orderTestRepo, orderRepo, testRepo, userDeptRepo, departmentRepo, panelStatusService, auditService) {
+    constructor(orderTestRepo, orderRepo, testRepo, labRepo, userDeptRepo, departmentRepo, panelStatusService, auditService) {
         this.orderTestRepo = orderTestRepo;
         this.orderRepo = orderRepo;
         this.testRepo = testRepo;
+        this.labRepo = labRepo;
         this.userDeptRepo = userDeptRepo;
         this.departmentRepo = departmentRepo;
         this.panelStatusService = panelStatusService;
@@ -90,10 +93,8 @@ let WorklistService = class WorklistService {
             });
         }
         if (params.date) {
-            const startDate = new Date(params.date);
-            startDate.setHours(0, 0, 0, 0);
-            const endDate = new Date(params.date);
-            endDate.setHours(23, 59, 59, 999);
+            const labTimeZone = await this.getLabTimeZone(labId);
+            const { startDate, endDate } = this.getDateRangeOrThrow(params.date, labTimeZone, 'date');
             qb.andWhere('order.registeredAt BETWEEN :startDate AND :endDate', {
                 startDate,
                 endDate,
@@ -538,10 +539,9 @@ let WorklistService = class WorklistService {
         return age < 0 ? null : age;
     }
     async getWorklistStats(labId) {
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-        const tomorrow = new Date(today);
-        tomorrow.setDate(tomorrow.getDate() + 1);
+        const labTimeZone = await this.getLabTimeZone(labId);
+        const todayDateKey = (0, lab_timezone_util_1.formatDateKeyForTimeZone)(new Date(), labTimeZone);
+        const { startDate: today, endExclusive: tomorrow } = (0, lab_timezone_util_1.getUtcRangeForLabDate)(todayDateKey, labTimeZone);
         const qb = this.orderTestRepo
             .createQueryBuilder('ot')
             .innerJoin('ot.sample', 'sample')
@@ -579,6 +579,19 @@ let WorklistService = class WorklistService {
         }
         return stats;
     }
+    async getLabTimeZone(labId) {
+        const lab = await this.labRepo.findOne({ where: { id: labId } });
+        return (0, lab_timezone_util_1.normalizeLabTimeZone)(lab?.timezone);
+    }
+    getDateRangeOrThrow(dateValue, timeZone, paramName) {
+        try {
+            const { startDate, endDate } = (0, lab_timezone_util_1.getUtcRangeForLabDate)(dateValue, timeZone);
+            return { startDate, endDate };
+        }
+        catch {
+            throw new common_1.BadRequestException(`Invalid ${paramName}. Expected YYYY-MM-DD.`);
+        }
+    }
     async syncOrderStatus(orderId) {
         const order = await this.orderRepo.findOne({ where: { id: orderId } });
         if (!order || order.status === order_entity_2.OrderStatus.CANCELLED) {
@@ -608,9 +621,11 @@ exports.WorklistService = WorklistService = __decorate([
     __param(0, (0, typeorm_1.InjectRepository)(order_test_entity_1.OrderTest)),
     __param(1, (0, typeorm_1.InjectRepository)(order_entity_1.Order)),
     __param(2, (0, typeorm_1.InjectRepository)(test_entity_1.Test)),
-    __param(3, (0, typeorm_1.InjectRepository)(user_department_assignment_entity_1.UserDepartmentAssignment)),
-    __param(4, (0, typeorm_1.InjectRepository)(department_entity_1.Department)),
+    __param(3, (0, typeorm_1.InjectRepository)(lab_entity_1.Lab)),
+    __param(4, (0, typeorm_1.InjectRepository)(user_department_assignment_entity_1.UserDepartmentAssignment)),
+    __param(5, (0, typeorm_1.InjectRepository)(department_entity_1.Department)),
     __metadata("design:paramtypes", [typeorm_2.Repository,
+        typeorm_2.Repository,
         typeorm_2.Repository,
         typeorm_2.Repository,
         typeorm_2.Repository,

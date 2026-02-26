@@ -5,6 +5,7 @@ export interface LabCounterNextValueInput {
   counterType: string;
   scopeKey?: string | null;
   date?: Date;
+  dateKey?: string;
   shiftId?: string | null;
 }
 
@@ -13,6 +14,19 @@ function toLocalDateKey(date: Date): string {
   const month = String(date.getMonth() + 1).padStart(2, '0');
   const day = String(date.getDate()).padStart(2, '0');
   return `${year}-${month}-${day}`;
+}
+
+function normalizeDateKey(value: string | null | undefined): string | null {
+  if (!value) return null;
+  const trimmed = value.trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+    throw new Error(`Invalid counter dateKey "${value}". Expected YYYY-MM-DD.`);
+  }
+  const probe = new Date(`${trimmed}T00:00:00.000Z`);
+  if (Number.isNaN(probe.getTime()) || probe.toISOString().slice(0, 10) !== trimmed) {
+    throw new Error(`Invalid counter dateKey "${value}". Expected YYYY-MM-DD.`);
+  }
+  return trimmed;
 }
 
 function normalizeFloorValue(value: number): number {
@@ -47,7 +61,7 @@ export async function nextLabCounterValueWithFloor(
   increment: number = 1,
 ): Promise<number> {
   const date = input.date ?? new Date();
-  const dateKey = toLocalDateKey(date);
+  const dateKey = normalizeDateKey(input.dateKey) ?? toLocalDateKey(date);
   const scopeKey = (input.scopeKey ?? '').trim() || '__default__';
   const shiftId = input.shiftId ?? null;
   const shiftScopeKey = shiftId ?? '';
@@ -89,7 +103,7 @@ export async function peekNextLabCounterValue(
   input: LabCounterNextValueInput,
 ): Promise<number> {
   const date = input.date ?? new Date();
-  const dateKey = toLocalDateKey(date);
+  const dateKey = normalizeDateKey(input.dateKey) ?? toLocalDateKey(date);
   const scopeKey = (input.scopeKey ?? '').trim() || '__default__';
   const shiftScopeKey = input.shiftId ?? '';
 

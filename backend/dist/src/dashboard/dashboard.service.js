@@ -24,6 +24,7 @@ const shift_entity_1 = require("../entities/shift.entity");
 const department_entity_1 = require("../entities/department.entity");
 const orders_service_1 = require("../orders/orders.service");
 const unmatched_results_service_1 = require("../unmatched/unmatched-results.service");
+const lab_timezone_util_1 = require("../database/lab-timezone.util");
 const PDFDocument = require('pdfkit');
 const TAT_TARGET_MINUTES = 60;
 let DashboardService = class DashboardService {
@@ -62,6 +63,10 @@ let DashboardService = class DashboardService {
             avgTatHours: null,
             totalPatients,
         };
+    }
+    async getLabTimeZone(labId) {
+        const lab = await this.labRepo.findOne({ where: { id: labId } });
+        return (0, lab_timezone_util_1.normalizeLabTimeZone)(lab?.timezone);
     }
     async getOrdersTrend(labId, days) {
         return this.ordersService.getOrdersTrend(labId, days);
