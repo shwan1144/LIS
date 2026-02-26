@@ -7,6 +7,7 @@ export interface AstmRecord {
 }
 
 export interface AstmResult {
+  /** Instrument-provided order identifier; expected to contain LIS order number. */
   sampleId: string;
   testCode: string;
   testName: string | null;

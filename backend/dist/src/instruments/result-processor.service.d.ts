@@ -1,7 +1,6 @@
 import { Repository } from 'typeorm';
 import { Instrument, InstrumentTestMapping } from '../entities/instrument.entity';
 import { OrderTest } from '../entities/order-test.entity';
-import { Sample } from '../entities/sample.entity';
 import { Order } from '../entities/order.entity';
 import { HL7ParserService, HL7Result } from './hl7-parser.service';
 import { AuditService } from '../audit/audit.service';
@@ -14,12 +13,11 @@ export interface ProcessedResult {
 export declare class InstrumentResultProcessor {
     private readonly mappingRepo;
     private readonly orderTestRepo;
-    private readonly sampleRepo;
     private readonly orderRepo;
     private readonly hl7Parser;
     private readonly auditService;
     private readonly logger;
-    constructor(mappingRepo: Repository<InstrumentTestMapping>, orderTestRepo: Repository<OrderTest>, sampleRepo: Repository<Sample>, orderRepo: Repository<Order>, hl7Parser: HL7ParserService, auditService: AuditService);
+    constructor(mappingRepo: Repository<InstrumentTestMapping>, orderTestRepo: Repository<OrderTest>, orderRepo: Repository<Order>, hl7Parser: HL7ParserService, auditService: AuditService);
     processResult(instrument: Instrument, result: HL7Result): Promise<ProcessedResult>;
     private findSample;
     private parseResultValue;

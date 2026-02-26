@@ -184,7 +184,7 @@ let HL7ParserService = class HL7ParserService {
             segments.push([
                 'ORC',
                 'NW',
-                orderData.orderId,
+                orderData.orderNumber,
                 '',
                 '',
                 '',
@@ -195,8 +195,8 @@ let HL7ParserService = class HL7ParserService {
             segments.push([
                 'OBR',
                 (index + 1).toString(),
-                orderData.orderId,
-                orderData.sampleId,
+                orderData.orderNumber,
+                orderData.orderNumber,
                 `${test.code}^${test.name}`,
                 orderData.priority || 'R',
                 orderData.orderDateTime || timestamp,

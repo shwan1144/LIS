@@ -295,7 +295,7 @@ function getOrderTestRows(order: OrderDto): ExpandedOrderTestRow[] {
   const allTestsInOrder = (order.samples ?? []).flatMap((s) => s.orderTests ?? []);
 
   for (const sample of order.samples ?? []) {
-    const sampleLabel = sample.sampleId || sample.barcode || sample.id.substring(0, 8);
+    const sampleLabel = sample.barcode || sample.id.substring(0, 8);
     for (const orderTest of sample.orderTests ?? []) {
       // Do not show panel child tests in expandable rows; they are managed in the edit popup.
       if (orderTest.parentOrderTestId) {

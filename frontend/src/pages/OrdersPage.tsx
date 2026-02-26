@@ -1074,7 +1074,7 @@ export function OrdersPage() {
                       >
                         Download Receipt PDF
                       </Button>
-                      {selectedCreatedOrder.paymentStatus !== 'paid' && (
+                      {selectedCreatedOrder.paymentStatus === 'unpaid' && (
                         <Space wrap>
                           <Button
                             type="primary"
@@ -1115,14 +1115,82 @@ export function OrdersPage() {
                         </Space>
                       )}
                       {selectedCreatedOrder.paymentStatus === 'paid' && (
-                        <Tag color="green">Paid</Tag>
+                        <Button
+                          type="dashed"
+                          size="large"
+                          loading={updatingPayment}
+                          style={{
+                            borderColor: '#52c41a',
+                            color: '#52c41a',
+                            backgroundColor: 'rgba(82, 196, 26, 0.1)',
+                          }}
+                          onClick={async () => {
+                            if (!selectedCreatedOrder?.id) return;
+                            setUpdatingPayment(true);
+                            try {
+                              const updated = await updateOrderPayment(selectedCreatedOrder.id, {
+                                paymentStatus: 'unpaid',
+                                paidAmount: 0,
+                              });
+                              message.success('Marked as unpaid');
+                              applyUpdatedOrderToList(updated);
+                            } catch {
+                              message.error('Failed to update payment');
+                            } finally {
+                              setUpdatingPayment(false);
+                            }
+                          }}
+                        >
+                          Paid (Click to Unpay)
+                        </Button>
                       )}
                       {selectedCreatedOrder.paymentStatus === 'partial' && (
-                        <Tag color="orange">
-                          Partially paid
-                          {selectedCreatedOrder.paidAmount != null &&
-                            ` (${selectedCreatedOrder.paidAmount} / ${selectedCreatedOrder.finalAmount})`}
-                        </Tag>
+                        <Space wrap>
+                          <Button
+                            type="primary"
+                            loading={updatingPayment}
+                            onClick={async () => {
+                              if (!selectedCreatedOrder?.id) return;
+                              setUpdatingPayment(true);
+                              try {
+                                const updated = await updateOrderPayment(selectedCreatedOrder.id, {
+                                  paymentStatus: 'paid',
+                                });
+                                message.success('Marked as paid');
+                                applyUpdatedOrderToList(updated);
+                              } catch {
+                                message.error('Failed to update payment');
+                              } finally {
+                                setUpdatingPayment(false);
+                              }
+                            }}
+                            size="large"
+                          >
+                            Mark as paid
+                          </Button>
+                          <Button
+                            type="dashed"
+                            size="large"
+                            loading={updatingPayment}
+                            style={{
+                              borderColor: '#faad14',
+                              color: '#faad14',
+                              backgroundColor: 'rgba(250, 173, 20, 0.1)',
+                            }}
+                            onClick={() => {
+                              setPartialPaymentAmount(
+                                selectedCreatedOrder?.paidAmount != null
+                                  ? Number(selectedCreatedOrder.paidAmount)
+                                  : 0
+                              );
+                              setPartialPaymentModalOpen(true);
+                            }}
+                          >
+                            Partially paid
+                            {selectedCreatedOrder.paidAmount != null &&
+                              ` (${selectedCreatedOrder.paidAmount} / ${selectedCreatedOrder.finalAmount})`}
+                          </Button>
+                        </Space>
                       )}
                       <Button
                         type="primary"
@@ -1186,7 +1254,7 @@ export function OrdersPage() {
                             label: (
                               <Space>
                                 <Text strong>{t.code}</Text>
-                                <Text>{t.name}</Text>
+                                <Text>{t.abbreviation ? `${t.abbreviation} - ${t.name}` : t.name}</Text>
                                 <Text type="secondary">({t.tubeType})</Text>
                               </Space>
                             ),
@@ -1384,7 +1452,7 @@ export function OrdersPage() {
             optionFilterProp="label"
             options={testOptions.map((test) => ({
               value: test.id,
-              label: `${test.code} - ${test.name} (${test.tubeType})`,
+              label: test.abbreviation ? `${test.code} - ${test.abbreviation} - ${test.name} (${test.tubeType})` : `${test.code} - ${test.name} (${test.tubeType})`,
             }))}
           />
           {editingTests.length === 0 ? (

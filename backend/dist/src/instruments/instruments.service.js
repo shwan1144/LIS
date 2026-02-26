@@ -117,8 +117,9 @@ let InstrumentsService = class InstrumentsService {
         if (!instrument.bidirectionalEnabled) {
             throw new common_1.BadRequestException('Bidirectional mode is disabled for this instrument');
         }
-        if (!dto.orderId?.trim() || !dto.sampleId?.trim() || !dto.patientId?.trim() || !dto.patientName?.trim()) {
-            throw new common_1.BadRequestException('orderId, sampleId, patientId, and patientName are required');
+        const orderNumber = dto.orderNumber?.trim() || dto.orderId?.trim() || '';
+        if (!orderNumber || !dto.patientId?.trim() || !dto.patientName?.trim()) {
+            throw new common_1.BadRequestException('orderNumber (or legacy orderId), patientId, and patientName are required');
         }
         const normalizedTests = (dto.tests || [])
             .map((test) => ({
@@ -139,8 +140,7 @@ let InstrumentsService = class InstrumentsService {
             patientName: dto.patientName.trim(),
             patientDob: dto.patientDob?.trim() || undefined,
             patientSex: dto.patientSex?.trim() || undefined,
-            sampleId: dto.sampleId.trim(),
-            orderId: dto.orderId.trim(),
+            orderNumber,
             tests: normalizedTests,
             priority: dto.priority?.trim() || 'R',
         });
@@ -149,7 +149,7 @@ let InstrumentsService = class InstrumentsService {
         }
         return {
             success: true,
-            message: `Order ${dto.orderId.trim()} sent to ${instrument.code}`,
+            message: `Order ${orderNumber} sent to ${instrument.code}`,
         };
     }
     async getMappings(instrumentId, labId) {

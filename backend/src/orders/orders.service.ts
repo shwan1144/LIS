@@ -53,7 +53,7 @@ export class OrdersService {
     private readonly testComponentRepo: Repository<TestComponent>,
     @InjectRepository(LabOrdersWorklist)
     private readonly worklistRepo: Repository<LabOrdersWorklist>,
-  ) {}
+  ) { }
 
   async create(labId: string, dto: CreateOrderDto): Promise<Order> {
     // Validate patient exists
@@ -120,7 +120,8 @@ export class OrdersService {
         : dto.samples;
 
     // Generate order number (sequential per lab, per day, per shift; restarts when shift or day changes)
-    const orderNumber = await this.generateOrderNumber(labId, dto.shiftId || null);
+    const sequencesNeeded = Math.max(1, samplesToCreate.length);
+    const orderNumber = await this.generateOrderNumber(labId, dto.shiftId || null, sequencesNeeded);
 
     // Create order
     const order = this.orderRepo.create({
@@ -159,7 +160,7 @@ export class OrdersService {
       const sample = this.orderRepo.manager.create(Sample, {
         labId,
         orderId: savedOrder.id,
-        sampleId: sampleDto.sampleId || null,
+        sampleId: null,
         tubeType: sampleDto.tubeType || null,
         barcode: sampleBarcode,
         sequenceNumber,
@@ -498,11 +499,7 @@ export class OrdersService {
         }
       }
 
-      const nextBarcode = this.createOrderSampleBarcodeAllocator(
-        order.orderNumber,
-        refreshedSamples.map((sample) => sample.barcode),
-      );
-
+      // `createOrderSampleBarcodeAllocator` removed, we will grab global sequence directly
       for (const testId of uniqueTestIds) {
         if (existingRootByTestId.has(testId)) {
           continue;
@@ -535,12 +532,14 @@ export class OrdersService {
             labelSequenceBy,
           );
 
+          const newBarcode = await this.generateOrderNumber(labId, order.shiftId ?? null, 1);
+
           const createdSample = sampleRepo.create({
             labId,
             orderId: order.id,
             sampleId: null,
             tubeType: testTubeType,
-            barcode: nextBarcode(),
+            barcode: newBarcode,
             sequenceNumber,
             qrCode: null,
           });
@@ -612,7 +611,6 @@ export class OrdersService {
     const groupedSamples = new Map<
       string,
       {
-        sampleId?: string;
         tubeType?: SampleTubeType;
         tests: Array<{ testId: string }>;
       }
@@ -630,7 +628,6 @@ export class OrdersService {
         let groupedSample = groupedSamples.get(groupKey);
         if (!groupedSample) {
           groupedSample = {
-            sampleId: sample.sampleId ?? undefined,
             tubeType: tubeType ?? undefined,
             tests: [],
           };
@@ -723,39 +720,7 @@ export class OrdersService {
     await orderTestRepo.save(orderTest);
   }
 
-  private createOrderSampleBarcodeAllocator(
-    orderNumber: string | null,
-    existingBarcodes: Array<string | null>,
-  ): () => string {
-    const normalizedOrderNumber = orderNumber?.trim() ?? '';
-    const normalizedBarcodes = existingBarcodes
-      .map((value) => (typeof value === 'string' ? value.trim() : ''))
-      .filter((value) => value.length > 0);
-
-    if (/^\d+$/.test(normalizedOrderNumber)) {
-      const width = normalizedOrderNumber.length;
-      let maxValue = Number(normalizedOrderNumber);
-      for (const barcode of normalizedBarcodes) {
-        if (!/^\d+$/.test(barcode)) continue;
-        const value = Number(barcode);
-        if (Number.isFinite(value) && value > maxValue) {
-          maxValue = value;
-        }
-      }
-      return () => {
-        maxValue += 1;
-        return String(maxValue).padStart(width, '0');
-      };
-    }
-
-    let fallbackSeq = normalizedBarcodes.length;
-    const prefix = normalizedOrderNumber || 'ORD';
-    return () => {
-      fallbackSeq += 1;
-      return `${prefix}-${String(fallbackSeq).padStart(2, '0')}`;
-    };
-  }
-
+  // Old allocator removed, global sequential is used now
   private isOrderTestProcessed(orderTest: OrderTest): boolean {
     return (
       orderTest.status !== OrderTestStatus.PENDING ||
@@ -832,7 +797,7 @@ export class OrdersService {
    * Generates a unique order number stored in the database as orderNumber.
    * Uses same logic as getNextOrderNumber. First sample of the order gets this as barcode.
    */
-  private async generateOrderNumber(labId: string, _shiftId: string | null): Promise<string> {
+  private async generateOrderNumber(labId: string, _shiftId: string | null, increment: number = 1): Promise<string> {
     const today = new Date();
     const yy = String(today.getFullYear() % 100).padStart(2, '0');
     const mm = String(today.getMonth() + 1).padStart(2, '0');
@@ -845,7 +810,7 @@ export class OrdersService {
       scopeKey: 'ORDER',
       date: today,
       shiftId: null,
-    }, floor);
+    }, floor, increment);
     return `${dateStr}${String(nextSeq).padStart(3, '0')}`;
   }
 
@@ -871,10 +836,18 @@ export class OrdersService {
     const pattern = `^${datePrefix}[0-9]{3}$`;
     const rows = await this.orderRepo.manager.query(
       `
-        SELECT COALESCE(MAX(CAST(SUBSTRING("orderNumber" FROM 7 FOR 3) AS integer)), 0) AS "maxSeq"
-        FROM "orders"
-        WHERE "labId" = $1
-          AND "orderNumber" ~ $2
+        SELECT GREATEST(
+          COALESCE((
+            SELECT MAX(CAST(SUBSTRING("orderNumber" FROM 7 FOR 3) AS integer))
+            FROM "orders"
+            WHERE "labId" = $1 AND "orderNumber" ~ $2
+          ), 0),
+          COALESCE((
+            SELECT MAX(CAST(SUBSTRING("barcode" FROM 7 FOR 3) AS integer))
+            FROM "samples"
+            WHERE "labId" = $1 AND "barcode" ~ $2
+          ), 0)
+        ) AS "maxSeq"
       `,
       [labId, pattern],
     ) as Array<{ maxSeq: string | number | null }>;

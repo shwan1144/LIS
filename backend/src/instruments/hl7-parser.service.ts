@@ -31,6 +31,7 @@ export interface HL7Message {
 }
 
 export interface HL7Result {
+  /** Instrument-provided identifier from OBR; expected to contain LIS order number. */
   sampleId: string;
   patientId: string;
   patientName: string;
@@ -255,8 +256,7 @@ export class HL7ParserService {
     patientName: string;
     patientDob?: string;
     patientSex?: string;
-    sampleId: string;
-    orderId: string;
+    orderNumber: string;
     tests: { code: string; name: string }[];
     priority?: string;
     orderDateTime?: string;
@@ -309,7 +309,7 @@ export class HL7ParserService {
         [
           'ORC',
           'NW', // New order
-          orderData.orderId,
+          orderData.orderNumber,
           '',
           '',
           '',
@@ -324,8 +324,8 @@ export class HL7ParserService {
         [
           'OBR',
           (index + 1).toString(),
-          orderData.orderId,
-          orderData.sampleId,
+          orderData.orderNumber,
+          orderData.orderNumber,
           `${test.code}^${test.name}`,
           orderData.priority || 'R', // R=Routine, S=Stat
           orderData.orderDateTime || timestamp,

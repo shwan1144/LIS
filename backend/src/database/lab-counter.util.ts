@@ -33,6 +33,7 @@ export async function nextLabCounterValueWithFloor(
   manager: EntityManager,
   input: LabCounterNextValueInput,
   floorValue: number,
+  increment: number = 1,
 ): Promise<number> {
   const date = input.date ?? new Date();
   const dateKey = toLocalDateKey(date);
@@ -52,15 +53,15 @@ export async function nextLabCounterValueWithFloor(
         "shiftScopeKey",
         "value"
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7 + 1)
+      VALUES ($1, $2, $3, $4, $5, $6, $7 + $8)
       ON CONFLICT ("labId", "counterType", "scopeKey", "dateKey", "shiftScopeKey")
       DO UPDATE
-        SET "value" = GREATEST("lab_counters"."value", $7) + 1,
+        SET "value" = GREATEST("lab_counters"."value", $7) + $8,
             "shiftId" = EXCLUDED."shiftId",
             "updatedAt" = CURRENT_TIMESTAMP
       RETURNING "value"
     `,
-    [input.labId, input.counterType, scopeKey, dateKey, shiftId, shiftScopeKey, floor],
+    [input.labId, input.counterType, scopeKey, dateKey, shiftId, shiftScopeKey, floor, increment],
   ) as Array<{ value: string | number }>;
 
   const value = Number(rows?.[0]?.value);
@@ -68,7 +69,7 @@ export async function nextLabCounterValueWithFloor(
     throw new Error(`Failed to increment lab counter ${input.counterType} for lab ${input.labId}`);
   }
 
-  return Math.floor(value);
+  return Math.floor(value) - increment + 1;
 }
 
 export async function peekNextLabCounterValue(

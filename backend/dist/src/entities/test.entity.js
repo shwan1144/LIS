@@ -55,6 +55,10 @@ __decorate([
     __metadata("design:type", String)
 ], Test.prototype, "name", void 0);
 __decorate([
+    (0, typeorm_1.Column)({ type: 'varchar', length: 32, nullable: true }),
+    __metadata("design:type", Object)
+], Test.prototype, "abbreviation", void 0);
+__decorate([
     (0, typeorm_1.Column)({
         type: 'enum',
         enum: TestType,

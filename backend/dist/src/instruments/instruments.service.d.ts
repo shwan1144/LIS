@@ -35,8 +35,8 @@ export interface CreateMappingDto {
     multiplier?: number;
 }
 export interface SendInstrumentTestOrderDto {
-    orderId: string;
-    sampleId: string;
+    orderNumber?: string;
+    orderId?: string;
     patientId: string;
     patientName: string;
     patientDob?: string;

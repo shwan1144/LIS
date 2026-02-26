@@ -21,21 +21,19 @@ const instrument_entity_1 = require("../entities/instrument.entity");
 const order_entity_1 = require("../entities/order.entity");
 const order_test_entity_1 = require("../entities/order-test.entity");
 const order_test_result_history_entity_1 = require("../entities/order-test-result-history.entity");
-const sample_entity_1 = require("../entities/sample.entity");
 const unmatched_instrument_result_entity_1 = require("../entities/unmatched-instrument-result.entity");
 const audit_service_1 = require("../audit/audit.service");
 const audit_log_entity_1 = require("../entities/audit-log.entity");
 const panel_status_service_1 = require("../panels/panel-status.service");
 const astm_parser_service_1 = require("./astm-parser.service");
 let AstmIngestionService = AstmIngestionService_1 = class AstmIngestionService {
-    constructor(instrumentRepo, mappingRepo, messageRepo, orderTestRepo, historyRepo, unmatchedRepo, sampleRepo, orderRepo, astmParser, panelStatusService, auditService) {
+    constructor(instrumentRepo, mappingRepo, messageRepo, orderTestRepo, historyRepo, unmatchedRepo, orderRepo, astmParser, panelStatusService, auditService) {
         this.instrumentRepo = instrumentRepo;
         this.mappingRepo = mappingRepo;
         this.messageRepo = messageRepo;
         this.orderTestRepo = orderTestRepo;
         this.historyRepo = historyRepo;
         this.unmatchedRepo = unmatchedRepo;
-        this.sampleRepo = sampleRepo;
         this.orderRepo = orderRepo;
         this.astmParser = astmParser;
         this.panelStatusService = panelStatusService;
@@ -166,15 +164,22 @@ let AstmIngestionService = AstmIngestionService_1 = class AstmIngestionService {
             return {
                 success: false,
                 reason: unmatched_instrument_result_entity_1.UnmatchedReason.UNMATCHED_SAMPLE,
-                message: 'Sample identifier not found in ASTM order record',
+                message: 'Order number not found in ASTM order record',
             };
         }
         const sample = await this.findSample(sampleIdentifier, instrument.labId);
         if (!sample) {
+            this.logger.warn(JSON.stringify({
+                event: 'instrument_order_number_mismatch',
+                instrumentId: instrument.id,
+                labId: instrument.labId,
+                orderNumber: sampleIdentifier,
+                source: 'ASTM',
+            }));
             return {
                 success: false,
                 reason: unmatched_instrument_result_entity_1.UnmatchedReason.UNMATCHED_SAMPLE,
-                message: `Sample identifier "${sampleIdentifier}" not found in lab`,
+                message: `Order number "${sampleIdentifier}" not found in lab`,
             };
         }
         const instrumentCode = (result.testCode || '').trim().toUpperCase();
@@ -198,18 +203,29 @@ let AstmIngestionService = AstmIngestionService_1 = class AstmIngestionService {
                 message: `No mapping found for instrument code: ${instrumentCode}`,
             };
         }
-        const orderTest = await this.orderTestRepo.findOne({
+        let orderTest = await this.orderTestRepo.findOne({
             where: {
                 sampleId: sample.id,
                 testId: mapping.testId,
             },
             relations: ['test', 'sample', 'sample.order'],
         });
+        if (!orderTest && sample.orderId) {
+            orderTest = await this.orderTestRepo
+                .createQueryBuilder('ot')
+                .leftJoinAndSelect('ot.test', 'test')
+                .leftJoinAndSelect('ot.sample', 'sample')
+                .leftJoinAndSelect('sample.order', 'order')
+                .where('sample.orderId = :orderId', { orderId: sample.orderId })
+                .andWhere('ot.testId = :testId', { testId: mapping.testId })
+                .orderBy('ot.createdAt', 'ASC')
+                .getOne();
+        }
         if (!orderTest) {
             return {
                 success: false,
                 reason: unmatched_instrument_result_entity_1.UnmatchedReason.UNORDERED_TEST,
-                message: `Mapped test is not ordered for sample ${sample.sampleId || sample.id}`,
+                message: `Mapped test is not ordered for order ${sample.orderId}`,
             };
         }
         if (orderTest.status === order_test_entity_1.OrderTestStatus.VERIFIED && strictMode) {
@@ -301,34 +317,16 @@ let AstmIngestionService = AstmIngestionService_1 = class AstmIngestionService {
         });
         await this.unmatchedRepo.save(unmatched);
     }
-    async findSample(sampleIdentifier, labId) {
-        if (!sampleIdentifier)
+    async findSample(orderNumber, labId) {
+        if (!orderNumber)
             return null;
         const order = await this.orderRepo.findOne({
-            where: { labId, orderNumber: sampleIdentifier },
+            where: { labId, orderNumber },
             relations: ['samples'],
         });
         if (order && order.samples.length > 0 && order.status !== order_entity_1.OrderStatus.CANCELLED) {
             return order.samples[0];
         }
-        let sample = await this.sampleRepo
-            .createQueryBuilder('s')
-            .innerJoin('s.order', 'o')
-            .where('o.labId = :labId', { labId })
-            .andWhere('s.sampleId = :sampleId', { sampleId: sampleIdentifier })
-            .andWhere('o.status != :cancelled', { cancelled: order_entity_1.OrderStatus.CANCELLED })
-            .getOne();
-        if (sample)
-            return sample;
-        sample = await this.sampleRepo
-            .createQueryBuilder('s')
-            .innerJoin('s.order', 'o')
-            .where('o.labId = :labId', { labId })
-            .andWhere('s.barcode = :barcode', { barcode: sampleIdentifier })
-            .andWhere('o.status != :cancelled', { cancelled: order_entity_1.OrderStatus.CANCELLED })
-            .getOne();
-        if (sample)
-            return sample;
         return null;
     }
     parseResultValue(value, multiplier) {
@@ -353,10 +351,8 @@ exports.AstmIngestionService = AstmIngestionService = AstmIngestionService_1 = _
     __param(3, (0, typeorm_1.InjectRepository)(order_test_entity_1.OrderTest)),
     __param(4, (0, typeorm_1.InjectRepository)(order_test_result_history_entity_1.OrderTestResultHistory)),
     __param(5, (0, typeorm_1.InjectRepository)(unmatched_instrument_result_entity_1.UnmatchedInstrumentResult)),
-    __param(6, (0, typeorm_1.InjectRepository)(sample_entity_1.Sample)),
-    __param(7, (0, typeorm_1.InjectRepository)(order_entity_1.Order)),
+    __param(6, (0, typeorm_1.InjectRepository)(order_entity_1.Order)),
     __metadata("design:paramtypes", [typeorm_2.Repository,
-        typeorm_2.Repository,
         typeorm_2.Repository,
         typeorm_2.Repository,
         typeorm_2.Repository,

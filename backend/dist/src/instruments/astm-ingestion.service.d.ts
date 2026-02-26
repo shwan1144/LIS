@@ -3,7 +3,6 @@ import { Instrument, InstrumentMessage, InstrumentTestMapping } from '../entitie
 import { Order } from '../entities/order.entity';
 import { OrderTest } from '../entities/order-test.entity';
 import { OrderTestResultHistory } from '../entities/order-test-result-history.entity';
-import { Sample } from '../entities/sample.entity';
 import { UnmatchedInstrumentResult } from '../entities/unmatched-instrument-result.entity';
 import { AuditService } from '../audit/audit.service';
 import { PanelStatusService } from '../panels/panel-status.service';
@@ -24,13 +23,12 @@ export declare class AstmIngestionService {
     private readonly orderTestRepo;
     private readonly historyRepo;
     private readonly unmatchedRepo;
-    private readonly sampleRepo;
     private readonly orderRepo;
     private readonly astmParser;
     private readonly panelStatusService;
     private readonly auditService;
     private readonly logger;
-    constructor(instrumentRepo: Repository<Instrument>, mappingRepo: Repository<InstrumentTestMapping>, messageRepo: Repository<InstrumentMessage>, orderTestRepo: Repository<OrderTest>, historyRepo: Repository<OrderTestResultHistory>, unmatchedRepo: Repository<UnmatchedInstrumentResult>, sampleRepo: Repository<Sample>, orderRepo: Repository<Order>, astmParser: AstmParserService, panelStatusService: PanelStatusService, auditService: AuditService);
+    constructor(instrumentRepo: Repository<Instrument>, mappingRepo: Repository<InstrumentTestMapping>, messageRepo: Repository<InstrumentMessage>, orderTestRepo: Repository<OrderTest>, historyRepo: Repository<OrderTestResultHistory>, unmatchedRepo: Repository<UnmatchedInstrumentResult>, orderRepo: Repository<Order>, astmParser: AstmParserService, panelStatusService: PanelStatusService, auditService: AuditService);
     ingestAstmResult(instrumentId: string, rawMessage: string, config?: {
         strictMode?: boolean;
     }): Promise<AstmIngestionResult>;

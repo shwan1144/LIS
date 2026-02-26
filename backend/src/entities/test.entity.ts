@@ -78,6 +78,9 @@ export class Test {
   @Column({ type: 'varchar', length: 255 })
   name: string;
 
+  @Column({ type: 'varchar', length: 32, nullable: true })
+  abbreviation: string | null;
+
   @Column({
     type: 'enum',
     enum: TestType,

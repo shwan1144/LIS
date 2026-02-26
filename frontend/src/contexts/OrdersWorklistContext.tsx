@@ -1,19 +1,5 @@
-import {
-  createContext,
-  useContext,
-  useState,
-  useCallback,
-  type ReactNode,
-} from 'react';
-import type { PatientDto, OrderDto } from '../api/client';
-
-export interface PatientRow {
-  rowId: string;
-  patient: PatientDto;
-  createdOrder: OrderDto | null;
-}
-
-type WorklistByShift = Record<string, PatientRow[]>;
+import { createContext, useContext } from 'react';
+import { useOrdersWorklistStore, type PatientRow } from '../stores/ordersWorklistStore';
 
 interface OrdersWorklistContextValue {
   getList: (shiftId: string | null) => PatientRow[];
@@ -22,29 +8,8 @@ interface OrdersWorklistContextValue {
 
 const OrdersWorklistContext = createContext<OrdersWorklistContextValue | null>(null);
 
-export function OrdersWorklistProvider({ children }: { children: ReactNode }) {
-  const [worklistByShift, setWorklistByShift] = useState<WorklistByShift>({});
-
-  const shiftKey = (shiftId: string | null) => shiftId ?? '';
-
-  const getList = useCallback(
-    (shiftId: string | null) => worklistByShift[shiftKey(shiftId)] ?? [],
-    [worklistByShift]
-  );
-
-  const setList = useCallback((shiftId: string | null, list: PatientRow[]) => {
-    setWorklistByShift((prev) => ({ ...prev, [shiftKey(shiftId)]: list }));
-  }, []);
-
-  return (
-    <OrdersWorklistContext.Provider value={{ getList, setList }}>
-      {children}
-    </OrdersWorklistContext.Provider>
-  );
-}
-
 export function useOrdersWorklist() {
-  const ctx = useContext(OrdersWorklistContext);
-  if (!ctx) return null;
-  return ctx;
+  const getList = useOrdersWorklistStore((state) => state.getList);
+  const setList = useOrdersWorklistStore((state) => state.setList);
+  return { getList, setList };
 }

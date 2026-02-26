@@ -47,6 +47,7 @@ export declare class ReportsService implements OnModuleDestroy {
     private decodeImageDataUrl;
     private applyFallbackPageBranding;
     private getReportableOrderTests;
+    private classifyOrderTestsForReport;
     private loadOrderResultsSnapshot;
     getPublicResultStatus(orderId: string): Promise<PublicResultStatus>;
     generatePublicTestResultsPDF(orderId: string): Promise<Buffer>;

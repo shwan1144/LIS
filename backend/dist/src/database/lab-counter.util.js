@@ -18,7 +18,7 @@ function normalizeFloorValue(value) {
 async function nextLabCounterValue(manager, input) {
     return nextLabCounterValueWithFloor(manager, input, 0);
 }
-async function nextLabCounterValueWithFloor(manager, input, floorValue) {
+async function nextLabCounterValueWithFloor(manager, input, floorValue, increment = 1) {
     const date = input.date ?? new Date();
     const dateKey = toLocalDateKey(date);
     const scopeKey = (input.scopeKey ?? '').trim() || '__default__';
@@ -35,19 +35,19 @@ async function nextLabCounterValueWithFloor(manager, input, floorValue) {
         "shiftScopeKey",
         "value"
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7 + 1)
+      VALUES ($1, $2, $3, $4, $5, $6, $7 + $8)
       ON CONFLICT ("labId", "counterType", "scopeKey", "dateKey", "shiftScopeKey")
       DO UPDATE
-        SET "value" = GREATEST("lab_counters"."value", $7) + 1,
+        SET "value" = GREATEST("lab_counters"."value", $7) + $8,
             "shiftId" = EXCLUDED."shiftId",
             "updatedAt" = CURRENT_TIMESTAMP
       RETURNING "value"
-    `, [input.labId, input.counterType, scopeKey, dateKey, shiftId, shiftScopeKey, floor]);
+    `, [input.labId, input.counterType, scopeKey, dateKey, shiftId, shiftScopeKey, floor, increment]);
     const value = Number(rows?.[0]?.value);
     if (!Number.isFinite(value) || value <= 0) {
         throw new Error(`Failed to increment lab counter ${input.counterType} for lab ${input.labId}`);
     }
-    return Math.floor(value);
+    return Math.floor(value) - increment + 1;
 }
 async function peekNextLabCounterValue(manager, input) {
     const date = input.date ?? new Date();

@@ -151,6 +151,12 @@ __decorate([
     __metadata("design:type", String)
 ], CreateTestDto.prototype, "name", void 0);
 __decorate([
+    (0, class_validator_1.IsString)(),
+    (0, class_validator_1.MaxLength)(32),
+    (0, class_validator_1.IsOptional)(),
+    __metadata("design:type", String)
+], CreateTestDto.prototype, "abbreviation", void 0);
+__decorate([
     (0, class_validator_1.IsEnum)(test_entity_1.TestType),
     (0, class_validator_1.IsOptional)(),
     __metadata("design:type", String)

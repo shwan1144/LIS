@@ -54,8 +54,7 @@ export declare class HL7ParserService {
         patientName: string;
         patientDob?: string;
         patientSex?: string;
-        sampleId: string;
-        orderId: string;
+        orderNumber: string;
         tests: {
             code: string;
             name: string;

@@ -27,7 +27,7 @@ export interface IngestionResult {
  * 
  * Key principles:
  * - NEVER auto-create OrderTests from incoming results
- * - STRICT matching: sampleId + testId must exist
+ * - STRICT matching: orderNumber + testId must exist
  * - Unmatched results go to inbox for manual review
  * - Track result history for reruns/corrections
  * - Recompute panel parent statuses after processing
@@ -49,8 +49,6 @@ export class HL7IngestionService {
     private readonly historyRepo: Repository<OrderTestResultHistory>,
     @InjectRepository(UnmatchedInstrumentResult)
     private readonly unmatchedRepo: Repository<UnmatchedInstrumentResult>,
-    @InjectRepository(Sample)
-    private readonly sampleRepo: Repository<Sample>,
     @InjectRepository(Order)
     private readonly orderRepo: Repository<Order>,
     private readonly hl7Parser: HL7ParserService,
@@ -65,7 +63,7 @@ export class HL7IngestionService {
     instrumentId: string,
     rawMessage: string,
     config?: {
-      sampleIdentifierField?: 'OBR-3' | 'OBR-2' | 'PID-3'; // Which HL7 field to use as barcode
+      sampleIdentifierField?: 'OBR-3' | 'OBR-2' | 'PID-3'; // Which HL7 field to use for order number
       strictMode?: boolean; // Default true
     },
   ): Promise<IngestionResult> {
@@ -130,7 +128,7 @@ export class HL7IngestionService {
       };
     }
 
-    // 3. Extract sample identifier from OBR
+    // 3. Extract order-number identifier from HL7 field mapping
     const obrSegment = parsed.message.segments.find(s => s.name === 'OBR');
     if (!obrSegment) {
       const errorMsg = 'OBR segment not found';
@@ -161,7 +159,7 @@ export class HL7IngestionService {
     }
 
     if (!sampleIdentifier) {
-      const errorMsg = `Sample identifier not found in ${sampleField}`;
+      const errorMsg = `Order number not found in ${sampleField}`;
       messageRecord.status = 'ERROR';
       messageRecord.errorMessage = errorMsg;
       await this.messageRepo.save(messageRecord);
@@ -179,6 +177,15 @@ export class HL7IngestionService {
     // 4. Find sample by identifier
     const sample = await this.findSample(sampleIdentifier.trim(), instrument.labId);
     if (!sample) {
+      this.logger.warn(
+        JSON.stringify({
+          event: 'instrument_order_number_mismatch',
+          instrumentId: instrument.id,
+          labId: instrument.labId,
+          orderNumber: sampleIdentifier.trim(),
+          source: 'HL7',
+        }),
+      );
       // Store all OBX as unmatched
       const unmatchedCount = parsed.results.length;
       for (const result of parsed.results) {
@@ -188,20 +195,20 @@ export class HL7IngestionService {
           result,
           UnmatchedReason.UNMATCHED_SAMPLE,
           messageRecord.id,
-          `Sample identifier "${sampleIdentifier}" not found in lab ${instrument.labId}`,
+          `Order number "${sampleIdentifier}" not found in lab ${instrument.labId}`,
         );
       }
       messageRecord.status = 'ERROR';
-      messageRecord.errorMessage = `Sample not found: ${sampleIdentifier}`;
+      messageRecord.errorMessage = `Order number not found: ${sampleIdentifier}`;
       await this.messageRepo.save(messageRecord);
       return {
         success: false,
         messageId: messageRecord.id,
         processed: 0,
         unmatched: unmatchedCount,
-        errors: [`Sample not found: ${sampleIdentifier}`],
+        errors: [`Order number not found: ${sampleIdentifier}`],
         ackCode: 'AE',
-        ackMessage: `Sample ${sampleIdentifier} not found`,
+        ackMessage: `Order number ${sampleIdentifier} not found`,
       };
     }
 
@@ -352,7 +359,7 @@ export class HL7IngestionService {
       return {
         success: false,
         reason: UnmatchedReason.UNORDERED_TEST,
-        message: `Test ${mapping.instrumentTestCode || mapping.instrumentTestName || mapping.testId} not ordered for sample ${sample.id}`,
+        message: `Test ${mapping.instrumentTestCode || mapping.instrumentTestName || mapping.testId} not ordered for order ${sample.orderId}`,
       };
     }
 
@@ -475,42 +482,20 @@ export class HL7IngestionService {
   }
 
   /**
-   * Find sample by various identifiers
+   * Resolve sample from order number
    */
-  private async findSample(sampleIdentifier: string, labId: string): Promise<Sample | null> {
-    if (!sampleIdentifier) return null;
+  private async findSample(orderNumber: string, labId: string): Promise<Sample | null> {
+    if (!orderNumber) return null;
 
-    // Prefer order number match first (order-based workflow)
+    // Order-number-only resolution (legacy sampleId/barcode matching removed).
     const order = await this.orderRepo.findOne({
-      where: { labId, orderNumber: sampleIdentifier },
+      where: { labId, orderNumber },
       relations: ['samples'],
     });
 
     if (order && order.samples.length > 0 && order.status !== OrderStatus.CANCELLED) {
       return order.samples[0];
     }
-
-    // Try by sampleId field
-    let sample = await this.sampleRepo
-      .createQueryBuilder('s')
-      .innerJoin('s.order', 'o')
-      .where('o.labId = :labId', { labId })
-      .andWhere('s.sampleId = :sampleId', { sampleId: sampleIdentifier })
-      .andWhere('o.status != :cancelled', { cancelled: OrderStatus.CANCELLED })
-      .getOne();
-
-    if (sample) return sample;
-
-    // Try by barcode
-    sample = await this.sampleRepo
-      .createQueryBuilder('s')
-      .innerJoin('s.order', 'o')
-      .where('o.labId = :labId', { labId })
-      .andWhere('s.barcode = :barcode', { barcode: sampleIdentifier })
-      .andWhere('o.status != :cancelled', { cancelled: OrderStatus.CANCELLED })
-      .getOne();
-
-    if (sample) return sample;
 
     return null;
   }

@@ -192,6 +192,7 @@ export interface AdminSummaryDto {
     testId: string;
     testCode: string;
     testName: string;
+  testAbbreviation: string | null;
     ordersCount: number;
     verifiedCount: number;
   }>;
@@ -271,6 +272,7 @@ export interface AdminOrderTestDetail {
 
 export interface AdminOrderSampleDetail {
   id: string;
+  /** @deprecated Legacy sample identifier kept for compatibility; new flows use orderNumber/barcode. */
   sampleId: string | null;
   tubeType: string | null;
   barcode: string | null;
@@ -941,6 +943,7 @@ export interface OrderTestDto {
 export interface SampleDto {
   id: string;
   orderId: string;
+  /** @deprecated Legacy sample identifier kept for compatibility; new flows use orderNumber/barcode. */
   sampleId: string | null;
   tubeType: TubeType | null;
   barcode: string | null;
@@ -985,6 +988,7 @@ export interface CreateOrderTestDto {
 }
 
 export interface CreateSampleDto {
+  /** @deprecated Accepted for backward compatibility only; ignored by backend. */
   sampleId?: string;
   tubeType?: TubeType;
   tests: CreateOrderTestDto[];
@@ -1318,6 +1322,7 @@ export interface WorklistItem {
   patientAge: number | null;
   testCode: string;
   testName: string;
+  testAbbreviation: string | null;
   testType: 'SINGLE' | 'PANEL';
   testUnit: string | null;
   normalMin: number | null;
@@ -1725,8 +1730,9 @@ export interface InstrumentMessageDto {
 }
 
 export interface SendInstrumentTestOrderRequest {
-  orderId: string;
-  sampleId: string;
+  orderNumber: string;
+  /** @deprecated Legacy alias accepted by backend for compatibility. */
+  orderId?: string;
   patientId: string;
   patientName: string;
   patientDob?: string;

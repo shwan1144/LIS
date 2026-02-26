@@ -100,18 +100,23 @@ function groupVerificationByOrder(items: WorklistItem[]): VerificationOrderGroup
     byOrder.set(item.orderId, list);
   }
 
-  return Array.from(byOrder.entries()).map(([orderId, orderItems]) => {
-    const first = orderItems[0];
-    return {
-      orderId,
-      orderNumber: first.orderNumber,
-      patientName: first.patientName,
-      patientAge: first.patientAge,
-      patientSex: first.patientSex,
-      registeredAt: first.registeredAt,
-      items: orderItems,
-    };
-  });
+  return Array.from(byOrder.entries())
+    .map(([orderId, orderItems]) => {
+      const first = orderItems[0];
+      return {
+        orderId,
+        orderNumber: first.orderNumber,
+        patientName: first.patientName,
+        patientAge: first.patientAge,
+        patientSex: first.patientSex,
+        registeredAt: first.registeredAt,
+        items: orderItems,
+      };
+    })
+    .filter((group) => {
+      // Exclude orders that don't have any visible top-level items
+      return group.items.some((i) => !i.parentOrderTestId);
+    });
 }
 
 function getRootTests(items: WorklistItem[]): WorklistItem[] {
@@ -364,8 +369,7 @@ export function VerificationPage() {
     try {
       const result = await verifyMultipleResults(ids);
       message.success(
-        `Verified ${result.verified} result(s)${
-          result.failed > 0 ? `, ${result.failed} failed` : ''
+        `Verified ${result.verified} result(s)${result.failed > 0 ? `, ${result.failed} failed` : ''
         }`,
       );
       await reloadQueueAndStats();
@@ -509,7 +513,7 @@ export function VerificationPage() {
                     )}
                   </Space>
                   <Text strong style={{ display: 'block', fontSize: 12 }}>
-                    {row.testName}
+                    {row.testAbbreviation || row.testName}
                   </Text>
                 </div>
               ),
@@ -1131,7 +1135,6 @@ export function VerificationPage() {
         {detailItem && (
           <Descriptions column={2} bordered size="small">
             <Descriptions.Item label="Order #">{detailItem.orderNumber}</Descriptions.Item>
-            <Descriptions.Item label="Sample ID">{detailItem.sampleId || '-'}</Descriptions.Item>
             <Descriptions.Item label="Patient">{detailItem.patientName}</Descriptions.Item>
             <Descriptions.Item label="Age/Sex">
               {detailItem.patientAge ? `${detailItem.patientAge}y` : '-'} / {detailItem.patientSex || '-'}
