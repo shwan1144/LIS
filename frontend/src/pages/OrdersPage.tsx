@@ -17,6 +17,7 @@ import {
   List,
   Tag,
   Modal,
+  Table,
 } from 'antd';
 import {
   ShoppingCartOutlined,
@@ -1316,41 +1317,38 @@ export function OrdersPage() {
                             style={{ padding: 24 }}
                           />
                         ) : (
-                          <div
-                            style={{
-                              border: styles.borderDark,
-                              borderRadius: 8,
-                              padding: 12,
-                              maxHeight: 280,
-                              overflow: 'auto',
-                            }}
-                          >
-                            <Space direction="vertical" style={{ width: '100%' }} size={8}>
-                              {selectedTests.map((test) => (
-                                <div
-                                  key={test.testId}
-                                  style={{
-                                    display: 'flex',
-                                    justifyContent: 'space-between',
-                                    alignItems: 'center',
-                                    padding: '8px 12px',
-                                    backgroundColor: styles.bgSubtle,
-                                    borderRadius: 6,
-                                  }}
-                                >
-                                  <Space>
-                                    <Text strong>{test.testCode}</Text>
-                                  </Space>
+                          <Table
+                            dataSource={selectedTests}
+                            rowKey="testId"
+                            pagination={false}
+                            size="small"
+                            scroll={{ y: 280 }}
+                            showHeader={false}
+                            columns={[
+                              {
+                                title: 'Test',
+                                dataIndex: 'testCode',
+                                key: 'testCode',
+                                render: (text: string) => <Text strong>{text}</Text>,
+                              },
+                              {
+                                title: 'Action',
+                                key: 'action',
+                                align: 'right',
+                                width: 50,
+                                render: (_, record) => (
                                   <Button
                                     type="text"
                                     danger
                                     icon={<DeleteOutlined />}
-                                    onClick={() => handleRemoveTest(test.testId)}
+                                    onClick={() => handleRemoveTest(record.testId)}
+                                    size="small"
                                   />
-                                </div>
-                              ))}
-                            </Space>
-                          </div>
+                                ),
+                              },
+                            ]}
+                            style={{ border: styles.borderDark, borderRadius: 8 }}
+                          />
                         )}
                       </Col>
 
