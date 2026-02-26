@@ -614,12 +614,9 @@ export class ReportsService implements OnModuleDestroy {
       doc.fontSize(10).font('Helvetica');
       doc.text(`Samples: ${order.samples.length} sample(s)`, { align: 'left' });
       order.samples.forEach((sample) => {
-        doc.text(
-          `  - ${sample.tubeType?.replace('_', ' ') || 'Unknown'} tube${
-            sample.sampleId ? ` (${sample.sampleId})` : ''
-          }`,
-          { align: 'left' },
-        );
+        doc.text(`  - ${sample.tubeType?.replace('_', ' ') || 'Unknown'} tube`, {
+          align: 'left',
+        });
       });
 
       doc.moveDown(1);

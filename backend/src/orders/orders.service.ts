@@ -159,7 +159,7 @@ export class OrdersService {
       const sample = this.orderRepo.manager.create(Sample, {
         labId,
         orderId: savedOrder.id,
-        sampleId: sampleDto.sampleId || null,
+        sampleId: null,
         tubeType: sampleDto.tubeType || null,
         barcode: sampleBarcode,
         sequenceNumber,
@@ -612,7 +612,6 @@ export class OrdersService {
     const groupedSamples = new Map<
       string,
       {
-        sampleId?: string;
         tubeType?: SampleTubeType;
         tests: Array<{ testId: string }>;
       }
@@ -630,7 +629,6 @@ export class OrdersService {
         let groupedSample = groupedSamples.get(groupKey);
         if (!groupedSample) {
           groupedSample = {
-            sampleId: sample.sampleId ?? undefined,
             tubeType: tubeType ?? undefined,
             tests: [],
           };

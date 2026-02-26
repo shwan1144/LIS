@@ -47,8 +47,9 @@ export interface CreateMappingDto {
 }
 
 export interface SendInstrumentTestOrderDto {
-  orderId: string;
-  sampleId: string;
+  orderNumber?: string;
+  /** @deprecated Legacy alias for orderNumber, kept for backward compatibility. */
+  orderId?: string;
   patientId: string;
   patientName: string;
   patientDob?: string;
@@ -199,8 +200,9 @@ export class InstrumentsService {
       throw new BadRequestException('Bidirectional mode is disabled for this instrument');
     }
 
-    if (!dto.orderId?.trim() || !dto.sampleId?.trim() || !dto.patientId?.trim() || !dto.patientName?.trim()) {
-      throw new BadRequestException('orderId, sampleId, patientId, and patientName are required');
+    const orderNumber = dto.orderNumber?.trim() || dto.orderId?.trim() || '';
+    if (!orderNumber || !dto.patientId?.trim() || !dto.patientName?.trim()) {
+      throw new BadRequestException('orderNumber (or legacy orderId), patientId, and patientName are required');
     }
 
     const normalizedTests = (dto.tests || [])
@@ -224,8 +226,7 @@ export class InstrumentsService {
       patientName: dto.patientName.trim(),
       patientDob: dto.patientDob?.trim() || undefined,
       patientSex: dto.patientSex?.trim() || undefined,
-      sampleId: dto.sampleId.trim(),
-      orderId: dto.orderId.trim(),
+      orderNumber,
       tests: normalizedTests as Array<{ code: string; name: string }>,
       priority: dto.priority?.trim() || 'R',
     });
@@ -238,7 +239,7 @@ export class InstrumentsService {
 
     return {
       success: true,
-      message: `Order ${dto.orderId.trim()} sent to ${instrument.code}`,
+      message: `Order ${orderNumber} sent to ${instrument.code}`,
     };
   }
 

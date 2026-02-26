@@ -4,7 +4,7 @@ import { Repository } from 'typeorm';
 import { Instrument, InstrumentTestMapping } from '../entities/instrument.entity';
 import { OrderTest, OrderTestStatus, ResultFlag } from '../entities/order-test.entity';
 import { Sample } from '../entities/sample.entity';
-import { Order } from '../entities/order.entity';
+import { Order, OrderStatus } from '../entities/order.entity';
 import { HL7ParserService, HL7Result } from './hl7-parser.service';
 import { AuditService } from '../audit/audit.service';
 import { AuditAction } from '../entities/audit-log.entity';
@@ -25,8 +25,6 @@ export class InstrumentResultProcessor {
     private readonly mappingRepo: Repository<InstrumentTestMapping>,
     @InjectRepository(OrderTest)
     private readonly orderTestRepo: Repository<OrderTest>,
-    @InjectRepository(Sample)
-    private readonly sampleRepo: Repository<Sample>,
     @InjectRepository(Order)
     private readonly orderRepo: Repository<Order>,
     private readonly hl7Parser: HL7ParserService,
@@ -37,7 +35,7 @@ export class InstrumentResultProcessor {
    * Process a single result from instrument
    */
   async processResult(instrument: Instrument, result: HL7Result): Promise<ProcessedResult> {
-    this.logger.log(`Processing result: Sample=${result.sampleId}, Test=${result.testCode}, Value=${result.value}`);
+    this.logger.log(`Processing result: Identifier=${result.sampleId}, Test=${result.testCode}, Value=${result.value}`);
 
     // Find test mapping
     const mapping = await this.mappingRepo.findOne({
@@ -59,15 +57,24 @@ export class InstrumentResultProcessor {
     // Find the sample by various identifiers
     const sample = await this.findSample(result.sampleId, instrument.labId);
     if (!sample) {
-      this.logger.warn(`Sample not found: ${result.sampleId}`);
+      this.logger.warn(
+        JSON.stringify({
+          event: 'instrument_order_number_mismatch',
+          instrumentId: instrument.id,
+          labId: instrument.labId,
+          orderNumber: result.sampleId,
+          source: 'RESULT_PROCESSOR',
+        }),
+      );
+      this.logger.warn(`Order number not found: ${result.sampleId}`);
       return {
         success: false,
-        message: `Sample not found: ${result.sampleId}`,
+        message: `Order number not found: ${result.sampleId}`,
       };
     }
 
     // Find the order test
-    const orderTest = await this.orderTestRepo.findOne({
+    let orderTest = await this.orderTestRepo.findOne({
       where: {
         sampleId: sample.id,
         testId: mapping.testId,
@@ -75,8 +82,21 @@ export class InstrumentResultProcessor {
       relations: ['test', 'sample', 'sample.order'],
     });
 
+    // If not found on the first sample resolved by order number, fallback to sibling samples.
+    if (!orderTest && sample.orderId) {
+      orderTest = await this.orderTestRepo
+        .createQueryBuilder('ot')
+        .leftJoinAndSelect('ot.test', 'test')
+        .leftJoinAndSelect('ot.sample', 'sample')
+        .leftJoinAndSelect('sample.order', 'order')
+        .where('sample.orderId = :orderId', { orderId: sample.orderId })
+        .andWhere('ot.testId = :testId', { testId: mapping.testId })
+        .orderBy('ot.createdAt', 'ASC')
+        .getOne();
+    }
+
     if (!orderTest) {
-      this.logger.warn(`Order test not found for sample ${sample.id} and test ${mapping.testId}`);
+      this.logger.warn(`Order test not found for order ${sample.orderId} and test ${mapping.testId}`);
       return {
         success: false,
         message: `Order test not found`,
@@ -153,50 +173,22 @@ export class InstrumentResultProcessor {
   }
 
   /**
-   * Find sample by various identifiers
+   * Resolve sample from order number
    */
-  private async findSample(sampleIdentifier: string, labId: string): Promise<Sample | null> {
-    if (!sampleIdentifier) return null;
+  private async findSample(orderNumber: string, labId: string): Promise<Sample | null> {
+    if (!orderNumber) return null;
 
-    // Prefer order number match first (order-based workflow)
+    // Order-number-only resolution (legacy sampleId/barcode/UUID matching removed).
     const order = await this.orderRepo.findOne({
-      where: { labId, orderNumber: sampleIdentifier },
+      where: { labId, orderNumber },
       relations: ['samples'],
     });
 
-    if (order && order.samples.length > 0) {
+    if (order && order.samples.length > 0 && order.status !== OrderStatus.CANCELLED) {
       return order.samples[0];
     }
 
-    // Try to find by sampleId field
-    let sample = await this.sampleRepo
-      .createQueryBuilder('s')
-      .innerJoin('s.order', 'o')
-      .where('o.labId = :labId', { labId })
-      .andWhere('s.sampleId = :sampleId', { sampleId: sampleIdentifier })
-      .getOne();
-
-    if (sample) return sample;
-
-    // Try to find by barcode
-    sample = await this.sampleRepo
-      .createQueryBuilder('s')
-      .innerJoin('s.order', 'o')
-      .where('o.labId = :labId', { labId })
-      .andWhere('s.barcode = :barcode', { barcode: sampleIdentifier })
-      .getOne();
-
-    if (sample) return sample;
-
-    // Try by sample ID (UUID)
-    sample = await this.sampleRepo
-      .createQueryBuilder('s')
-      .innerJoin('s.order', 'o')
-      .where('o.labId = :labId', { labId })
-      .andWhere('s.id = :id', { id: sampleIdentifier })
-      .getOne();
-
-    return sample;
+    return null;
   }
 
   /**

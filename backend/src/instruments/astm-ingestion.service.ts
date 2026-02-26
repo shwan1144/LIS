@@ -39,8 +39,6 @@ export class AstmIngestionService {
     private readonly historyRepo: Repository<OrderTestResultHistory>,
     @InjectRepository(UnmatchedInstrumentResult)
     private readonly unmatchedRepo: Repository<UnmatchedInstrumentResult>,
-    @InjectRepository(Sample)
-    private readonly sampleRepo: Repository<Sample>,
     @InjectRepository(Order)
     private readonly orderRepo: Repository<Order>,
     private readonly astmParser: AstmParserService,
@@ -212,16 +210,25 @@ export class AstmIngestionService {
       return {
         success: false,
         reason: UnmatchedReason.UNMATCHED_SAMPLE,
-        message: 'Sample identifier not found in ASTM order record',
+        message: 'Order number not found in ASTM order record',
       };
     }
 
     const sample = await this.findSample(sampleIdentifier, instrument.labId);
     if (!sample) {
+      this.logger.warn(
+        JSON.stringify({
+          event: 'instrument_order_number_mismatch',
+          instrumentId: instrument.id,
+          labId: instrument.labId,
+          orderNumber: sampleIdentifier,
+          source: 'ASTM',
+        }),
+      );
       return {
         success: false,
         reason: UnmatchedReason.UNMATCHED_SAMPLE,
-        message: `Sample identifier "${sampleIdentifier}" not found in lab`,
+        message: `Order number "${sampleIdentifier}" not found in lab`,
       };
     }
 
@@ -249,7 +256,7 @@ export class AstmIngestionService {
       };
     }
 
-    const orderTest = await this.orderTestRepo.findOne({
+    let orderTest = await this.orderTestRepo.findOne({
       where: {
         sampleId: sample.id,
         testId: mapping.testId,
@@ -257,11 +264,24 @@ export class AstmIngestionService {
       relations: ['test', 'sample', 'sample.order'],
     });
 
+    // If not found on the first sample resolved by order number, fallback to sibling samples.
+    if (!orderTest && sample.orderId) {
+      orderTest = await this.orderTestRepo
+        .createQueryBuilder('ot')
+        .leftJoinAndSelect('ot.test', 'test')
+        .leftJoinAndSelect('ot.sample', 'sample')
+        .leftJoinAndSelect('sample.order', 'order')
+        .where('sample.orderId = :orderId', { orderId: sample.orderId })
+        .andWhere('ot.testId = :testId', { testId: mapping.testId })
+        .orderBy('ot.createdAt', 'ASC')
+        .getOne();
+    }
+
     if (!orderTest) {
       return {
         success: false,
         reason: UnmatchedReason.UNORDERED_TEST,
-        message: `Mapped test is not ordered for sample ${sample.sampleId || sample.id}`,
+        message: `Mapped test is not ordered for order ${sample.orderId}`,
       };
     }
 
@@ -371,35 +391,17 @@ export class AstmIngestionService {
     await this.unmatchedRepo.save(unmatched);
   }
 
-  private async findSample(sampleIdentifier: string, labId: string): Promise<Sample | null> {
-    if (!sampleIdentifier) return null;
+  private async findSample(orderNumber: string, labId: string): Promise<Sample | null> {
+    if (!orderNumber) return null;
 
-    // Prefer order number match first (order-based workflow)
+    // Order-number-only resolution (legacy sampleId/barcode matching removed).
     const order = await this.orderRepo.findOne({
-      where: { labId, orderNumber: sampleIdentifier },
+      where: { labId, orderNumber },
       relations: ['samples'],
     });
     if (order && order.samples.length > 0 && order.status !== OrderStatus.CANCELLED) {
       return order.samples[0];
     }
-
-    let sample = await this.sampleRepo
-      .createQueryBuilder('s')
-      .innerJoin('s.order', 'o')
-      .where('o.labId = :labId', { labId })
-      .andWhere('s.sampleId = :sampleId', { sampleId: sampleIdentifier })
-      .andWhere('o.status != :cancelled', { cancelled: OrderStatus.CANCELLED })
-      .getOne();
-    if (sample) return sample;
-
-    sample = await this.sampleRepo
-      .createQueryBuilder('s')
-      .innerJoin('s.order', 'o')
-      .where('o.labId = :labId', { labId })
-      .andWhere('s.barcode = :barcode', { barcode: sampleIdentifier })
-      .andWhere('o.status != :cancelled', { cancelled: OrderStatus.CANCELLED })
-      .getOne();
-    if (sample) return sample;
 
     return null;
   }

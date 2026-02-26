@@ -126,6 +126,11 @@ export class CreateTestDto {
   @MaxLength(255)
   name: string;
 
+  @IsString()
+  @MaxLength(32)
+  @IsOptional()
+  abbreviation?: string;
+
   @IsEnum(TestType)
   @IsOptional()
   type?: TestType;

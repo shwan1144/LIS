@@ -513,7 +513,7 @@ export function VerificationPage() {
                     )}
                   </Space>
                   <Text strong style={{ display: 'block', fontSize: 12 }}>
-                    {row.testName}
+                    {row.testAbbreviation || row.testName}
                   </Text>
                 </div>
               ),
@@ -1135,7 +1135,6 @@ export function VerificationPage() {
         {detailItem && (
           <Descriptions column={2} bordered size="small">
             <Descriptions.Item label="Order #">{detailItem.orderNumber}</Descriptions.Item>
-            <Descriptions.Item label="Sample ID">{detailItem.sampleId || '-'}</Descriptions.Item>
             <Descriptions.Item label="Patient">{detailItem.patientName}</Descriptions.Item>
             <Descriptions.Item label="Age/Sex">
               {detailItem.patientAge ? `${detailItem.patientAge}y` : '-'} / {detailItem.patientSex || '-'}

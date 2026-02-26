@@ -109,3 +109,11 @@ This usually means `node_modules` is corrupted (e.g. by file locking on Windows)
    npm run start:dev
    ```
 5. If EPERM errors persist, move the project to a path **without spaces** (e.g. `C:\lis`) and run `npm install` there.
+
+## Instrument Integration Update
+
+- Instrument result matching now uses **order number** as the LIS identifier.
+- Legacy `samples.sampleId` is deprecated and no longer used in normal workflows.
+- For HL7 inbound, configure instruments to send order number in the configured identifier field (default `OBR-3`).
+- For outbound HL7 ORM, LIS sends order number in `OBR-3`.
+- Devices still sending only legacy sample IDs will route results to unmatched until reconfigured.

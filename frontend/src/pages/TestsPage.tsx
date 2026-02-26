@@ -547,6 +547,13 @@ export function TestsPage() {
       ellipsis: true,
     },
     {
+      title: 'Abbreviation',
+      dataIndex: 'abbreviation',
+      key: 'abbreviation',
+      width: 120,
+      render: (abbreviation: string | null) => abbreviation ? <Tag color="geekblue">{abbreviation}</Tag> : <Text type="secondary">—</Text>,
+    },
+    {
       title: 'Category',
       dataIndex: 'category',
       key: 'category',
@@ -826,6 +833,16 @@ export function TestsPage() {
                       </Form.Item>
                     </Col>
                     <Col span={8}>
+                      <Form.Item
+                        name="abbreviation"
+                        label="Abbreviation"
+                      >
+                        <Input placeholder="e.g., GUE" style={{ textTransform: 'uppercase' }} />
+                      </Form.Item>
+                    </Col>
+                  </Row>
+                  <Row gutter={16}>
+                    <Col span={8}>
                       <Form.Item name="category" label="Category">
                         <Select
                           allowClear
@@ -835,7 +852,6 @@ export function TestsPage() {
                         />
                       </Form.Item>
                     </Col>
-                  </Row>
                   <Row gutter={16}>
                     <Col span={8}>
                       <Form.Item name="type" label="Type">

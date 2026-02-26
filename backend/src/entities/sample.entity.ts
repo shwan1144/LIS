@@ -38,6 +38,7 @@ export class Sample {
   @Column({ type: 'uuid' })
   orderId: string;
 
+  /** @deprecated Legacy sample identifier. Kept for backward compatibility; new writes should remain NULL. */
   @Column({ type: 'varchar', length: 64, nullable: true })
   sampleId: string | null;
 

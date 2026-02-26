@@ -21,6 +21,7 @@ export class CreateOrderTestDto {
 }
 
 export class CreateSampleDto {
+  /** @deprecated Accepted for backward compatibility only. Ignored server-side and not persisted. */
   @IsOptional()
   @IsString()
   sampleId?: string;

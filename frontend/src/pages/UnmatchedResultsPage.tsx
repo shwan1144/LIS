@@ -185,7 +185,7 @@ export function UnmatchedResultsPage() {
       render: (date: string) => dayjs(date).format('MM-DD HH:mm:ss'),
     },
     {
-      title: 'Sample ID',
+      title: 'Order # / Identifier',
       dataIndex: 'sampleIdentifier',
       key: 'sampleIdentifier',
       width: 120,
@@ -305,7 +305,7 @@ export function UnmatchedResultsPage() {
       <Card>
         <Space wrap style={{ marginBottom: 16 }}>
           <Search
-            placeholder="Search sample ID or instrument code"
+            placeholder="Search order number or instrument code"
             allowClear
             style={{ width: 250 }}
             onSearch={setSearch}
@@ -363,7 +363,7 @@ export function UnmatchedResultsPage() {
       >
         {selectedItem && (
           <Descriptions bordered column={1}>
-            <Descriptions.Item label="Sample Identifier">
+            <Descriptions.Item label="Order Number / Identifier">
               <Text code>{selectedItem.sampleIdentifier}</Text>
             </Descriptions.Item>
             <Descriptions.Item label="Instrument Code">
@@ -409,7 +409,7 @@ export function UnmatchedResultsPage() {
         {selectedItem && (
           <Space direction="vertical" style={{ width: '100%' }} size="large">
             <div>
-              <Text strong>Sample:</Text> <Text code>{selectedItem.sampleIdentifier}</Text>
+              <Text strong>Order Number / Identifier:</Text> <Text code>{selectedItem.sampleIdentifier}</Text>
               <br />
               <Text strong>Instrument Code:</Text> <Text>{selectedItem.instrumentCode}</Text>
               <br />

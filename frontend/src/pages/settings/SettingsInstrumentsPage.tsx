@@ -268,7 +268,7 @@ export function SettingsInstrumentsPage() {
   // Simulator
   const [simulatorMessage, setSimulatorMessage] = useState('');
   const [simulatorSending, setSimulatorSending] = useState(false);
-  const [simulatorSampleId, setSimulatorSampleId] = useState('');
+  const [simulatorOrderNumber, setSimulatorOrderNumber] = useState('');
   const [simulatorPatientId, setSimulatorPatientId] = useState('PAT001');
 
   const loadInstruments = useCallback(async () => {
@@ -566,8 +566,7 @@ export function SettingsInstrumentsPage() {
 
     const firstMapping = mappings[0];
     sendOrderForm.setFieldsValue({
-      orderId: `TEST-${dayjs().format('YYYYMMDD-HHmmss')}`,
-      sampleId: `SMP-${dayjs().format('HHmmss')}`,
+      orderNumber: `TEST-${dayjs().format('YYYYMMDD-HHmmss')}`,
       patientId: 'P-TEST-001',
       patientName: 'Test Patient',
       patientDob: '',
@@ -603,8 +602,7 @@ export function SettingsInstrumentsPage() {
 
       setSendOrderSubmitting(true);
       const result = await sendInstrumentTestOrder(selectedInstrument.id, {
-        orderId: values.orderId,
-        sampleId: values.sampleId,
+        orderNumber: values.orderNumber,
         patientId: values.patientId,
         patientName: values.patientName,
         patientDob: values.patientDob || undefined,
@@ -834,16 +832,16 @@ export function SettingsInstrumentsPage() {
       return;
     }
 
-    const sampleId = simulatorSampleId.trim();
+    const orderNumber = simulatorOrderNumber.trim();
     const patientId = simulatorPatientId.trim() || 'PAT001';
-    if (!sampleId) {
-      message.warning('Enter Sample/Order ID from LIS first (e.g. barcode, sample ID, or order number)');
+    if (!orderNumber) {
+      message.warning('Enter Order Number from LIS first');
       return;
     }
 
     const payload = simulatorMessage
-      .split('{{SAMPLE_ID}}').join(sampleId)
-      .split('{{ORDER_ID}}').join(sampleId)
+      .split('{{SAMPLE_ID}}').join(orderNumber)
+      .split('{{ORDER_ID}}').join(orderNumber)
       .split('{{PATIENT_ID}}').join(patientId);
 
     setSimulatorSending(true);
@@ -856,8 +854,9 @@ export function SettingsInstrumentsPage() {
         loadTrackerMessages(trackerInstrument.id);
       } else {
         const resultMessage = result.message || 'Failed to process message';
-        if (resultMessage.toLowerCase().includes('sample not found')) {
-          message.error(`${resultMessage}. Use an existing LIS sample/order identifier in the Sample/Order ID field.`);
+        const normalizedMessage = resultMessage.toLowerCase();
+        if (normalizedMessage.includes('order number') && normalizedMessage.includes('not found')) {
+          message.error(`${resultMessage}. Use an existing LIS order number in the Order Number field.`);
         } else {
           message.error(resultMessage);
         }
@@ -1613,17 +1612,12 @@ L|1|N`,
           type="info"
           showIcon
           style={{ marginBottom: 12 }}
-          message="This sends an HL7 ORM test order to the selected instrument."
+          message="This sends an HL7 ORM order (OBR-3 = order number) to the selected instrument."
         />
         <Form form={sendOrderForm} layout="vertical">
-          <Space style={{ display: 'flex' }} align="start">
-            <Form.Item name="orderId" label="Order ID" rules={[{ required: true }]} style={{ flex: 1 }}>
-              <Input />
-            </Form.Item>
-            <Form.Item name="sampleId" label="Sample ID" rules={[{ required: true }]} style={{ flex: 1 }}>
-              <Input />
-            </Form.Item>
-          </Space>
+          <Form.Item name="orderNumber" label="Order Number" rules={[{ required: true }]}>
+            <Input />
+          </Form.Item>
 
           <Space style={{ display: 'flex' }} align="start">
             <Form.Item name="patientId" label="Patient ID" rules={[{ required: true }]} style={{ flex: 1 }}>
@@ -1790,9 +1784,9 @@ L|1|N`,
                   <Input
                     size="small"
                     style={{ width: 190 }}
-                    placeholder="Sample/Order ID in LIS"
-                    value={simulatorSampleId}
-                    onChange={(e) => setSimulatorSampleId(e.target.value)}
+                    placeholder="Order Number in LIS"
+                    value={simulatorOrderNumber}
+                    onChange={(e) => setSimulatorOrderNumber(e.target.value)}
                   />
                   <Input
                     size="small"
@@ -1838,7 +1832,7 @@ L|1|N`,
                   Clear
                 </Button>
                 <Text type="secondary" style={{ fontSize: 11 }}>
-                  Use a real LIS sample/order ID. Templates auto-replace {'{{SAMPLE_ID}}'}, {'{{ORDER_ID}}'}, {'{{PATIENT_ID}}'}.
+                  Use a real LIS order number. Templates auto-replace {'{{SAMPLE_ID}}'}, {'{{ORDER_ID}}'}, {'{{PATIENT_ID}}'}.
                 </Text>
               </Space>
             </Card>

@@ -274,7 +274,7 @@ export function AdminOrdersPage() {
     return selectedOrder.samples.flatMap((sample) =>
       sample.orderTests.map((orderTest) => ({
         key: orderTest.id,
-        sampleBarcode: sample.barcode || sample.sampleId || '-',
+        sampleBarcode: sample.barcode || '-',
         tubeType: sample.tubeType || '-',
         testCode: orderTest.test?.code || '-',
         testName: orderTest.test?.name || '-',
