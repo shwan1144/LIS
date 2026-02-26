@@ -345,6 +345,49 @@ export class ReportsService implements OnModuleDestroy {
     });
   }
 
+  private classifyOrderTestsForReport(orderTests: OrderTest[]): {
+    regularTests: OrderTest[];
+    panelParents: OrderTest[];
+    panelChildrenByParent: Map<string, OrderTest[]>;
+  } {
+    const sortKey = (ot: OrderTest): string => {
+      const test = ot.test as (Test & { sortOrder?: number }) | undefined;
+      const sortOrder = Number(test?.sortOrder ?? 0);
+      const code = (test?.code || '').toUpperCase();
+      return `${String(sortOrder).padStart(6, '0')}_${code}`;
+    };
+
+    const panelParents = orderTests
+      .filter((ot) => !ot.parentOrderTestId && (ot.test as Test | undefined)?.type === TestType.PANEL)
+      .sort((a, b) => sortKey(a).localeCompare(sortKey(b)));
+
+    const panelParentIds = new Set(panelParents.map((ot) => ot.id));
+    const panelChildrenByParent = new Map<string, OrderTest[]>();
+    for (const parent of panelParents) {
+      panelChildrenByParent.set(parent.id, []);
+    }
+
+    for (const ot of orderTests) {
+      if (!ot.parentOrderTestId || !panelParentIds.has(ot.parentOrderTestId)) continue;
+      const list = panelChildrenByParent.get(ot.parentOrderTestId);
+      if (list) list.push(ot);
+    }
+
+    for (const [, children] of panelChildrenByParent) {
+      children.sort((a, b) => sortKey(a).localeCompare(sortKey(b)));
+    }
+
+    const regularTests = orderTests
+      .filter(
+        (ot) =>
+          !panelParentIds.has(ot.id) &&
+          (!ot.parentOrderTestId || !panelParentIds.has(ot.parentOrderTestId)),
+      )
+      .sort((a, b) => sortKey(a).localeCompare(sortKey(b)));
+
+    return { regularTests, panelParents, panelChildrenByParent };
+  }
+
   private async loadOrderResultsSnapshot(
     orderId: string,
     labId?: string,
