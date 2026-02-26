@@ -314,21 +314,37 @@ export function buildResultsReportHtml(input: {
     ? `<div class="report-footer"><img class="footer-image" ${footerUrlAttr} alt="Report Footer" /></div>`
     : '';
 
-  // Panel tests: any PANEL (not just GUE/GSE) - will be added to main content below regular tests
-  const isPanelParent = (ot: OrderTest) =>
-    !ot.parentOrderTestId && (ot.test as any)?.type === TestType.PANEL;
-  const panelTests = flattenedTests.filter(isPanelParent);
+  // Panel classification:
+  // - panelParents: only top-level PANEL tests
+  // - panel children: only children of those panel parents
+  // - regularTests: everything else (no panel parents, no panel children)
+  const panelParentIds = new Set(
+    orderTests
+      .filter((ot) => !ot.parentOrderTestId && (ot.test as any)?.type === TestType.PANEL)
+      .map((ot) => ot.id),
+  );
+
+  const panelChildrenByParent = new Map<string, OrderTest[]>();
+  for (const [parentId, children] of childrenByParent) {
+    if (panelParentIds.has(parentId)) {
+      panelChildrenByParent.set(parentId, children);
+    }
+  }
+
+  const panelParents = flattenedTests.filter((ot) => panelParentIds.has(ot.id));
   const regularTests = flattenedTests.filter(
-    (ot) => ot.parentOrderTestId || (ot.test as any)?.type !== TestType.PANEL
+    (ot) =>
+      !panelParentIds.has(ot.id) &&
+      (!ot.parentOrderTestId || !panelParentIds.has(ot.parentOrderTestId)),
   );
 
   // Build panel content with one panel per page.
   const panelPageSections: string[] = [];
-  for (let i = 0; i < panelTests.length; i++) {
-    const ot = panelTests[i];
+  for (let i = 0; i < panelParents.length; i++) {
+    const ot = panelParents[i];
     const t: any = ot.test;
     const testName = t?.name || t?.code || 'Examination';
-    const kids = childrenByParent.get(ot.id) || [];
+    const kids = panelChildrenByParent.get(ot.id) || [];
     const params = Array.isArray(t?.parameterDefinitions) ? t.parameterDefinitions : [];
     const resultParams = ot.resultParameters && typeof ot.resultParameters === 'object' ? ot.resultParameters : {};
 
@@ -466,7 +482,7 @@ export function buildResultsReportHtml(input: {
     </table>`;
     }
   }
-  if (!sectionsHtml && regularTests.length === 0 && panelTests.length === 0) {
+  if (!sectionsHtml && regularTests.length === 0 && panelParents.length === 0) {
     sectionsHtml = '<div class="dept-title ltr">No tests</div>';
   }
 
@@ -480,7 +496,7 @@ export function buildResultsReportHtml(input: {
       ${pageHeaderHtml}
       <div class="content">
         ${sectionsHtml}
-        ${commentsText && panelTests.length === 0 ? `<div class="comments" style="margin-top:8px;font-size:11px;font-weight:700;"><strong>Comments:</strong> ${escapeHtml(commentsText)}</div>` : ''}
+        ${commentsText && panelParents.length === 0 ? `<div class="comments" style="margin-top:8px;font-size:11px;font-weight:700;"><strong>Comments:</strong> ${escapeHtml(commentsText)}</div>` : ''}
       </div>
       ${pageFooterHtml}
     </div>`;
@@ -492,7 +508,7 @@ export function buildResultsReportHtml(input: {
   }
 
   // If no tests at all
-  if (regularTests.length === 0 && panelTests.length === 0) {
+  if (regularTests.length === 0 && panelParents.length === 0) {
     pagesHtml += `
     <div class="page">
       ${pageHeaderHtml}
@@ -532,7 +548,7 @@ export function buildResultsReportHtml(input: {
     .ltr { direction: ltr; unicode-bidi: isolate; }
     .nowrap { white-space: nowrap; }
     .watermark { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%) rotate(-30deg); opacity: 0.08; width: min(68vw, 170mm); z-index: 0; pointer-events: none; }
-    .page { position: relative; z-index: 1; padding: 0 0 calc(var(--footer-height) + 4mm) 0; page-break-inside: avoid; min-height: calc(297mm - 6mm); box-sizing: border-box; }
+    .page { position: relative; z-index: 1; padding: 0 0 calc(var(--footer-height) + 4mm) 0; page-break-inside: auto; break-inside: auto; min-height: calc(297mm - 6mm); box-sizing: border-box; }
     .patient-info,
     .content { margin-left: var(--content-x); margin-right: var(--content-x); }
     .banner-wrap {
@@ -587,7 +603,11 @@ export function buildResultsReportHtml(input: {
     tr.abnormal td { background-color: #fff5f5; }
     .panel-section { margin-top: 20px; }
     .panel-page-title { font-size: 18px; font-weight: 800; margin-bottom: 12px; border-bottom: 2px solid #222; padding-bottom: 6px; }
-    .panel-page .content { padding: 0; }
+    .panel-page { page-break-inside: auto; break-inside: auto; }
+    .panel-page .content { padding: 0; overflow: visible; }
+    .panel-page .panel-section { page-break-inside: auto; break-inside: auto; }
+    .panel-page table { page-break-inside: auto; break-inside: auto; }
+    .panel-page tr { page-break-inside: avoid; break-inside: avoid; }
     .gue-gse-table { width: 100%; margin-top: 8px; margin-bottom: 12px; }
     .report-footer {
       position: absolute;

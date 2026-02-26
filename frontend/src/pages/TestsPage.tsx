@@ -669,13 +669,58 @@ export function TestsPage() {
         .tests-editor-modal .ant-modal-body {
           padding: 10px 14px 12px !important;
         }
-        .tests-editor-modal .ant-form-item {
-          margin-bottom: 10px !important;
+        
+        /* New Tabular Grid Design */
+        .tests-editor-table {
+          display: grid;
+          grid-template-columns: repeat(2, 1fr);
+          border-top: 1px solid #d9d9d9;
+          border-left: 1px solid #d9d9d9;
+          margin-bottom: 16px;
+          border-radius: 4px;
+          overflow: hidden;
         }
-        .tests-editor-modal .ant-form-item-label > label {
-          font-size: 12px;
-          line-height: 1.2;
+        .tests-editor-table.single-col {
+          grid-template-columns: 1fr;
         }
+        .tests-editor-table .ant-form-item {
+          margin: 0 !important;
+          border-right: 1px solid #d9d9d9;
+          border-bottom: 1px solid #d9d9d9;
+          display: flex !important;
+          flex-direction: row !important;
+        }
+        .tests-editor-table .ant-form-item-row {
+          width: 100%;
+          display: flex;
+          flex-direction: row;
+        }
+        .tests-editor-table .ant-form-item-label {
+          width: 140px;
+          background-color: #fafafa;
+          padding: 6px 12px;
+          border-right: 1px solid #d9d9d9;
+          display: flex;
+          align-items: center;
+          text-align: left;
+        }
+        .tests-editor-table .ant-form-item-label > label {
+          font-size: 13px;
+          height: auto;
+          color: #555;
+          font-weight: 500;
+        }
+        .tests-editor-table .ant-form-item-label > label::after {
+          content: none;
+        }
+        .tests-editor-table .ant-form-item-control {
+          padding: 6px 12px;
+          flex: 1;
+        }
+        .tests-editor-table input, .tests-editor-table .ant-select-selector {
+          font-size: 13px;
+        }
+
         .tests-editor-modal .ant-divider {
           margin: 10px 0 !important;
           font-size: 12px !important;
@@ -686,53 +731,58 @@ export function TestsPage() {
         .tests-editor-modal .ant-tabs-tab {
           padding: 4px 0 !important;
         }
-        .tests-editor-modal .tests-editor-panel {
-          border: 1px solid #91caff;
-          border-left: 2px solid #1677ff;
-          border-radius: 8px;
-          background: #f7fbff;
-          padding: 10px;
-          margin-bottom: 10px;
-        }
-        .tests-editor-modal .tests-editor-params-scroll {
-          max-height: 62vh;
+
+        /* Panel Result Parameters Styling */
+        .tests-editor-params-scroll {
+          max-height: 55vh;
           overflow-y: auto;
           overflow-x: hidden;
           padding-right: 6px;
         }
-        .tests-editor-modal .tests-editor-param-grid .ant-form-item,
-        .tests-editor-modal .tests-editor-param-meta .ant-form-item {
+        .tests-editor-param-grid .ant-form-item,
+        .tests-editor-param-meta .ant-form-item {
           margin-bottom: 0 !important;
         }
-        .tests-editor-modal .tests-editor-param-meta {
+        .tests-editor-param-meta {
           margin-top: 6px;
         }
-        .tests-editor-modal .tests-editor-params-scroll::-webkit-scrollbar {
+        .tests-editor-params-scroll::-webkit-scrollbar {
           width: 8px;
         }
-        .tests-editor-modal .tests-editor-params-scroll::-webkit-scrollbar-thumb {
+        .tests-editor-params-scroll::-webkit-scrollbar-thumb {
           background: #91caff;
           border-radius: 6px;
         }
-        .tests-editor-modal .tests-editor-params-scroll::-webkit-scrollbar-track {
+        .tests-editor-params-scroll::-webkit-scrollbar-track {
           background: rgba(22, 119, 255, 0.08);
           border-radius: 6px;
         }
+
+        /* Dark Mode Overrides */
         html[data-theme='dark'] .tests-editor-modal .ant-modal-content {
           border-color: rgba(100, 168, 255, 0.55);
         }
         html[data-theme='dark'] .tests-editor-modal .ant-modal-header {
           border-bottom-color: rgba(100, 168, 255, 0.55);
         }
-        html[data-theme='dark'] .tests-editor-modal .tests-editor-panel {
-          border-color: rgba(100, 168, 255, 0.55);
-          border-left-color: #3c89e8;
-          background: rgba(255, 255, 255, 0.03);
+        html[data-theme='dark'] .tests-editor-table {
+          border-color: #303030;
         }
-        html[data-theme='dark'] .tests-editor-modal .tests-editor-params-scroll::-webkit-scrollbar-thumb {
+        html[data-theme='dark'] .tests-editor-table .ant-form-item {
+          border-color: #303030;
+        }
+        html[data-theme='dark'] .tests-editor-table .ant-form-item-label {
+          background-color: #1a1a1a;
+          border-color: #303030;
+        }
+        html[data-theme='dark'] .tests-editor-table .ant-form-item-label > label {
+          color: #aaa;
+        }
+        
+        html[data-theme='dark'] .tests-editor-params-scroll::-webkit-scrollbar-thumb {
           background: rgba(100, 168, 255, 0.65);
         }
-        html[data-theme='dark'] .tests-editor-modal .tests-editor-params-scroll::-webkit-scrollbar-track {
+        html[data-theme='dark'] .tests-editor-params-scroll::-webkit-scrollbar-track {
           background: rgba(100, 168, 255, 0.16);
         }
       `}</style>
@@ -812,75 +862,51 @@ export function TestsPage() {
               const isPanel = form.getFieldValue('type') === 'PANEL';
               if (isPanel) return null;
               return (
-                <div className="tests-editor-panel">
-                  <Row gutter={16}>
-                    <Col span={6}>
-                      <Form.Item
-                        name="code"
-                        label="Test Code"
-                        rules={[{ required: true, message: 'Code is required' }]}
-                      >
-                        <Input placeholder="e.g., GLU, CBC" style={{ textTransform: 'uppercase' }} />
-                      </Form.Item>
-                    </Col>
-                    <Col span={10}>
-                      <Form.Item
-                        name="name"
-                        label="Test Name"
-                        rules={[{ required: true, message: 'Name is required' }]}
-                      >
-                        <Input placeholder="e.g., Blood Glucose, Complete Blood Count" />
-                      </Form.Item>
-                    </Col>
-                    <Col span={8}>
-                      <Form.Item
-                        name="abbreviation"
-                        label="Abbreviation"
-                      >
-                        <Input placeholder="e.g., GUE" style={{ textTransform: 'uppercase' }} />
-                      </Form.Item>
-                    </Col>
-                  </Row>
-                  <Row gutter={16}>
-                    <Col span={8}>
-                      <Form.Item name="category" label="Category">
-                        <Select
-                          allowClear
-                          mode="tags"
-                          placeholder="e.g., Liver Function"
-                          options={categories.map((c) => ({ label: c, value: c }))}
-                        />
-                      </Form.Item>
-                    </Col>
-                  </Row>
-                  <Row gutter={16}>
-                    <Col span={8}>
-                      <Form.Item name="type" label="Type">
-                        <Select options={TEST_TYPES} />
-                      </Form.Item>
-                    </Col>
-                    <Col span={8}>
-                      <Form.Item name="tubeType" label="Tube Type">
-                        <Select options={TUBE_TYPES} />
-                      </Form.Item>
-                    </Col>
-                    <Col span={8}>
-                      <Form.Item name="unit" label="Unit">
-                        <Input placeholder="e.g., mg/dL, mmol/L" />
-                      </Form.Item>
-                    </Col>
-                  </Row>
-                  <Row gutter={16}>
-                    <Col span={12}>
-                      <Form.Item name="departmentId" label="Department (for worklist filter)">
-                        <Select
-                          placeholder="Select department"
-                          allowClear
-                          options={departments.map((d) => ({ label: `${d.code} – ${d.name}`, value: d.id }))}
-                        />
-                      </Form.Item>
-                    </Col>
-                  </Row>
+                <div className="tests-editor-table">
+                  <Form.Item
+                    name="code"
+                    label="Test Code"
+                    rules={[{ required: true, message: 'Code is required' }]}
+                  >
+                    <Input placeholder="e.g., GLU, CBC" style={{ textTransform: 'uppercase' }} />
+                  </Form.Item>
+                  <Form.Item
+                    name="name"
+                    label="Test Name"
+                    rules={[{ required: true, message: 'Name is required' }]}
+                  >
+                    <Input placeholder="e.g., Blood Glucose, Complete Blood Count" />
+                  </Form.Item>
+                  <Form.Item
+                    name="abbreviation"
+                    label="Abbreviation"
+                  >
+                    <Input placeholder="e.g., GUE" style={{ textTransform: 'uppercase' }} />
+                  </Form.Item>
+                  <Form.Item name="category" label="Category">
+                    <Select
+                      allowClear
+                      mode="tags"
+                      placeholder="e.g., Liver Function"
+                      options={categories.map((c) => ({ label: c, value: c }))}
+                    />
+                  </Form.Item>
+                  <Form.Item name="type" label="Type">
+                    <Select options={TEST_TYPES} />
+                  </Form.Item>
+                  <Form.Item name="tubeType" label="Tube Type">
+                    <Select options={TUBE_TYPES} />
+                  </Form.Item>
+                  <Form.Item name="unit" label="Unit">
+                    <Input placeholder="e.g., mg/dL, mmol/L" />
+                  </Form.Item>
+                  <Form.Item name="departmentId" label="Department">
+                    <Select
+                      placeholder="Select department"
+                      allowClear
+                      options={departments.map((d) => ({ label: `${d.code} – ${d.name}`, value: d.id }))}
+                    />
+                  </Form.Item>
                 </div>
               );
             }}
@@ -905,22 +931,18 @@ export function TestsPage() {
                   <Text strong style={{ display: 'block', marginBottom: 8 }}>
                     Result Entry
                   </Text>
-                  <Row gutter={16}>
-                    <Col span={10}>
-                      <Form.Item name="resultEntryType" label="Entry mode">
-                        <Select options={RESULT_ENTRY_TYPES} />
-                      </Form.Item>
-                    </Col>
-                    <Col span={8}>
-                      <Form.Item
-                        name="allowCustomResultText"
-                        label="Allow custom text"
-                        valuePropName="checked"
-                      >
-                        <Switch disabled={resultEntryType === 'NUMERIC'} />
-                      </Form.Item>
-                    </Col>
-                  </Row>
+                  <div className="tests-editor-table">
+                    <Form.Item name="resultEntryType" label="Entry mode">
+                      <Select options={RESULT_ENTRY_TYPES} />
+                    </Form.Item>
+                    <Form.Item
+                      name="allowCustomResultText"
+                      label="Allow custom text"
+                      valuePropName="checked"
+                    >
+                      <Switch disabled={resultEntryType === 'NUMERIC'} />
+                    </Form.Item>
+                  </div>
 
                   {showTextOptions && (
                     <Form.List name="resultTextOptions">
@@ -1185,33 +1207,39 @@ export function TestsPage() {
                   <Col span={10}>
                     <div style={panelCardStyle}>
                       <Text strong style={{ display: 'block', marginBottom: 12 }}>Test information</Text>
-                      <Form.Item name="code" label="Test Code" rules={[{ required: true, message: 'Code is required' }]} style={{ marginBottom: 12 }}>
-                        <Input placeholder="e.g., GLU, CBC" style={{ textTransform: 'uppercase' }} />
-                      </Form.Item>
-                      <Form.Item name="name" label="Test Name" rules={[{ required: true, message: 'Name is required' }]} style={{ marginBottom: 12 }}>
-                        <Input placeholder="e.g., Blood Glucose, Complete Blood Count" />
-                      </Form.Item>
-                      <Form.Item name="category" label="Category" style={{ marginBottom: 12 }}>
-                        <Select
-                          allowClear
-                          mode="tags"
-                          placeholder="e.g., Liver Function"
-                          options={categories.map((c) => ({ label: c, value: c }))}
-                        />
-                      </Form.Item>
-                      <Form.Item name="type" label="Type" style={{ marginBottom: 12 }}>
-                        <Select options={TEST_TYPES} />
-                      </Form.Item>
-                      <Form.Item name="tubeType" label="Tube Type" style={{ marginBottom: 12 }}>
-                        <Select options={TUBE_TYPES} />
-                      </Form.Item>
-                      <Form.Item name="departmentId" label="Department (for worklist filter)" style={{ marginBottom: 12 }}>
-                        <Select
-                          placeholder="Select department"
-                          allowClear
-                          options={departments.map((d) => ({ label: `${d.code} – ${d.name}`, value: d.id }))}
-                        />
-                      </Form.Item>
+                      <div className="tests-editor-table single-col">
+                        <Form.Item name="code" label="Test Code" rules={[{ required: true, message: 'Code is required' }]}>
+                          <Input placeholder="e.g., GLU, CBC" style={{ textTransform: 'uppercase' }} />
+                        </Form.Item>
+                        <Form.Item name="name" label="Test Name" rules={[{ required: true, message: 'Name is required' }]}>
+                          <Input placeholder="e.g., Blood Glucose, Complete Blood Count" />
+                        </Form.Item>
+                        <Form.Item name="abbreviation" label="Abbreviation">
+                          <Input placeholder="e.g., GUE" style={{ textTransform: 'uppercase' }} />
+                        </Form.Item>
+                        <Form.Item name="category" label="Category">
+                          <Select
+                            allowClear
+                            mode="tags"
+                            placeholder="e.g., Liver Function"
+                            options={categories.map((c) => ({ label: c, value: c }))}
+                          />
+                        </Form.Item>
+                        <Form.Item name="type" label="Type">
+                          <Select options={TEST_TYPES} />
+                        </Form.Item>
+                        <Form.Item name="tubeType" label="Tube Type">
+                          <Select options={TUBE_TYPES} />
+                        </Form.Item>
+                        <Form.Item name="departmentId" label="Department">
+                          <Select
+                            placeholder="Select department"
+                            allowClear
+                            options={departments.map((d) => ({ label: `${d.code} – ${d.name}`, value: d.id }))}
+                          />
+                        </Form.Item>
+                      </div>
+                      
                       <Form.Item
                         name="panelComponentTestIds"
                         label="Panel subtests"
