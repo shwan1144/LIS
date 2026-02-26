@@ -157,11 +157,11 @@ export function OrdersPage() {
   const [departments, setDepartments] = useState<DepartmentDto[]>([]);
   const [testOptions, setTestOptions] = useState<TestDto[]>([]);
   const [loadingTests, setLoadingTests] = useState(false);
-  const [selectedDepartmentId, setSelectedDepartmentId] = useState<string | null>(null);
   const [testSearch, setTestSearch] = useState('');
   const [selectedTests, setSelectedTests] = useState<SelectedTest[]>([]);
   const [uiTestGroups, setUiTestGroups] = useState<{ id: string; name: string; testIds: string[] }[]>([]);
   const [createGroupModalOpen, setCreateGroupModalOpen] = useState(false);
+  const [groupTests, setGroupTests] = useState<SelectedTest[]>([]);
   const [newGroupName, setNewGroupName] = useState('');
   const [savingGroup, setSavingGroup] = useState(false);
 
@@ -398,21 +398,15 @@ export function OrdersPage() {
     return () => { cancelled = true; };
   }, [patientList, selectedPatient, isSelectedLocked, currentShiftId, worklistLoading]);
 
-  const testsFilteredByDepartment = useMemo(() => {
-    if (!selectedDepartmentId) return testOptions;
-    return testOptions.filter((t) => t.departmentId === selectedDepartmentId);
-  }, [testOptions, selectedDepartmentId]);
-
   const filteredTests = useMemo(() => {
-    const base = testsFilteredByDepartment;
-    if (!testSearch.trim()) return base;
+    if (!testSearch.trim()) return testOptions;
     const search = testSearch.toLowerCase();
-    return base.filter(
+    return testOptions.filter(
       (t) =>
         t.name.toLowerCase().includes(search) ||
         t.code.toLowerCase().includes(search)
     );
-  }, [testsFilteredByDepartment, testSearch]);
+  }, [testOptions, testSearch]);
 
   const handleAddTest = (testId: string) => {
     const test = testOptions.find((t) => t.id === testId);
@@ -466,7 +460,7 @@ export function OrdersPage() {
       message.error('Please enter a group name');
       return;
     }
-    if (selectedTests.length === 0) {
+    if (groupTests.length === 0) {
       message.error('Please select at least one test for the group');
       return;
     }
@@ -477,7 +471,7 @@ export function OrdersPage() {
       const newGroup = {
         id: Math.random().toString(36).substring(2, 9),
         name: newGroupName.trim(),
-        testIds: selectedTests.map(t => t.testId)
+        testIds: groupTests.map(t => t.testId)
       };
 
       const existingGroups = currentSettings.uiTestGroups || [];
@@ -488,6 +482,7 @@ export function OrdersPage() {
       message.success(`Group "${newGroup.name}" saved!`);
       setCreateGroupModalOpen(false);
       setNewGroupName('');
+      setGroupTests([]);
     } catch {
       message.error('Failed to save group to lab settings');
     } finally {
@@ -1316,20 +1311,6 @@ export function OrdersPage() {
                           }))}
                         />
 
-                        <div style={{ marginTop: 8 }}>
-                          <Select
-                            placeholder="All departments"
-                            allowClear
-                            style={{ width: '100%', marginBottom: 16 }}
-                            value={selectedDepartmentId || undefined}
-                            onChange={(v) => setSelectedDepartmentId(v || null)}
-                            options={departments.map((d) => ({
-                              value: d.id,
-                              label: d.name || d.code,
-                            }))}
-                          />
-                        </div>
-
                         {selectedTests.length === 0 ? (
                           <Empty
                             image={Empty.PRESENTED_IMAGE_SIMPLE}
@@ -1361,8 +1342,6 @@ export function OrdersPage() {
                                 >
                                   <Space>
                                     <Text strong>{test.testCode}</Text>
-                                    <Text>{test.testName}</Text>
-                                    <Text type="secondary">({test.tubeType})</Text>
                                   </Space>
                                   <Button
                                     type="text"
@@ -1386,10 +1365,7 @@ export function OrdersPage() {
                             size="small"
                             icon={<PlusOutlined />}
                             onClick={() => {
-                              if (selectedTests.length === 0) {
-                                message.warning('First, select some tests on the left to create a group from them.');
-                                return;
-                              }
+                              setGroupTests([]);
                               setCreateGroupModalOpen(true);
                             }}
                           >
@@ -1430,7 +1406,7 @@ export function OrdersPage() {
                   </div>
 
                   <Card
-                    style={styles.summaryCard}
+                    style={{ ...styles.summaryCard, position: 'sticky', bottom: 16, zIndex: 10, marginTop: 16 }}
                   >
                     <Row gutter={16} align="middle" justify="space-between" wrap>
                       <Col>
@@ -1553,23 +1529,63 @@ export function OrdersPage() {
         onCancel={() => {
           setCreateGroupModalOpen(false);
           setNewGroupName('');
+          setGroupTests([]);
         }}
         okText="Save Group"
+        destroyOnClose
       >
-        <Text>Selected tests to group:</Text>
-        <div style={{ marginTop: 8, marginBottom: 16 }}>
-          <Space wrap size={[4, 4]}>
-            {selectedTests.map(t => (
-              <Tag key={t.testId}>{t.testCode}</Tag>
-            ))}
-          </Space>
-        </div>
         <Input
           placeholder="Group Name (e.g., LFT)"
           value={newGroupName}
           onChange={(e) => setNewGroupName(e.target.value)}
           autoFocus
+          style={{ marginBottom: 16 }}
         />
+
+        <Text strong>Add Tests to Group:</Text>
+        <Select
+          showSearch
+          placeholder="Search tests by name or code..."
+          style={{ width: '100%', marginTop: 8, marginBottom: 16 }}
+          value={null}
+          onChange={(testId) => {
+            const test = testOptions.find((t) => t.id === testId);
+            if (!test) return;
+            if (groupTests.some(t => t.testId === testId)) return;
+            setGroupTests([...groupTests, {
+              testId: test.id, testCode: test.code, testName: test.name, tubeType: test.tubeType
+            }]);
+            setTestSearch('');
+          }}
+          filterOption={false}
+          onSearch={setTestSearch}
+          loading={loadingTests}
+          notFoundContent={loadingTests ? <Spin size="small" /> : 'No tests found'}
+          options={filteredTests.map((t) => ({
+            value: t.id,
+            label: (
+              <Space>
+                <Text strong>{t.code}</Text>
+                <Text>{(t as any).abbreviation ? `${(t as any).abbreviation} - ${t.name}` : t.name}</Text>
+                <Text type="secondary">({t.tubeType})</Text>
+              </Space>
+            ),
+          }))}
+        />
+
+        <div style={{ marginTop: 8 }}>
+          <Space wrap size={[4, 4]}>
+            {groupTests.map(t => (
+              <Tag
+                key={t.testId}
+                closable
+                onClose={() => setGroupTests(groupTests.filter(g => g.testId !== t.testId))}
+              >
+                {t.testCode}
+              </Tag>
+            ))}
+          </Space>
+        </div>
       </Modal>
 
       <Modal
