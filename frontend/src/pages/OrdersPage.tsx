@@ -135,6 +135,7 @@ function toOrderHistoryItem(order: OrderDto): OrderHistoryItemDto {
       order.paymentStatus === 'paid' || order.paymentStatus === 'partial'
         ? order.paymentStatus
         : 'unpaid',
+    paidAmount: order.paidAmount != null ? Number(order.paidAmount) : null,
     finalAmount: Number(order.finalAmount ?? 0),
     patient: order.patient,
     shift: order.shift,
@@ -1328,8 +1329,8 @@ export function OrdersPage() {
                           loading={updatingPayment}
                           onClick={() => {
                             setPartialPaymentAmount(
-                              selectedCreatedOrder?.paidAmount != null
-                                ? Number(selectedCreatedOrder.paidAmount)
+                              selectedCreatedOrderSummary?.paidAmount != null
+                                ? Number(selectedCreatedOrderSummary.paidAmount)
                                 : 0
                             );
                             setPartialPaymentModalOpen(true);
@@ -1403,16 +1404,16 @@ export function OrdersPage() {
                           }}
                           onClick={() => {
                             setPartialPaymentAmount(
-                              selectedCreatedOrder?.paidAmount != null
-                                ? Number(selectedCreatedOrder.paidAmount)
+                              selectedCreatedOrderSummary?.paidAmount != null
+                                ? Number(selectedCreatedOrderSummary.paidAmount)
                                 : 0
                             );
                             setPartialPaymentModalOpen(true);
                             }}
                           >
                             Partially paid
-                            {selectedCreatedOrder?.paidAmount != null &&
-                              ` (${selectedCreatedOrder.paidAmount} / ${selectedCreatedOrderSummary.finalAmount})`}
+                            {selectedCreatedOrderSummary?.paidAmount != null &&
+                              ` (${selectedCreatedOrderSummary.paidAmount} / ${selectedCreatedOrderSummary.finalAmount})`}
                           </Button>
                         </Space>
                       )}

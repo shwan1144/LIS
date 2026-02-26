@@ -42,6 +42,13 @@ export declare class OrdersController {
     }): Promise<{
         ok: boolean;
     }>;
+    findHistory(req: RequestWithUser, page?: string, size?: string, search?: string, status?: string, patientId?: string, startDate?: string, endDate?: string): Promise<{
+        items: import("./orders.service").OrderHistoryItem[];
+        total: number;
+        page: number;
+        size: number;
+        totalPages: number;
+    }>;
     findOne(req: RequestWithUser, id: string): Promise<import("../entities/order.entity").Order>;
     updatePayment(req: RequestWithUser, id: string, dto: UpdateOrderPaymentDto): Promise<import("../entities/order.entity").Order>;
     updateOrderTests(req: RequestWithUser, id: string, dto: UpdateOrderTestsDto): Promise<import("../entities/order.entity").Order>;

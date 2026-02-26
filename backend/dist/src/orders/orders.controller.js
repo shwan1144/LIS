@@ -84,6 +84,21 @@ let OrdersController = class OrdersController {
         await this.ordersService.saveWorklist(labId, body.shiftId ?? null, items);
         return { ok: true };
     }
+    async findHistory(req, page, size, search, status, patientId, startDate, endDate) {
+        const labId = req.user?.labId;
+        if (!labId) {
+            throw new Error('Lab ID not found in token');
+        }
+        return this.ordersService.findHistory(labId, {
+            page: page ? parseInt(page, 10) : undefined,
+            size: size ? parseInt(size, 10) : undefined,
+            search,
+            status: status,
+            patientId,
+            startDate,
+            endDate,
+        });
+    }
     async findOne(req, id) {
         const labId = req.user?.labId;
         if (!labId) {
@@ -173,6 +188,20 @@ __decorate([
     __metadata("design:paramtypes", [Object, Object]),
     __metadata("design:returntype", Promise)
 ], OrdersController.prototype, "saveWorklist", null);
+__decorate([
+    (0, common_1.Get)('history'),
+    __param(0, (0, common_1.Req)()),
+    __param(1, (0, common_1.Query)('page')),
+    __param(2, (0, common_1.Query)('size')),
+    __param(3, (0, common_1.Query)('search')),
+    __param(4, (0, common_1.Query)('status')),
+    __param(5, (0, common_1.Query)('patientId')),
+    __param(6, (0, common_1.Query)('startDate')),
+    __param(7, (0, common_1.Query)('endDate')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, String, String, String, String, String, String, String]),
+    __metadata("design:returntype", Promise)
+], OrdersController.prototype, "findHistory", null);
 __decorate([
     (0, common_1.Get)(':id'),
     __param(0, (0, common_1.Req)()),

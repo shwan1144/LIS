@@ -18,6 +18,29 @@ export interface WorklistItemResponse {
     patient: Patient;
     createdOrder: Order | null;
 }
+export interface OrderListQueryParams {
+    page?: number;
+    size?: number;
+    search?: string;
+    status?: OrderStatus;
+    patientId?: string;
+    startDate?: string;
+    endDate?: string;
+}
+export interface OrderHistoryItem {
+    id: string;
+    orderNumber: string | null;
+    status: OrderStatus;
+    registeredAt: Date;
+    paymentStatus: 'unpaid' | 'partial' | 'paid';
+    paidAmount: number | null;
+    finalAmount: number;
+    patient: Patient;
+    shift: Shift | null;
+    testsCount: number;
+    readyTestsCount: number;
+    reportReady: boolean;
+}
 export declare class OrdersService {
     private readonly orderRepo;
     private readonly patientRepo;
@@ -29,16 +52,15 @@ export declare class OrdersService {
     private readonly worklistRepo;
     constructor(orderRepo: Repository<Order>, patientRepo: Repository<Patient>, labRepo: Repository<Lab>, shiftRepo: Repository<Shift>, testRepo: Repository<Test>, pricingRepo: Repository<Pricing>, testComponentRepo: Repository<TestComponent>, worklistRepo: Repository<LabOrdersWorklist>);
     create(labId: string, dto: CreateOrderDto): Promise<Order>;
-    findAll(labId: string, params: {
-        page?: number;
-        size?: number;
-        search?: string;
-        status?: OrderStatus;
-        patientId?: string;
-        startDate?: string;
-        endDate?: string;
-    }): Promise<{
+    findAll(labId: string, params: OrderListQueryParams): Promise<{
         items: Order[];
+        total: number;
+        page: number;
+        size: number;
+        totalPages: number;
+    }>;
+    findHistory(labId: string, params: OrderListQueryParams): Promise<{
+        items: OrderHistoryItem[];
         total: number;
         page: number;
         size: number;
@@ -84,6 +106,9 @@ export declare class OrdersService {
         }[];
         revenue: number;
     }>;
+    private applyOrderQueryFilters;
+    private enrichOrdersWithProgress;
+    private normalizePaymentStatus;
     private getLabTimeZone;
     private getDateRangeOrThrow;
     getWorklist(labId: string, shiftId: string | null): Promise<WorklistItemResponse[]>;

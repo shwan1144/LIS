@@ -141,6 +141,42 @@ async function ensureReportBrandingColumns(dataSource) {
         await dataSource.query(sql);
     }
 }
+async function ensureOrderFlowPerformanceIndexes(dataSource) {
+    const sqlStatements = [
+        `
+      DO $$
+      BEGIN
+        IF to_regclass('public.orders') IS NOT NULL THEN
+          CREATE INDEX IF NOT EXISTS "IDX_orders_lab_registered_at"
+            ON "orders" ("labId", "registeredAt" DESC);
+          CREATE INDEX IF NOT EXISTS "IDX_orders_lab_status_registered_at"
+            ON "orders" ("labId", "status", "registeredAt" DESC);
+        END IF;
+      END $$;
+    `,
+        `
+      DO $$
+      BEGIN
+        IF to_regclass('public.samples') IS NOT NULL THEN
+          CREATE INDEX IF NOT EXISTS "IDX_samples_order_id"
+            ON "samples" ("orderId");
+        END IF;
+      END $$;
+    `,
+        `
+      DO $$
+      BEGIN
+        IF to_regclass('public.order_tests') IS NOT NULL THEN
+          CREATE INDEX IF NOT EXISTS "IDX_order_tests_sample_status_parent"
+            ON "order_tests" ("sampleId", "status", "parentOrderTestId");
+        END IF;
+      END $$;
+    `,
+    ];
+    for (const sql of sqlStatements) {
+        await dataSource.query(sql);
+    }
+}
 async function ensureTenantRolePrivileges(dataSource) {
     const roleBootstrapStatements = [
         `
@@ -527,6 +563,12 @@ async function bootstrap() {
     }
     catch (error) {
         bootstrapLogger.warn(`Failed to auto-ensure report branding columns: ${error instanceof Error ? error.message : String(error)}`);
+    }
+    try {
+        await ensureOrderFlowPerformanceIndexes(dataSource);
+    }
+    catch (error) {
+        bootstrapLogger.warn(`Failed to auto-ensure order-flow performance indexes: ${error instanceof Error ? error.message : String(error)}`);
     }
     try {
         await ensureTenantRolePrivileges(dataSource);

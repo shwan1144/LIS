@@ -57,6 +57,7 @@ export interface OrderHistoryItem {
   status: OrderStatus;
   registeredAt: Date;
   paymentStatus: 'unpaid' | 'partial' | 'paid';
+  paidAmount: number | null;
   finalAmount: number;
   patient: Patient;
   shift: Shift | null;
@@ -315,6 +316,7 @@ export class OrdersService {
         status: order.status,
         registeredAt: order.registeredAt,
         paymentStatus: this.normalizePaymentStatus(order.paymentStatus),
+        paidAmount: order.paidAmount != null ? Number(order.paidAmount) : null,
         finalAmount: Number(order.finalAmount ?? 0),
         patient: order.patient,
         shift: order.shift ?? null,
