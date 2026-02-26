@@ -222,13 +222,13 @@ export function OrdersPage() {
 
         const rows = effectiveDraft
           ? [
-              {
-                rowId: `draft-${effectiveDraft.id}`,
-                patient: effectiveDraft,
-                createdOrder: null,
-              },
-              ...historyRows,
-            ]
+            {
+              rowId: `draft-${effectiveDraft.id}`,
+              patient: effectiveDraft,
+              createdOrder: null,
+            },
+            ...historyRows,
+          ]
           : historyRows;
 
         setPatientList(rows);
@@ -570,7 +570,7 @@ export function OrdersPage() {
       const msg =
         err && typeof err === 'object' && 'response' in err
           ? (err as { response?: { data?: { message?: string } } }).response?.data
-              ?.message
+            ?.message
           : 'Order creation failed';
       message.error(msg || 'Order creation failed');
     } finally {
@@ -723,219 +723,219 @@ export function OrdersPage() {
                   width: '100%',
                 }}
               >
-              <Space direction="vertical" style={{ width: '100%', flexShrink: 0 }} size={12}>
-                <Input
-                  placeholder="Search order #, patient, phone"
-                  value={listQueryInput}
-                  allowClear
-                  prefix={<SearchOutlined />}
-                  onChange={(e) => setListQueryInput(e.target.value)}
-                  onPressEnter={handleApplyHistorySearch}
-                />
-                <Space style={{ width: '100%', justifyContent: 'space-between' }} wrap>
-                  <Select<'ALL' | OrderStatus>
-                    style={{ minWidth: 170 }}
-                    value={statusFilter}
-                    options={ORDER_STATUS_FILTERS}
-                    onChange={(value) => {
-                      setStatusFilter(value);
-                      setListPage(1);
-                    }}
+                <Space direction="vertical" style={{ width: '100%', flexShrink: 0 }} size={12}>
+                  <Input
+                    placeholder="Search order #, patient, phone"
+                    value={listQueryInput}
+                    allowClear
+                    prefix={<SearchOutlined />}
+                    onChange={(e) => setListQueryInput(e.target.value)}
+                    onPressEnter={handleApplyHistorySearch}
                   />
-                  <Button type="primary" onClick={handleApplyHistorySearch}>
-                    Apply
-                  </Button>
-                </Space>
-              </Space>
-
-              {patientList.length > 0 ? (
-                <>
-                <div
-                  style={{
-                    marginTop: 10,
-                    flex: 1,
-                    minHeight: 0,
-                    overflowY: 'auto',
-                  }}
-                >
-                  <div
-                    style={{
-                      padding: '4px 8px 6px',
-                      borderBottom: styles.border,
-                    }}
-                  >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <div style={{ width: 14 }} />
-                      <div
-                        style={{
-                          minWidth: 0,
-                          flex: 1,
-                          display: 'grid',
-                          gridTemplateColumns: orderHistoryGridTemplate,
-                          columnGap: 6,
-                        }}
-                      >
-                        <Text type="secondary" style={{ fontSize: 11, fontWeight: 600 }}>Patient</Text>
-                        <Text type="secondary" style={{ fontSize: 11, fontWeight: 600 }}>Status</Text>
-                        <Text type="secondary" style={{ fontSize: 11, fontWeight: 600 }}>Order</Text>
-                        <Text type="secondary" style={{ fontSize: 11, fontWeight: 600 }}>Shift</Text>
-                        <Text type="secondary" style={{ fontSize: 11, fontWeight: 600 }}>Time</Text>
-                      </div>
-                      <div style={{ width: 24 }} />
-                    </div>
-                  </div>
-
-                  <List
-                    size="small"
-                    dataSource={patientList}
-                    renderItem={(row) => {
-                  const isLocked = row.createdOrder != null;
-                  const isSelected = selectedRowId === row.rowId;
-                  const name = getPatientName(row.patient);
-                  const shiftLabel = row.createdOrder ? getShiftLabel(row.createdOrder) : null;
-                  const shiftTagColor = shiftLabel ? getShiftTagColor(shiftLabel) : null;
-                  return (
-                    <List.Item
-                      key={row.rowId}
-                      style={{
-                        padding: '6px 8px',
-                        cursor: 'pointer',
-                        backgroundColor: isSelected ? 'rgba(22, 119, 255, 0.08)' : undefined,
-                        borderLeft: isSelected ? '3px solid #1677ff' : undefined,
+                  <Space style={{ width: '100%', justifyContent: 'space-between' }} wrap>
+                    <Select<'ALL' | OrderStatus>
+                      style={{ minWidth: 170 }}
+                      value={statusFilter}
+                      options={ORDER_STATUS_FILTERS}
+                      onChange={(value) => {
+                        setStatusFilter(value);
+                        setListPage(1);
                       }}
-                      onClick={() => setSelectedRowId(row.rowId)}
+                    />
+                    <Button type="primary" onClick={handleApplyHistorySearch}>
+                      Apply
+                    </Button>
+                  </Space>
+                </Space>
+
+                {patientList.length > 0 ? (
+                  <>
+                    <div
+                      style={{
+                        marginTop: 10,
+                        flex: 1,
+                        minHeight: 0,
+                        overflowY: 'auto',
+                      }}
                     >
                       <div
                         style={{
-                          width: '100%',
-                          display: 'flex',
-                          alignItems: 'flex-start',
-                          justifyContent: 'space-between',
-                          gap: 8,
+                          padding: '4px 8px 6px',
+                          borderBottom: styles.border,
                         }}
                       >
-                        <Space size={8} align="start" style={{ minWidth: 0, flex: 1 }}>
-                          <UserOutlined style={{ fontSize: 14, color: '#1677ff', marginTop: 2 }} />
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <div style={{ width: 14 }} />
                           <div
                             style={{
                               minWidth: 0,
                               flex: 1,
                               display: 'grid',
                               gridTemplateColumns: orderHistoryGridTemplate,
-                              alignItems: 'center',
                               columnGap: 6,
                             }}
                           >
-                            <Text
-                              strong={isSelected}
-                              style={{
-                                fontSize: 13,
-                                lineHeight: '16px',
-                                wordBreak: 'break-word',
-                                margin: 0,
-                              }}
-                            >
-                              {name || '-'}
-                            </Text>
-
-                            {isLocked ? (
-                              <Tag
-                                color={ORDER_STATUS_TAG_COLORS[row.createdOrder?.status ?? 'REGISTERED']}
-                                style={{ margin: 0, fontSize: 10, lineHeight: '14px', paddingInline: 4 }}
-                              >
-                                {row.createdOrder?.status ?? 'REGISTERED'}
-                              </Tag>
-                            ) : (
-                              <Tag
-                                color="gold"
-                                icon={<PlusOutlined />}
-                                style={{ margin: 0, fontSize: 10, lineHeight: '14px', paddingInline: 4 }}
-                              >
-                                New
-                              </Tag>
-                            )}
-
-                            <Text type="secondary" style={{ fontSize: 10, lineHeight: '14px' }}>
-                              {isLocked && row.createdOrder
-                                ? (row.createdOrder.orderNumber || row.createdOrder.id.substring(0, 8))
-                                : (nextOrderNumber ?? '-')}
-                            </Text>
-
-                            {isLocked ? (
-                              <Tag
-                                color={shiftTagColor ?? 'default'}
-                                style={{ margin: 0, fontSize: 10, lineHeight: '14px', paddingInline: 4 }}
-                              >
-                                {shiftLabel}
-                              </Tag>
-                            ) : (
-                              <Text type="secondary" style={{ fontSize: 10, lineHeight: '14px' }}>
-                                -
-                              </Text>
-                            )}
-
-                            <Text type="secondary" style={{ fontSize: 10, lineHeight: '14px' }}>
-                              {isLocked && row.createdOrder
-                                ? dayjs(row.createdOrder.registeredAt).format('YYYY-MM-DD HH:mm')
-                                : '-'}
-                            </Text>
+                            <Text type="secondary" style={{ fontSize: 11, fontWeight: 600 }}>Patient</Text>
+                            <Text type="secondary" style={{ fontSize: 11, fontWeight: 600 }}>Status</Text>
+                            <Text type="secondary" style={{ fontSize: 11, fontWeight: 600 }}>Order</Text>
+                            <Text type="secondary" style={{ fontSize: 11, fontWeight: 600 }}>Shift</Text>
+                            <Text type="secondary" style={{ fontSize: 11, fontWeight: 600 }}>Time</Text>
                           </div>
-                        </Space>
-
-                        {!isLocked ? (
-                          <Button
-                            type="text"
-                            danger
-                            size="small"
-                            icon={<DeleteOutlined />}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              removePatientFromList(row.rowId);
-                            }}
-                          />
-                        ) : null}
+                          <div style={{ width: 24 }} />
+                        </div>
                       </div>
-                    </List.Item>
-                  );
-                }}
-                  />
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 8, flexShrink: 0 }}>
-                  <Text type="secondary">
-                    Page {listPage} of {totalPages}
-                  </Text>
-                  <Pagination
-                    size="small"
-                    current={listPage}
-                    total={listTotal}
-                    pageSize={ORDER_PAGE_SIZE}
-                    showSizeChanger={false}
-                    onChange={(page) => setListPage(page)}
-                  />
-                </div>
-                </>
-              ) : (
-                <>
-                <Empty
-                  image={Empty.PRESENTED_IMAGE_SIMPLE}
-                  description="No orders found"
-                  style={{ padding: 24, marginTop: 10 }}
-                />
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 8 }}>
-                  <Text type="secondary">
-                    Page {listPage} of {totalPages}
-                  </Text>
-                  <Pagination
-                    size="small"
-                    current={listPage}
-                    total={listTotal}
-                    pageSize={ORDER_PAGE_SIZE}
-                    showSizeChanger={false}
-                    onChange={(page) => setListPage(page)}
-                  />
-                </div>
-                </>
-              )}
+
+                      <List
+                        size="small"
+                        dataSource={patientList}
+                        renderItem={(row) => {
+                          const isLocked = row.createdOrder != null;
+                          const isSelected = selectedRowId === row.rowId;
+                          const name = getPatientName(row.patient);
+                          const shiftLabel = row.createdOrder ? getShiftLabel(row.createdOrder) : null;
+                          const shiftTagColor = shiftLabel ? getShiftTagColor(shiftLabel) : null;
+                          return (
+                            <List.Item
+                              key={row.rowId}
+                              style={{
+                                padding: '6px 8px',
+                                cursor: 'pointer',
+                                backgroundColor: isSelected ? 'rgba(22, 119, 255, 0.08)' : undefined,
+                                borderLeft: isSelected ? '3px solid #1677ff' : undefined,
+                              }}
+                              onClick={() => setSelectedRowId(row.rowId)}
+                            >
+                              <div
+                                style={{
+                                  width: '100%',
+                                  display: 'flex',
+                                  alignItems: 'flex-start',
+                                  justifyContent: 'space-between',
+                                  gap: 8,
+                                }}
+                              >
+                                <Space size={8} align="start" style={{ minWidth: 0, flex: 1 }}>
+                                  <UserOutlined style={{ fontSize: 14, color: '#1677ff', marginTop: 2 }} />
+                                  <div
+                                    style={{
+                                      minWidth: 0,
+                                      flex: 1,
+                                      display: 'grid',
+                                      gridTemplateColumns: orderHistoryGridTemplate,
+                                      alignItems: 'center',
+                                      columnGap: 6,
+                                    }}
+                                  >
+                                    <Text
+                                      strong={isSelected}
+                                      style={{
+                                        fontSize: 13,
+                                        lineHeight: '16px',
+                                        wordBreak: 'break-word',
+                                        margin: 0,
+                                      }}
+                                    >
+                                      {name || '-'}
+                                    </Text>
+
+                                    {isLocked ? (
+                                      <Tag
+                                        color={ORDER_STATUS_TAG_COLORS[row.createdOrder?.status ?? 'REGISTERED']}
+                                        style={{ margin: 0, fontSize: 10, lineHeight: '14px', paddingInline: 4 }}
+                                      >
+                                        {row.createdOrder?.status ?? 'REGISTERED'}
+                                      </Tag>
+                                    ) : (
+                                      <Tag
+                                        color="gold"
+                                        icon={<PlusOutlined />}
+                                        style={{ margin: 0, fontSize: 10, lineHeight: '14px', paddingInline: 4 }}
+                                      >
+                                        New
+                                      </Tag>
+                                    )}
+
+                                    <Text type="secondary" style={{ fontSize: 10, lineHeight: '14px' }}>
+                                      {isLocked && row.createdOrder
+                                        ? (row.createdOrder.orderNumber || row.createdOrder.id.substring(0, 8))
+                                        : (nextOrderNumber ?? '-')}
+                                    </Text>
+
+                                    {isLocked ? (
+                                      <Tag
+                                        color={shiftTagColor ?? 'default'}
+                                        style={{ margin: 0, fontSize: 10, lineHeight: '14px', paddingInline: 4 }}
+                                      >
+                                        {shiftLabel}
+                                      </Tag>
+                                    ) : (
+                                      <Text type="secondary" style={{ fontSize: 10, lineHeight: '14px' }}>
+                                        -
+                                      </Text>
+                                    )}
+
+                                    <Text type="secondary" style={{ fontSize: 10, lineHeight: '14px' }}>
+                                      {isLocked && row.createdOrder
+                                        ? dayjs(row.createdOrder.registeredAt).format('YYYY-MM-DD HH:mm')
+                                        : '-'}
+                                    </Text>
+                                  </div>
+                                </Space>
+
+                                {!isLocked ? (
+                                  <Button
+                                    type="text"
+                                    danger
+                                    size="small"
+                                    icon={<DeleteOutlined />}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      removePatientFromList(row.rowId);
+                                    }}
+                                  />
+                                ) : null}
+                              </div>
+                            </List.Item>
+                          );
+                        }}
+                      />
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 8, flexShrink: 0 }}>
+                      <Text type="secondary">
+                        Page {listPage} of {totalPages}
+                      </Text>
+                      <Pagination
+                        size="small"
+                        current={listPage}
+                        total={listTotal}
+                        pageSize={ORDER_PAGE_SIZE}
+                        showSizeChanger={false}
+                        onChange={(page) => setListPage(page)}
+                      />
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <Empty
+                      image={Empty.PRESENTED_IMAGE_SIMPLE}
+                      description="No orders found"
+                      style={{ padding: 24, marginTop: 10 }}
+                    />
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 8 }}>
+                      <Text type="secondary">
+                        Page {listPage} of {totalPages}
+                      </Text>
+                      <Pagination
+                        size="small"
+                        current={listPage}
+                        total={listTotal}
+                        pageSize={ORDER_PAGE_SIZE}
+                        showSizeChanger={false}
+                        onChange={(page) => setListPage(page)}
+                      />
+                    </div>
+                  </>
+                )}
               </div>
             </Card>
           </Col>
@@ -1320,7 +1320,7 @@ export function OrdersPage() {
                           {selectedTests.length > 0 && (
                             <>
                               <Text type="secondary">
-                                Subtotal: {loadingPrice ? '...' : `$${subtotal.toFixed(2)}`}
+                                Subtotal: {loadingPrice ? '...' : `${subtotal.toFixed(0)} IQD`}
                               </Text>
                               <Space.Compact>
                                 <Text type="secondary">Discount:</Text>
@@ -1334,7 +1334,7 @@ export function OrdersPage() {
                                 <span style={{ padding: '0 4px', lineHeight: '32px' }}>%</span>
                               </Space.Compact>
                               <Text strong style={{ fontSize: 16 }}>
-                                Total: {loadingPrice ? '...' : `$${totalAfterDiscount.toFixed(2)}`}
+                                Total: {loadingPrice ? '...' : `${totalAfterDiscount.toFixed(0)} IQD`}
                               </Text>
                             </>
                           )}
