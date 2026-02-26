@@ -1264,24 +1264,24 @@ export function OrdersPage() {
                   </div>
                 </div>
               ) : (
-                <Space direction="vertical" size={16} style={{ width: '100%' }}>
-                  <div style={{ padding: '12px 0', borderBottom: styles.border }}>
+                <Space direction="vertical" size={12} style={{ width: '100%' }}>
+                  <div style={{ padding: '8px 0', borderBottom: styles.border }}>
                     <Text type="secondary">Patient: </Text>
-                    <Text strong style={{ fontSize: 18 }}>
+                    <Text strong style={{ fontSize: 16 }}>
                       {getPatientName(selectedPatient)}
                     </Text>
                   </div>
                   {nextOrderNumber && (
-                    <div style={{ padding: '8px 0', borderBottom: styles.border }}>
+                    <div style={{ padding: '6px 0', borderBottom: styles.border }}>
                       <Text type="secondary">Order number (after creation): </Text>
-                      <Text strong style={{ fontSize: 16 }}>
+                      <Text strong style={{ fontSize: 14 }}>
                         {nextOrderNumber}
                       </Text>
                     </div>
                   )}
 
                   <div>
-                    <Row gutter={24} style={{ marginBottom: 12 }}>
+                    <Row gutter={24} style={{ marginBottom: 4 }}>
                       {/* Left Pane: Search & Selected Tests */}
                       <Col xs={24} md={12}>
                         <Text strong style={{ display: 'block', marginBottom: 8 }}>
