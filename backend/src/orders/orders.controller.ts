@@ -121,6 +121,32 @@ export class OrdersController {
     return { ok: true };
   }
 
+  @Get('history')
+  async findHistory(
+    @Req() req: RequestWithUser,
+    @Query('page') page?: string,
+    @Query('size') size?: string,
+    @Query('search') search?: string,
+    @Query('status') status?: string,
+    @Query('patientId') patientId?: string,
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
+  ) {
+    const labId = req.user?.labId;
+    if (!labId) {
+      throw new Error('Lab ID not found in token');
+    }
+    return this.ordersService.findHistory(labId, {
+      page: page ? parseInt(page, 10) : undefined,
+      size: size ? parseInt(size, 10) : undefined,
+      search,
+      status: status as OrderStatus | undefined,
+      patientId,
+      startDate,
+      endDate,
+    });
+  }
+
   @Get(':id')
   async findOne(@Req() req: RequestWithUser, @Param('id', ParseUUIDPipe) id: string) {
     const labId = req.user?.labId;

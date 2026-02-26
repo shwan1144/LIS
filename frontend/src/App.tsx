@@ -22,6 +22,7 @@ import { SettingsDepartmentsPage } from './pages/settings/SettingsDepartmentsPag
 import { SettingsInstrumentsPage } from './pages/settings/SettingsInstrumentsPage';
 import { SettingsLabelPage } from './pages/settings/SettingsLabelPage';
 import { SettingsPrintingPage } from './pages/settings/SettingsPrintingPage';
+import { SettingsTestGroupsPage } from './pages/settings/SettingsTestGroupsPage';
 import { AdminDashboardPage } from './pages/admin/AdminDashboardPage';
 import { AdminLabsPage } from './pages/admin/AdminLabsPage';
 import { AdminOrdersPage } from './pages/admin/AdminOrdersPage';
@@ -136,6 +137,7 @@ function AppContent() {
                   <Route path="label" element={<SettingsLabelPage />} />
                   <Route path="printing" element={<SettingsPrintingPage />} />
                   <Route path="instruments" element={<SettingsInstrumentsPage />} />
+                  <Route path="test-groups" element={<SettingsTestGroupsPage />} />
                   <Route path="tests" element={<TestsPage />} />
                   <Route path="audit" element={<AuditLogPage />} />
                 </Route>

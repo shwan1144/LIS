@@ -1021,6 +1021,28 @@ export interface OrderSearchResult {
   totalPages: number;
 }
 
+export interface OrderHistoryItemDto {
+  id: string;
+  orderNumber: string | null;
+  status: OrderStatus;
+  registeredAt: string;
+  paymentStatus: 'unpaid' | 'partial' | 'paid';
+  finalAmount: number;
+  patient: PatientDto;
+  shift: { id: string; code: string; name: string | null } | null;
+  testsCount: number;
+  readyTestsCount: number;
+  reportReady: boolean;
+}
+
+export interface OrderHistorySearchResult {
+  items: OrderHistoryItemDto[];
+  total: number;
+  page: number;
+  size: number;
+  totalPages: number;
+}
+
 export async function getOrderPriceEstimate(
   testIds: string[],
   shiftId?: string | null
@@ -1039,6 +1061,39 @@ export async function createOrder(data: CreateOrderDto): Promise<OrderDto> {
 export async function searchOrders(params: OrderSearchParams): Promise<OrderSearchResult> {
   const res = await api.get<OrderSearchResult>('/orders', { params });
   return res.data;
+}
+
+function toHistoryItem(order: OrderDto): OrderHistoryItemDto {
+  return {
+    id: order.id,
+    orderNumber: order.orderNumber,
+    status: order.status,
+    registeredAt: order.registeredAt,
+    paymentStatus: order.paymentStatus === 'paid' || order.paymentStatus === 'partial' ? order.paymentStatus : 'unpaid',
+    finalAmount: Number(order.finalAmount ?? 0),
+    patient: order.patient,
+    shift: order.shift,
+    testsCount: Number(order.testsCount ?? 0) || 0,
+    readyTestsCount: Number(order.readyTestsCount ?? 0) || 0,
+    reportReady: Boolean(order.reportReady) || Number(order.readyTestsCount ?? 0) > 0,
+  };
+}
+
+export async function searchOrdersHistory(params: OrderSearchParams): Promise<OrderHistorySearchResult> {
+  try {
+    const res = await api.get<OrderHistorySearchResult>('/orders/history', { params });
+    return res.data;
+  } catch (error: unknown) {
+    if (!axios.isAxiosError(error) || error.response?.status !== 404) {
+      throw error;
+    }
+
+    const fallback = await searchOrders(params);
+    return {
+      ...fallback,
+      items: fallback.items.map(toHistoryItem),
+    };
+  }
 }
 
 export async function getOrder(id: string): Promise<OrderDto> {

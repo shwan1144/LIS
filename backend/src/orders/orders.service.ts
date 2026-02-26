@@ -4,7 +4,7 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, Between, EntityManager } from 'typeorm';
+import { Repository, Between, EntityManager, SelectQueryBuilder } from 'typeorm';
 import { Order, OrderStatus, PatientType } from '../entities/order.entity';
 import { Sample, TubeType as SampleTubeType } from '../entities/sample.entity';
 import { OrderTest, OrderTestStatus } from '../entities/order-test.entity';
@@ -40,6 +40,38 @@ export interface WorklistItemResponse {
   patient: Patient;
   createdOrder: Order | null;
 }
+
+export interface OrderListQueryParams {
+  page?: number;
+  size?: number;
+  search?: string;
+  status?: OrderStatus;
+  patientId?: string;
+  startDate?: string;
+  endDate?: string;
+}
+
+export interface OrderHistoryItem {
+  id: string;
+  orderNumber: string | null;
+  status: OrderStatus;
+  registeredAt: Date;
+  paymentStatus: 'unpaid' | 'partial' | 'paid';
+  finalAmount: number;
+  patient: Patient;
+  shift: Shift | null;
+  testsCount: number;
+  readyTestsCount: number;
+  reportReady: boolean;
+}
+
+type OrderProgressTarget = {
+  id: string;
+  status: OrderStatus;
+  testsCount?: number;
+  readyTestsCount?: number;
+  reportReady?: boolean;
+};
 
 @Injectable()
 export class OrdersService {
@@ -216,15 +248,7 @@ export class OrdersService {
     });
   }
 
-  async findAll(labId: string, params: {
-    page?: number;
-    size?: number;
-    search?: string;
-    status?: OrderStatus;
-    patientId?: string;
-    startDate?: string;
-    endDate?: string;
-  }) {
+  async findAll(labId: string, params: OrderListQueryParams) {
     const page = Math.max(1, params.page ?? 1);
     const size = Math.min(100, Math.max(1, params.size ?? 20));
     const skip = (page - 1) * size;
@@ -238,130 +262,67 @@ export class OrdersService {
       .leftJoinAndSelect('orderTests.test', 'test')
       .where('order.labId = :labId', { labId });
 
-    if (params.status) {
-      if (params.status === OrderStatus.COMPLETED) {
-        qb.andWhere(
-          `("order"."status" = :status OR EXISTS (
-            SELECT 1
-            FROM samples s
-            INNER JOIN order_tests ot ON ot."sampleId" = s.id
-            WHERE s."orderId" = "order"."id"
-              AND ot.status IN (:...completedStatuses)
-          ))`,
-          {
-            status: params.status,
-            completedStatuses: [
-              OrderTestStatus.COMPLETED,
-              OrderTestStatus.VERIFIED,
-              OrderTestStatus.REJECTED,
-            ],
-          },
-        );
-      } else {
-        qb.andWhere('order.status = :status', { status: params.status });
-      }
-    }
-
-    if (params.patientId) {
-      qb.andWhere('order.patientId = :patientId', { patientId: params.patientId });
-    }
-
-    if (params.search?.trim()) {
-      const term = `%${params.search.trim()}%`;
-      const exactSearch = params.search.trim();
-      qb.andWhere(
-        '(order.orderNumber ILIKE :term OR patient.fullName ILIKE :term OR patient.patientNumber = :exactSearch OR patient.phone ILIKE :term)',
-        { term, exactSearch },
-      );
-    }
-
-    const labTimeZone =
-      params.startDate || params.endDate ? await this.getLabTimeZone(labId) : null;
-    if (params.startDate && params.endDate && labTimeZone) {
-      const { startDate } = this.getDateRangeOrThrow(params.startDate, labTimeZone, 'startDate');
-      const { endDate } = this.getDateRangeOrThrow(params.endDate, labTimeZone, 'endDate');
-      if (startDate.getTime() > endDate.getTime()) {
-        throw new BadRequestException('startDate cannot be after endDate');
-      }
-      qb.andWhere('order.registeredAt BETWEEN :startDate AND :endDate', {
-        startDate,
-        endDate,
-      });
-    } else if (params.startDate && labTimeZone) {
-      const { startDate } = this.getDateRangeOrThrow(params.startDate, labTimeZone, 'startDate');
-      qb.andWhere('order.registeredAt >= :startDate', { startDate });
-    } else if (params.endDate && labTimeZone) {
-      const { endDate } = this.getDateRangeOrThrow(params.endDate, labTimeZone, 'endDate');
-      qb.andWhere('order.registeredAt <= :endDate', { endDate });
-    }
+    await this.applyOrderQueryFilters(qb, labId, params);
 
     qb.orderBy('order.registeredAt', 'DESC').skip(skip).take(size);
 
     const [items, total] = await qb.getManyAndCount();
+    await this.enrichOrdersWithProgress(items as OrderProgressTarget[]);
 
-    // Backfill display status dynamically: if any test has a finalized result,
-    // treat order as COMPLETED in API response even when stored status is stale.
-    if (items.length > 0) {
-      const orderIds = items.map((o) => o.id);
-      const progressed = await this.orderRepo.manager
-        .createQueryBuilder()
-        .select('s."orderId"', 'orderId')
-        .addSelect('COUNT(*)', 'cnt')
-        .from('order_tests', 'ot')
-        .innerJoin('samples', 's', 's.id = ot."sampleId"')
-        .where('s."orderId" IN (:...orderIds)', { orderIds })
-        .andWhere('ot.status IN (:...statuses)', {
-          statuses: [
-            OrderTestStatus.COMPLETED,
-            OrderTestStatus.VERIFIED,
-            OrderTestStatus.REJECTED,
-          ],
-        })
-        .groupBy('s."orderId"')
-        .getRawMany<{ orderId: string; cnt: string }>();
+    return {
+      items,
+      total,
+      page,
+      size,
+      totalPages: Math.ceil(total / size),
+    };
+  }
 
-      const progressedSet = new Set(progressed.map((r) => r.orderId));
+  async findHistory(labId: string, params: OrderListQueryParams): Promise<{
+    items: OrderHistoryItem[];
+    total: number;
+    page: number;
+    size: number;
+    totalPages: number;
+  }> {
+    const page = Math.max(1, params.page ?? 1);
+    const size = Math.min(100, Math.max(1, params.size ?? 20));
+    const skip = (page - 1) * size;
 
-      const testCounts = await this.orderRepo.manager
-        .createQueryBuilder()
-        .select('s."orderId"', 'orderId')
-        .addSelect('COUNT(*)', 'totalTests')
-        .addSelect(
-          `SUM(CASE WHEN ot.status IN (:...readyStatuses) THEN 1 ELSE 0 END)`,
-          'readyTests',
-        )
-        .from('order_tests', 'ot')
-        .innerJoin('samples', 's', 's.id = ot."sampleId"')
-        .where('s."orderId" IN (:...orderIds)', { orderIds })
-        .setParameter('readyStatuses', [
-          OrderTestStatus.COMPLETED,
-          OrderTestStatus.VERIFIED,
-          OrderTestStatus.REJECTED,
-        ])
-        .groupBy('s."orderId"')
-        .getRawMany<{ orderId: string; totalTests: string; readyTests: string }>();
+    const qb = this.orderRepo
+      .createQueryBuilder('order')
+      .leftJoinAndSelect('order.patient', 'patient')
+      .leftJoinAndSelect('order.shift', 'shift')
+      .where('order.labId = :labId', { labId });
 
-      const countMap = new Map(
-        testCounts.map((r) => [
-          r.orderId,
-          {
-            totalTests: parseInt(r.totalTests, 10) || 0,
-            readyTests: parseInt(r.readyTests, 10) || 0,
-          },
-        ]),
-      );
+    await this.applyOrderQueryFilters(qb, labId, params);
 
-      for (const order of items) {
-        const counts = countMap.get(order.id) || { totalTests: 0, readyTests: 0 };
-        (order as unknown as Record<string, unknown>).testsCount = counts.totalTests;
-        (order as unknown as Record<string, unknown>).readyTestsCount = counts.readyTests;
-        (order as unknown as Record<string, unknown>).reportReady = counts.readyTests > 0;
+    qb.orderBy('order.registeredAt', 'DESC').skip(skip).take(size);
 
-        if (order.status !== OrderStatus.CANCELLED && progressedSet.has(order.id)) {
-          order.status = OrderStatus.COMPLETED;
-        }
-      }
-    }
+    const [orders, total] = await qb.getManyAndCount();
+    await this.enrichOrdersWithProgress(orders as OrderProgressTarget[]);
+
+    const items: OrderHistoryItem[] = orders.map((order) => {
+      const testsCount = Number((order as unknown as Record<string, unknown>).testsCount ?? 0) || 0;
+      const readyTestsCount =
+        Number((order as unknown as Record<string, unknown>).readyTestsCount ?? 0) || 0;
+      const reportReady =
+        Boolean((order as unknown as Record<string, unknown>).reportReady) || readyTestsCount > 0;
+
+      return {
+        id: order.id,
+        orderNumber: order.orderNumber,
+        status: order.status,
+        registeredAt: order.registeredAt,
+        paymentStatus: this.normalizePaymentStatus(order.paymentStatus),
+        finalAmount: Number(order.finalAmount ?? 0),
+        patient: order.patient,
+        shift: order.shift ?? null,
+        testsCount,
+        readyTestsCount,
+        reportReady,
+      };
+    });
 
     return {
       items,
@@ -1106,6 +1067,141 @@ export class OrdersService {
     const revenue = parseFloat(revenueRow?.revenue ?? '0');
 
     return { total, byStatus, byShift, revenue };
+  }
+
+  private async applyOrderQueryFilters(
+    qb: SelectQueryBuilder<Order>,
+    labId: string,
+    params: OrderListQueryParams,
+  ): Promise<void> {
+    if (params.status) {
+      if (params.status === OrderStatus.COMPLETED) {
+        qb.andWhere(
+          `("order"."status" = :status OR EXISTS (
+            SELECT 1
+            FROM samples s
+            INNER JOIN order_tests ot ON ot."sampleId" = s.id
+            WHERE s."orderId" = "order"."id"
+              AND ot.status IN (:...completedStatuses)
+          ))`,
+          {
+            status: params.status,
+            completedStatuses: [
+              OrderTestStatus.COMPLETED,
+              OrderTestStatus.VERIFIED,
+              OrderTestStatus.REJECTED,
+            ],
+          },
+        );
+      } else {
+        qb.andWhere('order.status = :status', { status: params.status });
+      }
+    }
+
+    if (params.patientId) {
+      qb.andWhere('order.patientId = :patientId', { patientId: params.patientId });
+    }
+
+    if (params.search?.trim()) {
+      const term = `%${params.search.trim()}%`;
+      const exactSearch = params.search.trim();
+      qb.andWhere(
+        '(order.orderNumber ILIKE :term OR patient.fullName ILIKE :term OR patient.patientNumber = :exactSearch OR patient.phone ILIKE :term)',
+        { term, exactSearch },
+      );
+    }
+
+    const labTimeZone =
+      params.startDate || params.endDate ? await this.getLabTimeZone(labId) : null;
+    if (params.startDate && params.endDate && labTimeZone) {
+      const { startDate } = this.getDateRangeOrThrow(params.startDate, labTimeZone, 'startDate');
+      const { endDate } = this.getDateRangeOrThrow(params.endDate, labTimeZone, 'endDate');
+      if (startDate.getTime() > endDate.getTime()) {
+        throw new BadRequestException('startDate cannot be after endDate');
+      }
+      qb.andWhere('order.registeredAt BETWEEN :startDate AND :endDate', {
+        startDate,
+        endDate,
+      });
+    } else if (params.startDate && labTimeZone) {
+      const { startDate } = this.getDateRangeOrThrow(params.startDate, labTimeZone, 'startDate');
+      qb.andWhere('order.registeredAt >= :startDate', { startDate });
+    } else if (params.endDate && labTimeZone) {
+      const { endDate } = this.getDateRangeOrThrow(params.endDate, labTimeZone, 'endDate');
+      qb.andWhere('order.registeredAt <= :endDate', { endDate });
+    }
+  }
+
+  private async enrichOrdersWithProgress(items: OrderProgressTarget[]): Promise<void> {
+    if (items.length === 0) {
+      return;
+    }
+
+    const orderIds = items.map((order) => order.id);
+    const progressed = await this.orderRepo.manager
+      .createQueryBuilder()
+      .select('s."orderId"', 'orderId')
+      .addSelect('COUNT(*)', 'cnt')
+      .from('order_tests', 'ot')
+      .innerJoin('samples', 's', 's.id = ot."sampleId"')
+      .where('s."orderId" IN (:...orderIds)', { orderIds })
+      .andWhere('ot.status IN (:...statuses)', {
+        statuses: [
+          OrderTestStatus.COMPLETED,
+          OrderTestStatus.VERIFIED,
+          OrderTestStatus.REJECTED,
+        ],
+      })
+      .groupBy('s."orderId"')
+      .getRawMany<{ orderId: string; cnt: string }>();
+
+    const progressedSet = new Set(progressed.map((row) => row.orderId));
+
+    const testCounts = await this.orderRepo.manager
+      .createQueryBuilder()
+      .select('s."orderId"', 'orderId')
+      .addSelect('COUNT(*)', 'totalTests')
+      .addSelect(
+        `SUM(CASE WHEN ot.status IN (:...readyStatuses) THEN 1 ELSE 0 END)`,
+        'readyTests',
+      )
+      .from('order_tests', 'ot')
+      .innerJoin('samples', 's', 's.id = ot."sampleId"')
+      .where('s."orderId" IN (:...orderIds)', { orderIds })
+      .setParameter('readyStatuses', [
+        OrderTestStatus.COMPLETED,
+        OrderTestStatus.VERIFIED,
+        OrderTestStatus.REJECTED,
+      ])
+      .groupBy('s."orderId"')
+      .getRawMany<{ orderId: string; totalTests: string; readyTests: string }>();
+
+    const countMap = new Map(
+      testCounts.map((row) => [
+        row.orderId,
+        {
+          totalTests: parseInt(row.totalTests, 10) || 0,
+          readyTests: parseInt(row.readyTests, 10) || 0,
+        },
+      ]),
+    );
+
+    for (const order of items) {
+      const counts = countMap.get(order.id) || { totalTests: 0, readyTests: 0 };
+      order.testsCount = counts.totalTests;
+      order.readyTestsCount = counts.readyTests;
+      order.reportReady = counts.readyTests > 0;
+
+      if (order.status !== OrderStatus.CANCELLED && progressedSet.has(order.id)) {
+        order.status = OrderStatus.COMPLETED;
+      }
+    }
+  }
+
+  private normalizePaymentStatus(value: string | null | undefined): 'unpaid' | 'partial' | 'paid' {
+    if (value === 'paid') return 'paid';
+    if (value === 'partial') return 'partial';
+    return 'unpaid';
   }
 
   private async getLabTimeZone(
