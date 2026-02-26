@@ -1,4 +1,4 @@
-﻿import type { Order } from '../../entities/order.entity';
+import type { Order } from '../../entities/order.entity';
 import type { OrderTest } from '../../entities/order-test.entity';
 import { TestType } from '../../entities/test.entity';
 import { resolveNumericRange } from '../../tests/normal-range.util';
@@ -269,7 +269,7 @@ export function buildResultsReportHtml(input: {
 
       const row = `
         <tr class="result-row ${abnormal ? 'abnormal' : ''}">
-          <td class="c-test">${escapeHtml(t?.name || '-')}${t?.code ? ` (${escapeHtml(t.code)})` : ''}</td>
+          <td class="c-test">${escapeHtml(t?.abbreviation || t?.name || '-')}${t?.code ? ` (${escapeHtml(t.code)})` : ''}</td>
           <td class="c-result">${escapeHtml(formatResultValue(ot))}${extra}</td>
           <td class="c-unit">${escapeHtml(t?.unit || '-')}</td>
           <td class="c-status">${escapeHtml(statusText)}</td>
@@ -390,7 +390,7 @@ export function buildResultsReportHtml(input: {
           const abnormal = isAbnormalFlag(flag);
           const statusClass = abnormal ? (flag.startsWith('H') ? 'status-high' : 'status-low') : 'status-normal';
           return `<tr class="${abnormal ? 'abnormal' : ''}">
-            <td style="width:28%;">${escapeHtml(ct?.name || '-')}</td>
+            <td style="width:28%;">${escapeHtml(ct?.abbreviation || ct?.name || '-')}</td>
             <td style="width:14%;" class="nowrap">${escapeHtml(formatResultValue(child))}</td>
             <td style="width:14%;" class="nowrap">${escapeHtml(ct?.unit || '-')}</td>
             <td style="width:14%;" class="${statusClass}">${escapeHtml(statusText)}</td>
@@ -452,7 +452,7 @@ export function buildResultsReportHtml(input: {
           const abnormal = isAbnormalFlag(flag);
           const statusClass = abnormal ? (flag.startsWith('H') ? 'status-high' : 'status-low') : 'status-normal';
           return `<tr class="${abnormal ? 'abnormal' : ''}">
-          <td style="width:28%;">${escapeHtml(t?.name || '-')}</td>
+          <td style="width:28%;">${escapeHtml(t?.abbreviation || t?.name || '-')}</td>
           <td style="width:14%;" class="nowrap">${escapeHtml(formatResultValue(ot))}</td>
           <td style="width:14%;" class="nowrap">${escapeHtml(t?.unit || '-')}</td>
           <td style="width:14%;" class="${statusClass}">${escapeHtml(statusText)}</td>
