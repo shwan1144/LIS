@@ -852,6 +852,7 @@ export function TestsPage() {
                         />
                       </Form.Item>
                     </Col>
+                  </Row>
                   <Row gutter={16}>
                     <Col span={8}>
                       <Form.Item name="type" label="Type">
