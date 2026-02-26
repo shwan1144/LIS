@@ -293,6 +293,11 @@ export declare class PlatformAdminService {
             logoDataUrl: string | null;
             watermarkDataUrl: string | null;
         };
+        uiTestGroups: {
+            id: string;
+            name: string;
+            testIds: string[];
+        }[];
     }>;
     updateLabSettings(labId: string, data: {
         labelSequenceBy?: string;
@@ -333,6 +338,11 @@ export declare class PlatformAdminService {
             logoDataUrl: string | null;
             watermarkDataUrl: string | null;
         };
+        uiTestGroups: {
+            id: string;
+            name: string;
+            testIds: string[];
+        }[];
     }>;
     getLabUsers(labId: string, actor?: PlatformActorContext): Promise<User[]>;
     getLabUser(userId: string, labId: string, actor?: PlatformActorContext): Promise<{

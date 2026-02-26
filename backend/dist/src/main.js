@@ -100,6 +100,7 @@ async function ensureReportBrandingColumns(dataSource) {
         'ALTER TABLE IF EXISTS "labs" ADD COLUMN IF NOT EXISTS "receiptPrinterName" varchar(128)',
         'ALTER TABLE IF EXISTS "labs" ADD COLUMN IF NOT EXISTS "labelsPrinterName" varchar(128)',
         'ALTER TABLE IF EXISTS "labs" ADD COLUMN IF NOT EXISTS "reportPrinterName" varchar(128)',
+        'ALTER TABLE IF EXISTS "labs" ADD COLUMN IF NOT EXISTS "uiTestGroups" jsonb',
         `UPDATE "labs" SET "printMethod" = 'browser' WHERE "printMethod" IS NULL`,
         `
       DO $$

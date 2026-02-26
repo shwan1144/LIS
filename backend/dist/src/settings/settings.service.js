@@ -67,6 +67,7 @@ let SettingsService = class SettingsService {
                 logoDataUrl: lab.reportLogoDataUrl ?? null,
                 watermarkDataUrl: lab.reportWatermarkDataUrl ?? null,
             },
+            uiTestGroups: lab.uiTestGroups ?? [],
         };
     }
     async updateLabSettings(labId, data) {
@@ -134,6 +135,24 @@ let SettingsService = class SettingsService {
             if ('watermarkDataUrl' in data.reportBranding) {
                 lab.reportWatermarkDataUrl = this.normalizeReportImageDataUrl(data.reportBranding.watermarkDataUrl, 'reportBranding.watermarkDataUrl');
             }
+        }
+        if (data.uiTestGroups !== undefined) {
+            if (data.uiTestGroups && !Array.isArray(data.uiTestGroups)) {
+                throw new common_1.BadRequestException('uiTestGroups must be an array or null');
+            }
+            if (data.uiTestGroups !== null) {
+                for (const group of data.uiTestGroups) {
+                    if (!group.id || typeof group.id !== 'string')
+                        throw new common_1.BadRequestException('invalid group id');
+                    if (!group.name || typeof group.name !== 'string')
+                        throw new common_1.BadRequestException('invalid group name');
+                    if (!Array.isArray(group.testIds))
+                        throw new common_1.BadRequestException('group testIds must be array');
+                    if (!group.testIds.every(id => typeof id === 'string'))
+                        throw new common_1.BadRequestException('group testIds elements must be strings');
+                }
+            }
+            lab.uiTestGroups = data.uiTestGroups;
         }
         await this.labRepo.save(lab);
         return this.getLabSettings(labId);

@@ -22,6 +22,11 @@ export declare class Lab {
     receiptPrinterName: string | null;
     labelsPrinterName: string | null;
     reportPrinterName: string | null;
+    uiTestGroups: {
+        id: string;
+        name: string;
+        testIds: string[];
+    }[] | null;
     createdAt: Date;
     updatedAt: Date;
     userAssignments: UserLabAssignment[];

@@ -73,6 +73,11 @@ export declare class PlatformAdminController {
             logoDataUrl: string | null;
             watermarkDataUrl: string | null;
         };
+        uiTestGroups: {
+            id: string;
+            name: string;
+            testIds: string[];
+        }[];
     }>;
     updateLabSettings(labId: string, body: {
         labelSequenceBy?: string;
@@ -113,6 +118,11 @@ export declare class PlatformAdminController {
             logoDataUrl: string | null;
             watermarkDataUrl: string | null;
         };
+        uiTestGroups: {
+            id: string;
+            name: string;
+            testIds: string[];
+        }[];
     }>;
     getLabUsers(req: RequestWithPlatformUser, labId: string): Promise<import("../entities/user.entity").User[]>;
     getLabUser(req: RequestWithPlatformUser, labId: string, id: string): Promise<{
