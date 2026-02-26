@@ -83,6 +83,10 @@ export class Lab {
   @Column({ type: 'varchar', length: 128, nullable: true })
   reportPrinterName: string | null;
 
+  /** Custom UI test groups for quick selection in the order page. */
+  @Column({ type: 'jsonb', nullable: true })
+  uiTestGroups: { id: string; name: string; testIds: string[] }[] | null;
+
   @CreateDateColumn()
   createdAt: Date;
 

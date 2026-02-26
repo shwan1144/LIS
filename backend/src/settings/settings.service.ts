@@ -35,6 +35,8 @@ type LabPrintingUpdate = {
   reportPrinterName?: string | null;
 };
 
+type UiTestGroup = { id: string; name: string; testIds: string[] };
+
 @Injectable()
 export class SettingsService {
   constructor(
@@ -52,7 +54,7 @@ export class SettingsService {
     private readonly labRepo: Repository<Lab>,
     @InjectRepository(Shift)
     private readonly shiftRepo: Repository<Shift>,
-  ) {}
+  ) { }
 
   getRoles(): string[] {
     return ROLES;
@@ -82,6 +84,7 @@ export class SettingsService {
         logoDataUrl: lab.reportLogoDataUrl ?? null,
         watermarkDataUrl: lab.reportWatermarkDataUrl ?? null,
       },
+      uiTestGroups: lab.uiTestGroups ?? [],
     };
   }
 
@@ -95,6 +98,7 @@ export class SettingsService {
       onlineResultWatermarkText?: string | null;
       printing?: LabPrintingUpdate;
       reportBranding?: ReportBrandingUpdate;
+      uiTestGroups?: UiTestGroup[] | null;
     },
   ) {
     const lab = await this.labRepo.findOne({ where: { id: labId } });
@@ -191,6 +195,20 @@ export class SettingsService {
           'reportBranding.watermarkDataUrl',
         );
       }
+    }
+    if (data.uiTestGroups !== undefined) {
+      if (data.uiTestGroups && !Array.isArray(data.uiTestGroups)) {
+        throw new BadRequestException('uiTestGroups must be an array or null');
+      }
+      if (data.uiTestGroups !== null) {
+        for (const group of data.uiTestGroups) {
+          if (!group.id || typeof group.id !== 'string') throw new BadRequestException('invalid group id');
+          if (!group.name || typeof group.name !== 'string') throw new BadRequestException('invalid group name');
+          if (!Array.isArray(group.testIds)) throw new BadRequestException('group testIds must be array');
+          if (!group.testIds.every(id => typeof id === 'string')) throw new BadRequestException('group testIds elements must be strings');
+        }
+      }
+      lab.uiTestGroups = data.uiTestGroups;
     }
     await this.labRepo.save(lab);
     return this.getLabSettings(labId);

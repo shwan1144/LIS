@@ -43,6 +43,7 @@ import {
   downloadOrderReceiptPDF,
   updateOrderPayment,
   updateOrderTests,
+  updateLabSettings,
   type CreateOrderDto,
   type PatientDto,
   type TestDto,
@@ -159,6 +160,10 @@ export function OrdersPage() {
   const [selectedDepartmentId, setSelectedDepartmentId] = useState<string | null>(null);
   const [testSearch, setTestSearch] = useState('');
   const [selectedTests, setSelectedTests] = useState<SelectedTest[]>([]);
+  const [uiTestGroups, setUiTestGroups] = useState<{ id: string; name: string; testIds: string[] }[]>([]);
+  const [createGroupModalOpen, setCreateGroupModalOpen] = useState(false);
+  const [newGroupName, setNewGroupName] = useState('');
+  const [savingGroup, setSavingGroup] = useState(false);
 
   const [subtotal, setSubtotal] = useState(0);
   const [loadingPrice, setLoadingPrice] = useState(false);
@@ -249,14 +254,11 @@ export function OrdersPage() {
             if (current && rows.some((row) => row.rowId === current)) {
               return current;
             }
-            if (effectiveDraft) {
-              return `draft-${effectiveDraft.id}`;
-            }
-            return rows[0]?.rowId ?? null;
+            return rows.length > 0 ? rows[0].rowId : null;
           });
         }
       } catch {
-        message.error('Failed to load order history');
+        message.warning('Failed to load orders');
         if (effectiveDraft) {
           setPatientList([
             {
@@ -321,19 +323,29 @@ export function OrdersPage() {
   }, [loadOrderHistory]);
 
   useEffect(() => {
-    async function load() {
+    async function init() {
       setLoadingTests(true);
       try {
-        const [tests, deps] = await Promise.all([getTests(true), getDepartments()]);
-        setTestOptions(tests);
-        setDepartments(deps);
+        const [depts, tsts, settings] = await Promise.all([
+          getDepartments(),
+          getTests(),
+          getLabSettings()
+        ]);
+        setDepartments(depts);
+        setTestOptions(tsts);
+        const activeIds = new Set(tsts.filter((t) => t.isActive).map((t) => t.id));
+        const validGroups = (settings.uiTestGroups || []).map(g => ({
+          ...g,
+          testIds: g.testIds.filter(id => activeIds.has(id))
+        })).filter(g => g.testIds.length > 0);
+        setUiTestGroups(validGroups);
       } catch {
-        message.error('Failed to load tests');
+        message.warning('Failed to load tests or departments');
       } finally {
         setLoadingTests(false);
       }
     }
-    load();
+    init();
   }, []);
 
   useEffect(() => {
@@ -447,6 +459,61 @@ export function OrdersPage() {
         tubeType: orderTest.test?.tubeType ?? 'OTHER',
       };
     });
+  };
+
+  const handleCreateGroup = async () => {
+    if (!newGroupName.trim()) {
+      message.error('Please enter a group name');
+      return;
+    }
+    if (selectedTests.length === 0) {
+      message.error('Please select at least one test for the group');
+      return;
+    }
+
+    setSavingGroup(true);
+    try {
+      const currentSettings = await getLabSettings();
+      const newGroup = {
+        id: Math.random().toString(36).substring(2, 9),
+        name: newGroupName.trim(),
+        testIds: selectedTests.map(t => t.testId)
+      };
+
+      const existingGroups = currentSettings.uiTestGroups || [];
+      const updatedGroups = [...existingGroups, newGroup];
+
+      await updateLabSettings({ uiTestGroups: updatedGroups });
+      setUiTestGroups(updatedGroups);
+      message.success(`Group "${newGroup.name}" saved!`);
+      setCreateGroupModalOpen(false);
+      setNewGroupName('');
+    } catch {
+      message.error('Failed to save group to lab settings');
+    } finally {
+      setSavingGroup(false);
+    }
+  };
+
+  const handleAddGroupTests = (groupTestIds: string[]) => {
+    const testsToAdd = filteredTests.filter(t => groupTestIds.includes(t.id));
+
+    // Add tests that aren't already selected
+    const newSelections = testsToAdd.filter(
+      t => !selectedTests.some(st => st.testId === t.id)
+    ).map(t => ({
+      testId: t.id,
+      testCode: t.code,
+      testName: t.name,
+      tubeType: t.tubeType,
+    }));
+
+    if (newSelections.length > 0) {
+      setSelectedTests(prev => [...prev, ...newSelections]);
+      message.success(`Added ${newSelections.length} test(s) from group`);
+    } else {
+      message.info('All tests from this group are already selected');
+    }
   };
 
   const applyUpdatedOrderToList = (updatedOrder: OrderDto) => {
@@ -1221,28 +1288,16 @@ export function OrdersPage() {
                   )}
 
                   <div>
-                    <Text strong style={{ display: 'block', marginBottom: 8 }}>
-                      Select tests
-                    </Text>
-                    <Row gutter={8} style={{ marginBottom: 12 }}>
-                      <Col flex="none">
-                        <Select
-                          placeholder="All departments"
-                          allowClear
-                          style={{ minWidth: 180 }}
-                          value={selectedDepartmentId || undefined}
-                          onChange={(v) => setSelectedDepartmentId(v || null)}
-                          options={departments.map((d) => ({
-                            value: d.id,
-                            label: d.name || d.code,
-                          }))}
-                        />
-                      </Col>
-                      <Col flex="auto">
+                    <Row gutter={24} style={{ marginBottom: 12 }}>
+                      {/* Left Pane: Search & Selected Tests */}
+                      <Col xs={24} md={12}>
+                        <Text strong style={{ display: 'block', marginBottom: 8 }}>
+                          Select tests
+                        </Text>
                         <Select
                           showSearch
                           placeholder="Search tests by name or code..."
-                          style={{ width: '100%' }}
+                          style={{ width: '100%', marginBottom: 12 }}
                           value={null}
                           onChange={handleAddTest}
                           filterOption={false}
@@ -1254,61 +1309,125 @@ export function OrdersPage() {
                             label: (
                               <Space>
                                 <Text strong>{t.code}</Text>
-                                <Text>{t.abbreviation ? `${t.abbreviation} - ${t.name}` : t.name}</Text>
+                                <Text>{(t as any).abbreviation ? `${(t as any).abbreviation} - ${t.name}` : t.name}</Text>
                                 <Text type="secondary">({t.tubeType})</Text>
                               </Space>
                             ),
                           }))}
                         />
+
+                        <div style={{ marginTop: 8 }}>
+                          <Select
+                            placeholder="All departments"
+                            allowClear
+                            style={{ width: '100%', marginBottom: 16 }}
+                            value={selectedDepartmentId || undefined}
+                            onChange={(v) => setSelectedDepartmentId(v || null)}
+                            options={departments.map((d) => ({
+                              value: d.id,
+                              label: d.name || d.code,
+                            }))}
+                          />
+                        </div>
+
+                        {selectedTests.length === 0 ? (
+                          <Empty
+                            image={Empty.PRESENTED_IMAGE_SIMPLE}
+                            description="No tests selected. Use search above or test groups."
+                            style={{ padding: 24 }}
+                          />
+                        ) : (
+                          <div
+                            style={{
+                              border: styles.borderDark,
+                              borderRadius: 8,
+                              padding: 12,
+                              maxHeight: 280,
+                              overflow: 'auto',
+                            }}
+                          >
+                            <Space direction="vertical" style={{ width: '100%' }} size={8}>
+                              {selectedTests.map((test) => (
+                                <div
+                                  key={test.testId}
+                                  style={{
+                                    display: 'flex',
+                                    justifyContent: 'space-between',
+                                    alignItems: 'center',
+                                    padding: '8px 12px',
+                                    backgroundColor: styles.bgSubtle,
+                                    borderRadius: 6,
+                                  }}
+                                >
+                                  <Space>
+                                    <Text strong>{test.testCode}</Text>
+                                    <Text>{test.testName}</Text>
+                                    <Text type="secondary">({test.tubeType})</Text>
+                                  </Space>
+                                  <Button
+                                    type="text"
+                                    danger
+                                    icon={<DeleteOutlined />}
+                                    onClick={() => handleRemoveTest(test.testId)}
+                                  />
+                                </div>
+                              ))}
+                            </Space>
+                          </div>
+                        )}
+                      </Col>
+
+                      {/* Right Pane: Test Groups */}
+                      <Col xs={24} md={12}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                          <Text strong>Quick Select Groups</Text>
+                          <Button
+                            type="dashed"
+                            size="small"
+                            icon={<PlusOutlined />}
+                            onClick={() => {
+                              if (selectedTests.length === 0) {
+                                message.warning('First, select some tests on the left to create a group from them.');
+                                return;
+                              }
+                              setCreateGroupModalOpen(true);
+                            }}
+                          >
+                            Create Group
+                          </Button>
+                        </div>
+
+                        {uiTestGroups.length === 0 ? (
+                          <Empty
+                            image={Empty.PRESENTED_IMAGE_SIMPLE}
+                            description="No test groups saved. Select tests and create one!"
+                            style={{ padding: 24, marginTop: 24 }}
+                          />
+                        ) : (
+                          <div
+                            style={{
+                              border: styles.border,
+                              borderRadius: 8,
+                              padding: 12,
+                              backgroundColor: styles.bgSubtle,
+                              minHeight: 120
+                            }}
+                          >
+                            <Space wrap size={[8, 8]}>
+                              {uiTestGroups.map((group) => (
+                                <Button
+                                  key={group.id}
+                                  onClick={() => handleAddGroupTests(group.testIds)}
+                                >
+                                  {group.name}
+                                </Button>
+                              ))}
+                            </Space>
+                          </div>
+                        )}
                       </Col>
                     </Row>
                   </div>
-
-                  {selectedTests.length === 0 ? (
-                    <Empty
-                      image={Empty.PRESENTED_IMAGE_SIMPLE}
-                      description="No tests selected. Use the department dropdown or search above to add tests."
-                      style={{ padding: 24 }}
-                    />
-                  ) : (
-                    <div
-                      style={{
-                        border: styles.borderDark,
-                        borderRadius: 8,
-                        padding: 12,
-                        maxHeight: 280,
-                        overflow: 'auto',
-                      }}
-                    >
-                      <Space direction="vertical" style={{ width: '100%' }} size={8}>
-                        {selectedTests.map((test) => (
-                          <div
-                            key={test.testId}
-                            style={{
-                              display: 'flex',
-                              justifyContent: 'space-between',
-                              alignItems: 'center',
-                              padding: '8px 12px',
-                              backgroundColor: styles.bgSubtle,
-                              borderRadius: 6,
-                            }}
-                          >
-                            <Space>
-                              <Text strong>{test.testCode}</Text>
-                              <Text>{test.testName}</Text>
-                              <Text type="secondary">({test.tubeType})</Text>
-                            </Space>
-                            <Button
-                              type="text"
-                              danger
-                              icon={<DeleteOutlined />}
-                              onClick={() => handleRemoveTest(test.testId)}
-                            />
-                          </div>
-                        ))}
-                      </Space>
-                    </div>
-                  )}
 
                   <Card
                     style={styles.summaryCard}
@@ -1427,6 +1546,33 @@ export function OrdersPage() {
       </Modal>
 
       <Modal
+        title="Create Test Group"
+        open={createGroupModalOpen}
+        onOk={handleCreateGroup}
+        confirmLoading={savingGroup}
+        onCancel={() => {
+          setCreateGroupModalOpen(false);
+          setNewGroupName('');
+        }}
+        okText="Save Group"
+      >
+        <Text>Selected tests to group:</Text>
+        <div style={{ marginTop: 8, marginBottom: 16 }}>
+          <Space wrap size={[4, 4]}>
+            {selectedTests.map(t => (
+              <Tag key={t.testId}>{t.testCode}</Tag>
+            ))}
+          </Space>
+        </div>
+        <Input
+          placeholder="Group Name (e.g., LFT)"
+          value={newGroupName}
+          onChange={(e) => setNewGroupName(e.target.value)}
+          autoFocus
+        />
+      </Modal>
+
+      <Modal
         title="Edit tests in order"
         open={editTestsModalOpen}
         onCancel={() => {
@@ -1452,7 +1598,7 @@ export function OrdersPage() {
             optionFilterProp="label"
             options={testOptions.map((test) => ({
               value: test.id,
-              label: test.abbreviation ? `${test.code} - ${test.abbreviation} - ${test.name} (${test.tubeType})` : `${test.code} - ${test.name} (${test.tubeType})`,
+              label: (test as any).abbreviation ? `${test.code} - ${(test as any).abbreviation} - ${test.name} (${test.tubeType})` : `${test.code} - ${test.name} (${test.tubeType})`,
             }))}
           />
           {editingTests.length === 0 ? (

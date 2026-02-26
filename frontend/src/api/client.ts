@@ -192,7 +192,7 @@ export interface AdminSummaryDto {
     testId: string;
     testCode: string;
     testName: string;
-  testAbbreviation: string | null;
+    testAbbreviation: string | null;
     ordersCount: number;
     verifiedCount: number;
   }>;
@@ -1558,6 +1558,7 @@ export interface LabSettingsDto {
     reportPrinterName: string | null;
   };
   reportBranding: ReportBrandingDto;
+  uiTestGroups?: { id: string; name: string; testIds: string[] }[];
 }
 
 export async function getLabSettings(): Promise<LabSettingsDto> {
@@ -1565,7 +1566,7 @@ export async function getLabSettings(): Promise<LabSettingsDto> {
   return res.data;
 }
 
-export async function updateLabSettings(data: {
+export interface UpdateLabSettingsDto {
   labelSequenceBy?: 'tube_type' | 'department';
   sequenceResetBy?: 'day' | 'shift';
   enableOnlineResults?: boolean;
@@ -1578,7 +1579,10 @@ export async function updateLabSettings(data: {
     reportPrinterName?: string | null;
   };
   reportBranding?: Partial<ReportBrandingDto>;
-}): Promise<LabSettingsDto> {
+  uiTestGroups?: { id: string; name: string; testIds: string[] }[] | null;
+}
+
+export async function updateLabSettings(data: UpdateLabSettingsDto): Promise<LabSettingsDto> {
   const res = await api.patch<LabSettingsDto>('/settings/lab', data);
   return res.data;
 }
