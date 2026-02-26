@@ -212,7 +212,7 @@ export class ReportsService implements OnModuleDestroy {
     private readonly labRepo: Repository<Lab>,
     @InjectRepository(User)
     private readonly userRepo: Repository<User>,
-  ) {}
+  ) { }
 
   private async getBrowser(): Promise<Browser> {
     if (!this.browserPromise) {
@@ -250,7 +250,7 @@ export class ReportsService implements OnModuleDestroy {
       });
       return Buffer.from(pdf);
     } finally {
-      await page.close().catch(() => {});
+      await page.close().catch(() => { });
     }
   }
 
@@ -420,10 +420,10 @@ export class ReportsService implements OnModuleDestroy {
       sampleIds.length === 0
         ? []
         : await this.orderTestRepo.find({
-            where: { sampleId: In(sampleIds) },
-            relations: ['test', 'test.department', 'sample'],
-            order: { test: { code: 'ASC' } },
-          });
+          where: { sampleId: In(sampleIds) },
+          relations: ['test', 'test.department', 'sample'],
+          order: { test: { code: 'ASC' } },
+        });
 
     const reportableOrderTests = this.getReportableOrderTests(orderTests);
     const verifiedTests = reportableOrderTests.filter(
@@ -576,7 +576,7 @@ export class ReportsService implements OnModuleDestroy {
       if (order.patient.dateOfBirth) {
         const age = Math.floor(
           (Date.now() - new Date(order.patient.dateOfBirth).getTime()) /
-            (365.25 * 24 * 60 * 60 * 1000),
+          (365.25 * 24 * 60 * 60 * 1000),
         );
         doc.text(`Age: ${age} years`, { align: 'left' });
       }
@@ -622,7 +622,7 @@ export class ReportsService implements OnModuleDestroy {
         }
         doc.text(`${test.code} - ${test.name}`, startX, yPos, { width: testWidth });
         doc.text(
-          test.price !== null ? `$${parseFloat(test.price.toString()).toFixed(2)}` : '-',
+          test.price !== null ? `${parseFloat(test.price.toString()).toFixed(0)} IQD` : '-',
           startX + testWidth,
           yPos,
           { width: priceWidth, align: 'right' },
@@ -634,14 +634,14 @@ export class ReportsService implements OnModuleDestroy {
 
       // Totals
       doc.font('Helvetica');
-      doc.text(`Subtotal: $${parseFloat(order.totalAmount.toString()).toFixed(2)}`, {
+      doc.text(`Subtotal: ${parseFloat(order.totalAmount.toString()).toFixed(0)} IQD`, {
         align: 'right',
       });
       if (order.discountPercent != null && Number(order.discountPercent) > 0) {
         const discountAmount =
           parseFloat(order.totalAmount.toString()) -
           parseFloat((order.finalAmount ?? order.totalAmount).toString());
-        doc.text(`Discount (${order.discountPercent}%): -$${discountAmount.toFixed(2)}`, {
+        doc.text(`Discount (${order.discountPercent}%): -${discountAmount.toFixed(0)} IQD`, {
           align: 'right',
         });
       }
@@ -650,7 +650,7 @@ export class ReportsService implements OnModuleDestroy {
         order.finalAmount != null
           ? parseFloat(order.finalAmount.toString())
           : parseFloat(order.totalAmount.toString());
-      doc.text(`TOTAL: $${finalAmount.toFixed(2)}`, { align: 'right' });
+      doc.text(`TOTAL: ${finalAmount.toFixed(0)} IQD`, { align: 'right' });
       doc.moveDown(1);
 
       // Samples
@@ -698,8 +698,8 @@ export class ReportsService implements OnModuleDestroy {
       verifierIds.length === 0
         ? []
         : await this.userRepo.find({
-            where: verifierIds.map((id) => ({ id })),
-          });
+          where: verifierIds.map((id) => ({ id })),
+        });
     const verifierNameMap = new Map(
       verifiers.map((u) => [u.id, u.fullName || u.username || u.id.substring(0, 8)]),
     );
