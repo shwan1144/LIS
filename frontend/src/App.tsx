@@ -1,6 +1,7 @@
+import { useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { ConfigProvider, theme } from 'antd';
-import { AuthProvider } from './contexts/AuthContext';
+import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { ThemeProvider, useTheme } from './contexts/ThemeContext';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { AppLayout } from './components/Layout/AppLayout';
@@ -38,6 +39,20 @@ function SettingsLayout() {
   return <Outlet />;
 }
 
+function AppTitleUpdater() {
+  const { lab } = useAuth();
+
+  useEffect(() => {
+    if (lab) {
+      document.title = lab.name;
+    } else {
+      document.title = 'LIS';
+    }
+  }, [lab]);
+
+  return null;
+}
+
 function AppContent() {
   const { isDark } = useTheme();
   const authScope = getCurrentAuthScope();
@@ -71,6 +86,7 @@ function AppContent() {
       }}
     >
       <AuthProvider>
+        <AppTitleUpdater />
         <BrowserRouter>
           <Routes>
             <Route path="/login" element={<LoginPage />} />
