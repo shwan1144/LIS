@@ -132,6 +132,11 @@ function groupWorklistByOrder(items: WorklistItem[]): WorklistOrderGroup[] {
         items: orderItems,
       };
     })
+    .filter((group) => {
+      // Exclude orders that don't have any visible top-level items
+      // (e.g. they only contain rejected panel child tests)
+      return group.items.some((i) => !i.parentOrderTestId);
+    })
     .sort((a, b) => {
       const aTop = a.items.filter((i) => !i.parentOrderTestId);
       const bTop = b.items.filter((i) => !i.parentOrderTestId);
@@ -1093,15 +1098,15 @@ export function WorklistPage() {
                       <div
                         className="panel-entry-grid-head"
                         style={{
-                        display: 'flex',
-                        backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : '#f5f5f5',
-                        borderRadius: '6px 6px 0 0',
-                        borderBottom: isDark ? '1px solid rgba(255,255,255,0.1)' : '1px solid #e8e8e8',
-                        fontWeight: 600,
-                        fontSize: 12,
-                        textTransform: 'uppercase',
-                        letterSpacing: '0.5px'
-                      }}
+                          display: 'flex',
+                          backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : '#f5f5f5',
+                          borderRadius: '6px 6px 0 0',
+                          borderBottom: isDark ? '1px solid rgba(255,255,255,0.1)' : '1px solid #e8e8e8',
+                          fontWeight: 600,
+                          fontSize: 12,
+                          textTransform: 'uppercase',
+                          letterSpacing: '0.5px'
+                        }}
                       >
                         <div style={{ flex: '1 1 24%' }}>Test</div>
                         <div style={{ flex: '1 1 40%' }}>Result</div>
@@ -1199,11 +1204,11 @@ export function WorklistPage() {
                             <div
                               className="panel-entry-params"
                               style={{
-                              marginTop: isPanel ? 12 : 16,
-                              padding: 16,
-                              backgroundColor: isDark ? 'rgba(255,255,255,0.02)' : '#fafafa',
-                              borderRadius: 8,
-                              border: isDark ? '1px solid rgba(255,255,255,0.05)' : '1px solid #f0f0f0'
+                                marginTop: isPanel ? 12 : 16,
+                                padding: 16,
+                                backgroundColor: isDark ? 'rgba(255,255,255,0.02)' : '#fafafa',
+                                borderRadius: 8,
+                                border: isDark ? '1px solid rgba(255,255,255,0.05)' : '1px solid #f0f0f0'
                               }}
                             >
                               <Row gutter={[16, 12]}>
