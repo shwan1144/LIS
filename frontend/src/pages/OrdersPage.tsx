@@ -305,6 +305,9 @@ export function OrdersPage() {
           return;
         }
         message.warning('Failed to load orders');
+        if (mode === 'soft') {
+          return;
+        }
         if (effectiveDraft) {
           setPatientList([
             {
@@ -1611,8 +1614,8 @@ export function OrdersPage() {
         open={partialPaymentModalOpen}
         onCancel={() => setPartialPaymentModalOpen(false)}
         onOk={async () => {
-          if (!selectedCreatedOrder?.id) return;
-          const final = Number(selectedCreatedOrder.finalAmount ?? 0);
+          if (!selectedCreatedOrderSummary?.id) return;
+          const final = Number(selectedCreatedOrderSummary.finalAmount ?? 0);
           const amount = Number(partialPaymentAmount) || 0;
           if (amount <= 0) {
             message.warning('Enter amount paid (greater than 0)');
@@ -1624,7 +1627,7 @@ export function OrdersPage() {
           }
           setUpdatingPayment(true);
           try {
-            const updated = await updateOrderPayment(selectedCreatedOrder.id, {
+            const updated = await updateOrderPayment(selectedCreatedOrderSummary.id, {
               paymentStatus: 'partial',
               paidAmount: Math.round(amount * 100) / 100,
             });
@@ -1643,14 +1646,14 @@ export function OrdersPage() {
       >
         <Space direction="vertical" style={{ width: '100%' }} size={16}>
           <Text type="secondary">Enter how much the patient has paid so far.</Text>
-          {selectedCreatedOrder && (
+          {selectedCreatedOrderSummary && (
             <>
               <div>
                 <Text strong>Amount paid (IQD)</Text>
                 <div style={{ marginTop: 8 }}>
                   <InputNumber
                     min={0}
-                    max={Number(selectedCreatedOrder.finalAmount ?? 0)}
+                    max={Number(selectedCreatedOrderSummary.finalAmount ?? 0)}
                     value={partialPaymentAmount}
                     onChange={(v) => setPartialPaymentAmount(Number(v) ?? 0)}
                     style={{ width: '100%', maxWidth: 240 }}
@@ -1660,7 +1663,7 @@ export function OrdersPage() {
                 </div>
               </div>
               <Text type="secondary">
-                Total due: {Number(selectedCreatedOrder.finalAmount ?? 0).toLocaleString()} IQD
+                Total due: {Number(selectedCreatedOrderSummary.finalAmount ?? 0).toLocaleString()} IQD
               </Text>
             </>
           )}
