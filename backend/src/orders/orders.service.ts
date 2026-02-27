@@ -53,7 +53,7 @@ export class OrdersService {
     private readonly testComponentRepo: Repository<TestComponent>,
     @InjectRepository(LabOrdersWorklist)
     private readonly worklistRepo: Repository<LabOrdersWorklist>,
-  ) {}
+  ) { }
 
   async create(labId: string, dto: CreateOrderDto): Promise<Order> {
     // Validate patient exists
@@ -704,7 +704,8 @@ export class OrdersService {
           parentOrderTestId: savedParent.id,
           status: OrderTestStatus.PENDING,
           price: null,
-        });
+          panelSortOrder: component.sortOrder,
+        } as any);
         await orderTestRepo.save(childOrderTest);
       }
       return;

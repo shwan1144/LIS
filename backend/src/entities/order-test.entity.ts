@@ -95,6 +95,10 @@ export class OrderTest {
   @Column({ type: 'text', nullable: true })
   comments: string | null;
 
+  /** For panel child tests: position index in the panel. Null for non-panel or parent rows. */
+  @Column({ type: 'int', nullable: true })
+  panelSortOrder: number | null;
+
   @CreateDateColumn()
   createdAt: Date;
 

@@ -212,7 +212,7 @@ export class ReportsService implements OnModuleDestroy {
     private readonly labRepo: Repository<Lab>,
     @InjectRepository(User)
     private readonly userRepo: Repository<User>,
-  ) {}
+  ) { }
 
   private async getBrowser(): Promise<Browser> {
     if (!this.browserPromise) {
@@ -250,7 +250,7 @@ export class ReportsService implements OnModuleDestroy {
       });
       return Buffer.from(pdf);
     } finally {
-      await page.close().catch(() => {});
+      await page.close().catch(() => { });
     }
   }
 
@@ -374,7 +374,15 @@ export class ReportsService implements OnModuleDestroy {
     }
 
     for (const [, children] of panelChildrenByParent) {
-      children.sort((a, b) => sortKey(a).localeCompare(sortKey(b)));
+      children.sort((a, b) => {
+        // Use panel-defined sort order if available; fall back to test code
+        const aOrder = (a as any).panelSortOrder ?? 9999;
+        const bOrder = (b as any).panelSortOrder ?? 9999;
+        if (aOrder !== bOrder) return aOrder - bOrder;
+        const aCode = ((a.test as Test | undefined)?.code || '').toUpperCase();
+        const bCode = ((b.test as Test | undefined)?.code || '').toUpperCase();
+        return aCode.localeCompare(bCode);
+      });
     }
 
     const regularTests = orderTests
@@ -420,10 +428,10 @@ export class ReportsService implements OnModuleDestroy {
       sampleIds.length === 0
         ? []
         : await this.orderTestRepo.find({
-            where: { sampleId: In(sampleIds) },
-            relations: ['test', 'test.department', 'sample'],
-            order: { test: { code: 'ASC' } },
-          });
+          where: { sampleId: In(sampleIds) },
+          relations: ['test', 'test.department', 'sample'],
+          order: { test: { code: 'ASC' } },
+        });
 
     const reportableOrderTests = this.getReportableOrderTests(orderTests);
     const verifiedTests = reportableOrderTests.filter(
@@ -576,7 +584,7 @@ export class ReportsService implements OnModuleDestroy {
       if (order.patient.dateOfBirth) {
         const age = Math.floor(
           (Date.now() - new Date(order.patient.dateOfBirth).getTime()) /
-            (365.25 * 24 * 60 * 60 * 1000),
+          (365.25 * 24 * 60 * 60 * 1000),
         );
         doc.text(`Age: ${age} years`, { align: 'left' });
       }
@@ -698,8 +706,8 @@ export class ReportsService implements OnModuleDestroy {
       verifierIds.length === 0
         ? []
         : await this.userRepo.find({
-            where: verifierIds.map((id) => ({ id })),
-          });
+          where: verifierIds.map((id) => ({ id })),
+        });
     const verifierNameMap = new Map(
       verifiers.map((u) => [u.id, u.fullName || u.username || u.id.substring(0, 8)]),
     );

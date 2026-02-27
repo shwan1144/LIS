@@ -25,6 +25,8 @@ import {
   ExperimentOutlined,
   DatabaseOutlined,
   ApiOutlined,
+  ArrowUpOutlined,
+  ArrowDownOutlined,
 } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import {
@@ -91,6 +93,96 @@ const RESULT_FLAG_OPTIONS: { label: string; value: NonNullable<TestResultTextOpt
   { label: 'Negative (NEG)', value: 'NEG' },
   { label: 'Abnormal (ABN)', value: 'ABN' },
 ];
+
+/** Sortable subtest list for panel editor — proper component so hooks work correctly */
+function SortableSubtestList({
+  value,
+  onChange,
+  options,
+  excludeId,
+}: {
+  value?: string[];
+  onChange?: (v: string[]) => void;
+  options: { label: string; value: string }[];
+  excludeId?: string | null;
+}) {
+  const ids = value ?? [];
+  const [addId, setAddId] = useState<string | null>(null);
+
+  const availableToAdd = options.filter(
+    (opt) => opt.value !== excludeId && !ids.includes(opt.value),
+  );
+
+  const move = (index: number, dir: -1 | 1) => {
+    const next = [...ids];
+    const target = index + dir;
+    if (target < 0 || target >= next.length) return;
+    [next[index], next[target]] = [next[target], next[index]];
+    onChange?.(next);
+  };
+
+  const remove = (id: string) => onChange?.(ids.filter((i) => i !== id));
+
+  const add = () => {
+    if (!addId) return;
+    onChange?.([...ids, addId]);
+    setAddId(null);
+  };
+
+  return (
+    <>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+        <Select
+          style={{ flex: 1 }}
+          placeholder="Search and add a subtest..."
+          showSearch
+          allowClear
+          optionFilterProp="label"
+          value={addId}
+          onChange={(v) => setAddId(v ?? null)}
+          options={availableToAdd}
+        />
+        <Button
+          type="dashed"
+          icon={<PlusOutlined />}
+          disabled={!addId}
+          onClick={add}
+        >
+          Add
+        </Button>
+      </div>
+
+      {ids.length === 0 ? (
+        <div style={{ color: '#aaa', fontSize: 12, padding: '6px 0' }}>No subtests added yet.</div>
+      ) : (
+        <div style={{ border: '1px solid var(--ant-color-border, #d9d9d9)', borderRadius: 6, overflow: 'hidden' }}>
+          {ids.map((id, idx) => {
+            const opt = options.find((o) => o.value === id);
+            return (
+              <div
+                key={id}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  padding: '5px 10px',
+                  background: idx % 2 === 0 ? 'var(--ant-color-fill-quaternary, #fafafa)' : 'transparent',
+                  borderTop: idx > 0 ? '1px solid var(--ant-color-border-secondary, #f0f0f0)' : undefined,
+                }}
+              >
+                <span style={{ color: '#999', minWidth: 22, fontSize: 11, fontVariantNumeric: 'tabular-nums' }}>{idx + 1}.</span>
+                <span style={{ flex: 1, fontSize: 13 }}>{opt?.label ?? id}</span>
+                <Button size="small" type="text" icon={<ArrowUpOutlined />} disabled={idx === 0} onClick={() => move(idx, -1)} />
+                <Button size="small" type="text" icon={<ArrowDownOutlined />} disabled={idx === ids.length - 1} onClick={() => move(idx, 1)} />
+                <Button size="small" type="text" danger onClick={() => remove(id)}>✕</Button>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </>
+  );
+}
 
 export function TestsPage() {
   const { isDark } = useTheme();
@@ -1254,19 +1346,16 @@ export function TestsPage() {
                       />
                     </Form.Item>
                   </div>
-                  
+
                   <Form.Item
                     name="panelComponentTestIds"
                     label="Panel subtests"
                     style={{ marginBottom: 12 }}
-                    extra="Choose the child tests included in this panel (for example CBC and GUE analytes)."
+                    extra="Use ↑ ↓ to reorder. The order here is the order in the worklist and report."
                   >
-                    <Select
-                      mode="multiple"
-                      placeholder="Select subtests"
-                      showSearch
-                      optionFilterProp="label"
-                      options={panelComponentOptions.filter((option) => option.value !== editingTest?.id)}
+                    <SortableSubtestList
+                      options={panelComponentOptions}
+                      excludeId={editingTest?.id}
                     />
                   </Form.Item>
                   <Form.Item name="description" label="Description" style={{ marginBottom: 0 }}>
