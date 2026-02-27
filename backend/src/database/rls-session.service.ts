@@ -9,9 +9,7 @@ type QueryExecutor = (query: string, parameters?: unknown[]) => Promise<unknown>
 export class RlsSessionService {
   private readonly logger = new Logger(RlsSessionService.name);
   private readonly strictRlsMode = isRlsStrictModeEnabled();
-  private readonly warnedMissingRoles = new Set<string>();
-  private readonly warnedMembershipRoles = new Set<string>();
-  private readonly warnedMissingRolePrivileges = new Set<string>();
+  private readonly warnedSetRoleFailures = new Set<string>();
   private readonly warnedResetFailures = new Set<string>();
 
   constructor(private readonly dataSource: DataSource) {}
@@ -24,21 +22,29 @@ export class RlsSessionService {
     this.markRunnerSkipAutoContext(runner);
     await runner.connect();
     await runner.startTransaction();
+    const executeQuery = runner.query.bind(runner) as QueryExecutor;
+    let pendingError: unknown = null;
 
     try {
       await this.applyRequestContextWithExecutor(
-        runner.query.bind(runner) as QueryExecutor,
+        executeQuery,
         { scope: 'lab', labId },
-        { local: true },
       );
       const result = await execute(runner.manager);
       await runner.commitTransaction();
       return result;
     } catch (error) {
-      await runner.rollbackTransaction();
+      pendingError = error;
       throw error;
     } finally {
-      await runner.release();
+      pendingError = await this.resetThenFinalizeRunner(
+        runner,
+        executeQuery,
+        pendingError,
+      );
+      if (pendingError) {
+        throw pendingError;
+      }
     }
   }
 
@@ -49,34 +55,40 @@ export class RlsSessionService {
     this.markRunnerSkipAutoContext(runner);
     await runner.connect();
     await runner.startTransaction();
+    const executeQuery = runner.query.bind(runner) as QueryExecutor;
+    let pendingError: unknown = null;
 
     try {
       await this.applyRequestContextWithExecutor(
-        runner.query.bind(runner) as QueryExecutor,
+        executeQuery,
         { scope: 'admin', labId: null },
-        { local: true },
       );
       const result = await execute(runner.manager);
       await runner.commitTransaction();
       return result;
     } catch (error) {
-      await runner.rollbackTransaction();
+      pendingError = error;
       throw error;
     } finally {
-      await runner.release();
+      pendingError = await this.resetThenFinalizeRunner(
+        runner,
+        executeQuery,
+        pendingError,
+      );
+      if (pendingError) {
+        throw pendingError;
+      }
     }
   }
 
   async applyRequestContextWithExecutor(
     executeQuery: QueryExecutor,
     context: RequestRlsContext,
-    options: { local?: boolean } = {},
   ): Promise<boolean> {
     if (context.scope === 'none') {
       return false;
     }
 
-    const useLocal = options.local === true;
     if (context.scope === 'lab') {
       if (!context.labId) {
         if (this.strictRlsMode) {
@@ -84,19 +96,18 @@ export class RlsSessionService {
         }
         return false;
       }
-      await executeQuery(`SELECT set_config('app.current_lab_id', $1, $2)`, [context.labId, useLocal]);
-      await this.trySetRole(executeQuery, 'app_lab_user', useLocal);
+      await executeQuery(`SELECT set_config('app.current_lab_id', $1, true)`, [context.labId]);
+      await this.trySetRole(executeQuery, 'app_lab_user');
       return true;
     }
 
-    await executeQuery(`SELECT set_config('app.current_lab_id', $1, $2)`, ['', useLocal]);
-    await this.trySetRole(executeQuery, 'app_platform_admin', useLocal);
+    await executeQuery(`SELECT set_config('app.current_lab_id', $1, true)`, ['']);
+    await this.trySetRole(executeQuery, 'app_platform_admin');
     return true;
   }
 
   async resetRequestContextWithExecutor(executeQuery: QueryExecutor): Promise<void> {
     try {
-      await executeQuery(`SELECT set_config('app.current_lab_id', $1, false)`, ['']);
       await executeQuery('RESET ROLE');
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -122,84 +133,25 @@ export class RlsSessionService {
   private async trySetRole(
     executeQuery: QueryExecutor,
     role: string,
-    useLocal: boolean,
   ): Promise<void> {
     const safeRole = role.trim();
     if (!/^[a-z_][a-z0-9_]*$/i.test(safeRole)) {
       this.failOrWarn(
         `Invalid role identifier for RLS context: ${role}`,
-        this.warnedMissingRoles,
+        this.warnedSetRoleFailures,
       );
       return;
-    }
-
-    const status = await executeQuery(
-      `
-      SELECT
-        EXISTS(SELECT 1 FROM pg_roles WHERE rolname = $1) AS "roleExists",
-        CASE
-          WHEN EXISTS(SELECT 1 FROM pg_roles WHERE rolname = $1)
-            THEN pg_has_role(current_user, $1, 'MEMBER')
-          ELSE false
-        END AS "canSetRole"
-      `,
-      [safeRole],
-    ) as Array<{ roleExists: boolean | string; canSetRole: boolean | string }>;
-
-    const roleExists = this.toBoolean(status?.[0]?.roleExists);
-    const canSetRole = this.toBoolean(status?.[0]?.canSetRole);
-
-    if (!roleExists) {
-      this.failOrWarn(
-        `Skipped SET ROLE ${safeRole}: role does not exist.`,
-        this.warnedMissingRoles,
-      );
-      return;
-    }
-
-    if (!canSetRole) {
-      this.failOrWarn(
-        `Skipped SET ROLE ${safeRole}: current DB user is not a member.`,
-        this.warnedMembershipRoles,
-      );
-      return;
-    }
-
-    if (safeRole === 'app_platform_admin') {
-      const hasPrivilegeRows = await executeQuery(
-        `
-        SELECT
-          CASE
-            WHEN to_regclass('public.labs') IS NULL THEN true
-            ELSE has_table_privilege($1, 'public.labs', 'SELECT')
-          END AS "hasLabsSelect"
-        `,
-        [safeRole],
-      ) as Array<{ hasLabsSelect: boolean | string }>;
-
-      const hasLabsSelect = this.toBoolean(hasPrivilegeRows?.[0]?.hasLabsSelect);
-      if (!hasLabsSelect) {
-        this.failOrWarn(
-          `Skipped SET ROLE ${safeRole}: role lacks SELECT privilege on public.labs.`,
-          this.warnedMissingRolePrivileges,
-        );
-        return;
-      }
     }
 
     try {
-      await executeQuery(`${useLocal ? 'SET LOCAL ROLE' : 'SET ROLE'} ${safeRole}`);
+      await executeQuery(`SET ROLE ${safeRole}`);
     } catch (error) {
-      if (safeRole === 'app_platform_admin') {
-        const message = error instanceof Error ? error.message : String(error);
-        this.failOrWarn(
-          `Skipped SET ROLE ${safeRole}: ${message}`,
-          this.warnedMissingRolePrivileges,
-          `${safeRole}:set-role:${message}`,
-        );
-        return;
-      }
-      throw error;
+      const message = error instanceof Error ? error.message : String(error);
+      this.failOrWarn(
+        `Skipped SET ROLE ${safeRole}: ${message}`,
+        this.warnedSetRoleFailures,
+        `${safeRole}:set-role:${message}`,
+      );
     }
   }
 
@@ -215,17 +167,39 @@ export class RlsSessionService {
     }
   }
 
-  private toBoolean(value: unknown): boolean {
-    if (typeof value === 'boolean') {
-      return value;
+  private async resetThenFinalizeRunner(
+    runner: QueryRunner,
+    executeQuery: QueryExecutor,
+    pendingError: unknown,
+  ): Promise<unknown> {
+    let error = pendingError;
+
+    try {
+      await this.resetRequestContextWithExecutor(executeQuery);
+    } catch (resetError) {
+      if (!error) {
+        error = resetError;
+      }
     }
-    if (typeof value === 'string') {
-      const normalized = value.trim().toLowerCase();
-      return normalized === 'true' || normalized === 't' || normalized === '1';
+
+    try {
+      if (runner.isTransactionActive) {
+        await runner.rollbackTransaction();
+      }
+    } catch (rollbackError) {
+      if (!error) {
+        error = rollbackError;
+      }
     }
-    if (typeof value === 'number') {
-      return value === 1;
+
+    try {
+      await runner.release();
+    } catch (releaseError) {
+      if (!error) {
+        error = releaseError;
+      }
     }
-    return false;
+
+    return error;
   }
 }

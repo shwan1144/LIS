@@ -57,14 +57,21 @@ export class RlsQueryRunnerEnforcerService implements OnModuleInit {
       originalQuery(query, parameters as any[] | undefined);
 
     let contextPrepared = false;
-    let shouldResetContext = false;
+    let shouldResetRole = false;
+    let ownsAutoTransaction = false;
+    let queryFailed = false;
 
-    const ensureContext = async (): Promise<void> => {
+    const ensureContext = async (query: string): Promise<void> => {
       if (contextPrepared) {
         return;
       }
+      if (this.isTransactionControlStatement(query)) {
+        return;
+      }
       contextPrepared = true;
-      shouldResetContext = await this.applyAutomaticRequestContext(runner, rawExecutor);
+      const applyResult = await this.applyAutomaticRequestContext(runner, rawExecutor);
+      shouldResetRole = applyResult.shouldResetRole;
+      ownsAutoTransaction = applyResult.ownsAutoTransaction;
     };
 
     const patchedQuery = (async (
@@ -72,21 +79,57 @@ export class RlsQueryRunnerEnforcerService implements OnModuleInit {
       parameters?: any[],
       useStructuredResult?: true,
     ): Promise<unknown> => {
-      await ensureContext();
-      if (useStructuredResult === true) {
-        return originalQuery(query, parameters, true);
+      try {
+        await ensureContext(query);
+        if (useStructuredResult === true) {
+          return await originalQuery(query, parameters, true);
+        }
+        return await originalQuery(query, parameters);
+      } catch (error) {
+        queryFailed = true;
+        throw error;
       }
-      return originalQuery(query, parameters);
     }) as QueryRunner['query'];
     runner.query = patchedQuery;
 
     runner.release = async (): Promise<void> => {
+      let pendingError: unknown = null;
       try {
-        if (shouldResetContext) {
+        if (shouldResetRole) {
           await this.rlsSessionService.resetRequestContextWithExecutor(rawExecutor);
+        }
+      } catch (error) {
+        pendingError = error;
+      }
+
+      try {
+        if (ownsAutoTransaction && runner.isTransactionActive) {
+          if (queryFailed) {
+            await runner.rollbackTransaction();
+          } else {
+            await runner.commitTransaction();
+          }
+        }
+      } catch (error) {
+        if (!pendingError) {
+          pendingError = error;
+        }
+      }
+
+      try {
+        if (runner.isTransactionActive) {
+          await runner.rollbackTransaction();
+        }
+      } catch (error) {
+        if (!pendingError) {
+          pendingError = error;
         }
       } finally {
         await originalRelease();
+      }
+
+      if (pendingError) {
+        throw pendingError;
       }
     };
   }
@@ -94,15 +137,15 @@ export class RlsQueryRunnerEnforcerService implements OnModuleInit {
   private async applyAutomaticRequestContext(
     runner: QueryRunner,
     executeQuery: (query: string, parameters?: unknown[]) => Promise<unknown>,
-  ): Promise<boolean> {
+  ): Promise<{ shouldResetRole: boolean; ownsAutoTransaction: boolean }> {
     const runnerData = (runner as QueryRunner & { data?: Record<string, unknown> }).data ?? {};
     if (runnerData.skipAutomaticRlsContext === true) {
-      return false;
+      return { shouldResetRole: false, ownsAutoTransaction: false };
     }
 
     const context = this.requestRlsContextService.getContext();
     if (context.scope === 'none') {
-      return false;
+      return { shouldResetRole: false, ownsAutoTransaction: false };
     }
     if (context.scope === 'lab' && !context.labId) {
       const message = 'Skipped automatic lab RLS context: lab scope is missing labId.';
@@ -110,12 +153,46 @@ export class RlsQueryRunnerEnforcerService implements OnModuleInit {
         throw new Error(`[SECURITY][RLS] ${message}`);
       }
       this.logger.warn(message);
+      return { shouldResetRole: false, ownsAutoTransaction: false };
+    }
+
+    let ownsAutoTransaction = false;
+    if (!runner.isTransactionActive) {
+      await runner.startTransaction();
+      ownsAutoTransaction = true;
+    }
+
+    await this.rlsSessionService.applyRequestContextWithExecutor(executeQuery, context);
+    return { shouldResetRole: true, ownsAutoTransaction };
+  }
+
+  private isTransactionControlStatement(query: string): boolean {
+    const normalized = this.normalizeSql(query);
+    if (!normalized) {
       return false;
     }
 
-    await this.rlsSessionService.applyRequestContextWithExecutor(executeQuery, context, {
-      local: false,
-    });
-    return true;
+    return (
+      normalized === 'BEGIN'
+      || normalized.startsWith('BEGIN ')
+      || normalized.startsWith('START TRANSACTION')
+      || normalized === 'COMMIT'
+      || normalized.startsWith('COMMIT ')
+      || normalized === 'ROLLBACK'
+      || normalized.startsWith('ROLLBACK ')
+      || normalized.startsWith('SAVEPOINT ')
+      || normalized.startsWith('RELEASE SAVEPOINT')
+      || normalized.startsWith('ROLLBACK TO SAVEPOINT')
+      || normalized.startsWith('SET TRANSACTION')
+      || normalized.startsWith('SET SESSION CHARACTERISTICS AS TRANSACTION')
+    );
+  }
+
+  private normalizeSql(query: string): string {
+    const stripped = query.replace(
+      /^\s*(?:(?:--[^\n]*\n)\s*|(?:\/\*[\s\S]*?\*\/)\s*)*/,
+      '',
+    );
+    return stripped.trim().replace(/\s+/g, ' ').toUpperCase();
   }
 }

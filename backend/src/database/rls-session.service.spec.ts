@@ -18,22 +18,15 @@ describe('RlsSessionService strict mode', () => {
   }
 
   function createExecutor(options: {
-    roleExists?: boolean;
-    canSetRole?: boolean;
-    hasLabsSelect?: boolean;
+    throwOnSetRole?: boolean;
     throwOnReset?: boolean;
   } = {}): jest.Mock<Promise<unknown>, [string, unknown[]?]> {
-    const roleExists = options.roleExists ?? true;
-    const canSetRole = options.canSetRole ?? true;
-    const hasLabsSelect = options.hasLabsSelect ?? true;
+    const throwOnSetRole = options.throwOnSetRole ?? false;
     const throwOnReset = options.throwOnReset ?? false;
 
     return jest.fn(async (query: string) => {
-      if (query.includes('EXISTS(SELECT 1 FROM pg_roles')) {
-        return [{ roleExists, canSetRole }];
-      }
-      if (query.includes('has_table_privilege')) {
-        return [{ hasLabsSelect }];
+      if (throwOnSetRole && query.includes('SET ROLE')) {
+        throw new Error('set role failed');
       }
       if (throwOnReset && query.includes('RESET ROLE')) {
         throw new Error('reset failed');
@@ -42,18 +35,18 @@ describe('RlsSessionService strict mode', () => {
     });
   }
 
-  it('throws in strict mode when role is missing', async () => {
+  it('throws in strict mode when SET ROLE fails', async () => {
     const service = createService(true);
-    const executeQuery = createExecutor({ roleExists: false, canSetRole: false });
+    const executeQuery = createExecutor({ throwOnSetRole: true });
 
     await expect(
       service.applyRequestContextWithExecutor(executeQuery, { scope: 'lab', labId: 'lab-1' }),
-    ).rejects.toThrow('[SECURITY][RLS] Skipped SET ROLE app_lab_user: role does not exist.');
+    ).rejects.toThrow('[SECURITY][RLS] Skipped SET ROLE app_lab_user: set role failed');
   });
 
-  it('does not throw in non-strict mode when role is missing', async () => {
+  it('does not throw in non-strict mode when SET ROLE fails', async () => {
     const service = createService(false);
-    const executeQuery = createExecutor({ roleExists: false, canSetRole: false });
+    const executeQuery = createExecutor({ throwOnSetRole: true });
 
     await expect(
       service.applyRequestContextWithExecutor(executeQuery, { scope: 'lab', labId: 'lab-1' }),
@@ -76,5 +69,29 @@ describe('RlsSessionService strict mode', () => {
     await expect(service.resetRequestContextWithExecutor(executeQuery)).rejects.toThrow(
       '[SECURITY][RLS] Failed to reset DB request context: reset failed',
     );
+  });
+
+  it('uses transaction-local lab context and avoids metadata checks', async () => {
+    const service = createService(true);
+    const executeQuery = createExecutor();
+
+    await service.applyRequestContextWithExecutor(executeQuery, { scope: 'lab', labId: 'lab-1' });
+
+    const calls = executeQuery.mock.calls.map(([query]) => query.trim());
+    expect(calls).toContain(`SELECT set_config('app.current_lab_id', $1, true)`);
+    expect(calls).toContain('SET ROLE app_lab_user');
+    expect(calls.some((query) => query.includes('pg_roles'))).toBe(false);
+    expect(calls.some((query) => query.includes('pg_has_role'))).toBe(false);
+    expect(calls.some((query) => query.includes('has_table_privilege'))).toBe(false);
+  });
+
+  it('reset helper only resets role', async () => {
+    const service = createService(true);
+    const executeQuery = createExecutor();
+
+    await service.resetRequestContextWithExecutor(executeQuery);
+
+    const calls = executeQuery.mock.calls.map(([query]) => query.trim());
+    expect(calls).toEqual(['RESET ROLE']);
   });
 });
