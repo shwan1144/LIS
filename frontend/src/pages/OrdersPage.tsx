@@ -42,8 +42,8 @@ import {
   getNextOrderNumber,
   getOrderPriceEstimate,
   getLabSettings,
-  downloadOrderReceiptPDF,
   updateOrderPayment,
+  updateOrderDiscount,
   updateOrderTests,
   updateLabSettings,
   type CreateOrderDto,
@@ -62,6 +62,7 @@ import {
   directPrintReceipt,
   getDirectPrintErrorMessage,
 } from '../printing/direct-print';
+import './OrdersPage.css';
 
 const { Title, Text } = Typography;
 
@@ -157,13 +158,10 @@ export function OrdersPage() {
       border: isDark ? '1px solid rgba(255,255,255,0.12)' : '1px solid #f0f0f0',
       borderDark: isDark ? '1px solid rgba(255,255,255,0.12)' : '1px solid #d9d9d9',
       bgSubtle: isDark ? 'rgba(255,255,255,0.04)' : '#fafafa',
-      summaryCard: isDark
-        ? { backgroundColor: 'rgba(82, 196, 26, 0.15)', borderColor: 'rgba(82, 196, 26, 0.4)' }
-        : { backgroundColor: '#f6ffed', borderColor: '#b7eb8f' },
     }),
     [isDark]
   );
-  const orderHistoryGridTemplate = 'minmax(220px, 1.8fr) 108px 88px 84px 120px';
+  const orderHistoryGridTemplate = 'minmax(150px, 1.9fr) 88px 76px 74px 98px';
 
   const [patientList, setPatientList] = useState<OrderListRow[]>([]);
   const [selectedRowId, setSelectedRowId] = useState<string | null>(null);
@@ -198,9 +196,10 @@ export function OrdersPage() {
   const [printLabelSequenceBy, setPrintLabelSequenceBy] = useState<'tube_type' | 'department'>(
     lab?.labelSequenceBy ?? 'tube_type',
   );
-  const [downloadingPDF, setDownloadingPDF] = useState<string | null>(null);
+  const [printingAction, setPrintingAction] = useState<'receipt' | 'labels' | null>(null);
   const [nextOrderNumber, setNextOrderNumber] = useState<string | null>(null);
   const [updatingPayment, setUpdatingPayment] = useState(false);
+  const [updatingDiscount, setUpdatingDiscount] = useState(false);
   const [partialPaymentModalOpen, setPartialPaymentModalOpen] = useState(false);
   const [partialPaymentAmount, setPartialPaymentAmount] = useState<number>(0);
   const [editTestsModalOpen, setEditTestsModalOpen] = useState(false);
@@ -210,6 +209,8 @@ export function OrdersPage() {
   const [orderDetailsLoadingId, setOrderDetailsLoadingId] = useState<string | null>(null);
   const [orderDetailsErrors, setOrderDetailsErrors] = useState<Record<string, string>>({});
   const orderDetailsRequestVersionRef = useRef<Record<string, number>>({});
+  const discountSaveTimerRef = useRef<number | null>(null);
+  const discountSaveRequestVersionRef = useRef(0);
 
   const selectedRow = useMemo(
     () => patientList.find((r) => r.rowId === selectedRowId) ?? null,
@@ -226,6 +227,22 @@ export function OrdersPage() {
     selectedCreatedOrderSummary != null && orderDetailsLoadingId === selectedCreatedOrderSummary.id;
   const selectedOrderDetailsError =
     selectedCreatedOrderSummary != null ? orderDetailsErrors[selectedCreatedOrderSummary.id] ?? null : null;
+  const lockedOrderContextActive = isSelectedLocked && selectedCreatedOrderSummary != null;
+  const lockedOrderActionsReady = lockedOrderContextActive && selectedCreatedOrder != null;
+  const lockedOrderActionsBusy =
+    submitting ||
+    updatingPayment ||
+    updatingDiscount ||
+    savingEditedTests ||
+    printingAction !== null;
+  const lockedOrderActionsDisabled = lockedOrderActionsBusy || !lockedOrderActionsReady;
+  const lockedOrderActionDisabledTitle = lockedOrderActionsBusy
+    ? 'Please wait until the current action finishes.'
+    : !lockedOrderContextActive
+      ? 'Select a locked order to use these actions.'
+      : !selectedCreatedOrder
+        ? 'Order details are still loading.'
+        : undefined;
 
   const loadOrderHistory = useCallback(
     async (options?: {
@@ -606,6 +623,24 @@ export function OrdersPage() {
     selectedOrderDetailsLoading,
   ]);
 
+  useEffect(() => {
+    if (!isSelectedLocked || !selectedCreatedOrder) return;
+    const normalizedDiscount = Math.min(
+      100,
+      Math.max(0, Number(selectedCreatedOrder.discountPercent ?? 0)),
+    );
+    setDiscountPercent((current) =>
+      Math.abs(current - normalizedDiscount) < 0.001 ? current : normalizedDiscount,
+    );
+  }, [isSelectedLocked, selectedCreatedOrder]);
+
+  useEffect(() => () => {
+    if (discountSaveTimerRef.current !== null) {
+      window.clearTimeout(discountSaveTimerRef.current);
+      discountSaveTimerRef.current = null;
+    }
+  }, []);
+
   const openEditTestsModal = () => {
     if (!selectedCreatedOrder) return;
     const currentRootTests = getRootOrderTests(selectedCreatedOrder);
@@ -741,7 +776,6 @@ export function OrdersPage() {
 
       setDraftPatient(null);
       setSelectedTests([]);
-      setDiscountPercent(0);
       setListPage(1);
       void loadOrderHistory({
         focusOrderId: createdOrder.id,
@@ -793,53 +827,185 @@ export function OrdersPage() {
   };
 
   const openPrint = async (order: OrderDto, type: 'receipt' | 'labels') => {
+    if (lockedOrderActionsBusy) return;
+    setPrintingAction(type);
     try {
-      const settings = await getLabSettings();
-      const nextLabelSequenceBy = settings.labelSequenceBy ?? 'tube_type';
-      setPrintLabelSequenceBy(nextLabelSequenceBy);
-      const printing = settings.printing;
-      const printerName =
-        type === 'receipt'
-          ? printing?.receiptPrinterName?.trim()
-          : printing?.labelsPrinterName?.trim();
-      if (printing?.mode === 'direct_qz' && printerName) {
-        try {
-          if (type === 'receipt') {
-            await directPrintReceipt({
-              order,
-              labName: lab?.name,
-              printerName,
-            });
-          } else {
-            await directPrintLabels({
-              order,
-              printerName,
-              labelSequenceBy: nextLabelSequenceBy,
-              departments,
-            });
+      try {
+        const settings = await getLabSettings();
+        const nextLabelSequenceBy = settings.labelSequenceBy ?? 'tube_type';
+        setPrintLabelSequenceBy(nextLabelSequenceBy);
+        const printing = settings.printing;
+        const printerName =
+          type === 'receipt'
+            ? printing?.receiptPrinterName?.trim()
+            : printing?.labelsPrinterName?.trim();
+        if (printing?.mode === 'direct_qz' && printerName) {
+          try {
+            if (type === 'receipt') {
+              await directPrintReceipt({
+                order,
+                labName: lab?.name,
+                printerName,
+              });
+            } else {
+              await directPrintLabels({
+                order,
+                printerName,
+                labelSequenceBy: nextLabelSequenceBy,
+                departments,
+              });
+            }
+            message.success(`${type === 'receipt' ? 'Receipt' : 'Labels'} sent to ${printerName}`);
+            return;
+          } catch (error) {
+            message.warning(`${getDirectPrintErrorMessage(error)} Falling back to print preview.`);
           }
-          message.success(`${type === 'receipt' ? 'Receipt' : 'Labels'} sent to ${printerName}`);
-          return;
-        } catch (error) {
-          message.warning(`${getDirectPrintErrorMessage(error)} Falling back to print preview.`);
         }
+      } catch {
+        // if settings fail, continue with fallback preview
       }
-    } catch {
-      // if settings fail, continue with fallback preview
-    }
 
-    setPrintType(type);
-    setPrintOrder(order);
-    setPrintModalOpen(true);
+      setPrintType(type);
+      setPrintOrder(order);
+      setPrintModalOpen(true);
+    } finally {
+      setPrintingAction((current) => (current === type ? null : current));
+    }
   };
 
   const openNewPatientInPatientsTab = () => {
     navigate('/patients', { state: { openNewPatient: true } });
   };
 
+  const handleLockedEditTests = () => {
+    if (lockedOrderActionsDisabled || !selectedCreatedOrder) return;
+    openEditTestsModal();
+  };
+
+  const handleLockedPrint = (type: 'receipt' | 'labels') => {
+    if (lockedOrderActionsDisabled || !selectedCreatedOrder) return;
+    void openPrint(selectedCreatedOrder, type);
+  };
+
+  const handleLockedMarkPaid = async () => {
+    if (lockedOrderActionsDisabled || !selectedCreatedOrderSummary) return;
+    setUpdatingPayment(true);
+    try {
+      const updated = await updateOrderPayment(selectedCreatedOrderSummary.id, {
+        paymentStatus: 'paid',
+      });
+      message.success('Marked as paid');
+      applyUpdatedOrderToList(updated);
+    } catch {
+      message.error('Failed to update payment');
+    } finally {
+      setUpdatingPayment(false);
+    }
+  };
+
+  const handleLockedMarkUnpaid = async () => {
+    if (lockedOrderActionsDisabled || !selectedCreatedOrderSummary) return;
+    setUpdatingPayment(true);
+    try {
+      const updated = await updateOrderPayment(selectedCreatedOrderSummary.id, {
+        paymentStatus: 'unpaid',
+        paidAmount: 0,
+      });
+      message.success('Marked as unpaid');
+      applyUpdatedOrderToList(updated);
+    } catch {
+      message.error('Failed to update payment');
+    } finally {
+      setUpdatingPayment(false);
+    }
+  };
+
+  const handleLockedOpenPartialPayment = () => {
+    if (lockedOrderActionsDisabled || !selectedCreatedOrderSummary) return;
+    setPartialPaymentAmount(
+      selectedCreatedOrderSummary?.paidAmount != null ? Number(selectedCreatedOrderSummary.paidAmount) : 0,
+    );
+    setPartialPaymentModalOpen(true);
+  };
+
+  const handleLockedStartNewOrder = () => {
+    if (lockedOrderActionsDisabled || !selectedCreatedOrderSummary || !selectedPatient) return;
+    addNewOrderForPatient(selectedCreatedOrderSummary.patient ?? selectedPatient);
+  };
+
+  const handleSummaryDiscountChange = (value: number | null) => {
+    const normalized = Math.min(100, Math.max(0, Number(value ?? 0)));
+    setDiscountPercent(normalized);
+    if (!isSelectedLocked || !selectedCreatedOrderSummary || !selectedCreatedOrder) return;
+
+    const serverDiscount = Math.min(100, Math.max(0, Number(selectedCreatedOrder.discountPercent ?? 0)));
+    if (Math.abs(serverDiscount - normalized) < 0.001) return;
+
+    if (discountSaveTimerRef.current !== null) {
+      window.clearTimeout(discountSaveTimerRef.current);
+    }
+    discountSaveTimerRef.current = window.setTimeout(() => {
+      discountSaveTimerRef.current = null;
+      void handleSummaryDiscountCommit(normalized);
+    }, 500);
+  };
+
+  const handleSummaryDiscountCommit = async (nextDiscount?: number) => {
+    if (!isSelectedLocked || !selectedCreatedOrderSummary || !selectedCreatedOrder) return;
+    const normalized = Math.round(Math.min(100, Math.max(0, nextDiscount ?? discountPercent)) * 100) / 100;
+    const serverDiscount = Math.min(100, Math.max(0, Number(selectedCreatedOrder.discountPercent ?? 0)));
+    if (Math.abs(serverDiscount - normalized) < 0.001) return;
+
+    if (discountSaveTimerRef.current !== null) {
+      window.clearTimeout(discountSaveTimerRef.current);
+      discountSaveTimerRef.current = null;
+    }
+    const requestVersion = ++discountSaveRequestVersionRef.current;
+    setUpdatingDiscount(true);
+    try {
+      const updated = await updateOrderDiscount(selectedCreatedOrderSummary.id, {
+        discountPercent: normalized,
+      });
+      if (requestVersion !== discountSaveRequestVersionRef.current) {
+        return;
+      }
+      applyUpdatedOrderToList(updated);
+      setOrderDetailsCache((prev) => ({ ...prev, [updated.id]: updated }));
+    } catch {
+      if (requestVersion !== discountSaveRequestVersionRef.current) {
+        return;
+      }
+      setDiscountPercent(serverDiscount);
+      message.error('Failed to update discount');
+    } finally {
+      if (requestVersion === discountSaveRequestVersionRef.current) {
+        setUpdatingDiscount(false);
+      }
+    }
+  };
+
   const totalTests = selectedTests.length;
   const totalAfterDiscount = Math.round(subtotal * (1 - discountPercent / 100) * 100) / 100;
   const totalPages = Math.max(1, Math.ceil(listTotal / ORDER_PAGE_SIZE));
+  const lockedOrderTestsCount = Number(
+    selectedCreatedOrderSummary?.testsCount ??
+    (selectedCreatedOrder ? getRootOrderTests(selectedCreatedOrder).length : 0),
+  );
+  const lockedOrderSubtotal = Number(
+    selectedCreatedOrder?.totalAmount ??
+    selectedCreatedOrderSummary?.finalAmount ??
+    0,
+  );
+  const summaryTestsCount = isSelectedLocked ? lockedOrderTestsCount : totalTests;
+  const summarySubtotal = isSelectedLocked
+    ? lockedOrderSubtotal
+    : subtotal;
+  const summaryTotalAmount = Math.round(summarySubtotal * (1 - discountPercent / 100) * 100) / 100;
+  const createOrderDisabledReason = isSelectedLocked
+    ? 'Create order is only available while preparing a new order.'
+    : selectedTests.length === 0
+      ? 'Select at least one test to create the order.'
+      : undefined;
 
   const handleApplyHistorySearch = () => {
     const nextQuery = listQueryInput.trim();
@@ -856,6 +1022,185 @@ export function OrdersPage() {
   const handleRefreshHistory = () => {
     void loadOrderHistory({ mode: 'soft' });
   };
+
+  const orderSummaryBar = selectedPatient ? (
+    <Card
+      className={`order-summary-bar${isDark ? ' order-summary-bar-dark' : ''}`}
+      bodyStyle={{ padding: 10 }}
+    >
+      <div className="order-summary-grid">
+        <div className="order-summary-item">
+          <Text type="secondary">Tests</Text>
+          <Text strong>{summaryTestsCount}</Text>
+        </div>
+        <div className="order-summary-item">
+          <Text type="secondary">Subtotal</Text>
+          <Text strong>{loadingPrice && !isSelectedLocked ? '...' : `${summarySubtotal.toFixed(0)} IQD`}</Text>
+        </div>
+        <div className="order-summary-item order-summary-discount">
+          <Text type="secondary">{updatingDiscount ? 'Discount (saving...)' : 'Discount'}</Text>
+          <Space.Compact>
+            <InputNumber
+              min={0}
+              max={100}
+              value={discountPercent}
+              onChange={handleSummaryDiscountChange}
+              onBlur={() => void handleSummaryDiscountCommit()}
+              disabled={submitting || updatingDiscount || (isSelectedLocked && !selectedCreatedOrder)}
+              style={{ width: 70 }}
+            />
+            <span className="order-summary-suffix">%</span>
+          </Space.Compact>
+        </div>
+        <div className="order-summary-item order-summary-total">
+          <Text type="secondary">Total</Text>
+          <Text strong>{loadingPrice && !isSelectedLocked ? '...' : `${summaryTotalAmount.toFixed(0)} IQD`}</Text>
+        </div>
+        <div className="order-summary-action">
+          <Button
+            type="primary"
+            size="large"
+            icon={<ShoppingCartOutlined />}
+            onClick={handleSubmit}
+            loading={submitting}
+            disabled={isSelectedLocked || selectedTests.length === 0}
+            title={createOrderDisabledReason}
+          >
+            Create order
+          </Button>
+        </div>
+      </div>
+    </Card>
+  ) : null;
+
+  const currentPaymentStatus = selectedCreatedOrderSummary?.paymentStatus ?? 'unpaid';
+  const lockedOrderActionBar = selectedPatient ? (
+    <div
+      className={`locked-order-action-bar${isDark ? ' locked-order-action-bar-dark' : ''}${lockedOrderContextActive ? '' : ' locked-order-action-bar-inactive'}`}
+    >
+      <div className="locked-order-action-row">
+        <Button
+          type="primary"
+          icon={<PlusOutlined />}
+          onClick={handleLockedStartNewOrder}
+          size="large"
+          disabled={lockedOrderActionsDisabled}
+          title={lockedOrderActionDisabledTitle}
+          className="locked-order-new-btn"
+        >
+          New order for this patient
+        </Button>
+        <Button
+          icon={<PlusOutlined />}
+          onClick={handleLockedEditTests}
+          size="large"
+          loading={savingEditedTests}
+          disabled={lockedOrderActionsDisabled}
+          title={lockedOrderActionDisabledTitle}
+        >
+          Edit tests
+        </Button>
+        <Button
+          type="primary"
+          icon={<PrinterOutlined />}
+          onClick={() => handleLockedPrint('receipt')}
+          size="large"
+          loading={printingAction === 'receipt'}
+          disabled={lockedOrderActionsDisabled}
+          title={lockedOrderActionDisabledTitle}
+        >
+          Receipt
+        </Button>
+        <Button
+          icon={<PrinterOutlined />}
+          onClick={() => handleLockedPrint('labels')}
+          size="large"
+          loading={printingAction === 'labels'}
+          disabled={lockedOrderActionsDisabled}
+          title={lockedOrderActionDisabledTitle}
+        >
+          Labels
+        </Button>
+        {currentPaymentStatus === 'unpaid' && (
+          <>
+            <Button
+              type="primary"
+              loading={updatingPayment}
+              onClick={() => void handleLockedMarkPaid()}
+              size="large"
+              disabled={lockedOrderActionsDisabled}
+              title={lockedOrderActionDisabledTitle}
+            >
+              Mark as paid
+            </Button>
+            <Button
+              loading={updatingPayment}
+              onClick={handleLockedOpenPartialPayment}
+              size="large"
+              disabled={lockedOrderActionsDisabled}
+              title={lockedOrderActionDisabledTitle}
+            >
+              Partially paid
+            </Button>
+          </>
+        )}
+        {currentPaymentStatus === 'paid' && (
+          <Button
+            type="dashed"
+            size="large"
+            loading={updatingPayment}
+            style={{
+              borderColor: '#52c41a',
+              color: '#52c41a',
+              backgroundColor: 'rgba(82, 196, 26, 0.1)',
+            }}
+            onClick={() => void handleLockedMarkUnpaid()}
+            disabled={lockedOrderActionsDisabled}
+            title={lockedOrderActionDisabledTitle}
+          >
+            Paid (Click to Unpay)
+          </Button>
+        )}
+        {currentPaymentStatus === 'partial' && (
+          <>
+            <Button
+              type="primary"
+              loading={updatingPayment}
+              onClick={() => void handleLockedMarkPaid()}
+              size="large"
+              disabled={lockedOrderActionsDisabled}
+              title={lockedOrderActionDisabledTitle}
+            >
+              Mark as paid
+            </Button>
+            <Button
+              type="dashed"
+              size="large"
+              loading={updatingPayment}
+              style={{
+                borderColor: '#faad14',
+                color: '#faad14',
+                backgroundColor: 'rgba(250, 173, 20, 0.1)',
+              }}
+              onClick={handleLockedOpenPartialPayment}
+              disabled={lockedOrderActionsDisabled}
+              title={lockedOrderActionDisabledTitle}
+            >
+              Partially paid
+              {selectedCreatedOrderSummary?.paidAmount != null &&
+                ` (${selectedCreatedOrderSummary.paidAmount} / ${selectedCreatedOrderSummary.finalAmount})`}
+            </Button>
+          </>
+        )}
+      </div>
+    </div>
+  ) : null;
+  const orderBottomControls = selectedPatient ? (
+    <div className="order-bottom-stack">
+      {orderSummaryBar}
+      {lockedOrderActionBar}
+    </div>
+  ) : null;
 
   return (
     <div>
@@ -953,6 +1298,7 @@ export function OrdersPage() {
                       flex: 1,
                       minHeight: 0,
                       overflowY: 'auto',
+                      overflowX: 'hidden',
                     }}
                   >
                     <div
@@ -969,7 +1315,7 @@ export function OrdersPage() {
                             flex: 1,
                             display: 'grid',
                             gridTemplateColumns: orderHistoryGridTemplate,
-                            columnGap: 6,
+                            columnGap: 4,
                           }}
                         >
                           <Text type="secondary" style={{ fontSize: 11, fontWeight: 600 }}>Patient</Text>
@@ -1020,7 +1366,7 @@ export function OrdersPage() {
                                     display: 'grid',
                                     gridTemplateColumns: orderHistoryGridTemplate,
                                     alignItems: 'center',
-                                    columnGap: 6,
+                                    columnGap: 4,
                                   }}
                                 >
                                   <Text
@@ -1038,7 +1384,16 @@ export function OrdersPage() {
                                   {isLocked ? (
                                     <Tag
                                       color={ORDER_STATUS_TAG_COLORS[row.createdOrder?.status ?? 'REGISTERED']}
-                                      style={{ margin: 0, fontSize: 10, lineHeight: '14px', paddingInline: 4 }}
+                                      style={{
+                                        margin: 0,
+                                        fontSize: 10,
+                                        lineHeight: '14px',
+                                        paddingInline: 4,
+                                        maxWidth: '100%',
+                                        overflow: 'hidden',
+                                        textOverflow: 'ellipsis',
+                                        whiteSpace: 'nowrap',
+                                      }}
                                     >
                                       {row.createdOrder?.status ?? 'REGISTERED'}
                                     </Tag>
@@ -1046,13 +1401,31 @@ export function OrdersPage() {
                                     <Tag
                                       color="gold"
                                       icon={<PlusOutlined />}
-                                      style={{ margin: 0, fontSize: 10, lineHeight: '14px', paddingInline: 4 }}
+                                      style={{
+                                        margin: 0,
+                                        fontSize: 10,
+                                        lineHeight: '14px',
+                                        paddingInline: 4,
+                                        maxWidth: '100%',
+                                        overflow: 'hidden',
+                                        textOverflow: 'ellipsis',
+                                        whiteSpace: 'nowrap',
+                                      }}
                                     >
                                       New
                                     </Tag>
                                   )}
 
-                                  <Text type="secondary" style={{ fontSize: 10, lineHeight: '14px' }}>
+                                  <Text
+                                    type="secondary"
+                                    style={{
+                                      fontSize: 10,
+                                      lineHeight: '14px',
+                                      whiteSpace: 'nowrap',
+                                      overflow: 'hidden',
+                                      textOverflow: 'ellipsis',
+                                    }}
+                                  >
                                     {isLocked && row.createdOrder
                                       ? (row.createdOrder.orderNumber || row.createdOrder.id.substring(0, 8))
                                       : (nextOrderNumber ?? '-')}
@@ -1061,17 +1434,44 @@ export function OrdersPage() {
                                   {isLocked ? (
                                     <Tag
                                       color={shiftTagColor ?? 'default'}
-                                      style={{ margin: 0, fontSize: 10, lineHeight: '14px', paddingInline: 4 }}
+                                      style={{
+                                        margin: 0,
+                                        fontSize: 10,
+                                        lineHeight: '14px',
+                                        paddingInline: 4,
+                                        maxWidth: '100%',
+                                        overflow: 'hidden',
+                                        textOverflow: 'ellipsis',
+                                        whiteSpace: 'nowrap',
+                                      }}
                                     >
                                       {shiftLabel}
                                     </Tag>
                                   ) : (
-                                    <Text type="secondary" style={{ fontSize: 10, lineHeight: '14px' }}>
+                                    <Text
+                                      type="secondary"
+                                      style={{
+                                        fontSize: 10,
+                                        lineHeight: '14px',
+                                        whiteSpace: 'nowrap',
+                                        overflow: 'hidden',
+                                        textOverflow: 'ellipsis',
+                                      }}
+                                    >
                                       -
                                     </Text>
                                   )}
 
-                                  <Text type="secondary" style={{ fontSize: 10, lineHeight: '14px' }}>
+                                  <Text
+                                    type="secondary"
+                                    style={{
+                                      fontSize: 10,
+                                      lineHeight: '14px',
+                                      whiteSpace: 'nowrap',
+                                      overflow: 'hidden',
+                                      textOverflow: 'ellipsis',
+                                    }}
+                                  >
                                     {isLocked && row.createdOrder
                                       ? dayjs(row.createdOrder.registeredAt).format('YYYY-MM-DD HH:mm')
                                       : '-'}
@@ -1139,7 +1539,7 @@ export function OrdersPage() {
 
         {/* Right: Test selection or order success */}
         <Col xs={24} md={12} lg={14}>
-          <Card bodyStyle={{ height: 'calc(100vh - 200px)', overflowY: 'auto' }}>
+          <Card className="orders-right-card" bodyStyle={{ height: 'calc(100vh - 200px)', overflowY: 'auto' }}>
             {!selectedPatient ? (
               <Empty
                 image={Empty.PRESENTED_IMAGE_SIMPLE}
@@ -1147,291 +1547,105 @@ export function OrdersPage() {
                 style={{ padding: 60 }}
               />
             ) : isSelectedLocked && selectedCreatedOrderSummary ? (
-              <div>
-                <Result
-                  status="success"
-                  icon={<CheckCircleOutlined style={{ color: '#52c41a' }} />}
-                  title="Order details"
-                  subTitle={
-                    <Space direction="vertical" size={8} style={{ marginTop: 16, textAlign: 'left' }}>
-                      <div>
-                        <Text type="secondary">Patient: </Text>
-                        <Text strong style={{ fontSize: 16 }}>
-                          {getPatientName(selectedCreatedOrderSummary.patient ?? selectedPatient)}
+              <div className="locked-order-view">
+                <div className="locked-order-content">
+                  <Card size="small" className="locked-order-summary-card">
+                    <Space direction="vertical" size={8} style={{ width: '100%' }}>
+                      <Space size={10} align="center">
+                        <CheckCircleOutlined className="locked-order-summary-icon" />
+                        <Text strong className="locked-order-summary-title">
+                          Order details
                         </Text>
-                      </div>
-                      <div>
-                        <Text type="secondary">Order ID: </Text>
-                        <Text strong>
-                          {selectedCreatedOrderSummary.orderNumber || selectedCreatedOrderSummary.id}
-                        </Text>
-                      </div>
-                      <div>
-                        <Text type="secondary">Shift: </Text>
-                        <Tag
-                          color={getShiftTagColor(getShiftLabel(selectedCreatedOrderSummary))}
-                          style={{ margin: 0, fontSize: 12, lineHeight: '18px', paddingInline: 8 }}
-                        >
-                          {selectedCreatedOrderSummary.shift?.name ||
-                            selectedCreatedOrderSummary.shift?.code ||
-                            currentShiftLabel ||
-                            '-'}
-                        </Tag>
-                      </div>
-                      <div>
-                        <Text type="secondary">Time: </Text>
-                        <Text strong>
-                          {dayjs(selectedCreatedOrderSummary.registeredAt).format('YYYY-MM-DD HH:mm')}
-                        </Text>
-                      </div>
-                      <div>
-                        <Tag color="success" icon={<LockOutlined />}>
-                          Locked for delete - test list can still be edited
-                        </Tag>
-                      </div>
-                    </Space>
-                  }
-                />
-                {/* Read-only list of tests in this order */}
-                <Card type="inner" title="Tests in this order" style={{ marginTop: 16 }}>
-                  <Text type="secondary" style={{ display: 'block', marginBottom: 8 }}>
-                    You can update tests for this order without changing order number or existing label sequence numbers.
-                  </Text>
-                  {selectedOrderDetailsLoading ? (
-                    <Spin tip="Loading order details..." />
-                  ) : selectedCreatedOrder ? (() => {
-                    const orderTests = getRootOrderTests(selectedCreatedOrder);
-                    if (orderTests.length === 0) {
-                      return <Text type="secondary">No tests in this order.</Text>;
-                    }
-                    return (
-                      <div
-                        style={{
-                          border: styles.border,
-                          borderRadius: 8,
-                          padding: 12,
-                          backgroundColor: styles.bgSubtle,
-                        }}
-                      >
-                        <Space wrap size={[8, 8]}>
-                          {orderTests.map((ot) => (
-                            <Tag key={ot.testId} style={{ margin: 0 }}>
-                              {ot.testCode ?? ot.testName ?? '-'}
-                              {ot.testName && ot.testCode ? ` - ${ot.testName}` : ''}
-                            </Tag>
-                          ))}
-                        </Space>
-                      </div>
-                    );
-                  })() : selectedOrderDetailsError ? (
-                    <Result
-                      status="warning"
-                      title="Unable to load order details"
-                      subTitle={selectedOrderDetailsError}
-                      extra={
-                        <Button
-                          onClick={() => void fetchOrderDetails(selectedCreatedOrderSummary.id, 'retry')}
-                          loading={selectedOrderDetailsLoading}
-                        >
-                          Retry
-                        </Button>
-                      }
-                    />
-                  ) : (
-                    <Spin tip="Loading order details..." />
-                  )}
-                </Card>
-                <div style={{ marginTop: 16 }}>
-                  <Space wrap>
-                    <Button
-                      icon={<PlusOutlined />}
-                      onClick={openEditTestsModal}
-                      size="large"
-                      disabled={!selectedCreatedOrder}
-                    >
-                      Edit tests
-                    </Button>
-                    <Button
-                      type="primary"
-                      icon={<PrinterOutlined />}
-                      onClick={() => {
-                        if (!selectedCreatedOrder) return;
-                        void openPrint(selectedCreatedOrder, 'receipt');
-                      }}
-                      size="large"
-                      disabled={!selectedCreatedOrder}
-                    >
-                      Receipt
-                    </Button>
-                    <Button
-                      icon={<PrinterOutlined />}
-                      onClick={() => {
-                        if (!selectedCreatedOrder) return;
-                        void openPrint(selectedCreatedOrder, 'labels');
-                      }}
-                      size="large"
-                      disabled={!selectedCreatedOrder}
-                    >
-                      Labels
-                    </Button>
-                    <Button
-                      icon={<PrinterOutlined />}
-                      loading={downloadingPDF === 'receipt'}
-                      onClick={async () => {
-                        if (!selectedCreatedOrder) return;
-                        setDownloadingPDF('receipt');
-                        try {
-                          const blob = await downloadOrderReceiptPDF(selectedCreatedOrder.id);
-                          const url = window.URL.createObjectURL(blob);
-                          const a = document.createElement('a');
-                          a.href = url;
-                          a.download = `receipt-${selectedCreatedOrder.orderNumber || selectedCreatedOrder.id.substring(0, 8)}.pdf`;
-                          document.body.appendChild(a);
-                          a.click();
-                          window.URL.revokeObjectURL(url);
-                          document.body.removeChild(a);
-                          message.success('Receipt downloaded');
-                        } catch {
-                          message.error('Failed to download receipt');
-                        } finally {
-                          setDownloadingPDF(null);
-                        }
-                      }}
-                      size="large"
-                      disabled={!selectedCreatedOrder}
-                    >
-                      Download Receipt PDF
-                    </Button>
-                      {selectedCreatedOrderSummary.paymentStatus === 'unpaid' && (
-                        <Space wrap>
-                          <Button
-                            type="primary"
-                            loading={updatingPayment}
-                            onClick={async () => {
-                              setUpdatingPayment(true);
-                              try {
-                                const updated = await updateOrderPayment(selectedCreatedOrderSummary.id, {
-                                  paymentStatus: 'paid',
-                                });
-                                message.success('Marked as paid');
-                                applyUpdatedOrderToList(updated);
-                            } catch {
-                              message.error('Failed to update payment');
-                            } finally {
-                              setUpdatingPayment(false);
-                            }
-                          }}
-                          size="large"
-                        >
-                          Mark as paid
-                        </Button>
-                        <Button
-                          loading={updatingPayment}
-                          onClick={() => {
-                            setPartialPaymentAmount(
-                              selectedCreatedOrderSummary?.paidAmount != null
-                                ? Number(selectedCreatedOrderSummary.paidAmount)
-                                : 0
-                            );
-                            setPartialPaymentModalOpen(true);
-                          }}
-                          size="large"
-                        >
-                          Partially paid
-                        </Button>
                       </Space>
-                      )}
-                      {selectedCreatedOrderSummary.paymentStatus === 'paid' && (
-                        <Button
-                          type="dashed"
-                          size="large"
-                          loading={updatingPayment}
-                        style={{
-                          borderColor: '#52c41a',
-                          color: '#52c41a',
-                          backgroundColor: 'rgba(82, 196, 26, 0.1)',
-                          }}
-                          onClick={async () => {
-                            setUpdatingPayment(true);
-                            try {
-                              const updated = await updateOrderPayment(selectedCreatedOrderSummary.id, {
-                                paymentStatus: 'unpaid',
-                                paidAmount: 0,
-                              });
-                              message.success('Marked as unpaid');
-                            applyUpdatedOrderToList(updated);
-                          } catch {
-                            message.error('Failed to update payment');
-                          } finally {
-                            setUpdatingPayment(false);
-                          }
-                        }}
-                        >
-                          Paid (Click to Unpay)
-                        </Button>
-                      )}
-                      {selectedCreatedOrderSummary.paymentStatus === 'partial' && (
-                        <Space wrap>
-                          <Button
-                            type="primary"
-                            loading={updatingPayment}
-                            onClick={async () => {
-                              setUpdatingPayment(true);
-                              try {
-                                const updated = await updateOrderPayment(selectedCreatedOrderSummary.id, {
-                                  paymentStatus: 'paid',
-                                });
-                                message.success('Marked as paid');
-                                applyUpdatedOrderToList(updated);
-                            } catch {
-                              message.error('Failed to update payment');
-                            } finally {
-                              setUpdatingPayment(false);
-                            }
-                          }}
-                          size="large"
-                        >
-                          Mark as paid
-                        </Button>
-                        <Button
-                          type="dashed"
-                          size="large"
-                          loading={updatingPayment}
-                          style={{
-                            borderColor: '#faad14',
-                            color: '#faad14',
-                            backgroundColor: 'rgba(250, 173, 20, 0.1)',
-                          }}
-                          onClick={() => {
-                            setPartialPaymentAmount(
-                              selectedCreatedOrderSummary?.paidAmount != null
-                                ? Number(selectedCreatedOrderSummary.paidAmount)
-                                : 0
-                            );
-                            setPartialPaymentModalOpen(true);
-                            }}
+                      <div className="locked-order-summary-meta">
+                        <div>
+                          <Text type="secondary">Patient: </Text>
+                          <Text strong>{getPatientName(selectedCreatedOrderSummary.patient ?? selectedPatient)}</Text>
+                        </div>
+                        <div>
+                          <Text type="secondary">Order ID: </Text>
+                          <Text strong>
+                            {selectedCreatedOrderSummary.orderNumber || selectedCreatedOrderSummary.id}
+                          </Text>
+                        </div>
+                        <div>
+                          <Text type="secondary">Shift: </Text>
+                          <Tag
+                            color={getShiftTagColor(getShiftLabel(selectedCreatedOrderSummary))}
+                            style={{ margin: 0, fontSize: 12, lineHeight: '18px', paddingInline: 8 }}
                           >
-                            Partially paid
-                            {selectedCreatedOrderSummary?.paidAmount != null &&
-                              ` (${selectedCreatedOrderSummary.paidAmount} / ${selectedCreatedOrderSummary.finalAmount})`}
+                            {selectedCreatedOrderSummary.shift?.name ||
+                              selectedCreatedOrderSummary.shift?.code ||
+                              currentShiftLabel ||
+                              '-'}
+                          </Tag>
+                        </div>
+                        <div>
+                          <Text type="secondary">Time: </Text>
+                          <Text strong>
+                            {dayjs(selectedCreatedOrderSummary.registeredAt).format('YYYY-MM-DD HH:mm')}
+                          </Text>
+                        </div>
+                      </div>
+                      <Tag color="success" icon={<LockOutlined />} style={{ marginInlineEnd: 0, width: 'fit-content' }}>
+                        Locked for delete - test list can still be edited
+                      </Tag>
+                    </Space>
+                  </Card>
+                  {/* Read-only list of tests in this order */}
+                  <Card type="inner" title="Tests in this order" style={{ marginTop: 10 }}>
+                    <Text type="secondary" style={{ display: 'block', marginBottom: 8 }}>
+                      You can update tests for this order without changing order number or existing label sequence numbers.
+                    </Text>
+                    {selectedOrderDetailsLoading ? (
+                      <Spin tip="Loading order details..." />
+                    ) : selectedCreatedOrder ? (() => {
+                      const orderTests = getRootOrderTests(selectedCreatedOrder);
+                      if (orderTests.length === 0) {
+                        return <Text type="secondary">No tests in this order.</Text>;
+                      }
+                      return (
+                        <div
+                          style={{
+                            border: styles.border,
+                            borderRadius: 8,
+                            padding: 12,
+                            backgroundColor: styles.bgSubtle,
+                          }}
+                        >
+                          <Space wrap size={[8, 8]}>
+                            {orderTests.map((ot) => (
+                              <Tag key={ot.testId} style={{ margin: 0 }}>
+                                {ot.testCode ?? '-'}
+                              </Tag>
+                            ))}
+                          </Space>
+                        </div>
+                      );
+                    })() : selectedOrderDetailsError ? (
+                      <Result
+                        status="warning"
+                        title="Unable to load order details"
+                        subTitle={selectedOrderDetailsError}
+                        extra={
+                          <Button
+                            onClick={() => void fetchOrderDetails(selectedCreatedOrderSummary.id, 'retry')}
+                            loading={selectedOrderDetailsLoading}
+                          >
+                            Retry
                           </Button>
-                        </Space>
-                      )}
-                      <Button
-                        type="primary"
-                        icon={<PlusOutlined />}
-                        onClick={() =>
-                          addNewOrderForPatient(selectedCreatedOrderSummary.patient ?? selectedPatient!)
                         }
-                        size="large"
-                      >
-                        New order for this patient
-                      </Button>
-                  </Space>
+                      />
+                    ) : (
+                      <Spin tip="Loading order details..." />
+                    )}
+                  </Card>
                 </div>
+                {orderBottomControls}
               </div>
             ) : (
-              <Space direction="vertical" size={12} style={{ width: '100%' }}>
+              <div className="draft-order-view">
+                <Space direction="vertical" size={12} style={{ width: '100%' }} className="draft-order-content">
                 <div style={{ padding: '8px 0', borderBottom: styles.border }}>
                   <Text type="secondary">Patient: </Text>
                   <Text strong style={{ fontSize: 16 }}>
@@ -1556,55 +1770,12 @@ export function OrdersPage() {
                   </Row>
                 </div>
 
-                <Card
-                  style={{ ...styles.summaryCard, position: 'sticky', bottom: 16, zIndex: 10, marginTop: 16 }}
-                >
-                  <Row gutter={16} align="middle" justify="space-between" wrap>
-                    <Col>
-                      <Space size="large">
-                        <Text strong>Total tests: {totalTests}</Text>
-                        {selectedTests.length > 0 && (
-                          <>
-                            <Text type="secondary">
-                              Subtotal: {loadingPrice ? '...' : `${subtotal.toFixed(0)} IQD`}
-                            </Text>
-                            <Space.Compact>
-                              <Text type="secondary">Discount:</Text>
-                              <InputNumber
-                                min={0}
-                                max={100}
-                                value={discountPercent}
-                                onChange={(v) => setDiscountPercent(Number(v) || 0)}
-                                style={{ width: 64, marginLeft: 8 }}
-                              />
-                              <span style={{ padding: '0 4px', lineHeight: '32px' }}>%</span>
-                            </Space.Compact>
-                            <Text strong style={{ fontSize: 16 }}>
-                              Total: {loadingPrice ? '...' : `${totalAfterDiscount.toFixed(0)} IQD`}
-                            </Text>
-                          </>
-                        )}
-                      </Space>
-                    </Col>
-                    <Col>
-                      <Button
-                        type="primary"
-                        size="large"
-                        icon={<ShoppingCartOutlined />}
-                        onClick={handleSubmit}
-                        loading={submitting}
-                        disabled={selectedTests.length === 0}
-                      >
-                        Create order
-                      </Button>
-                    </Col>
-                  </Row>
-                </Card>
-
                 <Button type="link" icon={<PlusOutlined />} onClick={openNewPatientInPatientsTab}>
                   New patient
                 </Button>
-              </Space>
+                </Space>
+                {orderBottomControls}
+              </div>
             )}
           </Card>
         </Col>

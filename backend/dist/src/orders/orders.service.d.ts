@@ -71,6 +71,7 @@ export declare class OrdersService {
         paymentStatus: 'unpaid' | 'partial' | 'paid';
         paidAmount?: number;
     }): Promise<Order>;
+    updateDiscount(id: string, labId: string, discountPercent: number): Promise<Order>;
     updateOrderTests(id: string, labId: string, testIds: string[]): Promise<Order>;
     private splitSamplesForDepartmentLabels;
     private resolveSampleDepartmentScope;

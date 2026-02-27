@@ -234,6 +234,30 @@ let OrdersService = class OrdersService {
         await this.orderRepo.save(order);
         return this.findOne(id, labId);
     }
+    async updateDiscount(id, labId, discountPercent) {
+        const order = await this.orderRepo.findOne({ where: { id, labId } });
+        if (!order) {
+            throw new common_1.NotFoundException('Order not found');
+        }
+        if (order.status === order_entity_1.OrderStatus.CANCELLED) {
+            throw new common_1.BadRequestException('Cancelled order cannot be edited');
+        }
+        const normalizedDiscount = Math.min(100, Math.max(0, Number(discountPercent ?? 0)));
+        const totalAmount = Math.round(Number(order.totalAmount ?? 0) * 100) / 100;
+        const finalAmount = Math.round(totalAmount * (1 - normalizedDiscount / 100) * 100) / 100;
+        const normalizedPaymentStatus = this.normalizePaymentStatus(order.paymentStatus);
+        const nextPaidAmount = normalizedPaymentStatus === 'paid'
+            ? finalAmount
+            : normalizedPaymentStatus === 'partial' && order.paidAmount != null
+                ? Math.min(Number(order.paidAmount), finalAmount)
+                : order.paidAmount;
+        await this.orderRepo.update({ id, labId }, {
+            discountPercent: normalizedDiscount,
+            finalAmount,
+            paidAmount: nextPaidAmount,
+        });
+        return this.findOne(id, labId);
+    }
     async updateOrderTests(id, labId, testIds) {
         const uniqueTestIds = [...new Set((testIds ?? []).map((testId) => testId?.trim()).filter(Boolean))];
         if (uniqueTestIds.length === 0) {

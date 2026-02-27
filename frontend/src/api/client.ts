@@ -1112,6 +1112,14 @@ export async function updateOrderPayment(
   return res.data;
 }
 
+export async function updateOrderDiscount(
+  orderId: string,
+  data: { discountPercent: number },
+): Promise<OrderDto> {
+  const res = await api.patch<OrderDto>(`/orders/${orderId}/discount`, data);
+  return res.data;
+}
+
 export async function updateOrderTests(
   orderId: string,
   data: { testIds: string[] },
