@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect } from 'react';
 import {
     Card,
     Table,
@@ -24,7 +24,6 @@ export function SettingsTestGroupsPage() {
     const [loading, setLoading] = useState(false);
     const [modalOpen, setModalOpen] = useState(false);
     const [editingGroup, setEditingGroup] = useState<{ id: string; name: string; testIds: string[] } | null>(null);
-    const [testSearch, setTestSearch] = useState('');
     const [form] = Form.useForm();
 
     const load = async () => {
@@ -50,12 +49,11 @@ export function SettingsTestGroupsPage() {
     const openModal = (group?: { id: string; name: string; testIds: string[] }) => {
         if (group) {
             setEditingGroup(group);
-            form.setFieldsValue({ name: group.name, testIds: group.testIds });
+            form.setFieldsValue({ name: group.name, testIds: group.testIds || [] });
         } else {
             setEditingGroup(null);
             form.resetFields();
         }
-        setTestSearch('');
         setModalOpen(true);
     };
 
@@ -74,7 +72,7 @@ export function SettingsTestGroupsPage() {
                     {
                         id: Math.random().toString(36).substring(2, 9),
                         name: values.name.trim(),
-                        testIds: values.testIds,
+                        testIds: values.testIds || [],
                     }
                 ];
             }
@@ -99,15 +97,7 @@ export function SettingsTestGroupsPage() {
         }
     };
 
-    const filteredTests = useMemo(() => {
-        if (!testSearch.trim()) return testOptions;
-        const search = testSearch.toLowerCase();
-        return testOptions.filter(
-            (t) =>
-                t.name.toLowerCase().includes(search) ||
-                t.code.toLowerCase().includes(search)
-        );
-    }, [testOptions, testSearch]);
+
 
     const columns: ColumnsType<{ id: string; name: string; testIds: string[] }> = [
         { title: 'Name', dataIndex: 'name', key: 'name', width: 300, render: (n) => <strong>{n}</strong> },
@@ -115,7 +105,8 @@ export function SettingsTestGroupsPage() {
             title: 'Tests Included',
             key: 'testIds',
             render: (_, r) => {
-                const tests = r.testIds.map(id => testOptions.find(t => t.id === id)).filter(Boolean) as TestDto[];
+                const safeTestIds = r.testIds || [];
+                const tests = safeTestIds.map(id => testOptions.find(t => t.id === id)).filter(Boolean) as TestDto[];
                 if (tests.length === 0) return <Text type="secondary">No active tests</Text>;
                 return (
                     <Space wrap size={[0, 4]}>
@@ -201,9 +192,10 @@ export function SettingsTestGroupsPage() {
                             showSearch
                             placeholder="Search and select tests..."
                             style={{ width: '100%' }}
-                            filterOption={false}
-                            onSearch={setTestSearch}
-                            options={filteredTests.map((t) => ({
+                            filterOption={(input, option) =>
+                                (option?.label ?? '').toString().toLowerCase().includes(input.toLowerCase())
+                            }
+                            options={testOptions.map((t) => ({
                                 value: t.id,
                                 label: `${t.code} - ${t.name}`,
                             }))}

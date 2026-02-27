@@ -56,6 +56,11 @@ export declare class SettingsController {
             logoDataUrl?: string | null;
             watermarkDataUrl?: string | null;
         };
+        uiTestGroups?: {
+            id: string;
+            name: string;
+            testIds: string[];
+        }[] | null;
     }): Promise<{
         id: string;
         code: string;

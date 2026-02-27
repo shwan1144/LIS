@@ -601,6 +601,7 @@ export async function updateAdminLabSettings(
       reportPrinterName?: string | null;
     };
     reportBranding?: Partial<ReportBrandingDto>;
+    uiTestGroups?: { id: string; name: string; testIds: string[] }[] | null;
   },
 ): Promise<LabSettingsDto> {
   const res = await api.patch<LabSettingsDto>(`/admin/api/labs/${labId}/settings`, data);
