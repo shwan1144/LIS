@@ -254,7 +254,7 @@ export class ReportsService implements OnModuleInit, OnModuleDestroy {
       viewport: { width: 1240, height: 1754 },
     });
     try {
-      await page.setContent(html, { waitUntil: 'networkidle' });
+      await page.setContent(html, { waitUntil: 'domcontentloaded' });
       const pdf = await page.pdf({
         format: 'A4',
         printBackground: true,
