@@ -24,8 +24,7 @@ export enum TubeType {
 }
 
 @Entity('samples')
-@Index('UQ_samples_lab_barcode', ['labId', 'barcode'], {
-  unique: true,
+@Index('IDX_samples_lab_barcode', ['labId', 'barcode'], {
   where: '"barcode" IS NOT NULL',
 })
 export class Sample {

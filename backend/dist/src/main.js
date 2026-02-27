@@ -100,11 +100,24 @@ async function ensureReportBrandingColumns(dataSource) {
         'ALTER TABLE IF EXISTS "labs" ADD COLUMN IF NOT EXISTS "receiptPrinterName" varchar(128)',
         'ALTER TABLE IF EXISTS "labs" ADD COLUMN IF NOT EXISTS "labelsPrinterName" varchar(128)',
         'ALTER TABLE IF EXISTS "labs" ADD COLUMN IF NOT EXISTS "reportPrinterName" varchar(128)',
+        'ALTER TABLE IF EXISTS "labs" ADD COLUMN IF NOT EXISTS "uiTestGroups" jsonb',
         `UPDATE "labs" SET "printMethod" = 'browser' WHERE "printMethod" IS NULL`,
+        `
+      DO $$
+      BEGIN
+        IF to_regclass('public.samples') IS NOT NULL THEN
+          DROP INDEX IF EXISTS "UQ_samples_lab_barcode";
+          CREATE INDEX IF NOT EXISTS "IDX_samples_lab_barcode"
+            ON "samples" ("labId", "barcode")
+            WHERE "barcode" IS NOT NULL;
+        END IF;
+      END $$;
+    `,
         'ALTER TABLE IF EXISTS "tests" ADD COLUMN IF NOT EXISTS "numericAgeRanges" jsonb',
         `ALTER TABLE IF EXISTS "tests" ADD COLUMN IF NOT EXISTS "resultEntryType" varchar(16) NOT NULL DEFAULT 'NUMERIC'`,
         'ALTER TABLE IF EXISTS "tests" ADD COLUMN IF NOT EXISTS "resultTextOptions" jsonb',
         'ALTER TABLE IF EXISTS "tests" ADD COLUMN IF NOT EXISTS "allowCustomResultText" boolean NOT NULL DEFAULT false',
+        'ALTER TABLE IF EXISTS "tests" ADD COLUMN IF NOT EXISTS "abbreviation" varchar(32)',
         `
       DO $$
       DECLARE
@@ -122,6 +135,42 @@ async function ensureReportBrandingColumns(dataSource) {
             EXECUTE format('ALTER TYPE %I ADD VALUE IF NOT EXISTS ''ABN''', enum_name);
           END IF;
         END LOOP;
+      END $$;
+    `,
+    ];
+    for (const sql of sqlStatements) {
+        await dataSource.query(sql);
+    }
+}
+async function ensureOrderFlowPerformanceIndexes(dataSource) {
+    const sqlStatements = [
+        `
+      DO $$
+      BEGIN
+        IF to_regclass('public.orders') IS NOT NULL THEN
+          CREATE INDEX IF NOT EXISTS "IDX_orders_lab_registered_at"
+            ON "orders" ("labId", "registeredAt" DESC);
+          CREATE INDEX IF NOT EXISTS "IDX_orders_lab_status_registered_at"
+            ON "orders" ("labId", "status", "registeredAt" DESC);
+        END IF;
+      END $$;
+    `,
+        `
+      DO $$
+      BEGIN
+        IF to_regclass('public.samples') IS NOT NULL THEN
+          CREATE INDEX IF NOT EXISTS "IDX_samples_order_id"
+            ON "samples" ("orderId");
+        END IF;
+      END $$;
+    `,
+        `
+      DO $$
+      BEGIN
+        IF to_regclass('public.order_tests') IS NOT NULL THEN
+          CREATE INDEX IF NOT EXISTS "IDX_order_tests_sample_status_parent"
+            ON "order_tests" ("sampleId", "status", "parentOrderTestId");
+        END IF;
       END $$;
     `,
     ];
@@ -515,6 +564,12 @@ async function bootstrap() {
     }
     catch (error) {
         bootstrapLogger.warn(`Failed to auto-ensure report branding columns: ${error instanceof Error ? error.message : String(error)}`);
+    }
+    try {
+        await ensureOrderFlowPerformanceIndexes(dataSource);
+    }
+    catch (error) {
+        bootstrapLogger.warn(`Failed to auto-ensure order-flow performance indexes: ${error instanceof Error ? error.message : String(error)}`);
     }
     try {
         await ensureTenantRolePrivileges(dataSource);

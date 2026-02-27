@@ -29,7 +29,7 @@ interface RequestWithUser {
 @Controller('worklist')
 @UseGuards(JwtAuthGuard)
 export class WorklistController {
-  constructor(private readonly worklistService: WorklistService) {}
+  constructor(private readonly worklistService: WorklistService) { }
 
   @Get()
   async getWorklist(
@@ -97,6 +97,29 @@ export class WorklistController {
       throw new Error('Lab ID not found in token');
     }
     return this.worklistService.enterResult(id, labId, actor, body, req.user?.role);
+  }
+
+  @Patch('batch-result')
+  async batchEnterResults(
+    @Req() req: RequestWithUser,
+    @Body()
+    body: {
+      updates: Array<{
+        orderTestId: string;
+        resultValue?: number | null;
+        resultText?: string | null;
+        comments?: string | null;
+        resultParameters?: Record<string, string> | null;
+        forceEditVerified?: boolean;
+      }>;
+    },
+  ) {
+    const labId = req.user?.labId;
+    const actor = buildLabActorContext(req.user);
+    if (!labId) {
+      throw new Error('Lab ID not found in token');
+    }
+    return this.worklistService.batchEnterResults(labId, actor, req.user?.role, body.updates);
   }
 
   @Patch(':id/verify')

@@ -44,6 +44,7 @@ export declare class Test {
     lab: Lab;
     code: string;
     name: string;
+    abbreviation: string | null;
     type: TestType;
     tubeType: TubeType;
     departmentId: string | null;

@@ -9,6 +9,7 @@ import { Shift } from '../entities/shift.entity';
 import { Department } from '../entities/department.entity';
 import { OrdersService } from '../orders/orders.service';
 import { UnmatchedResultsService } from '../unmatched/unmatched-results.service';
+import { normalizeLabTimeZone } from '../database/lab-timezone.util';
 
 // require() for CommonJS interop (pdfkit has no default export in some builds)
 // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -122,6 +123,11 @@ export class DashboardService {
       avgTatHours: null, // Will be implemented with TAT tracking
       totalPatients,
     };
+  }
+
+  async getLabTimeZone(labId: string): Promise<string> {
+    const lab = await this.labRepo.findOne({ where: { id: labId } });
+    return normalizeLabTimeZone(lab?.timezone);
   }
 
   async getOrdersTrend(labId: string, days: number): Promise<OrdersTrendPoint[]> {

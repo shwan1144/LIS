@@ -5,6 +5,7 @@ import { WorklistController } from './worklist.controller';
 import { OrderTest } from '../entities/order-test.entity';
 import { Order } from '../entities/order.entity';
 import { Test } from '../entities/test.entity';
+import { Lab } from '../entities/lab.entity';
 import { UserDepartmentAssignment } from '../entities/user-department-assignment.entity';
 import { Department } from '../entities/department.entity';
 import { PanelsModule } from '../panels/panels.module';
@@ -16,6 +17,7 @@ import { PanelsModule } from '../panels/panels.module';
       OrderTest,
       Order,
       Test,
+      Lab,
       UserDepartmentAssignment,
       Department,
     ]),

@@ -37,6 +37,8 @@ import {
   ResultFlag,
 } from '../api/client';
 import { WorklistStatusDashboard } from '../components/WorklistStatusDashboard';
+import { useFillToViewportBottom } from '../hooks/useFillToViewportBottom';
+import './QueuePages.css';
 
 const { Title, Text } = Typography;
 const { Search } = Input;
@@ -90,7 +92,10 @@ interface ResolvedPanelReviewContext {
   group: VerificationOrderGroup;
   panelRoot: WorklistItem;
   children: WorklistItem[];
+  hasPanelChildren: boolean;
 }
+
+const PANEL_PARAM_ROW_MARKER = '::param::';
 
 function groupVerificationByOrder(items: WorklistItem[]): VerificationOrderGroup[] {
   const byOrder = new Map<string, WorklistItem[]>();
@@ -136,15 +141,45 @@ function getPanelChildren(items: WorklistItem[], panelRootId: string): WorklistI
     .sort((a, b) => a.testCode.localeCompare(b.testCode));
 }
 
+function getPanelReviewTargets(items: WorklistItem[], panelRoot: WorklistItem): WorklistItem[] {
+  const children = getPanelChildren(items, panelRoot.id);
+  if (children.length > 0) return children;
+  return [panelRoot];
+}
+
+function getVirtualPanelParameterRows(panelRoot: WorklistItem): WorklistItem[] {
+  const definitions = panelRoot.parameterDefinitions ?? [];
+  if (definitions.length === 0) return [];
+
+  const values = panelRoot.resultParameters ?? {};
+
+  return definitions.map((def, index) => ({
+    ...panelRoot,
+    id: `${panelRoot.id}${PANEL_PARAM_ROW_MARKER}${def.code || index}`,
+    parentOrderTestId: panelRoot.id,
+    testCode: def.code || panelRoot.testCode,
+    testName: def.label || def.code || panelRoot.testName,
+    testAbbreviation: def.label || def.code || panelRoot.testAbbreviation,
+    resultValue: null,
+    resultText: values[def.code] ?? '-',
+    resultParameters: null,
+    testUnit: null,
+    normalMin: null,
+    normalMax: null,
+    normalText:
+      def.normalOptions && def.normalOptions.length === 1 ? def.normalOptions[0] : null,
+  }));
+}
+
 function getVerifiableIdsForOrder(group: VerificationOrderGroup): string[] {
   const ids: string[] = [];
 
   for (const root of getRootTests(group.items)) {
     if (root.testType === 'PANEL') {
       ids.push(
-        ...getPanelChildren(group.items, root.id)
-          .filter((child) => child.status === OrderTestStatus.COMPLETED)
-          .map((child) => child.id),
+        ...getPanelReviewTargets(group.items, root)
+          .filter((target) => target.status === OrderTestStatus.COMPLETED)
+          .map((target) => target.id),
       );
       continue;
     }
@@ -161,9 +196,17 @@ function getVerifiableIdsForPanelChildren(
   group: VerificationOrderGroup,
   panelRootId: string,
 ): string[] {
-  return getPanelChildren(group.items, panelRootId)
-    .filter((child) => child.status === OrderTestStatus.COMPLETED)
-    .map((child) => child.id);
+  const panelRoot = group.items.find(
+    (item) =>
+      item.id === panelRootId &&
+      item.testType === 'PANEL' &&
+      !item.parentOrderTestId,
+  );
+  if (!panelRoot) return [];
+
+  return getPanelReviewTargets(group.items, panelRoot)
+    .filter((target) => target.status === OrderTestStatus.COMPLETED)
+    .map((target) => target.id);
 }
 
 /** Same eligibility as verify panel children: COMPLETED child IDs only. */
@@ -171,9 +214,17 @@ function getRejectableIdsForPanelChildren(
   group: VerificationOrderGroup,
   panelRootId: string,
 ): string[] {
-  return getPanelChildren(group.items, panelRootId)
-    .filter((child) => child.status === OrderTestStatus.COMPLETED)
-    .map((child) => child.id);
+  const panelRoot = group.items.find(
+    (item) =>
+      item.id === panelRootId &&
+      item.testType === 'PANEL' &&
+      !item.parentOrderTestId,
+  );
+  if (!panelRoot) return [];
+
+  return getPanelReviewTargets(group.items, panelRoot)
+    .filter((target) => target.status === OrderTestStatus.COMPLETED)
+    .map((target) => target.id);
 }
 
 type RejectTarget =
@@ -181,6 +232,7 @@ type RejectTarget =
   | { mode: 'panel'; context: ResolvedPanelReviewContext; ids: string[] };
 
 export function VerificationPage() {
+  const { containerRef, filledMinHeightPx } = useFillToViewportBottom();
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState<WorklistItem[]>([]);
   const [total, setTotal] = useState(0);
@@ -257,10 +309,20 @@ export function VerificationPage() {
     );
     if (!panelRoot) return null;
 
+    const panelChildren = getPanelChildren(group.items, panelRoot.id);
+    const virtualRows =
+      panelChildren.length === 0 ? getVirtualPanelParameterRows(panelRoot) : [];
+    const reviewTargets = panelChildren.length > 0
+      ? panelChildren
+      : virtualRows.length > 0
+        ? virtualRows
+        : [panelRoot];
+
     return {
       group,
       panelRoot,
-      children: getPanelChildren(group.items, panelRoot.id),
+      children: reviewTargets,
+      hasPanelChildren: panelChildren.length > 0 || virtualRows.length > 0,
     };
   }, [groupedData, panelReviewContext]);
 
@@ -329,7 +391,11 @@ export function VerificationPage() {
   const openRejectAllPanelModal = (context: ResolvedPanelReviewContext) => {
     const ids = getRejectableIdsForPanelChildren(context.group, context.panelRoot.id);
     if (ids.length === 0) {
-      message.warning('No completed child results to reject.');
+      message.warning(
+        context.hasPanelChildren
+          ? 'No completed child results to reject.'
+          : 'No completed panel result to reject.',
+      );
       return;
     }
     setRejectTarget({ mode: 'panel', context, ids });
@@ -389,7 +455,12 @@ export function VerificationPage() {
     context: ResolvedPanelReviewContext,
   ) => {
     const ids = getVerifiableIdsForPanelChildren(context.group, context.panelRoot.id);
-    await handleVerifyMultiple(ids, 'No completed child results to verify in this panel');
+    await handleVerifyMultiple(
+      ids,
+      context.hasPanelChildren
+        ? 'No completed child results to verify in this panel'
+        : 'No completed panel result to verify',
+    );
   };
 
   const handleBatchVerify = async () => {
@@ -464,10 +535,20 @@ export function VerificationPage() {
     ).length;
 
     if (total === 0) {
+      const parameterCount = root.parameterDefinitions?.length ?? 0;
       return (
-        <Text type="secondary" style={{ fontSize: 12 }}>
-          No child tests
-        </Text>
+        <Space size={[4, 2]} wrap>
+          {parameterCount > 0 ? (
+            <Text strong style={{ fontSize: 12 }}>
+              {parameterCount} panel items
+            </Text>
+          ) : (
+            <Text style={{ fontSize: 12 }}>{formatResult(root)}</Text>
+          )}
+          <Tag color="purple" style={{ margin: 0, fontSize: 10, lineHeight: '14px', paddingInline: 4 }}>
+            Panel
+          </Tag>
+        </Space>
       );
     }
 
@@ -788,7 +869,11 @@ export function VerificationPage() {
             icon={<CheckCircleOutlined />}
             onClick={(event) => {
               event.stopPropagation();
-              void handleVerifySingle(row.id);
+              const targetId =
+                row.id.includes(PANEL_PARAM_ROW_MARKER) && row.parentOrderTestId
+                  ? row.parentOrderTestId
+                  : row.id;
+              void handleVerifySingle(targetId);
             }}
           >
             Verify
@@ -800,7 +885,11 @@ export function VerificationPage() {
             icon={<CloseCircleOutlined />}
             onClick={(event) => {
               event.stopPropagation();
-              openRejectModal(row);
+              const targetId =
+                row.id.includes(PANEL_PARAM_ROW_MARKER) && row.parentOrderTestId
+                  ? row.parentOrderTestId
+                  : row.id;
+              openRejectModal(targetId === row.id ? row : { ...row, id: targetId });
             }}
           >
             Reject
@@ -847,20 +936,32 @@ export function VerificationPage() {
           padding-bottom: 3px !important;
         }
         .verification-review-modal .ant-modal {
-          max-width: calc(100vw - 16px) !important;
+          max-width: calc(100vw - 24px) !important;
         }
         .verification-review-modal .ant-modal-content {
-          border-radius: 12px;
+          border-radius: 14px;
           overflow: hidden;
         }
         .verification-review-modal .ant-modal-header {
-          padding: 12px 16px;
+          padding: 10px 14px;
           margin-bottom: 0;
         }
         .verification-review-modal .ant-modal-body {
-          padding: 10px 12px 12px !important;
-          max-height: calc(100vh - 120px);
+          padding: 8px 12px 10px !important;
+          max-height: calc(100vh - 72px);
           overflow-y: auto;
+        }
+        .verification-review-toolbar {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          gap: 12px;
+          flex-wrap: wrap;
+        }
+        .verification-review-table .ant-table-container {
+          border: 1px solid #d6e4f3;
+          border-radius: 8px;
+          overflow: hidden;
         }
         @media (max-width: 992px) {
           .verification-review-modal .ant-modal {
@@ -868,6 +969,7 @@ export function VerificationPage() {
           }
           .verification-review-modal .ant-modal-body {
             max-height: calc(100vh - 110px);
+            padding: 8px 10px 10px !important;
           }
         }
       `}</style>
@@ -876,89 +978,99 @@ export function VerificationPage() {
       </Title>
       <WorklistStatusDashboard stats={stats} style={{ marginBottom: 12 }} />
 
-      <Card>
-        <Space wrap style={{ marginBottom: 16 }}>
-          <Search
-            placeholder="Search patient or order..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            onSearch={() => {
-              void loadData();
-            }}
-            style={{ width: 250 }}
-            allowClear
-          />
-          <DatePicker
-            value={dateFilter}
-            onChange={setDateFilter}
-            allowClear
-            placeholder="Filter by date"
-          />
-          <Select
-            placeholder="Department"
-            value={departmentId || undefined}
-            onChange={(v) => setDepartmentId(v || '')}
-            allowClear
-            style={{ width: 150 }}
-            options={[
-              { value: '', label: 'All departments' },
-              ...departments.map((d) => ({ value: d.id, label: d.name || d.code })),
-            ]}
-          />
-          <Button
-            icon={<ReloadOutlined />}
-            onClick={() => {
-              void loadData();
-            }}
-          >
-            Refresh
-          </Button>
-          {selectedRowKeys.length > 0 && (
-            <Button
-              type="primary"
-              icon={<CheckCircleOutlined />}
-              onClick={() => {
-                void handleBatchVerify();
-              }}
-            >
-              Verify Selected ({selectedRowKeys.length})
-            </Button>
-          )}
-        </Space>
+      <div
+        ref={containerRef}
+        className="queue-pane-shell"
+        style={{ minHeight: filledMinHeightPx }}
+      >
+        <Card className="queue-main-card">
+          <div className="queue-filters-block">
+            <Space wrap>
+              <Search
+                placeholder="Search patient or order..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                onSearch={() => {
+                  void loadData();
+                }}
+                style={{ width: 250 }}
+                allowClear
+              />
+              <DatePicker
+                value={dateFilter}
+                onChange={setDateFilter}
+                allowClear
+                placeholder="Filter by date"
+              />
+              <Select
+                placeholder="Department"
+                value={departmentId || undefined}
+                onChange={(v) => setDepartmentId(v || '')}
+                allowClear
+                style={{ width: 150 }}
+                options={[
+                  { value: '', label: 'All departments' },
+                  ...departments.map((d) => ({ value: d.id, label: d.name || d.code })),
+                ]}
+              />
+              <Button
+                icon={<ReloadOutlined />}
+                onClick={() => {
+                  void loadData();
+                }}
+              >
+                Refresh
+              </Button>
+              {selectedRowKeys.length > 0 && (
+                <Button
+                  type="primary"
+                  icon={<CheckCircleOutlined />}
+                  onClick={() => {
+                    void handleBatchVerify();
+                  }}
+                >
+                  Verify Selected ({selectedRowKeys.length})
+                </Button>
+              )}
+            </Space>
+          </div>
 
-        <Table<VerificationOrderGroup>
-          className="verification-orders-table"
-          columns={orderColumns}
-          dataSource={groupedData}
-          rowKey="orderId"
-          loading={loading}
-          rowSelection={rowSelection}
-          rowClassName={(record) =>
-            expandedOrderIds.includes(record.orderId)
-              ? 'verification-order-row-expanded'
-              : ''
-          }
-          expandable={{
-            expandedRowRender: (record) => renderExpandedTests(record),
-            expandRowByClick: true,
-            showExpandColumn: false,
-            expandedRowKeys: expandedOrderIds,
-            onExpand: (expanded, record) => {
-              setExpandedOrderIds(expanded ? [record.orderId] : []);
-            },
-          }}
-          pagination={{
-            current: page,
-            pageSize: size,
-            total,
-            onChange: (p) => setPage(p),
-            showSizeChanger: false,
-            showTotal: (t) => `${t} result(s) awaiting verification`,
-          }}
-          scroll={{ x: 1060 }}
-          size="small"
-        />
-      </Card>
+          <div className="queue-table-block">
+            <Table<VerificationOrderGroup>
+              className="verification-orders-table"
+              columns={orderColumns}
+              dataSource={groupedData}
+              rowKey="orderId"
+              loading={loading}
+              rowSelection={rowSelection}
+              rowClassName={(record) =>
+                expandedOrderIds.includes(record.orderId)
+                  ? 'verification-order-row-expanded'
+                  : ''
+              }
+              expandable={{
+                expandedRowRender: (record) => renderExpandedTests(record),
+                expandRowByClick: true,
+                showExpandColumn: false,
+                expandedRowKeys: expandedOrderIds,
+                onExpand: (expanded, record) => {
+                  setExpandedOrderIds(expanded ? [record.orderId] : []);
+                },
+              }}
+              pagination={{
+                current: page,
+                pageSize: size,
+                total,
+                onChange: (p) => setPage(p),
+                showSizeChanger: false,
+                showTotal: (t) => `${t} order(s) awaiting verification`,
+              }}
+              scroll={{ x: 1060 }}
+              size="small"
+            />
+          </div>
+        </Card>
+      </div>
 
       <Modal
         title={
@@ -973,20 +1085,19 @@ export function VerificationPage() {
         footer={null}
         width={1280}
         className="verification-review-modal"
+        style={{ top: 16 }}
       >
         {activePanelReview && (
           <Space direction="vertical" style={{ width: '100%' }} size="middle">
             <div
-              style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                gap: 12,
-                flexWrap: 'wrap',
-              }}
+              className="verification-review-toolbar"
             >
               <Space size={[6, 6]} wrap>
-                <Tag style={{ margin: 0 }}>{activePanelReview.children.length} child tests</Tag>
+                <Tag style={{ margin: 0 }}>
+                  {activePanelReview.hasPanelChildren
+                    ? `${activePanelReview.children.length} child tests`
+                    : 'Panel result'}
+                </Tag>
                 <Text strong>{activePanelReview.group.patientName}</Text>
                 <Text type="secondary">Order {activePanelReview.group.orderNumber}</Text>
                 <Text type="secondary">
@@ -999,7 +1110,7 @@ export function VerificationPage() {
                   icon={<CloseCircleOutlined />}
                   onClick={() => openRejectAllPanelModal(activePanelReview)}
                 >
-                  Reject All
+                  {activePanelReview.hasPanelChildren ? 'Reject All' : 'Reject panel result'}
                 </Button>
                 <Button
                   type="primary"
@@ -1008,7 +1119,7 @@ export function VerificationPage() {
                     void handleVerifyPanelChildren(activePanelReview);
                   }}
                 >
-                  Verify panel children
+                  {activePanelReview.hasPanelChildren ? 'Verify panel children' : 'Verify panel result'}
                 </Button>
               </div>
             </div>
@@ -1021,7 +1132,6 @@ export function VerificationPage() {
               dataSource={activePanelReview.children}
               columns={panelReviewColumns}
               tableLayout="fixed"
-              scroll={{ x: 1120, y: 560 }}
             />
           </Space>
         )}
@@ -1030,7 +1140,9 @@ export function VerificationPage() {
       <Modal
         title={
           rejectTarget?.mode === 'panel'
-            ? 'Reject All Panel Results'
+            ? rejectTarget.context.hasPanelChildren
+              ? 'Reject All Panel Results'
+              : 'Reject Panel Result'
             : 'Reject Result'
         }
         open={rejectModalOpen}
@@ -1042,7 +1154,13 @@ export function VerificationPage() {
         onOk={() => {
           void handleReject();
         }}
-        okText={rejectTarget?.mode === 'panel' ? 'Reject All' : 'Reject'}
+        okText={
+          rejectTarget?.mode === 'panel'
+            ? rejectTarget.context.hasPanelChildren
+              ? 'Reject All'
+              : 'Reject Panel'
+            : 'Reject'
+        }
         okButtonProps={{ danger: true, disabled: !rejectReason.trim() }}
       >
         {rejectTarget?.mode === 'single' && (
@@ -1078,10 +1196,17 @@ export function VerificationPage() {
               <strong>Order #:</strong> {rejectTarget.context.group.orderNumber}
             </p>
             <p>
-              <strong>Rejecting:</strong> {rejectTarget.ids.length} child result(s)
+              <strong>Rejecting:</strong>{' '}
+              {rejectTarget.context.hasPanelChildren
+                ? `${rejectTarget.ids.length} child result(s)`
+                : 'Panel result'}
             </p>
             <Input.TextArea
-              placeholder="Enter rejection reason (applies to all)..."
+              placeholder={
+                rejectTarget.context.hasPanelChildren
+                  ? 'Enter rejection reason (applies to all child results)...'
+                  : 'Enter rejection reason for panel result...'
+              }
               value={rejectReason}
               onChange={(e) => setRejectReason(e.target.value)}
               rows={3}

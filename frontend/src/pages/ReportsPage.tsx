@@ -1462,32 +1462,32 @@ export function ReportsPage() {
           margin: 0;
         }
         .panel-entry-modal .ant-modal {
-          max-width: calc(100vw - 24px) !important;
+          max-width: calc(100vw - 32px) !important;
         }
         .panel-entry-modal .ant-modal-content {
-          border-radius: 12px;
+          border-radius: 14px;
           overflow: hidden;
         }
         .panel-entry-modal .ant-modal-header {
-          padding: 10px 14px;
+          padding: 11px 14px;
           margin-bottom: 0;
         }
         .panel-entry-modal .ant-modal-body {
-          padding: 6px 10px 10px !important;
-          max-height: calc(100vh - 160px);
+          padding: 8px 12px 12px !important;
+          max-height: calc(100vh - 140px);
           overflow-y: auto;
         }
         .panel-entry-modal .panel-entry-summary {
           margin-bottom: 8px;
-          padding: 8px 10px;
+          padding: 9px 10px;
           border-radius: 6px;
         }
         .panel-entry-modal .panel-entry-grid-head {
-          padding: 6px 10px !important;
-          margin-bottom: 4px !important;
+          padding: 5px 8px !important;
+          margin-bottom: 0 !important;
         }
         .panel-entry-modal .panel-entry-grid-row {
-          padding: 4px 10px !important;
+          padding: 4px 8px !important;
           margin-bottom: 0 !important;
         }
         .panel-entry-modal .panel-entry-grid-row .ant-form-item {
@@ -1502,10 +1502,11 @@ export function ReportsPage() {
         }
         @media (max-width: 992px) {
           .panel-entry-modal .ant-modal {
-            margin: 12px auto;
+            margin: 10px auto;
           }
           .panel-entry-modal .ant-modal-body {
-            max-height: calc(100vh - 132px);
+            max-height: calc(100vh - 116px);
+            padding: 10px 12px 12px !important;
           }
         }
       `}</style>
@@ -1576,10 +1577,9 @@ export function ReportsPage() {
           editResultForm.resetFields();
         }}
         footer={null}
-        width={920}
+        width={960}
         className="panel-entry-modal"
         styles={{
-          body: { paddingTop: 8 },
           header: { borderBottom: isDark ? '1px solid rgba(255,255,255,0.08)' : '1px solid #f0f0f0' },
         }}
         destroyOnClose
@@ -1652,8 +1652,72 @@ export function ReportsPage() {
                     )}
 
                     {targetItems.map((target, idx) => {
-                      const hasParams = (target.test?.parameterDefinitions?.length ?? 0) > 0;
+                      const parameterDefinitions = target.test?.parameterDefinitions ?? [];
+                      const hasParams = parameterDefinitions.length > 0;
                       const panelResultControlStyle = isPanel ? { width: '100%' } : undefined;
+
+                      if (isPanel && hasParams) {
+                        return parameterDefinitions.map((def, defIndex) => {
+                          const isLastRow =
+                            idx === targetItems.length - 1 && defIndex === parameterDefinitions.length - 1;
+                          return (
+                            <div
+                              key={`${target.id}-${def.code}`}
+                              className="panel-entry-grid-row"
+                              style={{
+                                marginBottom: 0,
+                                borderBottom: !isLastRow
+                                  ? (isDark ? '1px solid rgba(255,255,255,0.05)' : '1px solid #f0f0f0')
+                                  : 'none',
+                              }}
+                            >
+                              <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap' }}>
+                                <div style={{ flex: '1 1 24%' }}>
+                                  <Text style={{ fontSize: 11, lineHeight: '15px' }}>{def.label}</Text>
+                                </div>
+                                <div style={{ flex: '1 1 40%' }}>
+                                  <Form.Item name={[target.id, 'resultParameters', def.code]} noStyle>
+                                    {def.type === 'select' ? (
+                                      <Select
+                                        allowClear
+                                        showSearch
+                                        style={{ width: '100%' }}
+                                        size="small"
+                                        placeholder="Select"
+                                        options={[
+                                          ...(def.options ?? []).map((o) => ({ label: o, value: o })),
+                                          { label: 'Other...', value: '__other__' },
+                                        ]}
+                                      />
+                                    ) : (
+                                      <Input style={{ width: '100%' }} size="small" placeholder="Result" />
+                                    )}
+                                  </Form.Item>
+                                  {def.type === 'select' && (
+                                    <Form.Item noStyle shouldUpdate>
+                                      {() => editResultForm.getFieldValue([target.id, 'resultParameters', def.code]) === '__other__' && (
+                                        <Form.Item
+                                          name={[target.id, 'resultParametersCustom', def.code]}
+                                          rules={[{ required: true, message: 'Enter custom value' }]}
+                                          style={{ marginTop: 4, marginBottom: 0 }}
+                                        >
+                                          <Input size="small" placeholder="Specify custom value..." />
+                                        </Form.Item>
+                                      )}
+                                    </Form.Item>
+                                  )}
+                                </div>
+                                <div style={{ flex: '1 1 14%', textAlign: 'center', fontSize: 11 }}>
+                                  -
+                                </div>
+                                <div style={{ flex: '1 1 22%', textAlign: 'right', fontSize: 11, color: 'rgba(128,128,128,0.8)' }}>
+                                  -
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        });
+                      }
 
                       return (
                         <div key={target.id} className={isPanel ? 'panel-entry-grid-row' : undefined} style={{
@@ -1661,7 +1725,7 @@ export function ReportsPage() {
                           padding: isPanel ? undefined : 0,
                           borderBottom: isPanel && idx < targetItems.length - 1 ? (isDark ? '1px solid rgba(255,255,255,0.05)' : '1px solid #f0f0f0') : 'none'
                         }}>
-                          <div style={{ display: 'flex', alignItems: 'flex-start', flexWrap: 'wrap' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap' }}>
                             <div style={{ flex: isPanel ? '1 1 24%' : '1 1 100%', marginBottom: isPanel ? 0 : 8 }}>
                               <Text strong={!isPanel} style={{ fontSize: isPanel ? 12 : 14 }}>{target.test?.name}</Text>
                             </div>
@@ -1680,19 +1744,25 @@ export function ReportsPage() {
                                           style={{ width: '100%' }}
                                           placeholder="Value"
                                           precision={2}
-                                          size={isPanel ? "small" : "large"}
+                                          size={isPanel ? 'small' : 'large'}
                                         />
                                       </Form.Item>
                                       {target.test?.resultEntryType === 'NUMERIC' && !isPanel && target.test?.unit && <Text type="secondary">{target.test.unit}</Text>}
                                     </div>
-                                  ) : target.test?.resultEntryType === 'QUALITATIVE' ? (
-                                    <Input
+                                  ) : target.test?.resultEntryType === 'QUALITATIVE' && (target.test?.resultTextOptions?.length ?? 0) > 0 ? (
+                                    <Select
+                                      allowClear
+                                      showSearch
                                       style={panelResultControlStyle}
-                                      size={isPanel ? "small" : "large"}
-                                      placeholder="Result text"
+                                      size={isPanel ? 'small' : 'large'}
+                                      placeholder="Select"
+                                      options={[
+                                        ...(target.test?.resultTextOptions ?? []).map((o) => ({ label: o.value, value: o.value })),
+                                        ...(target.test?.allowCustomResultText ? [{ label: 'Other...', value: '__other__' }] : []),
+                                      ]}
                                     />
                                   ) : (
-                                    <Input style={panelResultControlStyle} size={isPanel ? "small" : "large"} placeholder="Result text" />
+                                    <Input style={panelResultControlStyle} size={isPanel ? 'small' : 'large'} placeholder="Result text" />
                                   )}
                                 </Form.Item>
                               ) : (
@@ -1700,12 +1770,28 @@ export function ReportsPage() {
                               )}
                             </div>
 
+                            {!hasParams && target.test?.resultEntryType === 'QUALITATIVE' && target.test?.allowCustomResultText && (
+                              <Form.Item noStyle shouldUpdate>
+                                {() => editResultForm.getFieldValue([target.id, 'resultText']) === '__other__' && (
+                                  <div style={{ marginTop: 8, paddingLeft: isPanel ? 0 : 0 }}>
+                                    <Form.Item
+                                      name={[target.id, 'customResultText']}
+                                      rules={[{ required: true, message: 'Enter custom text' }]}
+                                      label={isPanel ? null : 'Custom text'}
+                                    >
+                                      <Input style={panelResultControlStyle} placeholder="Specify custom result..." size="small" />
+                                    </Form.Item>
+                                  </div>
+                                )}
+                              </Form.Item>
+                            )}
+
                             {isPanel && (
                               <>
-                                <div style={{ flex: '1 1 14%', textAlign: 'center', fontSize: 12 }}>
+                                <div style={{ flex: '1 1 14%', textAlign: 'center', fontSize: 11 }}>
                                   {target.test?.unit || '-'}
                                 </div>
-                                <div style={{ flex: '1 1 22%', textAlign: 'right', fontSize: 12, color: 'rgba(128,128,128,0.8)' }}>
+                                <div style={{ flex: '1 1 22%', textAlign: 'right', fontSize: 11, color: 'rgba(128,128,128,0.8)' }}>
                                   {target.test?.normalText || `${target.test?.normalMin ?? '-'} - ${target.test?.normalMax ?? '-'}`}
                                 </div>
                               </>
@@ -1713,7 +1799,7 @@ export function ReportsPage() {
                           </div>
 
                           {/* Parameters */}
-                          {hasParams && (
+                          {hasParams && !isPanel && (
                             <div
                               className="panel-entry-params"
                               style={{
@@ -1732,7 +1818,18 @@ export function ReportsPage() {
                                       label={<span style={{ fontSize: 12 }}>{def.label}</span>}
                                       style={{ marginBottom: 0 }}
                                     >
-                                      <Input size="small" placeholder="Enter..." />
+                                      {def.type === 'select' ? (
+                                        <Select
+                                          allowClear
+                                          size={isPanel ? 'middle' : 'small'}
+                                          options={[
+                                            ...(def.options ?? []).map((o) => ({ label: o, value: o })),
+                                            { label: 'Other...', value: '__other__' },
+                                          ]}
+                                        />
+                                      ) : (
+                                        <Input size={isPanel ? 'middle' : 'small'} placeholder="Enter..." />
+                                      )}
                                     </Form.Item>
                                   </Col>
                                 ))}

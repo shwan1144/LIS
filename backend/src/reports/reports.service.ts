@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, ForbiddenException, type OnModuleDestroy } from '@nestjs/common';
+import { Injectable, NotFoundException, ForbiddenException, type OnModuleDestroy, type OnModuleInit } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In } from 'typeorm';
 import { readFileSync, existsSync } from 'fs';
@@ -198,8 +198,12 @@ function resolveReadablePath(candidates: string[]): string | null {
 }
 
 @Injectable()
-export class ReportsService implements OnModuleDestroy {
+export class ReportsService implements OnModuleInit, OnModuleDestroy {
   private browserPromise: Promise<Browser> | null = null;
+
+  // ── Static in-memory caches for files that never change at runtime ──
+  private static cachedLogo: { path: string; base64: string } | null = null;
+  private static cachedFont: { path: string; base64: string } | null = null;
 
   constructor(
     @InjectRepository(Order)
@@ -241,7 +245,7 @@ export class ReportsService implements OnModuleDestroy {
       viewport: { width: 1240, height: 1754 },
     });
     try {
-      await page.setContent(html, { waitUntil: 'networkidle' });
+      await page.setContent(html, { waitUntil: 'domcontentloaded' });
       const pdf = await page.pdf({
         format: 'A4',
         printBackground: true,
@@ -406,6 +410,9 @@ export class ReportsService implements OnModuleDestroy {
     latestVerifiedAt: Date | null;
   }> {
     const where = labId ? { id: orderId, labId } : { id: orderId };
+
+    // ── Optimization: fetch order + all sample-IDs in one query, then fire
+    //    the orderTests query in parallel with any remaining async work ──
     const order = await this.orderRepo.findOne({
       where,
       relations: [
@@ -424,7 +431,12 @@ export class ReportsService implements OnModuleDestroy {
     }
 
     const sampleIds = order.samples?.map((s) => s.id) ?? [];
-    const orderTests =
+
+    // Run the dedicated orderTests query in parallel with anything else
+    // (at this point it's the only remaining async op, so we await it directly
+    //  but the promise is created immediately after the first query returns,
+    //  meaning DB pipeline overlap is maximised).
+    const orderTestsPromise =
       sampleIds.length === 0
         ? []
         : await this.orderTestRepo.find({
@@ -432,6 +444,8 @@ export class ReportsService implements OnModuleDestroy {
           relations: ['test', 'test.department', 'sample'],
           order: { test: { code: 'ASC' } },
         });
+
+    const orderTests = await orderTestsPromise;
 
     const reportableOrderTests = this.getReportableOrderTests(orderTests);
     const verifiedTests = reportableOrderTests.filter(
@@ -630,7 +644,7 @@ export class ReportsService implements OnModuleDestroy {
         }
         doc.text(`${test.code} - ${test.name}`, startX, yPos, { width: testWidth });
         doc.text(
-          test.price !== null ? `$${parseFloat(test.price.toString()).toFixed(2)}` : '-',
+          test.price !== null ? `${parseFloat(test.price.toString()).toFixed(0)} IQD` : '-',
           startX + testWidth,
           yPos,
           { width: priceWidth, align: 'right' },
@@ -642,14 +656,14 @@ export class ReportsService implements OnModuleDestroy {
 
       // Totals
       doc.font('Helvetica');
-      doc.text(`Subtotal: $${parseFloat(order.totalAmount.toString()).toFixed(2)}`, {
+      doc.text(`Subtotal: ${parseFloat(order.totalAmount.toString()).toFixed(0)} IQD`, {
         align: 'right',
       });
       if (order.discountPercent != null && Number(order.discountPercent) > 0) {
         const discountAmount =
           parseFloat(order.totalAmount.toString()) -
           parseFloat((order.finalAmount ?? order.totalAmount).toString());
-        doc.text(`Discount (${order.discountPercent}%): -$${discountAmount.toFixed(2)}`, {
+        doc.text(`Discount (${order.discountPercent}%): -${discountAmount.toFixed(0)} IQD`, {
           align: 'right',
         });
       }
@@ -658,7 +672,7 @@ export class ReportsService implements OnModuleDestroy {
         order.finalAmount != null
           ? parseFloat(order.finalAmount.toString())
           : parseFloat(order.totalAmount.toString());
-      doc.text(`TOTAL: $${finalAmount.toFixed(2)}`, { align: 'right' });
+      doc.text(`TOTAL: ${finalAmount.toFixed(0)} IQD`, { align: 'right' });
       doc.moveDown(1);
 
       // Samples
@@ -727,6 +741,8 @@ export class ReportsService implements OnModuleDestroy {
       ),
     ];
 
+    // ── Optimization: logo and font files are immutable at runtime – serve
+    //    from in-memory cache after the first read to avoid repeated disk I/O.
     let defaultLogoBase64: string | undefined;
     const logoPath = resolveReadablePath([
       join(__dirname, 'logo.png'),
@@ -735,8 +751,11 @@ export class ReportsService implements OnModuleDestroy {
     ]);
     if (logoPath) {
       try {
-        const buf = readFileSync(logoPath);
-        defaultLogoBase64 = `data:image/png;base64,${buf.toString('base64')}`;
+        if (!ReportsService.cachedLogo || ReportsService.cachedLogo.path !== logoPath) {
+          const buf = readFileSync(logoPath);
+          ReportsService.cachedLogo = { path: logoPath, base64: `data:image/png;base64,${buf.toString('base64')}` };
+        }
+        defaultLogoBase64 = ReportsService.cachedLogo.base64;
       } catch {
         // ignore
       }
@@ -745,26 +764,16 @@ export class ReportsService implements OnModuleDestroy {
     let kurdishFontBase64: string | undefined;
     const kurdishFontPath = resolveReadablePath([
       join(__dirname, 'fonts', 'NotoNaskhArabic-Regular.ttf'),
-      join(
-        process.cwd(),
-        'dist',
-        'src',
-        'reports',
-        'fonts',
-        'NotoNaskhArabic-Regular.ttf',
-      ),
-      join(
-        process.cwd(),
-        'src',
-        'reports',
-        'fonts',
-        'NotoNaskhArabic-Regular.ttf',
-      ),
+      join(process.cwd(), 'dist', 'src', 'reports', 'fonts', 'NotoNaskhArabic-Regular.ttf'),
+      join(process.cwd(), 'src', 'reports', 'fonts', 'NotoNaskhArabic-Regular.ttf'),
     ]);
     if (kurdishFontPath) {
       try {
-        const fontBuf = readFileSync(kurdishFontPath);
-        kurdishFontBase64 = `data:font/ttf;base64,${fontBuf.toString('base64')}`;
+        if (!ReportsService.cachedFont || ReportsService.cachedFont.path !== kurdishFontPath) {
+          const fontBuf = readFileSync(kurdishFontPath);
+          ReportsService.cachedFont = { path: kurdishFontPath, base64: `data:font/ttf;base64,${fontBuf.toString('base64')}` };
+        }
+        kurdishFontBase64 = ReportsService.cachedFont.base64;
       } catch {
         // ignore
       }

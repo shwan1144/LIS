@@ -2,6 +2,7 @@ import { Repository } from 'typeorm';
 import { OrderTest, OrderTestStatus, ResultFlag } from '../entities/order-test.entity';
 import { Order } from '../entities/order.entity';
 import { Test } from '../entities/test.entity';
+import { Lab } from '../entities/lab.entity';
 import { UserDepartmentAssignment } from '../entities/user-department-assignment.entity';
 import { Department } from '../entities/department.entity';
 import type { TestParameterDefinition, TestResultEntryType, TestResultTextOption } from '../entities/test.entity';
@@ -48,11 +49,12 @@ export declare class WorklistService {
     private readonly orderTestRepo;
     private readonly orderRepo;
     private readonly testRepo;
+    private readonly labRepo;
     private readonly userDeptRepo;
     private readonly departmentRepo;
     private readonly panelStatusService;
     private readonly auditService;
-    constructor(orderTestRepo: Repository<OrderTest>, orderRepo: Repository<Order>, testRepo: Repository<Test>, userDeptRepo: Repository<UserDepartmentAssignment>, departmentRepo: Repository<Department>, panelStatusService: PanelStatusService, auditService: AuditService);
+    constructor(orderTestRepo: Repository<OrderTest>, orderRepo: Repository<Order>, testRepo: Repository<Test>, labRepo: Repository<Lab>, userDeptRepo: Repository<UserDepartmentAssignment>, departmentRepo: Repository<Department>, panelStatusService: PanelStatusService, auditService: AuditService);
     getWorklist(labId: string, params: {
         status?: OrderTestStatus[];
         search?: string;
@@ -71,6 +73,14 @@ export declare class WorklistService {
         resultParameters?: Record<string, string> | null;
         forceEditVerified?: boolean;
     }, actorRole?: string): Promise<OrderTest>;
+    batchEnterResults(labId: string, actor: LabActorContext, actorRole: string | undefined, updates: Array<{
+        orderTestId: string;
+        resultValue?: number | null;
+        resultText?: string | null;
+        comments?: string | null;
+        resultParameters?: Record<string, string> | null;
+        forceEditVerified?: boolean;
+    }>): Promise<OrderTest[]>;
     verifyResult(orderTestId: string, labId: string, actor: LabActorContext): Promise<OrderTest>;
     verifyMultiple(orderTestIds: string[], labId: string, actor: LabActorContext): Promise<{
         verified: number;
@@ -91,5 +101,7 @@ export declare class WorklistService {
         verified: number;
         rejected: number;
     }>;
+    private getLabTimeZone;
+    private getDateRangeOrThrow;
     private syncOrderStatus;
 }

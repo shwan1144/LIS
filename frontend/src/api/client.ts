@@ -192,7 +192,7 @@ export interface AdminSummaryDto {
     testId: string;
     testCode: string;
     testName: string;
-  testAbbreviation: string | null;
+    testAbbreviation: string | null;
     ordersCount: number;
     verifiedCount: number;
   }>;
@@ -601,6 +601,7 @@ export async function updateAdminLabSettings(
       reportPrinterName?: string | null;
     };
     reportBranding?: Partial<ReportBrandingDto>;
+    uiTestGroups?: { id: string; name: string; testIds: string[] }[] | null;
   },
 ): Promise<LabSettingsDto> {
   const res = await api.patch<LabSettingsDto>(`/admin/api/labs/${labId}/settings`, data);
@@ -1021,6 +1022,29 @@ export interface OrderSearchResult {
   totalPages: number;
 }
 
+export interface OrderHistoryItemDto {
+  id: string;
+  orderNumber: string | null;
+  status: OrderStatus;
+  registeredAt: string;
+  paymentStatus: 'unpaid' | 'partial' | 'paid';
+  paidAmount: number | null;
+  finalAmount: number;
+  patient: PatientDto;
+  shift: { id: string; code: string; name: string | null } | null;
+  testsCount: number;
+  readyTestsCount: number;
+  reportReady: boolean;
+}
+
+export interface OrderHistorySearchResult {
+  items: OrderHistoryItemDto[];
+  total: number;
+  page: number;
+  size: number;
+  totalPages: number;
+}
+
 export async function getOrderPriceEstimate(
   testIds: string[],
   shiftId?: string | null
@@ -1041,6 +1065,40 @@ export async function searchOrders(params: OrderSearchParams): Promise<OrderSear
   return res.data;
 }
 
+function toHistoryItem(order: OrderDto): OrderHistoryItemDto {
+  return {
+    id: order.id,
+    orderNumber: order.orderNumber,
+    status: order.status,
+    registeredAt: order.registeredAt,
+    paymentStatus: order.paymentStatus === 'paid' || order.paymentStatus === 'partial' ? order.paymentStatus : 'unpaid',
+    paidAmount: order.paidAmount != null ? Number(order.paidAmount) : null,
+    finalAmount: Number(order.finalAmount ?? 0),
+    patient: order.patient,
+    shift: order.shift,
+    testsCount: Number(order.testsCount ?? 0) || 0,
+    readyTestsCount: Number(order.readyTestsCount ?? 0) || 0,
+    reportReady: Boolean(order.reportReady) || Number(order.readyTestsCount ?? 0) > 0,
+  };
+}
+
+export async function searchOrdersHistory(params: OrderSearchParams): Promise<OrderHistorySearchResult> {
+  try {
+    const res = await api.get<OrderHistorySearchResult>('/orders/history', { params });
+    return res.data;
+  } catch (error: unknown) {
+    if (!axios.isAxiosError(error) || error.response?.status !== 404) {
+      throw error;
+    }
+
+    const fallback = await searchOrders(params);
+    return {
+      ...fallback,
+      items: fallback.items.map(toHistoryItem),
+    };
+  }
+}
+
 export async function getOrder(id: string): Promise<OrderDto> {
   const res = await api.get<OrderDto>(`/orders/${id}`);
   return res.data;
@@ -1051,6 +1109,14 @@ export async function updateOrderPayment(
   data: { paymentStatus: 'unpaid' | 'partial' | 'paid'; paidAmount?: number }
 ): Promise<OrderDto> {
   const res = await api.patch<OrderDto>(`/orders/${orderId}/payment`, data);
+  return res.data;
+}
+
+export async function updateOrderDiscount(
+  orderId: string,
+  data: { discountPercent: number },
+): Promise<OrderDto> {
+  const res = await api.patch<OrderDto>(`/orders/${orderId}/discount`, data);
   return res.data;
 }
 
@@ -1363,6 +1429,19 @@ export async function enterResult(
   await api.patch(`/worklist/${id}/result`, data);
 }
 
+export async function batchEnterResults(
+  updates: Array<{
+    orderTestId: string;
+    resultValue?: number | null;
+    resultText?: string | null;
+    comments?: string | null;
+    resultParameters?: Record<string, string> | null;
+    forceEditVerified?: boolean;
+  }>
+): Promise<void> {
+  await api.patch('/worklist/batch-result', { updates });
+}
+
 export interface WorklistParams {
   status?: OrderTestStatus[];
   search?: string;
@@ -1558,6 +1637,7 @@ export interface LabSettingsDto {
     reportPrinterName: string | null;
   };
   reportBranding: ReportBrandingDto;
+  uiTestGroups?: { id: string; name: string; testIds: string[] }[];
 }
 
 export async function getLabSettings(): Promise<LabSettingsDto> {
@@ -1565,7 +1645,7 @@ export async function getLabSettings(): Promise<LabSettingsDto> {
   return res.data;
 }
 
-export async function updateLabSettings(data: {
+export interface UpdateLabSettingsDto {
   labelSequenceBy?: 'tube_type' | 'department';
   sequenceResetBy?: 'day' | 'shift';
   enableOnlineResults?: boolean;
@@ -1578,7 +1658,10 @@ export async function updateLabSettings(data: {
     reportPrinterName?: string | null;
   };
   reportBranding?: Partial<ReportBrandingDto>;
-}): Promise<LabSettingsDto> {
+  uiTestGroups?: { id: string; name: string; testIds: string[] }[] | null;
+}
+
+export async function updateLabSettings(data: UpdateLabSettingsDto): Promise<LabSettingsDto> {
   const res = await api.patch<LabSettingsDto>('/settings/lab', data);
   return res.data;
 }

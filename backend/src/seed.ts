@@ -227,7 +227,7 @@ export async function runSeed(options: RunSeedOptions = {}) {
           isActive: true,
         });
         await pricingRepo.save(pricing);
-        console.log(`Created pricing: ${test.code} - Walk-in/Day - $${basePrice}`);
+        console.log(`Created pricing: ${test.code} - Walk-in/Day - ${basePrice} IQD`);
       }
 
       // Create pricing for hospital (20% discount)
@@ -250,7 +250,7 @@ export async function runSeed(options: RunSeedOptions = {}) {
         });
         await pricingRepo.save(pricing);
         console.log(
-          `Created pricing: ${test.code} - Hospital/Day - $${(basePrice * 0.8).toFixed(2)}`,
+          `Created pricing: ${test.code} - Hospital/Day - ${(basePrice * 0.8).toFixed(0)} IQD`,
         );
       }
 
@@ -273,7 +273,7 @@ export async function runSeed(options: RunSeedOptions = {}) {
           isActive: true,
         });
         await pricingRepo.save(pricing);
-        console.log(`Created default pricing: ${test.code} - $${basePrice}`);
+        console.log(`Created default pricing: ${test.code} - ${basePrice} IQD`);
       }
     }
 

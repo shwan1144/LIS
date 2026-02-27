@@ -4,7 +4,7 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, Between, EntityManager } from 'typeorm';
+import { Repository, Between, EntityManager, SelectQueryBuilder } from 'typeorm';
 import { Order, OrderStatus, PatientType } from '../entities/order.entity';
 import { Sample, TubeType as SampleTubeType } from '../entities/sample.entity';
 import { OrderTest, OrderTestStatus } from '../entities/order-test.entity';
@@ -21,6 +21,13 @@ import {
   nextLabCounterValueWithFloor,
   peekNextLabCounterValue,
 } from '../database/lab-counter.util';
+import {
+  addDaysToDateKey,
+  formatDateKeyForTimeZone,
+  formatOrderDatePrefixForTimeZone,
+  getUtcRangeForLabDate,
+  normalizeLabTimeZone,
+} from '../database/lab-timezone.util';
 
 export interface WorklistItemStored {
   rowId: string;
@@ -33,6 +40,39 @@ export interface WorklistItemResponse {
   patient: Patient;
   createdOrder: Order | null;
 }
+
+export interface OrderListQueryParams {
+  page?: number;
+  size?: number;
+  search?: string;
+  status?: OrderStatus;
+  patientId?: string;
+  startDate?: string;
+  endDate?: string;
+}
+
+export interface OrderHistoryItem {
+  id: string;
+  orderNumber: string | null;
+  status: OrderStatus;
+  registeredAt: Date;
+  paymentStatus: 'unpaid' | 'partial' | 'paid';
+  paidAmount: number | null;
+  finalAmount: number;
+  patient: Patient;
+  shift: Shift | null;
+  testsCount: number;
+  readyTestsCount: number;
+  reportReady: boolean;
+}
+
+type OrderProgressTarget = {
+  id: string;
+  status: OrderStatus;
+  testsCount?: number;
+  readyTestsCount?: number;
+  reportReady?: boolean;
+};
 
 @Injectable()
 export class OrdersService {
@@ -94,18 +134,19 @@ export class OrdersService {
 
     // Calculate pricing
     const patientType = dto.patientType || PatientType.WALK_IN;
-    let totalAmount = 0;
-
-    // Get pricing for each test
-    for (const testId of uniqueTestIds) {
-      const pricing = await this.findPricing(
-        labId,
-        testId,
-        dto.shiftId || null,
-        patientType,
-      );
-      totalAmount += pricing;
-    }
+    const pricingValues = await Promise.all(
+      uniqueTestIds.map((testId) =>
+        this.findPricing(
+          labId,
+          testId,
+          dto.shiftId || null,
+          patientType,
+        ),
+      ),
+    );
+    const precomputedPricingMap = new Map<string, number>();
+    uniqueTestIds.forEach((id, idx) => precomputedPricingMap.set(id, pricingValues[idx]));
+    const totalAmount = pricingValues.reduce((sum, value) => sum + value, 0);
 
     const discountPercent = Math.min(100, Math.max(0, dto.discountPercent ?? 0));
     const finalAmount = Math.round(totalAmount * (1 - discountPercent / 100) * 100) / 100;
@@ -119,87 +160,103 @@ export class OrdersService {
         ? this.splitSamplesForDepartmentLabels(dto.samples, testMap)
         : dto.samples;
 
-    // Generate order number (sequential per lab, per day, per shift; restarts when shift or day changes)
-    const orderNumber = await this.generateOrderNumber(labId, dto.shiftId || null);
+    return this.orderRepo.manager.transaction(async (manager) => {
+      const orderRepo = manager.getRepository(Order);
+      const sampleRepo = manager.getRepository(Sample);
+      const now = new Date();
+      const labTimeZone = normalizeLabTimeZone(lab.timezone);
+      const counterDateKey = formatDateKeyForTimeZone(now, labTimeZone);
 
-    // Create order
-    const order = this.orderRepo.create({
-      patientId: dto.patientId,
-      labId,
-      shiftId: dto.shiftId || null,
-      orderNumber,
-      status: OrderStatus.REGISTERED,
-      patientType,
-      notes: dto.notes || null,
-      totalAmount,
-      discountPercent,
-      finalAmount,
-      registeredAt: new Date(),
-    });
-
-    const savedOrder = await this.orderRepo.save(order);
-
-    // Create samples and order tests (compact barcode: YYMMDD + 3-digit sequence per sample)
-    const datePart = orderNumber.slice(0, 6);
-    let seq = parseInt(orderNumber.slice(-3), 10);
-    for (let i = 0; i < samplesToCreate.length; i++) {
-      const sampleDto = samplesToCreate[i];
-      const sampleBarcode = `${datePart}${String(seq + i).padStart(3, '0')}`;
-      const scopeKey =
-        labelSequenceBy === 'department'
-          ? this.resolveSampleDepartmentScope(sampleDto.tests, testMap)
-          : (sampleDto.tubeType ?? null);
-      const sequenceNumber = await this.getNextSequenceForScope(
+      // Generate order number once per order (sequential per lab, per day).
+      const orderNumber = await this.generateOrderNumber(
         labId,
-        sequenceResetBy,
-        effectiveShiftId,
-        scopeKey,
-        labelSequenceBy,
+        dto.shiftId || null,
+        1,
+        manager,
+        {
+          now,
+          timeZone: labTimeZone,
+          dateKey: counterDateKey,
+        },
       );
-      const sample = this.orderRepo.manager.create(Sample, {
+
+      // Create order
+      const order = orderRepo.create({
+        patientId: dto.patientId,
         labId,
-        orderId: savedOrder.id,
-        sampleId: null,
-        tubeType: sampleDto.tubeType || null,
-        barcode: sampleBarcode,
-        sequenceNumber,
-        qrCode: null,
+        shiftId: dto.shiftId || null,
+        orderNumber,
+        status: OrderStatus.REGISTERED,
+        patientType,
+        notes: dto.notes || null,
+        totalAmount,
+        discountPercent,
+        finalAmount,
+        registeredAt: new Date(),
       });
-      const savedSample = await this.orderRepo.manager.save(sample);
 
-      for (const testDto of sampleDto.tests) {
-        const test = testMap.get(testDto.testId);
-        if (!test) {
-          // Should not happen due to earlier validation
-          continue;
-        }
-        await this.createOrderTestsForSample(
-          this.orderRepo.manager,
+      const savedOrder = await orderRepo.save(order);
+
+      // Create samples and order tests.
+      // Barcode is order-level and reused across all tubes/samples in the order.
+      const samplesToSave = [];
+      const bulkTestData = [];
+
+      for (let i = 0; i < samplesToCreate.length; i++) {
+        const sampleDto = samplesToCreate[i];
+        const sampleBarcode = orderNumber;
+        const scopeKey =
+          labelSequenceBy === 'department'
+            ? this.resolveSampleDepartmentScope(sampleDto.tests, testMap)
+            : (sampleDto.tubeType ?? null);
+        const sequenceNumber = await this.getNextSequenceForScope(
           labId,
-          savedSample.id,
-          test,
-          dto.shiftId ?? null,
-          patientType,
+          sequenceResetBy,
+          effectiveShiftId,
+          scopeKey,
+          labelSequenceBy,
+          counterDateKey,
+          manager,
         );
+        const sample = sampleRepo.create({
+          labId,
+          orderId: savedOrder.id,
+          sampleId: null,
+          tubeType: sampleDto.tubeType || null,
+          barcode: sampleBarcode,
+          sequenceNumber,
+          qrCode: null,
+        });
+        samplesToSave.push(sample);
       }
-    }
 
-    // Reload order with relations
-    return this.orderRepo.findOne({
-      where: { id: savedOrder.id },
-      relations: ['patient', 'lab', 'shift', 'samples', 'samples.orderTests', 'samples.orderTests.test'],
-    }) as Promise<Order>;
+      const savedSamples = await sampleRepo.save(samplesToSave);
+
+      for (let i = 0; i < samplesToCreate.length; i++) {
+        const sampleDto = samplesToCreate[i];
+        const savedSample = savedSamples[i];
+        const tests = sampleDto.tests.map(t => testMap.get(t.testId)!).filter(Boolean);
+        bulkTestData.push({ sampleId: savedSample.id, tests });
+      }
+
+      await this.bulkCreateOrderTests(
+        manager,
+        labId,
+        bulkTestData,
+        dto.shiftId ?? null,
+        patientType,
+        precomputedPricingMap,
+      );
+
+      // Reload order with relations
+      return (await orderRepo.findOne({
+        where: { id: savedOrder.id },
+        relations: ['patient', 'lab', 'shift', 'samples', 'samples.orderTests', 'samples.orderTests.test'],
+      })) as Order;
+    });
   }
 
-  async findAll(labId: string, params: {
-    page?: number;
-    size?: number;
-    search?: string;
-    status?: OrderStatus;
-    patientId?: string;
-    startDate?: string;
-    endDate?: string;
-  }) {
+  async findAll(labId: string, params: OrderListQueryParams) {
     const page = Math.max(1, params.page ?? 1);
     const size = Math.min(100, Math.max(1, params.size ?? 20));
     const skip = (page - 1) * size;
@@ -213,129 +270,68 @@ export class OrdersService {
       .leftJoinAndSelect('orderTests.test', 'test')
       .where('order.labId = :labId', { labId });
 
-    if (params.status) {
-      if (params.status === OrderStatus.COMPLETED) {
-        qb.andWhere(
-          `("order"."status" = :status OR EXISTS (
-            SELECT 1
-            FROM samples s
-            INNER JOIN order_tests ot ON ot."sampleId" = s.id
-            WHERE s."orderId" = "order"."id"
-              AND ot.status IN (:...completedStatuses)
-          ))`,
-          {
-            status: params.status,
-            completedStatuses: [
-              OrderTestStatus.COMPLETED,
-              OrderTestStatus.VERIFIED,
-              OrderTestStatus.REJECTED,
-            ],
-          },
-        );
-      } else {
-        qb.andWhere('order.status = :status', { status: params.status });
-      }
-    }
-
-    if (params.patientId) {
-      qb.andWhere('order.patientId = :patientId', { patientId: params.patientId });
-    }
-
-    if (params.search?.trim()) {
-      const term = `%${params.search.trim()}%`;
-      const exactSearch = params.search.trim();
-      qb.andWhere(
-        '(order.orderNumber ILIKE :term OR patient.fullName ILIKE :term OR patient.patientNumber = :exactSearch OR patient.phone ILIKE :term)',
-        { term, exactSearch },
-      );
-    }
-
-    if (params.startDate && params.endDate) {
-      const startDate = new Date(params.startDate);
-      startDate.setHours(0, 0, 0, 0);
-      const endDate = new Date(params.endDate);
-      endDate.setHours(23, 59, 59, 999);
-      qb.andWhere('order.registeredAt BETWEEN :startDate AND :endDate', {
-        startDate,
-        endDate,
-      });
-    } else if (params.startDate) {
-      const startDate = new Date(params.startDate);
-      startDate.setHours(0, 0, 0, 0);
-      qb.andWhere('order.registeredAt >= :startDate', { startDate });
-    } else if (params.endDate) {
-      const endDate = new Date(params.endDate);
-      endDate.setHours(23, 59, 59, 999);
-      qb.andWhere('order.registeredAt <= :endDate', { endDate });
-    }
+    await this.applyOrderQueryFilters(qb, labId, params);
 
     qb.orderBy('order.registeredAt', 'DESC').skip(skip).take(size);
 
     const [items, total] = await qb.getManyAndCount();
+    await this.enrichOrdersWithProgress(items as OrderProgressTarget[]);
 
-    // Backfill display status dynamically: if any test has a finalized result,
-    // treat order as COMPLETED in API response even when stored status is stale.
-    if (items.length > 0) {
-      const orderIds = items.map((o) => o.id);
-      const progressed = await this.orderRepo.manager
-        .createQueryBuilder()
-        .select('s."orderId"', 'orderId')
-        .addSelect('COUNT(*)', 'cnt')
-        .from('order_tests', 'ot')
-        .innerJoin('samples', 's', 's.id = ot."sampleId"')
-        .where('s."orderId" IN (:...orderIds)', { orderIds })
-        .andWhere('ot.status IN (:...statuses)', {
-          statuses: [
-            OrderTestStatus.COMPLETED,
-            OrderTestStatus.VERIFIED,
-            OrderTestStatus.REJECTED,
-          ],
-        })
-        .groupBy('s."orderId"')
-        .getRawMany<{ orderId: string; cnt: string }>();
+    return {
+      items,
+      total,
+      page,
+      size,
+      totalPages: Math.ceil(total / size),
+    };
+  }
 
-      const progressedSet = new Set(progressed.map((r) => r.orderId));
+  async findHistory(labId: string, params: OrderListQueryParams): Promise<{
+    items: OrderHistoryItem[];
+    total: number;
+    page: number;
+    size: number;
+    totalPages: number;
+  }> {
+    const page = Math.max(1, params.page ?? 1);
+    const size = Math.min(100, Math.max(1, params.size ?? 20));
+    const skip = (page - 1) * size;
 
-      const testCounts = await this.orderRepo.manager
-        .createQueryBuilder()
-        .select('s."orderId"', 'orderId')
-        .addSelect('COUNT(*)', 'totalTests')
-        .addSelect(
-          `SUM(CASE WHEN ot.status IN (:...readyStatuses) THEN 1 ELSE 0 END)`,
-          'readyTests',
-        )
-        .from('order_tests', 'ot')
-        .innerJoin('samples', 's', 's.id = ot."sampleId"')
-        .where('s."orderId" IN (:...orderIds)', { orderIds })
-        .setParameter('readyStatuses', [
-          OrderTestStatus.COMPLETED,
-          OrderTestStatus.VERIFIED,
-          OrderTestStatus.REJECTED,
-        ])
-        .groupBy('s."orderId"')
-        .getRawMany<{ orderId: string; totalTests: string; readyTests: string }>();
+    const qb = this.orderRepo
+      .createQueryBuilder('order')
+      .leftJoinAndSelect('order.patient', 'patient')
+      .leftJoinAndSelect('order.shift', 'shift')
+      .where('order.labId = :labId', { labId });
 
-      const countMap = new Map(
-        testCounts.map((r) => [
-          r.orderId,
-          {
-            totalTests: parseInt(r.totalTests, 10) || 0,
-            readyTests: parseInt(r.readyTests, 10) || 0,
-          },
-        ]),
-      );
+    await this.applyOrderQueryFilters(qb, labId, params);
 
-      for (const order of items) {
-        const counts = countMap.get(order.id) || { totalTests: 0, readyTests: 0 };
-        (order as unknown as Record<string, unknown>).testsCount = counts.totalTests;
-        (order as unknown as Record<string, unknown>).readyTestsCount = counts.readyTests;
-        (order as unknown as Record<string, unknown>).reportReady = counts.readyTests > 0;
+    qb.orderBy('order.registeredAt', 'DESC').skip(skip).take(size);
 
-        if (order.status !== OrderStatus.CANCELLED && progressedSet.has(order.id)) {
-          order.status = OrderStatus.COMPLETED;
-        }
-      }
-    }
+    const [orders, total] = await qb.getManyAndCount();
+    await this.enrichOrdersWithProgress(orders as OrderProgressTarget[]);
+
+    const items: OrderHistoryItem[] = orders.map((order) => {
+      const testsCount = Number((order as unknown as Record<string, unknown>).testsCount ?? 0) || 0;
+      const readyTestsCount =
+        Number((order as unknown as Record<string, unknown>).readyTestsCount ?? 0) || 0;
+      const reportReady =
+        Boolean((order as unknown as Record<string, unknown>).reportReady) || readyTestsCount > 0;
+
+      return {
+        id: order.id,
+        orderNumber: order.orderNumber,
+        status: order.status,
+        registeredAt: order.registeredAt,
+        paymentStatus: this.normalizePaymentStatus(order.paymentStatus),
+        paidAmount: order.paidAmount != null ? Number(order.paidAmount) : null,
+        finalAmount: Number(order.finalAmount ?? 0),
+        patient: order.patient,
+        shift: order.shift ?? null,
+        testsCount,
+        readyTestsCount,
+        reportReady,
+      };
+    });
 
     return {
       items,
@@ -382,6 +378,39 @@ export class OrdersService {
       order.paidAmount = null;
     }
     await this.orderRepo.save(order);
+    return this.findOne(id, labId);
+  }
+
+  async updateDiscount(id: string, labId: string, discountPercent: number): Promise<Order> {
+    const order = await this.orderRepo.findOne({ where: { id, labId } });
+    if (!order) {
+      throw new NotFoundException('Order not found');
+    }
+    if (order.status === OrderStatus.CANCELLED) {
+      throw new BadRequestException('Cancelled order cannot be edited');
+    }
+
+    const normalizedDiscount = Math.min(100, Math.max(0, Number(discountPercent ?? 0)));
+    const totalAmount = Math.round(Number(order.totalAmount ?? 0) * 100) / 100;
+    const finalAmount = Math.round(totalAmount * (1 - normalizedDiscount / 100) * 100) / 100;
+
+    const normalizedPaymentStatus = this.normalizePaymentStatus(order.paymentStatus);
+    const nextPaidAmount =
+      normalizedPaymentStatus === 'paid'
+        ? finalAmount
+        : normalizedPaymentStatus === 'partial' && order.paidAmount != null
+          ? Math.min(Number(order.paidAmount), finalAmount)
+          : order.paidAmount;
+
+    await this.orderRepo.update(
+      { id, labId },
+      {
+        discountPercent: normalizedDiscount,
+        finalAmount,
+        paidAmount: nextPaidAmount,
+      },
+    );
+
     return this.findOne(id, labId);
   }
 
@@ -482,6 +511,10 @@ export class OrdersService {
       const labelSequenceBy = order.lab?.labelSequenceBy === 'department' ? 'department' : 'tube_type';
       const sequenceResetBy = order.lab?.sequenceResetBy === 'shift' ? 'shift' : 'day';
       const effectiveShiftId = sequenceResetBy === 'shift' ? order.shiftId ?? null : null;
+      const counterDateKey = formatDateKeyForTimeZone(
+        new Date(),
+        normalizeLabTimeZone(order.lab?.timezone),
+      );
       const sampleByScope = new Map<string, Sample>();
       for (const sample of refreshedSamples) {
         const departmentIds = Array.from(
@@ -498,10 +531,8 @@ export class OrdersService {
         }
       }
 
-      const nextBarcode = this.createOrderSampleBarcodeAllocator(
-        order.orderNumber,
-        refreshedSamples.map((sample) => sample.barcode),
-      );
+      // `createOrderSampleBarcodeAllocator` removed, we will grab global sequence directly
+      const bulkTestsBySample = new Map<string, Test[]>();
 
       for (const testId of uniqueTestIds) {
         if (existingRootByTestId.has(testId)) {
@@ -533,6 +564,8 @@ export class OrdersService {
             effectiveShiftId,
             scopeKey,
             labelSequenceBy,
+            counterDateKey,
+            manager,
           );
 
           const createdSample = sampleRepo.create({
@@ -540,7 +573,8 @@ export class OrdersService {
             orderId: order.id,
             sampleId: null,
             tubeType: testTubeType,
-            barcode: nextBarcode(),
+            // Barcode stays order-level even when additional samples are created later.
+            barcode: order.orderNumber ?? null,
             sequenceNumber,
             qrCode: null,
           });
@@ -548,11 +582,21 @@ export class OrdersService {
           sampleByScope.set(sampleScopeKey, targetSample);
         }
 
-        await this.createOrderTestsForSample(
+        const list = bulkTestsBySample.get(targetSample.id) || [];
+        list.push(test);
+        bulkTestsBySample.set(targetSample.id, list);
+      }
+
+      const bulkTestData = Array.from(bulkTestsBySample.entries()).map(([sampleId, tests]) => ({
+        sampleId,
+        tests,
+      }));
+
+      if (bulkTestData.length > 0) {
+        await this.bulkCreateOrderTests(
           manager,
           labId,
-          targetSample.id,
-          test,
+          bulkTestData,
           order.shiftId ?? null,
           order.patientType,
         );
@@ -666,32 +710,47 @@ export class OrdersService {
     return `tube:${tubeType ?? 'none'}`;
   }
 
-  private async createOrderTestsForSample(
+  private async bulkCreateOrderTests(
     manager: EntityManager,
     labId: string,
-    sampleId: string,
-    test: Test,
+    sampleWithTestsArr: Array<{ sampleId: string; tests: Test[] }>,
     shiftId: string | null,
     patientType: PatientType,
+    precomputedPricingMap?: Map<string, number>,
   ): Promise<void> {
     const orderTestRepo = manager.getRepository(OrderTest);
-    const panelPrice = await this.findPricing(labId, test.id, shiftId, patientType);
 
-    if (test.type === TestType.PANEL) {
-      const parentOrderTest = orderTestRepo.create({
-        labId,
-        sampleId,
-        testId: test.id,
-        parentOrderTestId: null,
-        status: OrderTestStatus.PENDING,
-        price: panelPrice,
-      });
-      const savedParent = await orderTestRepo.save(parentOrderTest);
+    const allTestIds = new Set<string>();
+    for (const item of sampleWithTestsArr) {
+      for (const t of item.tests) {
+        allTestIds.add(t.id);
+      }
+    }
+    const uniqueTestIds = Array.from(allTestIds);
+    if (uniqueTestIds.length === 0) return;
 
-      const components = await manager.getRepository(TestComponent)
+    let pricingMap = precomputedPricingMap;
+    if (!pricingMap) {
+      pricingMap = new Map<string, number>();
+      const pricingValues = await Promise.all(
+        uniqueTestIds.map((testId) => this.findPricing(labId, testId, shiftId, patientType))
+      );
+      uniqueTestIds.forEach((id, idx) => pricingMap!.set(id, pricingValues[idx]));
+    }
+
+    const panelTestIds = uniqueTestIds.filter(id => {
+      for (const item of sampleWithTestsArr) {
+        if (item.tests.find(t => t.id === id)?.type === TestType.PANEL) return true;
+      }
+      return false;
+    });
+
+    const componentsByPanelId = new Map<string, TestComponent[]>();
+    if (panelTestIds.length > 0) {
+      const allComponents = await manager.getRepository(TestComponent)
         .createQueryBuilder('component')
         .innerJoinAndSelect('component.childTest', 'childTest')
-        .where('component.panelTestId = :panelTestId', { panelTestId: test.id })
+        .where('component.panelTestId IN (:...panelTestIds)', { panelTestIds })
         .andWhere('childTest.labId = :labId', { labId })
         .orderBy('component.sortOrder', 'ASC')
         .getMany();
@@ -704,8 +763,7 @@ export class OrdersService {
           parentOrderTestId: savedParent.id,
           status: OrderTestStatus.PENDING,
           price: null,
-          panelSortOrder: component.sortOrder,
-        } as any);
+        });
         await orderTestRepo.save(childOrderTest);
       }
       return;
@@ -820,7 +878,7 @@ export class OrdersService {
 
   /**
    * Returns the next order number that would be assigned (preview only; actual number is set at create).
-   * Logic: sequential per lab, per calendar day; one number per sample so barcodes are unique.
+   * Logic: sequential per lab, per calendar day; one number per order.
    * Format: YYMMDD + 3-digit sequence (e.g. 260216001).
    */
   async getNextOrderNumber(labId: string, shiftId: string | null): Promise<string> {
@@ -829,51 +887,66 @@ export class OrdersService {
 
   /**
    * Generates a unique order number stored in the database as orderNumber.
-   * Uses same logic as getNextOrderNumber. First sample of the order gets this as barcode.
+   * Uses same logic as getNextOrderNumber. All samples of the order share this barcode value.
    */
-  private async generateOrderNumber(labId: string, _shiftId: string | null): Promise<string> {
-    const today = new Date();
-    const yy = String(today.getFullYear() % 100).padStart(2, '0');
-    const mm = String(today.getMonth() + 1).padStart(2, '0');
-    const dd = String(today.getDate()).padStart(2, '0');
-    const dateStr = `${yy}${mm}${dd}`;
-    const floor = await this.getMaxOrderSequenceForDate(labId, dateStr);
-    const nextSeq = await nextLabCounterValueWithFloor(this.orderRepo.manager, {
+  private async generateOrderNumber(
+    labId: string,
+    _shiftId: string | null,
+    increment: number = 1,
+    manager: EntityManager = this.orderRepo.manager,
+    options?: {
+      now?: Date;
+      timeZone?: string;
+      dateKey?: string;
+    },
+  ): Promise<string> {
+    const now = options?.now ?? new Date();
+    const timeZone = options?.timeZone ?? (await this.getLabTimeZone(labId, manager));
+    const dateKey = options?.dateKey ?? formatDateKeyForTimeZone(now, timeZone);
+    const dateStr = formatOrderDatePrefixForTimeZone(now, timeZone);
+    const floor = await this.getMaxOrderSequenceForDate(labId, dateStr, manager);
+    const nextSeq = await nextLabCounterValueWithFloor(manager, {
       labId,
       counterType: 'ORDER_NUMBER',
       scopeKey: 'ORDER',
-      date: today,
+      date: now,
+      dateKey,
       shiftId: null,
-    }, floor);
+    }, floor, increment);
     return `${dateStr}${String(nextSeq).padStart(3, '0')}`;
   }
 
   private async computeNextOrderNumber(labId: string, _shiftId: string | null): Promise<string> {
-    const today = new Date();
-    const yy = String(today.getFullYear() % 100).padStart(2, '0');
-    const mm = String(today.getMonth() + 1).padStart(2, '0');
-    const dd = String(today.getDate()).padStart(2, '0');
-    const dateStr = `${yy}${mm}${dd}`;
+    const now = new Date();
+    const timeZone = await this.getLabTimeZone(labId);
+    const dateKey = formatDateKeyForTimeZone(now, timeZone);
+    const dateStr = formatOrderDatePrefixForTimeZone(now, timeZone);
     const floor = await this.getMaxOrderSequenceForDate(labId, dateStr);
     const counterNextSeq = await peekNextLabCounterValue(this.orderRepo.manager, {
       labId,
       counterType: 'ORDER_NUMBER',
       scopeKey: 'ORDER',
-      date: today,
+      date: now,
+      dateKey,
       shiftId: null,
     });
     const nextSeq = Math.max(counterNextSeq, floor + 1);
     return `${dateStr}${String(nextSeq).padStart(3, '0')}`;
   }
 
-  private async getMaxOrderSequenceForDate(labId: string, datePrefix: string): Promise<number> {
+  private async getMaxOrderSequenceForDate(
+    labId: string,
+    datePrefix: string,
+    manager: EntityManager = this.orderRepo.manager,
+  ): Promise<number> {
     const pattern = `^${datePrefix}[0-9]{3}$`;
-    const rows = await this.orderRepo.manager.query(
+    const rows = await manager.query(
       `
-        SELECT COALESCE(MAX(CAST(SUBSTRING("orderNumber" FROM 7 FOR 3) AS integer)), 0) AS "maxSeq"
-        FROM "orders"
-        WHERE "labId" = $1
-          AND "orderNumber" ~ $2
+        SELECT COALESCE((
+          SELECT MAX(CAST(SUBSTRING("orderNumber" FROM 7 FOR 3) AS integer))
+          FROM "orders"
+          WHERE "labId" = $1 AND "orderNumber" ~ $2
+        ), 0) AS "maxSeq"
       `,
       [labId, pattern],
     ) as Array<{ maxSeq: string | number | null }>;
@@ -895,14 +968,17 @@ export class OrdersService {
     shiftId: string | null,
     scopeKey: string | null,
     labelSequenceBy: 'tube_type' | 'department',
+    dateKey: string | null = null,
+    manager: EntityManager = this.orderRepo.manager,
   ): Promise<number> {
     const counterType =
       labelSequenceBy === 'department' ? 'SAMPLE_SEQUENCE_DEPARTMENT' : 'SAMPLE_SEQUENCE_TUBE';
     const scopedShiftId = sequenceResetBy === 'shift' ? shiftId ?? null : null;
-    return nextLabCounterValue(this.orderRepo.manager, {
+    return nextLabCounterValue(manager, {
       labId,
       counterType,
       scopeKey: scopeKey ?? '__none__',
+      dateKey: dateKey ?? undefined,
       shiftId: scopedShiftId,
     });
   }
@@ -914,21 +990,21 @@ export class OrdersService {
   ): Promise<{ subtotal: number }> {
     if (!testIds?.length) return { subtotal: 0 };
     const uniqueTestIds = [...new Set(testIds)];
-    let subtotal = 0;
     const patientType = PatientType.WALK_IN;
-    for (const testId of uniqueTestIds) {
-      const price = await this.findPricing(labId, testId, shiftId, patientType);
-      subtotal += price;
-    }
+    const prices = await Promise.all(
+      uniqueTestIds.map((testId) => this.findPricing(labId, testId, shiftId, patientType)),
+    );
+    const subtotal = prices.reduce((sum, value) => sum + value, 0);
     return { subtotal };
   }
 
   async getOrdersTodayCount(labId: string): Promise<number> {
-    const today = new Date();
-    const startOfDay = new Date(today);
-    startOfDay.setHours(0, 0, 0, 0);
-    const endOfDay = new Date(today);
-    endOfDay.setHours(23, 59, 59, 999);
+    const timeZone = await this.getLabTimeZone(labId);
+    const { startDate: startOfDay, endDate: endOfDay } = this.getDateRangeOrThrow(
+      formatDateKeyForTimeZone(new Date(), timeZone),
+      timeZone,
+      'today',
+    );
 
     return this.orderRepo.count({
       where: {
@@ -941,11 +1017,12 @@ export class OrdersService {
   async getTodayPatients(labId: string): Promise<
     Array<{ patient: Patient; orderCount: number; lastOrderAt: Date | null }>
   > {
-    const today = new Date();
-    const startOfDay = new Date(today);
-    startOfDay.setHours(0, 0, 0, 0);
-    const endOfDay = new Date(today);
-    endOfDay.setHours(23, 59, 59, 999);
+    const timeZone = await this.getLabTimeZone(labId);
+    const { startDate: startOfDay, endDate: endOfDay } = this.getDateRangeOrThrow(
+      formatDateKeyForTimeZone(new Date(), timeZone),
+      timeZone,
+      'today',
+    );
 
     // Get all orders today with patients
     const orders = await this.orderRepo.find({
@@ -989,39 +1066,36 @@ export class OrdersService {
   }
 
   async getOrdersTrend(labId: string, days: number): Promise<{ date: string; count: number }[]> {
-    const endDate = new Date();
-    endDate.setHours(23, 59, 59, 999);
-    const startDate = new Date(endDate);
-    startDate.setDate(startDate.getDate() - days + 1);
-    startDate.setHours(0, 0, 0, 0);
+    const timeZone = await this.getLabTimeZone(labId);
+    const todayDateKey = formatDateKeyForTimeZone(new Date(), timeZone);
+    const startDateKey = addDaysToDateKey(todayDateKey, -(days - 1));
+    const { startDate } = getUtcRangeForLabDate(startDateKey, timeZone);
+    const { endDate } = getUtcRangeForLabDate(todayDateKey, timeZone);
+    const dateExpr = `("order"."registeredAt" AT TIME ZONE 'UTC' AT TIME ZONE :timeZone)::date`;
 
     const orders = await this.orderRepo
       .createQueryBuilder('order')
-      .select("DATE(order.registeredAt)", "date")
-      .addSelect("COUNT(*)", "count")
+      .select(`TO_CHAR(${dateExpr}, 'YYYY-MM-DD')`, 'date')
+      .addSelect('COUNT(*)', 'count')
       .where('order.labId = :labId', { labId })
       .andWhere('order.registeredAt BETWEEN :startDate AND :endDate', {
         startDate,
         endDate,
       })
-      .groupBy("DATE(order.registeredAt)")
-      .orderBy("DATE(order.registeredAt)", "ASC")
-      .getRawMany();
+      .setParameter('timeZone', timeZone)
+      .groupBy(dateExpr)
+      .orderBy(dateExpr, 'ASC')
+      .getRawMany<{ date: string; count: string }>();
 
     // Fill in missing dates with 0
     const resultMap = new Map<string, number>();
-    const currentDate = new Date(startDate);
-    while (currentDate <= endDate) {
-      const dateStr = currentDate.toISOString().slice(0, 10);
-      resultMap.set(dateStr, 0);
-      currentDate.setDate(currentDate.getDate() + 1);
+    for (let offset = 0; offset < days; offset++) {
+      resultMap.set(addDaysToDateKey(startDateKey, offset), 0);
     }
 
     orders.forEach((row) => {
-      const dateStr = row.date instanceof Date
-        ? row.date.toISOString().slice(0, 10)
-        : row.date.slice(0, 10);
-      resultMap.set(dateStr, parseInt(row.count, 10));
+      const dateStr = String(row.date).slice(0, 10);
+      resultMap.set(dateStr, parseInt(row.count, 10) || 0);
     });
 
     return Array.from(resultMap.entries()).map(([date, count]) => ({
@@ -1096,6 +1170,162 @@ export class OrdersService {
     return { total, byStatus, byShift, revenue };
   }
 
+  private async applyOrderQueryFilters(
+    qb: SelectQueryBuilder<Order>,
+    labId: string,
+    params: OrderListQueryParams,
+  ): Promise<void> {
+    if (params.status) {
+      if (params.status === OrderStatus.COMPLETED) {
+        qb.andWhere(
+          `("order"."status" = :status OR EXISTS (
+            SELECT 1
+            FROM samples s
+            INNER JOIN order_tests ot ON ot."sampleId" = s.id
+            WHERE s."orderId" = "order"."id"
+              AND ot.status IN (:...completedStatuses)
+          ))`,
+          {
+            status: params.status,
+            completedStatuses: [
+              OrderTestStatus.COMPLETED,
+              OrderTestStatus.VERIFIED,
+              OrderTestStatus.REJECTED,
+            ],
+          },
+        );
+      } else {
+        qb.andWhere('order.status = :status', { status: params.status });
+      }
+    }
+
+    if (params.patientId) {
+      qb.andWhere('order.patientId = :patientId', { patientId: params.patientId });
+    }
+
+    if (params.search?.trim()) {
+      const term = `%${params.search.trim()}%`;
+      const exactSearch = params.search.trim();
+      qb.andWhere(
+        '(order.orderNumber ILIKE :term OR patient.fullName ILIKE :term OR patient.patientNumber = :exactSearch OR patient.phone ILIKE :term)',
+        { term, exactSearch },
+      );
+    }
+
+    const labTimeZone =
+      params.startDate || params.endDate ? await this.getLabTimeZone(labId) : null;
+    if (params.startDate && params.endDate && labTimeZone) {
+      const { startDate } = this.getDateRangeOrThrow(params.startDate, labTimeZone, 'startDate');
+      const { endDate } = this.getDateRangeOrThrow(params.endDate, labTimeZone, 'endDate');
+      if (startDate.getTime() > endDate.getTime()) {
+        throw new BadRequestException('startDate cannot be after endDate');
+      }
+      qb.andWhere('order.registeredAt BETWEEN :startDate AND :endDate', {
+        startDate,
+        endDate,
+      });
+    } else if (params.startDate && labTimeZone) {
+      const { startDate } = this.getDateRangeOrThrow(params.startDate, labTimeZone, 'startDate');
+      qb.andWhere('order.registeredAt >= :startDate', { startDate });
+    } else if (params.endDate && labTimeZone) {
+      const { endDate } = this.getDateRangeOrThrow(params.endDate, labTimeZone, 'endDate');
+      qb.andWhere('order.registeredAt <= :endDate', { endDate });
+    }
+  }
+
+  private async enrichOrdersWithProgress(items: OrderProgressTarget[]): Promise<void> {
+    if (items.length === 0) {
+      return;
+    }
+
+    const orderIds = items.map((order) => order.id);
+    const progressed = await this.orderRepo.manager
+      .createQueryBuilder()
+      .select('s."orderId"', 'orderId')
+      .addSelect('COUNT(*)', 'cnt')
+      .from('order_tests', 'ot')
+      .innerJoin('samples', 's', 's.id = ot."sampleId"')
+      .where('s."orderId" IN (:...orderIds)', { orderIds })
+      .andWhere('ot.status IN (:...statuses)', {
+        statuses: [
+          OrderTestStatus.COMPLETED,
+          OrderTestStatus.VERIFIED,
+          OrderTestStatus.REJECTED,
+        ],
+      })
+      .groupBy('s."orderId"')
+      .getRawMany<{ orderId: string; cnt: string }>();
+
+    const progressedSet = new Set(progressed.map((row) => row.orderId));
+
+    const testCounts = await this.orderRepo.manager
+      .createQueryBuilder()
+      .select('s."orderId"', 'orderId')
+      .addSelect('COUNT(*)', 'totalTests')
+      .addSelect(
+        `SUM(CASE WHEN ot.status IN (:...readyStatuses) THEN 1 ELSE 0 END)`,
+        'readyTests',
+      )
+      .from('order_tests', 'ot')
+      .innerJoin('samples', 's', 's.id = ot."sampleId"')
+      .where('s."orderId" IN (:...orderIds)', { orderIds })
+      .setParameter('readyStatuses', [
+        OrderTestStatus.COMPLETED,
+        OrderTestStatus.VERIFIED,
+        OrderTestStatus.REJECTED,
+      ])
+      .groupBy('s."orderId"')
+      .getRawMany<{ orderId: string; totalTests: string; readyTests: string }>();
+
+    const countMap = new Map(
+      testCounts.map((row) => [
+        row.orderId,
+        {
+          totalTests: parseInt(row.totalTests, 10) || 0,
+          readyTests: parseInt(row.readyTests, 10) || 0,
+        },
+      ]),
+    );
+
+    for (const order of items) {
+      const counts = countMap.get(order.id) || { totalTests: 0, readyTests: 0 };
+      order.testsCount = counts.totalTests;
+      order.readyTestsCount = counts.readyTests;
+      order.reportReady = counts.readyTests > 0;
+
+      if (order.status !== OrderStatus.CANCELLED && progressedSet.has(order.id)) {
+        order.status = OrderStatus.COMPLETED;
+      }
+    }
+  }
+
+  private normalizePaymentStatus(value: string | null | undefined): 'unpaid' | 'partial' | 'paid' {
+    if (value === 'paid') return 'paid';
+    if (value === 'partial') return 'partial';
+    return 'unpaid';
+  }
+
+  private async getLabTimeZone(
+    labId: string,
+    manager: EntityManager = this.orderRepo.manager,
+  ): Promise<string> {
+    const lab = await manager.getRepository(Lab).findOne({ where: { id: labId } });
+    return normalizeLabTimeZone(lab?.timezone);
+  }
+
+  private getDateRangeOrThrow(
+    dateValue: string,
+    timeZone: string,
+    paramName: string,
+  ): { startDate: Date; endDate: Date } {
+    try {
+      const { startDate, endDate } = getUtcRangeForLabDate(dateValue, timeZone);
+      return { startDate, endDate };
+    } catch {
+      throw new BadRequestException(`Invalid ${paramName}. Expected YYYY-MM-DD.`);
+    }
+  }
+
   async getWorklist(labId: string, shiftId: string | null): Promise<WorklistItemResponse[]> {
     const shiftKey = shiftId ?? '';
     const row = await this.worklistRepo.findOne({ where: { labId, shiftId: shiftKey } });
@@ -1141,20 +1371,6 @@ export class OrdersService {
   async saveWorklist(labId: string, shiftId: string | null, items: WorklistItemStored[]): Promise<void> {
     const shiftKey = shiftId ?? '';
     const itemsJson = JSON.stringify(items);
-    const existing = await this.worklistRepo.findOne({ where: { labId, shiftId: shiftKey } });
-    if (existing) {
-      await this.worklistRepo.update({ labId, shiftId: shiftKey }, { itemsJson });
-      return;
-    }
-    try {
-      await this.worklistRepo.insert({ labId, shiftId: shiftKey, itemsJson });
-    } catch (err: unknown) {
-      const code = (err as { code?: string })?.code;
-      if (code === '23505') {
-        await this.worklistRepo.update({ labId }, { shiftId: shiftKey, itemsJson });
-      } else {
-        throw err;
-      }
-    }
+    await this.worklistRepo.upsert({ labId, shiftId: shiftKey, itemsJson }, ['labId', 'shiftId']);
   }
 }

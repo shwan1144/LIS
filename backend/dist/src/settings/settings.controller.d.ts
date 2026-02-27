@@ -32,6 +32,11 @@ export declare class SettingsController {
             logoDataUrl: string | null;
             watermarkDataUrl: string | null;
         };
+        uiTestGroups: {
+            id: string;
+            name: string;
+            testIds: string[];
+        }[];
     }>;
     updateLabSettings(req: RequestWithUser, body: {
         labelSequenceBy?: string;
@@ -51,6 +56,11 @@ export declare class SettingsController {
             logoDataUrl?: string | null;
             watermarkDataUrl?: string | null;
         };
+        uiTestGroups?: {
+            id: string;
+            name: string;
+            testIds: string[];
+        }[] | null;
     }): Promise<{
         id: string;
         code: string;
@@ -72,6 +82,11 @@ export declare class SettingsController {
             logoDataUrl: string | null;
             watermarkDataUrl: string | null;
         };
+        uiTestGroups: {
+            id: string;
+            name: string;
+            testIds: string[];
+        }[];
     }>;
     getUsers(req: RequestWithUser): Promise<void>;
     getUser(req: RequestWithUser, id: string): Promise<void>;

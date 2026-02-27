@@ -16,6 +16,11 @@ import { Response } from 'express';
 import { AuditService } from '../audit/audit.service';
 import { AuditAction } from '../entities/audit-log.entity';
 import { buildLabActorContext } from '../types/lab-actor-context';
+import {
+  addDaysToDateKey,
+  formatDateKeyForTimeZone,
+  getUtcRangeForLabDate,
+} from '../database/lab-timezone.util';
 
 interface RequestWithUser {
   user: {
@@ -77,7 +82,8 @@ export class DashboardController {
     if (!labId) {
       return this.emptyStatistics();
     }
-    const { startDate, endDate } = this.resolveRange(query.startDate, query.endDate);
+    const timeZone = await this.dashboardService.getLabTimeZone(labId);
+    const { startDate, endDate } = this.resolveRange(timeZone, query.startDate, query.endDate);
     return this.dashboardService.getStatistics(labId, startDate, endDate, {
       shiftId: query.shiftId ?? null,
       departmentId: query.departmentId ?? null,
@@ -97,10 +103,15 @@ export class DashboardController {
       return res.status(401).json({ message: 'Lab ID not found in token' });
     }
 
-    const { startDate, endDate } = this.resolveRange(query.startDate, query.endDate);
+    const timeZone = await this.dashboardService.getLabTimeZone(labId);
+    const { startDate, endDate, startDateLabel, endDateLabel } = this.resolveRange(
+      timeZone,
+      query.startDate,
+      query.endDate,
+    );
     const shiftToken = query.shiftId ? this.toSafeFileToken(query.shiftId) : 'all';
     const departmentToken = query.departmentId ? this.toSafeFileToken(query.departmentId) : 'all';
-    const fileName = `statistics-${this.formatDateLabel(startDate)}-to-${this.formatDateLabel(endDate)}-${shiftToken}-${departmentToken}.pdf`;
+    const fileName = `statistics-${startDateLabel}-to-${endDateLabel}-${shiftToken}-${departmentToken}.pdf`;
     const actor = buildLabActorContext(req.user);
 
     try {
@@ -129,8 +140,8 @@ export class DashboardController {
         entityId: null,
         description: 'Exported statistics PDF',
         newValues: {
-          startDate: this.formatDateLabel(startDate),
-          endDate: this.formatDateLabel(endDate),
+          startDate: startDateLabel,
+          endDate: endDateLabel,
           shiftId: query.shiftId ?? null,
           departmentId: query.departmentId ?? null,
           ...impersonationAudit,
@@ -171,34 +182,28 @@ export class DashboardController {
   }
 
   private resolveRange(
+    timeZone: string,
     startDateStr?: string,
     endDateStr?: string,
-  ): { startDate: Date; endDate: Date } {
-    const endDate = endDateStr ? new Date(endDateStr) : new Date();
-    if (Number.isNaN(endDate.getTime())) {
-      throw new BadRequestException('Invalid endDate');
-    }
-    endDate.setHours(23, 59, 59, 999);
+  ): { startDate: Date; endDate: Date; startDateLabel: string; endDateLabel: string } {
+    let startDateLabel = startDateStr?.trim() ?? '';
+    let endDateLabel = endDateStr?.trim() ?? '';
 
-    const startDate = startDateStr ? new Date(startDateStr) : new Date(endDate);
-    if (Number.isNaN(startDate.getTime())) {
-      throw new BadRequestException('Invalid startDate');
+    let startDate: Date;
+    let endDate: Date;
+    try {
+      endDateLabel = endDateLabel || formatDateKeyForTimeZone(new Date(), timeZone);
+      startDateLabel = startDateLabel || addDaysToDateKey(endDateLabel, -30);
+      ({ startDate } = getUtcRangeForLabDate(startDateLabel, timeZone));
+      ({ endDate } = getUtcRangeForLabDate(endDateLabel, timeZone));
+    } catch {
+      throw new BadRequestException('Invalid date range. Expected YYYY-MM-DD.');
     }
-    if (!startDateStr) {
-      startDate.setDate(startDate.getDate() - 30);
-    }
-    startDate.setHours(0, 0, 0, 0);
+
     if (startDate.getTime() > endDate.getTime()) {
       throw new BadRequestException('startDate cannot be after endDate');
     }
-    return { startDate, endDate };
-  }
-
-  private formatDateLabel(date: Date): string {
-    const y = date.getFullYear();
-    const m = String(date.getMonth() + 1).padStart(2, '0');
-    const d = String(date.getDate()).padStart(2, '0');
-    return `${y}-${m}-${d}`;
+    return { startDate, endDate, startDateLabel, endDateLabel };
   }
 
   private toSafeFileToken(value: string): string {

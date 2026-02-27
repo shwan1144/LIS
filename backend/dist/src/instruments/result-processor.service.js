@@ -19,23 +19,21 @@ const typeorm_1 = require("@nestjs/typeorm");
 const typeorm_2 = require("typeorm");
 const instrument_entity_1 = require("../entities/instrument.entity");
 const order_test_entity_1 = require("../entities/order-test.entity");
-const sample_entity_1 = require("../entities/sample.entity");
 const order_entity_1 = require("../entities/order.entity");
 const hl7_parser_service_1 = require("./hl7-parser.service");
 const audit_service_1 = require("../audit/audit.service");
 const audit_log_entity_1 = require("../entities/audit-log.entity");
 let InstrumentResultProcessor = InstrumentResultProcessor_1 = class InstrumentResultProcessor {
-    constructor(mappingRepo, orderTestRepo, sampleRepo, orderRepo, hl7Parser, auditService) {
+    constructor(mappingRepo, orderTestRepo, orderRepo, hl7Parser, auditService) {
         this.mappingRepo = mappingRepo;
         this.orderTestRepo = orderTestRepo;
-        this.sampleRepo = sampleRepo;
         this.orderRepo = orderRepo;
         this.hl7Parser = hl7Parser;
         this.auditService = auditService;
         this.logger = new common_1.Logger(InstrumentResultProcessor_1.name);
     }
     async processResult(instrument, result) {
-        this.logger.log(`Processing result: Sample=${result.sampleId}, Test=${result.testCode}, Value=${result.value}`);
+        this.logger.log(`Processing result: Identifier=${result.sampleId}, Test=${result.testCode}, Value=${result.value}`);
         const mapping = await this.mappingRepo.findOne({
             where: {
                 instrumentId: instrument.id,
@@ -52,21 +50,39 @@ let InstrumentResultProcessor = InstrumentResultProcessor_1 = class InstrumentRe
         }
         const sample = await this.findSample(result.sampleId, instrument.labId);
         if (!sample) {
-            this.logger.warn(`Sample not found: ${result.sampleId}`);
+            this.logger.warn(JSON.stringify({
+                event: 'instrument_order_number_mismatch',
+                instrumentId: instrument.id,
+                labId: instrument.labId,
+                orderNumber: result.sampleId,
+                source: 'RESULT_PROCESSOR',
+            }));
+            this.logger.warn(`Order number not found: ${result.sampleId}`);
             return {
                 success: false,
-                message: `Sample not found: ${result.sampleId}`,
+                message: `Order number not found: ${result.sampleId}`,
             };
         }
-        const orderTest = await this.orderTestRepo.findOne({
+        let orderTest = await this.orderTestRepo.findOne({
             where: {
                 sampleId: sample.id,
                 testId: mapping.testId,
             },
             relations: ['test', 'sample', 'sample.order'],
         });
+        if (!orderTest && sample.orderId) {
+            orderTest = await this.orderTestRepo
+                .createQueryBuilder('ot')
+                .leftJoinAndSelect('ot.test', 'test')
+                .leftJoinAndSelect('ot.sample', 'sample')
+                .leftJoinAndSelect('sample.order', 'order')
+                .where('sample.orderId = :orderId', { orderId: sample.orderId })
+                .andWhere('ot.testId = :testId', { testId: mapping.testId })
+                .orderBy('ot.createdAt', 'ASC')
+                .getOne();
+        }
         if (!orderTest) {
-            this.logger.warn(`Order test not found for sample ${sample.id} and test ${mapping.testId}`);
+            this.logger.warn(`Order test not found for order ${sample.orderId} and test ${mapping.testId}`);
             return {
                 success: false,
                 message: `Order test not found`,
@@ -125,39 +141,17 @@ let InstrumentResultProcessor = InstrumentResultProcessor_1 = class InstrumentRe
             message: 'Result processed successfully',
         };
     }
-    async findSample(sampleIdentifier, labId) {
-        if (!sampleIdentifier)
+    async findSample(orderNumber, labId) {
+        if (!orderNumber)
             return null;
         const order = await this.orderRepo.findOne({
-            where: { labId, orderNumber: sampleIdentifier },
+            where: { labId, orderNumber },
             relations: ['samples'],
         });
-        if (order && order.samples.length > 0) {
+        if (order && order.samples.length > 0 && order.status !== order_entity_1.OrderStatus.CANCELLED) {
             return order.samples[0];
         }
-        let sample = await this.sampleRepo
-            .createQueryBuilder('s')
-            .innerJoin('s.order', 'o')
-            .where('o.labId = :labId', { labId })
-            .andWhere('s.sampleId = :sampleId', { sampleId: sampleIdentifier })
-            .getOne();
-        if (sample)
-            return sample;
-        sample = await this.sampleRepo
-            .createQueryBuilder('s')
-            .innerJoin('s.order', 'o')
-            .where('o.labId = :labId', { labId })
-            .andWhere('s.barcode = :barcode', { barcode: sampleIdentifier })
-            .getOne();
-        if (sample)
-            return sample;
-        sample = await this.sampleRepo
-            .createQueryBuilder('s')
-            .innerJoin('s.order', 'o')
-            .where('o.labId = :labId', { labId })
-            .andWhere('s.id = :id', { id: sampleIdentifier })
-            .getOne();
-        return sample;
+        return null;
     }
     parseResultValue(value, multiplier) {
         if (!value || value.trim() === '') {
@@ -206,10 +200,8 @@ exports.InstrumentResultProcessor = InstrumentResultProcessor = InstrumentResult
     (0, common_1.Injectable)(),
     __param(0, (0, typeorm_1.InjectRepository)(instrument_entity_1.InstrumentTestMapping)),
     __param(1, (0, typeorm_1.InjectRepository)(order_test_entity_1.OrderTest)),
-    __param(2, (0, typeorm_1.InjectRepository)(sample_entity_1.Sample)),
-    __param(3, (0, typeorm_1.InjectRepository)(order_entity_1.Order)),
+    __param(2, (0, typeorm_1.InjectRepository)(order_entity_1.Order)),
     __metadata("design:paramtypes", [typeorm_2.Repository,
-        typeorm_2.Repository,
         typeorm_2.Repository,
         typeorm_2.Repository,
         hl7_parser_service_1.HL7ParserService,

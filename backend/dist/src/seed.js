@@ -196,7 +196,7 @@ async function runSeed(options = {}) {
                     isActive: true,
                 });
                 await pricingRepo.save(pricing);
-                console.log(`Created pricing: ${test.code} - Walk-in/Day - $${basePrice}`);
+                console.log(`Created pricing: ${test.code} - Walk-in/Day - ${basePrice} IQD`);
             }
             pricing = await pricingRepo.findOne({
                 where: {
@@ -216,7 +216,7 @@ async function runSeed(options = {}) {
                     isActive: true,
                 });
                 await pricingRepo.save(pricing);
-                console.log(`Created pricing: ${test.code} - Hospital/Day - $${(basePrice * 0.8).toFixed(2)}`);
+                console.log(`Created pricing: ${test.code} - Hospital/Day - ${(basePrice * 0.8).toFixed(0)} IQD`);
             }
             pricing = await pricingRepo.findOne({
                 where: {
@@ -236,7 +236,7 @@ async function runSeed(options = {}) {
                     isActive: true,
                 });
                 await pricingRepo.save(pricing);
-                console.log(`Created default pricing: ${test.code} - $${basePrice}`);
+                console.log(`Created default pricing: ${test.code} - ${basePrice} IQD`);
             }
         }
         console.log('Seed done.');

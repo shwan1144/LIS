@@ -58,6 +58,7 @@ function getMenuItems(role: string | undefined) {
         { key: '/settings/label', label: 'Label & sequence' },
         { key: '/settings/printing', label: 'Printing' },
         { key: '/settings/instruments', label: 'Instruments' },
+        { key: '/settings/test-groups', label: 'Test Groups' },
         { key: '/settings/tests', label: 'Test management' },
         { key: '/unmatched', label: 'Unmatched Results' },
         { key: '/settings/audit', label: 'Audit Log' },
@@ -172,13 +173,13 @@ export function AppLayout() {
             mode="inline"
             selectedKeys={[
               location.pathname.startsWith('/settings') ? location.pathname :
-              location.pathname.startsWith('/orders') ? '/orders' :
-              location.pathname === '/patients' ? '/patients' :
-              location.pathname === '/statistics' ? '/statistics' :
-              location.pathname === '/worklist' ? '/worklist' :
-              location.pathname === '/verification' ? '/verification' :
-              location.pathname === '/unmatched' ? '/unmatched' :
-              location.pathname === '/reports' ? '/reports' : '/'
+                location.pathname.startsWith('/orders') ? '/orders' :
+                  location.pathname === '/patients' ? '/patients' :
+                    location.pathname === '/statistics' ? '/statistics' :
+                      location.pathname === '/worklist' ? '/worklist' :
+                        location.pathname === '/verification' ? '/verification' :
+                          location.pathname === '/unmatched' ? '/unmatched' :
+                            location.pathname === '/reports' ? '/reports' : '/'
             ]}
             defaultOpenKeys={
               location.pathname.startsWith('/settings') || location.pathname === '/unmatched'

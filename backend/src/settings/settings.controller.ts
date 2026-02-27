@@ -25,7 +25,7 @@ interface RequestWithUser {
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles('LAB_ADMIN', 'SUPER_ADMIN')
 export class SettingsController {
-  constructor(private readonly settingsService: SettingsService) {}
+  constructor(private readonly settingsService: SettingsService) { }
 
   @Get('roles')
   getRoles() {
@@ -63,6 +63,7 @@ export class SettingsController {
         logoDataUrl?: string | null;
         watermarkDataUrl?: string | null;
       };
+      uiTestGroups?: { id: string; name: string; testIds: string[] }[] | null;
     },
   ) {
     const labId = req.user?.labId;
@@ -88,6 +89,7 @@ export class SettingsController {
       labelSequenceBy: body.labelSequenceBy,
       sequenceResetBy: body.sequenceResetBy,
       printing: body.printing,
+      uiTestGroups: body.uiTestGroups,
     });
   }
 

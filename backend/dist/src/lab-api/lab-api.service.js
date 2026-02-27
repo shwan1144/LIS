@@ -22,6 +22,8 @@ const result_entity_1 = require("../entities/result.entity");
 const sample_entity_1 = require("../entities/sample.entity");
 const test_entity_1 = require("../entities/test.entity");
 const lab_counter_util_1 = require("../database/lab-counter.util");
+const lab_timezone_util_1 = require("../database/lab-timezone.util");
+const PATIENT_NUMBER_LOCK_KEY = 620001;
 let LabApiService = class LabApiService {
     constructor(rlsSessionService, auditService) {
         this.rlsSessionService = rlsSessionService;
@@ -65,7 +67,21 @@ let LabApiService = class LabApiService {
                 sex: dto.sex?.trim() || null,
                 address: dto.address?.trim() || null,
             });
-            const saved = await patientRepo.save(patient);
+            let saved;
+            try {
+                saved = await patientRepo.save(patient);
+            }
+            catch (error) {
+                const code = error?.code;
+                if (code === '23505') {
+                    const conflicted = await this.findExistingPatient(patientRepo.manager, dto);
+                    if (conflicted) {
+                        return { patient: conflicted, reused: true };
+                    }
+                    throw new common_1.ConflictException('Patient already exists');
+                }
+                throw error;
+            }
             const impersonationAudit = actor?.isImpersonation && actor.platformUserId
                 ? {
                     impersonation: {
@@ -105,7 +121,7 @@ let LabApiService = class LabApiService {
             if (tests.length !== uniqueTestIds.length) {
                 throw new common_1.BadRequestException('One or more tests are invalid');
             }
-            const orderNumber = await this.generateOrderNumber(manager, labId, dto.shiftId ?? null);
+            const orderNumber = await this.generateOrderNumber(manager, labId, dto.shiftId ?? null, lab.timezone);
             const order = manager.getRepository(order_entity_1.Order).create({
                 patientId: patient.id,
                 labId,
@@ -309,6 +325,7 @@ let LabApiService = class LabApiService {
         return qb.getOne();
     }
     async generatePatientNumber(manager) {
+        await manager.query('SELECT pg_advisory_xact_lock($1)', [PATIENT_NUMBER_LOCK_KEY]);
         const raw = await manager
             .getRepository(patient_entity_1.Patient)
             .createQueryBuilder('p')
@@ -319,22 +336,28 @@ let LabApiService = class LabApiService {
         const current = parseInt(maxValue.replace(/^P-/, ''), 10) || 0;
         return `P-${String(current + 1).padStart(6, '0')}`;
     }
-    async generateOrderNumber(manager, labId, _shiftId) {
-        const today = new Date();
-        const yy = String(today.getFullYear() % 100).padStart(2, '0');
-        const mm = String(today.getMonth() + 1).padStart(2, '0');
-        const dd = String(today.getDate()).padStart(2, '0');
-        const datePrefix = `${yy}${mm}${dd}`;
+    async generateOrderNumber(manager, labId, _shiftId, timeZoneHint) {
+        const now = new Date();
+        const timeZone = timeZoneHint !== undefined
+            ? (0, lab_timezone_util_1.normalizeLabTimeZone)(timeZoneHint)
+            : await this.getLabTimeZone(manager, labId);
+        const datePrefix = (0, lab_timezone_util_1.formatOrderDatePrefixForTimeZone)(now, timeZone);
+        const dateKey = (0, lab_timezone_util_1.formatDateKeyForTimeZone)(now, timeZone);
         const floor = await this.getMaxOrderSequenceForDate(manager, labId, datePrefix);
         const seq = await (0, lab_counter_util_1.nextLabCounterValueWithFloor)(manager, {
             labId,
             counterType: 'ORDER_NUMBER',
             scopeKey: 'ORDER',
-            date: today,
+            date: now,
+            dateKey,
             shiftId: null,
         }, floor);
         const sequence = String(seq).padStart(3, '0');
         return `${datePrefix}${sequence}`;
+    }
+    async getLabTimeZone(manager, labId) {
+        const lab = await manager.getRepository(lab_entity_1.Lab).findOne({ where: { id: labId } });
+        return (0, lab_timezone_util_1.normalizeLabTimeZone)(lab?.timezone);
     }
     async getMaxOrderSequenceForDate(manager, labId, datePrefix) {
         const pattern = `^${datePrefix}[0-9]{3}$`;

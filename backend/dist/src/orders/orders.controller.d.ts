@@ -2,6 +2,7 @@ import { OrdersService } from './orders.service';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { UpdateOrderPaymentDto } from './dto/update-payment.dto';
 import { UpdateOrderTestsDto } from './dto/update-order-tests.dto';
+import { UpdateOrderDiscountDto } from './dto/update-order-discount.dto';
 interface RequestWithUser {
     user: {
         userId: string;
@@ -42,8 +43,16 @@ export declare class OrdersController {
     }): Promise<{
         ok: boolean;
     }>;
+    findHistory(req: RequestWithUser, page?: string, size?: string, search?: string, status?: string, patientId?: string, startDate?: string, endDate?: string): Promise<{
+        items: import("./orders.service").OrderHistoryItem[];
+        total: number;
+        page: number;
+        size: number;
+        totalPages: number;
+    }>;
     findOne(req: RequestWithUser, id: string): Promise<import("../entities/order.entity").Order>;
     updatePayment(req: RequestWithUser, id: string, dto: UpdateOrderPaymentDto): Promise<import("../entities/order.entity").Order>;
+    updateDiscount(req: RequestWithUser, id: string, dto: UpdateOrderDiscountDto): Promise<import("../entities/order.entity").Order>;
     updateOrderTests(req: RequestWithUser, id: string, dto: UpdateOrderTestsDto): Promise<import("../entities/order.entity").Order>;
 }
 export {};

@@ -21,21 +21,19 @@ const instrument_entity_1 = require("../entities/instrument.entity");
 const order_test_entity_1 = require("../entities/order-test.entity");
 const order_test_result_history_entity_1 = require("../entities/order-test-result-history.entity");
 const unmatched_instrument_result_entity_1 = require("../entities/unmatched-instrument-result.entity");
-const sample_entity_1 = require("../entities/sample.entity");
 const order_entity_1 = require("../entities/order.entity");
 const hl7_parser_service_1 = require("./hl7-parser.service");
 const panel_status_service_1 = require("../panels/panel-status.service");
 const audit_service_1 = require("../audit/audit.service");
 const audit_log_entity_1 = require("../entities/audit-log.entity");
 let HL7IngestionService = HL7IngestionService_1 = class HL7IngestionService {
-    constructor(instrumentRepo, mappingRepo, messageRepo, orderTestRepo, historyRepo, unmatchedRepo, sampleRepo, orderRepo, hl7Parser, panelStatusService, auditService) {
+    constructor(instrumentRepo, mappingRepo, messageRepo, orderTestRepo, historyRepo, unmatchedRepo, orderRepo, hl7Parser, panelStatusService, auditService) {
         this.instrumentRepo = instrumentRepo;
         this.mappingRepo = mappingRepo;
         this.messageRepo = messageRepo;
         this.orderTestRepo = orderTestRepo;
         this.historyRepo = historyRepo;
         this.unmatchedRepo = unmatchedRepo;
-        this.sampleRepo = sampleRepo;
         this.orderRepo = orderRepo;
         this.hl7Parser = hl7Parser;
         this.panelStatusService = panelStatusService;
@@ -130,7 +128,7 @@ let HL7IngestionService = HL7IngestionService_1 = class HL7IngestionService {
             }
         }
         if (!sampleIdentifier) {
-            const errorMsg = `Sample identifier not found in ${sampleField}`;
+            const errorMsg = `Order number not found in ${sampleField}`;
             messageRecord.status = 'ERROR';
             messageRecord.errorMessage = errorMsg;
             await this.messageRepo.save(messageRecord);
@@ -146,21 +144,28 @@ let HL7IngestionService = HL7IngestionService_1 = class HL7IngestionService {
         }
         const sample = await this.findSample(sampleIdentifier.trim(), instrument.labId);
         if (!sample) {
+            this.logger.warn(JSON.stringify({
+                event: 'instrument_order_number_mismatch',
+                instrumentId: instrument.id,
+                labId: instrument.labId,
+                orderNumber: sampleIdentifier.trim(),
+                source: 'HL7',
+            }));
             const unmatchedCount = parsed.results.length;
             for (const result of parsed.results) {
-                await this.storeUnmatched(instrument, sampleIdentifier.trim(), result, unmatched_instrument_result_entity_1.UnmatchedReason.UNMATCHED_SAMPLE, messageRecord.id, `Sample identifier "${sampleIdentifier}" not found in lab ${instrument.labId}`);
+                await this.storeUnmatched(instrument, sampleIdentifier.trim(), result, unmatched_instrument_result_entity_1.UnmatchedReason.UNMATCHED_SAMPLE, messageRecord.id, `Order number "${sampleIdentifier}" not found in lab ${instrument.labId}`);
             }
             messageRecord.status = 'ERROR';
-            messageRecord.errorMessage = `Sample not found: ${sampleIdentifier}`;
+            messageRecord.errorMessage = `Order number not found: ${sampleIdentifier}`;
             await this.messageRepo.save(messageRecord);
             return {
                 success: false,
                 messageId: messageRecord.id,
                 processed: 0,
                 unmatched: unmatchedCount,
-                errors: [`Sample not found: ${sampleIdentifier}`],
+                errors: [`Order number not found: ${sampleIdentifier}`],
                 ackCode: 'AE',
-                ackMessage: `Sample ${sampleIdentifier} not found`,
+                ackMessage: `Order number ${sampleIdentifier} not found`,
             };
         }
         let processedCount = 0;
@@ -253,7 +258,7 @@ let HL7IngestionService = HL7IngestionService_1 = class HL7IngestionService {
             return {
                 success: false,
                 reason: unmatched_instrument_result_entity_1.UnmatchedReason.UNORDERED_TEST,
-                message: `Test ${mapping.instrumentTestCode || mapping.instrumentTestName || mapping.testId} not ordered for sample ${sample.id}`,
+                message: `Test ${mapping.instrumentTestCode || mapping.instrumentTestName || mapping.testId} not ordered for order ${sample.orderId}`,
             };
         }
         if (orderTest.status === order_test_entity_1.OrderTestStatus.VERIFIED && strictMode) {
@@ -347,34 +352,16 @@ let HL7IngestionService = HL7IngestionService_1 = class HL7IngestionService {
         await this.unmatchedRepo.save(unmatched);
         this.logger.warn(`Unmatched result stored: ${reason} - ${details}`);
     }
-    async findSample(sampleIdentifier, labId) {
-        if (!sampleIdentifier)
+    async findSample(orderNumber, labId) {
+        if (!orderNumber)
             return null;
         const order = await this.orderRepo.findOne({
-            where: { labId, orderNumber: sampleIdentifier },
+            where: { labId, orderNumber },
             relations: ['samples'],
         });
         if (order && order.samples.length > 0 && order.status !== order_entity_1.OrderStatus.CANCELLED) {
             return order.samples[0];
         }
-        let sample = await this.sampleRepo
-            .createQueryBuilder('s')
-            .innerJoin('s.order', 'o')
-            .where('o.labId = :labId', { labId })
-            .andWhere('s.sampleId = :sampleId', { sampleId: sampleIdentifier })
-            .andWhere('o.status != :cancelled', { cancelled: order_entity_1.OrderStatus.CANCELLED })
-            .getOne();
-        if (sample)
-            return sample;
-        sample = await this.sampleRepo
-            .createQueryBuilder('s')
-            .innerJoin('s.order', 'o')
-            .where('o.labId = :labId', { labId })
-            .andWhere('s.barcode = :barcode', { barcode: sampleIdentifier })
-            .andWhere('o.status != :cancelled', { cancelled: order_entity_1.OrderStatus.CANCELLED })
-            .getOne();
-        if (sample)
-            return sample;
         return null;
     }
     parseResultValue(value, multiplier) {
@@ -399,10 +386,8 @@ exports.HL7IngestionService = HL7IngestionService = HL7IngestionService_1 = __de
     __param(3, (0, typeorm_1.InjectRepository)(order_test_entity_1.OrderTest)),
     __param(4, (0, typeorm_1.InjectRepository)(order_test_result_history_entity_1.OrderTestResultHistory)),
     __param(5, (0, typeorm_1.InjectRepository)(unmatched_instrument_result_entity_1.UnmatchedInstrumentResult)),
-    __param(6, (0, typeorm_1.InjectRepository)(sample_entity_1.Sample)),
-    __param(7, (0, typeorm_1.InjectRepository)(order_entity_1.Order)),
+    __param(6, (0, typeorm_1.InjectRepository)(order_entity_1.Order)),
     __metadata("design:paramtypes", [typeorm_2.Repository,
-        typeorm_2.Repository,
         typeorm_2.Repository,
         typeorm_2.Repository,
         typeorm_2.Repository,

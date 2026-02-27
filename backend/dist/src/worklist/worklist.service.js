@@ -19,6 +19,7 @@ const typeorm_2 = require("typeorm");
 const order_test_entity_1 = require("../entities/order-test.entity");
 const order_entity_1 = require("../entities/order.entity");
 const test_entity_1 = require("../entities/test.entity");
+const lab_entity_1 = require("../entities/lab.entity");
 const user_department_assignment_entity_1 = require("../entities/user-department-assignment.entity");
 const department_entity_1 = require("../entities/department.entity");
 const audit_service_1 = require("../audit/audit.service");
@@ -26,6 +27,7 @@ const audit_log_entity_1 = require("../entities/audit-log.entity");
 const order_entity_2 = require("../entities/order.entity");
 const panel_status_service_1 = require("../panels/panel-status.service");
 const normal_range_util_1 = require("../tests/normal-range.util");
+const lab_timezone_util_1 = require("../database/lab-timezone.util");
 function parseJsonField(val) {
     if (val == null)
         return null;
@@ -42,10 +44,11 @@ function parseJsonField(val) {
     return null;
 }
 let WorklistService = class WorklistService {
-    constructor(orderTestRepo, orderRepo, testRepo, userDeptRepo, departmentRepo, panelStatusService, auditService) {
+    constructor(orderTestRepo, orderRepo, testRepo, labRepo, userDeptRepo, departmentRepo, panelStatusService, auditService) {
         this.orderTestRepo = orderTestRepo;
         this.orderRepo = orderRepo;
         this.testRepo = testRepo;
+        this.labRepo = labRepo;
         this.userDeptRepo = userDeptRepo;
         this.departmentRepo = departmentRepo;
         this.panelStatusService = panelStatusService;
@@ -70,41 +73,69 @@ let WorklistService = class WorklistService {
             if (forLab.length > 0)
                 allowedDepartmentIds = forLab;
         }
-        const qb = this.orderTestRepo
-            .createQueryBuilder('ot')
-            .innerJoin('ot.sample', 'sample')
-            .innerJoin('sample.order', 'order')
-            .innerJoin('order.patient', 'patient')
-            .innerJoin('ot.test', 'test')
-            .leftJoin('test.department', 'department')
-            .where('order.labId = :labId', { labId })
-            .andWhere('ot.status IN (:...statuses)', { statuses });
-        if (allowedDepartmentIds && allowedDepartmentIds.length > 0) {
-            qb.andWhere('test.departmentId IN (:...allowedDepartmentIds)', {
-                allowedDepartmentIds,
-            });
-        }
-        if (params.departmentId) {
-            qb.andWhere('test.departmentId = :departmentId', {
-                departmentId: params.departmentId,
-            });
-        }
+        let startDate = null;
+        let endDate = null;
         if (params.date) {
-            const startDate = new Date(params.date);
-            startDate.setHours(0, 0, 0, 0);
-            const endDate = new Date(params.date);
-            endDate.setHours(23, 59, 59, 999);
-            qb.andWhere('order.registeredAt BETWEEN :startDate AND :endDate', {
-                startDate,
-                endDate,
-            });
+            const labTimeZone = await this.getLabTimeZone(labId);
+            const dateRange = this.getDateRangeOrThrow(params.date, labTimeZone, 'date');
+            startDate = dateRange.startDate;
+            endDate = dateRange.endDate;
         }
-        if (params.search?.trim()) {
-            const term = `%${params.search.trim()}%`;
-            const exactSearch = params.search.trim();
-            qb.andWhere('(order.orderNumber ILIKE :term OR patient.fullName ILIKE :term OR patient.patientNumber = :exactSearch OR test.code ILIKE :term)', { term, exactSearch });
+        const buildBaseQuery = () => {
+            const qb = this.orderTestRepo
+                .createQueryBuilder('ot')
+                .innerJoin('ot.sample', 'sample')
+                .innerJoin('sample.order', 'order')
+                .innerJoin('order.patient', 'patient')
+                .innerJoin('ot.test', 'test')
+                .leftJoin('test.department', 'department')
+                .where('order.labId = :labId', { labId })
+                .andWhere('ot.status IN (:...statuses)', { statuses });
+            if (allowedDepartmentIds && allowedDepartmentIds.length > 0) {
+                qb.andWhere('test.departmentId IN (:...allowedDepartmentIds)', {
+                    allowedDepartmentIds,
+                });
+            }
+            if (params.departmentId) {
+                qb.andWhere('test.departmentId = :departmentId', {
+                    departmentId: params.departmentId,
+                });
+            }
+            if (params.date) {
+                qb.andWhere('order.registeredAt BETWEEN :startDate AND :endDate', {
+                    startDate,
+                    endDate,
+                });
+            }
+            if (params.search?.trim()) {
+                const term = `%${params.search.trim()}%`;
+                const exactSearch = params.search.trim();
+                qb.andWhere('(order.orderNumber ILIKE :term OR patient.fullName ILIKE :term OR patient.patientNumber = :exactSearch OR test.code ILIKE :term)', { term, exactSearch });
+            }
+            return qb;
+        };
+        const totalRaw = await buildBaseQuery()
+            .select('COUNT(DISTINCT order.id)', 'count')
+            .getRawOne();
+        const total = Number(totalRaw?.count ?? 0);
+        const orderRows = await buildBaseQuery()
+            .select('order.id', 'orderId')
+            .addSelect('MAX(order.registeredAt)', 'registeredAt')
+            .addSelect('MIN(CASE WHEN ot.status = :rejectedStatus THEN 0 ELSE 1 END)', 'rejectedPriority')
+            .setParameter('rejectedStatus', order_test_entity_1.OrderTestStatus.REJECTED)
+            .groupBy('order.id')
+            .orderBy('"rejectedPriority"', 'ASC')
+            .addOrderBy('"registeredAt"', 'DESC')
+            .offset(skip)
+            .limit(size)
+            .getRawMany();
+        const orderIds = orderRows.map((row) => row.orderId);
+        if (orderIds.length === 0) {
+            return { items: [], total };
         }
-        qb.select([
+        const rawItems = await buildBaseQuery()
+            .andWhere('order.id IN (:...orderIds)', { orderIds })
+            .select([
             'ot.id AS id',
             'order.orderNumber AS "orderNumber"',
             'order.id AS "orderId"',
@@ -149,9 +180,8 @@ let WorklistService = class WorklistService {
             .addOrderBy('order.registeredAt', 'DESC')
             .addOrderBy('test.sortOrder', 'ASC')
             .addOrderBy('test.code', 'ASC')
-            .setParameter('rejectedStatus', order_test_entity_1.OrderTestStatus.REJECTED);
-        const total = await qb.getCount();
-        const rawItems = await qb.offset(skip).limit(size).getRawMany();
+            .setParameter('rejectedStatus', order_test_entity_1.OrderTestStatus.REJECTED)
+            .getRawMany();
         const items = rawItems.map((item) => {
             const patientAge = this.computePatientAgeYears(item.patientDob);
             const numericAgeRanges = parseJsonField(item.numericAgeRanges) ??
@@ -325,6 +355,130 @@ let WorklistService = class WorklistService {
         });
         return saved;
     }
+    async batchEnterResults(labId, actor, actorRole, updates) {
+        if (!updates.length)
+            return [];
+        const orderTestIds = updates.map((u) => u.orderTestId);
+        const orderTests = await this.orderTestRepo.find({
+            where: { id: (0, typeorm_2.In)(orderTestIds) },
+            relations: ['sample', 'sample.order', 'sample.order.patient', 'test'],
+        });
+        const orderTestsMap = new Map(orderTests.map((ot) => [ot.id, ot]));
+        const toSave = [];
+        const updatedOrderIds = new Set();
+        const updatedParentIds = new Set();
+        const auditLogs = [];
+        for (const data of updates) {
+            const orderTest = orderTestsMap.get(data.orderTestId);
+            if (!orderTest || orderTest.sample.order.labId !== labId) {
+                continue;
+            }
+            const forceEditVerified = data.forceEditVerified === true;
+            const canForceEditVerified = actor.isImpersonation || actorRole === 'LAB_ADMIN' || actorRole === 'SUPER_ADMIN';
+            const isVerifiedOverride = orderTest.status === order_test_entity_1.OrderTestStatus.VERIFIED && forceEditVerified && canForceEditVerified;
+            if (orderTest.status === order_test_entity_1.OrderTestStatus.VERIFIED && !isVerifiedOverride) {
+                continue;
+            }
+            if (data.resultValue !== undefined) {
+                orderTest.resultValue = data.resultValue;
+            }
+            if (data.comments !== undefined) {
+                orderTest.comments = data.comments || null;
+            }
+            if (data.resultParameters !== undefined) {
+                orderTest.resultParameters =
+                    data.resultParameters && Object.keys(data.resultParameters).length > 0
+                        ? data.resultParameters
+                        : null;
+            }
+            const resultEntryType = this.normalizeResultEntryType(orderTest.test.resultEntryType);
+            const resultTextOptions = this.normalizeResultTextOptions(orderTest.test.resultTextOptions);
+            const normalizedResultTextInput = data.resultText !== undefined ? this.normalizeResultText(data.resultText) : undefined;
+            if (resultEntryType === 'QUALITATIVE') {
+                const candidateText = normalizedResultTextInput ?? this.normalizeResultText(orderTest.resultText);
+                if (!candidateText)
+                    continue;
+                const matchedOption = this.findMatchingResultTextOption(candidateText, resultTextOptions);
+                if (!matchedOption && !orderTest.test.allowCustomResultText)
+                    continue;
+                orderTest.resultText = matchedOption?.value ?? candidateText;
+                orderTest.resultValue = null;
+                orderTest.flag = this.toResultFlag(matchedOption?.flag ?? null);
+            }
+            else if (resultEntryType === 'TEXT') {
+                if (data.resultText !== undefined) {
+                    orderTest.resultText = normalizedResultTextInput ?? null;
+                }
+                orderTest.resultValue = null;
+                orderTest.flag = this.resolveFlagFromResultText(orderTest.resultText, resultTextOptions);
+            }
+            else {
+                if (data.resultText !== undefined) {
+                    orderTest.resultText = normalizedResultTextInput ?? null;
+                }
+                const optionFlag = this.resolveFlagFromResultText(orderTest.resultText, resultTextOptions);
+                if (optionFlag) {
+                    orderTest.flag = optionFlag;
+                }
+                else {
+                    const patientAgeYears = this.computePatientAgeYears(orderTest.sample.order.patient?.dateOfBirth ?? null);
+                    orderTest.flag = this.calculateFlag(orderTest.resultValue, orderTest.test, orderTest.sample.order.patient?.sex || null, patientAgeYears);
+                }
+            }
+            const isUpdate = orderTest.resultedAt !== null;
+            orderTest.status = isVerifiedOverride ? order_test_entity_1.OrderTestStatus.VERIFIED : order_test_entity_1.OrderTestStatus.COMPLETED;
+            orderTest.rejectionReason = null;
+            orderTest.resultedAt = new Date();
+            orderTest.resultedBy = actor.userId ?? orderTest.resultedBy;
+            if (isVerifiedOverride) {
+                orderTest.verifiedAt = new Date();
+                orderTest.verifiedBy = actor.userId ?? orderTest.verifiedBy;
+            }
+            toSave.push(orderTest);
+            updatedOrderIds.add(orderTest.sample.orderId);
+            updatedParentIds.add(orderTest.parentOrderTestId || orderTest.id);
+            const impersonationAudit = actor.isImpersonation && actor.platformUserId
+                ? {
+                    impersonation: {
+                        active: true,
+                        platformUserId: actor.platformUserId,
+                    },
+                }
+                : {};
+            auditLogs.push({
+                actorType: actor.actorType,
+                actorId: actor.actorId,
+                labId,
+                userId: actor.userId,
+                action: isUpdate ? audit_log_entity_1.AuditAction.RESULT_UPDATE : audit_log_entity_1.AuditAction.RESULT_ENTER,
+                entityType: 'order_test',
+                entityId: orderTest.id,
+                newValues: {
+                    resultValue: data.resultValue,
+                    resultText: data.resultText,
+                    flag: orderTest.flag,
+                    forceEditVerified: isVerifiedOverride,
+                    ...impersonationAudit,
+                },
+                description: isVerifiedOverride
+                    ? `Corrected verified result for test ${orderTest.test?.code || orderTest.id}`
+                    : `${isUpdate ? 'Updated' : 'Entered'} result for test ${orderTest.test?.code || orderTest.id}`,
+            });
+        }
+        if (toSave.length > 0) {
+            await this.orderTestRepo.save(toSave);
+            for (const pid of updatedParentIds) {
+                await this.panelStatusService.recomputeAfterChildUpdate(pid);
+            }
+            for (const oid of updatedOrderIds) {
+                await this.syncOrderStatus(oid);
+            }
+            for (const log of auditLogs) {
+                await this.auditService.log(log);
+            }
+        }
+        return toSave;
+    }
     async verifyResult(orderTestId, labId, actor) {
         const orderTest = await this.orderTestRepo.findOne({
             where: { id: orderTestId },
@@ -376,18 +530,62 @@ let WorklistService = class WorklistService {
         return saved;
     }
     async verifyMultiple(orderTestIds, labId, actor) {
-        let verified = 0;
+        if (!orderTestIds.length)
+            return { verified: 0, failed: 0 };
+        const orderTests = await this.orderTestRepo.find({
+            where: { id: (0, typeorm_2.In)(orderTestIds) },
+            relations: ['sample', 'sample.order', 'test'],
+        });
+        const toSave = [];
+        const updatedOrderIds = new Set();
+        const updatedParentIds = new Set();
+        const auditLogs = [];
         let failed = 0;
-        for (const id of orderTestIds) {
-            try {
-                await this.verifyResult(id, labId, actor);
-                verified++;
-            }
-            catch {
+        for (const ot of orderTests) {
+            if (ot.sample.order.labId !== labId || ot.status === order_test_entity_1.OrderTestStatus.VERIFIED || ot.status === order_test_entity_1.OrderTestStatus.PENDING) {
                 failed++;
+                continue;
+            }
+            ot.status = order_test_entity_1.OrderTestStatus.VERIFIED;
+            ot.verifiedAt = new Date();
+            ot.verifiedBy = actor.userId;
+            toSave.push(ot);
+            updatedOrderIds.add(ot.sample.orderId);
+            updatedParentIds.add(ot.parentOrderTestId || ot.id);
+            const impersonationAudit = actor.isImpersonation && actor.platformUserId ? {
+                impersonation: { active: true, platformUserId: actor.platformUserId },
+            } : {};
+            auditLogs.push({
+                actorType: actor.actorType,
+                actorId: actor.actorId,
+                labId,
+                userId: actor.userId,
+                action: audit_log_entity_1.AuditAction.RESULT_VERIFY,
+                entityType: 'order_test',
+                entityId: ot.id,
+                newValues: {
+                    resultValue: ot.resultValue,
+                    resultText: ot.resultText,
+                    flag: ot.flag,
+                    status: order_test_entity_1.OrderTestStatus.VERIFIED,
+                    ...impersonationAudit,
+                },
+                description: `Verified result for test ${ot.test?.code || ot.id}`,
+            });
+        }
+        if (toSave.length > 0) {
+            await this.orderTestRepo.save(toSave);
+            for (const pid of updatedParentIds) {
+                await this.panelStatusService.recomputeAfterChildUpdate(pid);
+            }
+            for (const oid of updatedOrderIds) {
+                await this.syncOrderStatus(oid);
+            }
+            for (const log of auditLogs) {
+                await this.auditService.log(log);
             }
         }
-        return { verified, failed };
+        return { verified: toSave.length, failed };
     }
     async rejectResult(orderTestId, labId, actor, reason) {
         const orderTest = await this.orderTestRepo.findOne({
@@ -538,10 +736,9 @@ let WorklistService = class WorklistService {
         return age < 0 ? null : age;
     }
     async getWorklistStats(labId) {
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-        const tomorrow = new Date(today);
-        tomorrow.setDate(tomorrow.getDate() + 1);
+        const labTimeZone = await this.getLabTimeZone(labId);
+        const todayDateKey = (0, lab_timezone_util_1.formatDateKeyForTimeZone)(new Date(), labTimeZone);
+        const { startDate: today, endExclusive: tomorrow } = (0, lab_timezone_util_1.getUtcRangeForLabDate)(todayDateKey, labTimeZone);
         const qb = this.orderTestRepo
             .createQueryBuilder('ot')
             .innerJoin('ot.sample', 'sample')
@@ -579,6 +776,19 @@ let WorklistService = class WorklistService {
         }
         return stats;
     }
+    async getLabTimeZone(labId) {
+        const lab = await this.labRepo.findOne({ where: { id: labId } });
+        return (0, lab_timezone_util_1.normalizeLabTimeZone)(lab?.timezone);
+    }
+    getDateRangeOrThrow(dateValue, timeZone, paramName) {
+        try {
+            const { startDate, endDate } = (0, lab_timezone_util_1.getUtcRangeForLabDate)(dateValue, timeZone);
+            return { startDate, endDate };
+        }
+        catch {
+            throw new common_1.BadRequestException(`Invalid ${paramName}. Expected YYYY-MM-DD.`);
+        }
+    }
     async syncOrderStatus(orderId) {
         const order = await this.orderRepo.findOne({ where: { id: orderId } });
         if (!order || order.status === order_entity_2.OrderStatus.CANCELLED) {
@@ -608,9 +818,11 @@ exports.WorklistService = WorklistService = __decorate([
     __param(0, (0, typeorm_1.InjectRepository)(order_test_entity_1.OrderTest)),
     __param(1, (0, typeorm_1.InjectRepository)(order_entity_1.Order)),
     __param(2, (0, typeorm_1.InjectRepository)(test_entity_1.Test)),
-    __param(3, (0, typeorm_1.InjectRepository)(user_department_assignment_entity_1.UserDepartmentAssignment)),
-    __param(4, (0, typeorm_1.InjectRepository)(department_entity_1.Department)),
+    __param(3, (0, typeorm_1.InjectRepository)(lab_entity_1.Lab)),
+    __param(4, (0, typeorm_1.InjectRepository)(user_department_assignment_entity_1.UserDepartmentAssignment)),
+    __param(5, (0, typeorm_1.InjectRepository)(department_entity_1.Department)),
     __metadata("design:paramtypes", [typeorm_2.Repository,
+        typeorm_2.Repository,
         typeorm_2.Repository,
         typeorm_2.Repository,
         typeorm_2.Repository,

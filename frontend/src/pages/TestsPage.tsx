@@ -1402,7 +1402,7 @@ export function TestsPage() {
                   step={0.01}
                   value={pricesByShift.default}
                   onChange={(v) => setPricesByShift((prev) => ({ ...prev, default: Number(v) || 0 }))}
-                  prefix="$"
+                  addonAfter="IQD"
                 />
               </Col>
             </Row>
@@ -1417,7 +1417,7 @@ export function TestsPage() {
                       step={0.01}
                       value={pricesByShift[shift.id]}
                       onChange={(v) => setPricesByShift((prev) => ({ ...prev, [shift.id]: Number(v) || 0 }))}
-                      prefix="$"
+                      addonAfter="IQD"
                     />
                   </Col>
                 ))}

@@ -29,6 +29,16 @@ export declare class WorklistController {
         resultParameters?: Record<string, string> | null;
         forceEditVerified?: boolean;
     }): Promise<import("../entities/order-test.entity").OrderTest>;
+    batchEnterResults(req: RequestWithUser, body: {
+        updates: Array<{
+            orderTestId: string;
+            resultValue?: number | null;
+            resultText?: string | null;
+            comments?: string | null;
+            resultParameters?: Record<string, string> | null;
+            forceEditVerified?: boolean;
+        }>;
+    }): Promise<import("../entities/order-test.entity").OrderTest[]>;
     verifyResult(req: RequestWithUser, id: string): Promise<import("../entities/order-test.entity").OrderTest>;
     verifyMultiple(req: RequestWithUser, body: {
         ids: string[];

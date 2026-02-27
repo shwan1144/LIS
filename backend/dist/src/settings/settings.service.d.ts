@@ -18,6 +18,11 @@ type LabPrintingUpdate = {
     labelsPrinterName?: string | null;
     reportPrinterName?: string | null;
 };
+type UiTestGroup = {
+    id: string;
+    name: string;
+    testIds: string[];
+};
 export declare class SettingsService {
     private readonly userRepo;
     private readonly labAssignmentRepo;
@@ -49,6 +54,11 @@ export declare class SettingsService {
             logoDataUrl: string | null;
             watermarkDataUrl: string | null;
         };
+        uiTestGroups: {
+            id: string;
+            name: string;
+            testIds: string[];
+        }[];
     }>;
     updateLabSettings(labId: string, data: {
         labelSequenceBy?: string;
@@ -58,6 +68,7 @@ export declare class SettingsService {
         onlineResultWatermarkText?: string | null;
         printing?: LabPrintingUpdate;
         reportBranding?: ReportBrandingUpdate;
+        uiTestGroups?: UiTestGroup[] | null;
     }): Promise<{
         id: string;
         code: string;
@@ -79,6 +90,11 @@ export declare class SettingsService {
             logoDataUrl: string | null;
             watermarkDataUrl: string | null;
         };
+        uiTestGroups: {
+            id: string;
+            name: string;
+            testIds: string[];
+        }[];
     }>;
     private normalizeReportImageDataUrl;
     private normalizeOnlineResultWatermarkText;

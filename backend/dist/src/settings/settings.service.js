@@ -67,6 +67,7 @@ let SettingsService = class SettingsService {
                 logoDataUrl: lab.reportLogoDataUrl ?? null,
                 watermarkDataUrl: lab.reportWatermarkDataUrl ?? null,
             },
+            uiTestGroups: lab.uiTestGroups ?? [],
         };
     }
     async updateLabSettings(labId, data) {
@@ -134,6 +135,24 @@ let SettingsService = class SettingsService {
             if ('watermarkDataUrl' in data.reportBranding) {
                 lab.reportWatermarkDataUrl = this.normalizeReportImageDataUrl(data.reportBranding.watermarkDataUrl, 'reportBranding.watermarkDataUrl');
             }
+        }
+        if (data.uiTestGroups !== undefined) {
+            if (data.uiTestGroups && !Array.isArray(data.uiTestGroups)) {
+                throw new common_1.BadRequestException('uiTestGroups must be an array or null');
+            }
+            if (data.uiTestGroups !== null) {
+                for (const group of data.uiTestGroups) {
+                    if (!group.id || typeof group.id !== 'string')
+                        throw new common_1.BadRequestException('invalid group id');
+                    if (!group.name || typeof group.name !== 'string')
+                        throw new common_1.BadRequestException('invalid group name');
+                    if (!Array.isArray(group.testIds))
+                        throw new common_1.BadRequestException('group testIds must be array');
+                    if (!group.testIds.every(id => typeof id === 'string'))
+                        throw new common_1.BadRequestException('group testIds elements must be strings');
+                }
+            }
+            lab.uiTestGroups = data.uiTestGroups;
         }
         await this.labRepo.save(lab);
         return this.getLabSettings(labId);
@@ -245,111 +264,148 @@ let SettingsService = class SettingsService {
         };
     }
     async createUser(labId, data) {
-        const existing = await this.userRepo.findOne({
-            where: { username: data.username.trim(), labId },
-        });
-        if (existing)
-            throw new common_1.ConflictException('Username already exists');
-        if (!ROLES.includes(data.role))
-            throw new common_1.BadRequestException('Invalid role');
-        const passwordHash = await (0, password_util_1.hashPassword)(data.password);
-        const user = this.userRepo.create({
-            username: data.username.trim(),
-            labId,
-            passwordHash,
-            fullName: data.fullName?.trim() || null,
-            email: data.email?.trim() || null,
-            role: data.role,
-            defaultLabId: labId,
-            isActive: true,
-        });
-        const saved = await this.userRepo.save(user);
-        await this.labAssignmentRepo.save({ userId: saved.id, labId });
-        if (data.shiftIds?.length) {
-            await this.ensureShiftsBelongToLab(data.shiftIds, labId);
-            for (const shiftId of data.shiftIds) {
-                await this.shiftAssignmentRepo.save({ userId: saved.id, shiftId }).catch(() => { });
+        return this.userRepo.manager.transaction(async (manager) => {
+            const userRepo = manager.getRepository(user_entity_1.User);
+            const labAssignmentRepo = manager.getRepository(user_lab_assignment_entity_1.UserLabAssignment);
+            const shiftAssignmentRepo = manager.getRepository(user_shift_assignment_entity_1.UserShiftAssignment);
+            const userDeptRepo = manager.getRepository(user_department_assignment_entity_1.UserDepartmentAssignment);
+            const existing = await userRepo.findOne({
+                where: { username: data.username.trim(), labId },
+            });
+            if (existing)
+                throw new common_1.ConflictException('Username already exists');
+            if (!ROLES.includes(data.role))
+                throw new common_1.BadRequestException('Invalid role');
+            const shiftIds = Array.from(new Set((data.shiftIds ?? []).map((id) => id.trim()).filter(Boolean)));
+            const departmentIds = Array.from(new Set((data.departmentIds ?? []).map((id) => id.trim()).filter(Boolean)));
+            if (shiftIds.length > 0) {
+                await this.ensureShiftsBelongToLab(shiftIds, labId, manager);
             }
-        }
-        if (data.departmentIds?.length) {
-            await this.ensureDepartmentsBelongToLab(data.departmentIds, labId);
-            for (const departmentId of data.departmentIds) {
-                await this.userDeptRepo.save({ userId: saved.id, departmentId }).catch(() => { });
+            if (departmentIds.length > 0) {
+                await this.ensureDepartmentsBelongToLab(departmentIds, labId, manager);
             }
-        }
-        return this.userRepo.findOne({
-            where: { id: saved.id },
-            relations: [
-                'labAssignments',
-                'shiftAssignments',
-                'shiftAssignments.shift',
-                'departmentAssignments',
-                'departmentAssignments.department',
-            ],
+            const passwordHash = await (0, password_util_1.hashPassword)(data.password);
+            const user = userRepo.create({
+                username: data.username.trim(),
+                labId,
+                passwordHash,
+                fullName: data.fullName?.trim() || null,
+                email: data.email?.trim() || null,
+                role: data.role,
+                defaultLabId: labId,
+                isActive: true,
+            });
+            const saved = await userRepo.save(user);
+            await labAssignmentRepo.save({ userId: saved.id, labId });
+            if (shiftIds.length > 0) {
+                await shiftAssignmentRepo.insert(shiftIds.map((shiftId) => ({ userId: saved.id, shiftId })));
+            }
+            if (departmentIds.length > 0) {
+                await userDeptRepo.insert(departmentIds.map((departmentId) => ({ userId: saved.id, departmentId })));
+            }
+            return (await userRepo.findOne({
+                where: { id: saved.id },
+                relations: [
+                    'labAssignments',
+                    'shiftAssignments',
+                    'shiftAssignments.shift',
+                    'departmentAssignments',
+                    'departmentAssignments.department',
+                ],
+            }));
         });
     }
     async updateUser(id, labId, data) {
-        const { user } = await this.getUserWithDetails(id, labId);
-        if (data.fullName !== undefined)
-            user.fullName = data.fullName?.trim() || null;
-        if (data.email !== undefined)
-            user.email = data.email?.trim() || null;
-        if (data.role !== undefined) {
-            if (!ROLES.includes(data.role))
-                throw new common_1.BadRequestException('Invalid role');
-            user.role = data.role;
-        }
-        if (data.defaultLabId !== undefined)
-            user.defaultLabId = data.defaultLabId || null;
-        if (data.isActive !== undefined)
-            user.isActive = data.isActive;
-        if (data.password?.trim()) {
-            user.passwordHash = await (0, password_util_1.hashPassword)(data.password.trim());
-        }
-        await this.userRepo.save(user);
-        if (data.shiftIds !== undefined) {
-            await this.shiftAssignmentRepo.delete({ userId: id });
-            if (data.shiftIds.length) {
-                await this.ensureShiftsBelongToLab(data.shiftIds, labId);
-                for (const shiftId of data.shiftIds) {
-                    await this.shiftAssignmentRepo.save({ userId: id, shiftId }).catch(() => { });
+        return this.userRepo.manager.transaction(async (manager) => {
+            const userRepo = manager.getRepository(user_entity_1.User);
+            const shiftAssignmentRepo = manager.getRepository(user_shift_assignment_entity_1.UserShiftAssignment);
+            const userDeptRepo = manager.getRepository(user_department_assignment_entity_1.UserDepartmentAssignment);
+            const user = await userRepo.findOne({
+                where: { id },
+                relations: [
+                    'labAssignments',
+                    'shiftAssignments',
+                    'shiftAssignments.shift',
+                    'departmentAssignments',
+                    'departmentAssignments.department',
+                    'defaultLab',
+                ],
+            });
+            if (!user)
+                throw new common_1.NotFoundException('User not found');
+            const inLab = user.labAssignments?.some((a) => a.labId === labId);
+            if (!inLab)
+                throw new common_1.NotFoundException('User not found in this lab');
+            if (data.fullName !== undefined)
+                user.fullName = data.fullName?.trim() || null;
+            if (data.email !== undefined)
+                user.email = data.email?.trim() || null;
+            if (data.role !== undefined) {
+                if (!ROLES.includes(data.role))
+                    throw new common_1.BadRequestException('Invalid role');
+                user.role = data.role;
+            }
+            if (data.defaultLabId !== undefined)
+                user.defaultLabId = data.defaultLabId || null;
+            if (data.isActive !== undefined)
+                user.isActive = data.isActive;
+            if (data.password?.trim()) {
+                user.passwordHash = await (0, password_util_1.hashPassword)(data.password.trim());
+            }
+            await userRepo.save(user);
+            if (data.shiftIds !== undefined) {
+                const shiftIds = Array.from(new Set(data.shiftIds.map((value) => value.trim()).filter(Boolean)));
+                await shiftAssignmentRepo.delete({ userId: id });
+                if (shiftIds.length > 0) {
+                    await this.ensureShiftsBelongToLab(shiftIds, labId, manager);
+                    await shiftAssignmentRepo.insert(shiftIds.map((shiftId) => ({ userId: id, shiftId })));
                 }
             }
-        }
-        if (data.departmentIds !== undefined) {
-            await this.userDeptRepo.delete({ userId: id });
-            if (data.departmentIds.length) {
-                await this.ensureDepartmentsBelongToLab(data.departmentIds, labId);
-                for (const departmentId of data.departmentIds) {
-                    await this.userDeptRepo.save({ userId: id, departmentId }).catch(() => { });
+            if (data.departmentIds !== undefined) {
+                const departmentIds = Array.from(new Set(data.departmentIds.map((value) => value.trim()).filter(Boolean)));
+                await userDeptRepo.delete({ userId: id });
+                if (departmentIds.length > 0) {
+                    await this.ensureDepartmentsBelongToLab(departmentIds, labId, manager);
+                    await userDeptRepo.insert(departmentIds.map((departmentId) => ({ userId: id, departmentId })));
                 }
             }
-        }
-        return this.userRepo.findOne({
-            where: { id },
-            relations: [
-                'labAssignments',
-                'shiftAssignments',
-                'shiftAssignments.shift',
-                'departmentAssignments',
-                'departmentAssignments.department',
-                'defaultLab',
-            ],
+            return (await userRepo.findOne({
+                where: { id },
+                relations: [
+                    'labAssignments',
+                    'shiftAssignments',
+                    'shiftAssignments.shift',
+                    'departmentAssignments',
+                    'departmentAssignments.department',
+                    'defaultLab',
+                ],
+            }));
         });
     }
-    async ensureShiftsBelongToLab(shiftIds, labId) {
-        for (const shiftId of shiftIds) {
-            const shift = await this.shiftRepo.findOne({ where: { id: shiftId } });
-            if (!shift || shift.labId !== labId)
-                throw new common_1.BadRequestException('Invalid shift for this lab');
+    async ensureShiftsBelongToLab(shiftIds, labId, manager) {
+        const normalizedIds = Array.from(new Set(shiftIds.map((id) => id.trim()).filter(Boolean)));
+        if (normalizedIds.length === 0)
+            return;
+        const repo = manager ? manager.getRepository(shift_entity_1.Shift) : this.shiftRepo;
+        const valid = await repo.find({
+            where: normalizedIds.map((id) => ({ id, labId })),
+            select: ['id'],
+        });
+        if (valid.length !== normalizedIds.length) {
+            throw new common_1.BadRequestException('Invalid shift for this lab');
         }
     }
-    async ensureDepartmentsBelongToLab(departmentIds, labId) {
-        for (const departmentId of departmentIds) {
-            const dept = await this.departmentRepo.findOne({ where: { id: departmentId } });
-            if (!dept || dept.labId !== labId) {
-                throw new common_1.BadRequestException('Invalid department for this lab');
-            }
+    async ensureDepartmentsBelongToLab(departmentIds, labId, manager) {
+        const normalizedIds = Array.from(new Set(departmentIds.map((id) => id.trim()).filter(Boolean)));
+        if (normalizedIds.length === 0)
+            return;
+        const repo = manager ? manager.getRepository(department_entity_1.Department) : this.departmentRepo;
+        const valid = await repo.find({
+            where: normalizedIds.map((id) => ({ id, labId })),
+            select: ['id'],
+        });
+        if (valid.length !== normalizedIds.length) {
+            throw new common_1.BadRequestException('Invalid department for this lab');
         }
     }
     async deleteUser(userId, labId, currentUserId) {

@@ -18,6 +18,7 @@ const orders_service_1 = require("./orders.service");
 const create_order_dto_1 = require("./dto/create-order.dto");
 const update_payment_dto_1 = require("./dto/update-payment.dto");
 const update_order_tests_dto_1 = require("./dto/update-order-tests.dto");
+const update_order_discount_dto_1 = require("./dto/update-order-discount.dto");
 const jwt_auth_guard_1 = require("../auth/jwt-auth.guard");
 let OrdersController = class OrdersController {
     constructor(ordersService) {
@@ -84,6 +85,21 @@ let OrdersController = class OrdersController {
         await this.ordersService.saveWorklist(labId, body.shiftId ?? null, items);
         return { ok: true };
     }
+    async findHistory(req, page, size, search, status, patientId, startDate, endDate) {
+        const labId = req.user?.labId;
+        if (!labId) {
+            throw new Error('Lab ID not found in token');
+        }
+        return this.ordersService.findHistory(labId, {
+            page: page ? parseInt(page, 10) : undefined,
+            size: size ? parseInt(size, 10) : undefined,
+            search,
+            status: status,
+            patientId,
+            startDate,
+            endDate,
+        });
+    }
     async findOne(req, id) {
         const labId = req.user?.labId;
         if (!labId) {
@@ -100,6 +116,13 @@ let OrdersController = class OrdersController {
             paymentStatus: dto.paymentStatus,
             paidAmount: dto.paidAmount,
         });
+    }
+    async updateDiscount(req, id, dto) {
+        const labId = req.user?.labId;
+        if (!labId) {
+            throw new Error('Lab ID not found in token');
+        }
+        return this.ordersService.updateDiscount(id, labId, dto.discountPercent);
     }
     async updateOrderTests(req, id, dto) {
         const labId = req.user?.labId;
@@ -174,6 +197,20 @@ __decorate([
     __metadata("design:returntype", Promise)
 ], OrdersController.prototype, "saveWorklist", null);
 __decorate([
+    (0, common_1.Get)('history'),
+    __param(0, (0, common_1.Req)()),
+    __param(1, (0, common_1.Query)('page')),
+    __param(2, (0, common_1.Query)('size')),
+    __param(3, (0, common_1.Query)('search')),
+    __param(4, (0, common_1.Query)('status')),
+    __param(5, (0, common_1.Query)('patientId')),
+    __param(6, (0, common_1.Query)('startDate')),
+    __param(7, (0, common_1.Query)('endDate')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, String, String, String, String, String, String, String]),
+    __metadata("design:returntype", Promise)
+], OrdersController.prototype, "findHistory", null);
+__decorate([
     (0, common_1.Get)(':id'),
     __param(0, (0, common_1.Req)()),
     __param(1, (0, common_1.Param)('id', common_1.ParseUUIDPipe)),
@@ -191,6 +228,16 @@ __decorate([
     __metadata("design:paramtypes", [Object, String, update_payment_dto_1.UpdateOrderPaymentDto]),
     __metadata("design:returntype", Promise)
 ], OrdersController.prototype, "updatePayment", null);
+__decorate([
+    (0, common_1.Patch)(':id/discount'),
+    (0, common_1.UsePipes)(new common_1.ValidationPipe({ whitelist: true })),
+    __param(0, (0, common_1.Req)()),
+    __param(1, (0, common_1.Param)('id', common_1.ParseUUIDPipe)),
+    __param(2, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, String, update_order_discount_dto_1.UpdateOrderDiscountDto]),
+    __metadata("design:returntype", Promise)
+], OrdersController.prototype, "updateDiscount", null);
 __decorate([
     (0, common_1.Patch)(':id/tests'),
     (0, common_1.UsePipes)(new common_1.ValidationPipe({ whitelist: true })),

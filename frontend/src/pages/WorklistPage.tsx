@@ -44,6 +44,8 @@ import {
 } from '../api/client';
 import { useTheme } from '../contexts/ThemeContext';
 import { WorklistStatusDashboard } from '../components/WorklistStatusDashboard';
+import { useFillToViewportBottom } from '../hooks/useFillToViewportBottom';
+import './QueuePages.css';
 
 const { Title, Text } = Typography;
 
@@ -149,6 +151,7 @@ function groupWorklistByOrder(items: WorklistItem[]): WorklistOrderGroup[] {
 
 export function WorklistPage() {
   const isDark = useTheme().theme === 'dark';
+  const { containerRef, filledMinHeightPx } = useFillToViewportBottom();
   const [data, setData] = useState<WorklistItem[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(false);
@@ -231,13 +234,27 @@ export function WorklistPage() {
     loadData();
   };
 
-  const handleOpenResultModal = (item: WorklistItem) => {
-    setEditingItem(item);
+  const resolveResultModalTargets = useCallback(
+    (item: WorklistItem): WorklistItem[] => {
+      if (item.testType !== 'PANEL') {
+        return [item];
+      }
 
-    const isPanel = item.testType === 'PANEL';
-    const targets = isPanel
-      ? data.filter((i) => i.parentOrderTestId === item.id)
-      : [item];
+      if (item.id.startsWith('group-')) {
+        return data.filter((entry) => entry.orderId === item.orderId);
+      }
+
+      const panelChildren = data.filter(
+        (entry) => entry.orderId === item.orderId && entry.parentOrderTestId === item.id,
+      );
+      return panelChildren.length > 0 ? panelChildren : [item];
+    },
+    [data],
+  );
+
+  const handleOpenResultModal = (item: WorklistItem) => {
+    const targets = resolveResultModalTargets(item);
+    setEditingItem(item);
 
     const formValues: any = {};
 
@@ -327,11 +344,7 @@ export function WorklistPage() {
     if (!editingItem) return;
 
     const isPanel = editingItem.testType === 'PANEL';
-    const targets = isPanel
-      ? (editingItem.id.startsWith('group-')
-        ? data.filter((i) => i.orderId === editingItem.orderId)
-        : data.filter((i) => i.parentOrderTestId === editingItem.id))
-      : [editingItem];
+    const targets = resolveResultModalTargets(editingItem);
 
     setSubmitting(true);
     try {
@@ -629,25 +642,18 @@ export function WorklistPage() {
 
     return (
       <div className="worklist-expanded-panel" style={{ padding: '4px 16px 16px' }}>
-        <Table
+        <Table<WorklistItem>
           className="worklist-subtests-table"
           size="small"
           rowKey="id"
           dataSource={visibleItems}
           pagination={false}
+          tableLayout="fixed"
           columns={[
-            {
-              title: 'Sample',
-              dataIndex: 'sampleLabel',
-              key: 'sample',
-              width: 100,
-              render: (v: string) => <Text style={{ fontSize: 12 }}>{v}</Text>,
-              onCell: () => ({ style: compactStyle }),
-            },
             {
               title: 'Test',
               key: 'test',
-              width: 220,
+              width: 300,
               render: (_: unknown, r: WorklistItem) => (
                 <div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -655,7 +661,7 @@ export function WorklistPage() {
                       {r.testCode}
                     </Tag>
                     <Text strong style={{ fontSize: 12 }}>
-                      {r.testName}
+                      {r.testAbbreviation || r.testName}
                     </Text>
                   </div>
                   {r.testType === 'PANEL' && (
@@ -670,7 +676,7 @@ export function WorklistPage() {
             {
               title: 'Result',
               key: 'result',
-              width: 160,
+              width: 220,
               render: (_: unknown, r: WorklistItem) => (
                 <div>
                   {formatWorklistResultPreview(r, group.items)}
@@ -701,7 +707,7 @@ export function WorklistPage() {
             {
               title: 'Status',
               key: 'status',
-              width: 110,
+              width: 130,
               render: (_: unknown, r: WorklistItem) => {
                 const colors: Record<OrderTestStatus, string> = {
                   PENDING: 'default',
@@ -730,7 +736,7 @@ export function WorklistPage() {
             {
               title: 'Actions',
               key: 'actions',
-              width: 180,
+              width: 170,
               align: 'right',
               render: (_: unknown, r: WorklistItem) => (
                 <Space size="small">
@@ -894,32 +900,34 @@ export function WorklistPage() {
           padding-bottom: 3px !important;
         }
         .panel-entry-modal .ant-modal {
-          max-width: calc(100vw - 24px) !important;
+          max-width: calc(100vw - 32px) !important;
+          top: 20px;
+          padding-bottom: 0;
         }
         .panel-entry-modal .ant-modal-content {
-          border-radius: 12px;
+          border-radius: 14px;
           overflow: hidden;
         }
         .panel-entry-modal .ant-modal-header {
-          padding: 10px 14px;
+          padding: 8px 12px;
           margin-bottom: 0;
         }
         .panel-entry-modal .ant-modal-body {
-          padding: 6px 10px 10px !important;
-          max-height: calc(100vh - 160px);
+          padding: 6px 12px 10px !important;
+          max-height: calc(100vh - 140px);
           overflow-y: auto;
         }
         .panel-entry-modal .panel-entry-summary {
-          margin-bottom: 8px;
-          padding: 8px 10px;
+          margin-bottom: 6px;
+          padding: 7px 9px;
           border-radius: 6px;
         }
         .panel-entry-modal .panel-entry-grid-head {
-          padding: 6px 10px !important;
-          margin-bottom: 4px !important;
+          padding: 5px 8px !important;
+          margin-bottom: 0 !important;
         }
         .panel-entry-modal .panel-entry-grid-row {
-          padding: 4px 10px !important;
+          padding: 4px 8px !important;
           margin-bottom: 0 !important;
         }
         .panel-entry-modal .panel-entry-grid-row .ant-form-item {
@@ -934,103 +942,114 @@ export function WorklistPage() {
         }
         @media (max-width: 992px) {
           .panel-entry-modal .ant-modal {
-            margin: 12px auto;
+            margin: 10px auto;
+            top: 8px;
           }
           .panel-entry-modal .ant-modal-body {
-            max-height: calc(100vh - 132px);
+            max-height: calc(100vh - 116px);
+            padding: 10px 12px 12px !important;
           }
         }
       `}</style>
       <Title level={4} style={{ marginTop: 0, marginBottom: 10 }}>Worklist</Title>
       <WorklistStatusDashboard stats={stats} style={{ marginBottom: 12 }} />
 
-      <Card>
-        {/* Filters */}
-        <Space style={{ marginBottom: 16 }} wrap>
-          <Input
-            placeholder="Search order #, patient, test..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            onPressEnter={handleSearch}
-            style={{ width: 250 }}
-            allowClear
-          />
-          <Select
-            placeholder="Status"
-            value={statusFilter}
-            onChange={(value) => setStatusFilter(value as OrderTestStatus | 'ALL')}
-            style={{ width: 180 }}
-            options={STATUS_OPTIONS}
-            allowClear={false}
-          />
-          <Select
-            placeholder="Department"
-            value={departmentId || undefined}
-            onChange={(v) => setDepartmentId(v ?? '')}
-            style={{ width: 180 }}
-            allowClear
-            options={departments.map((d) => ({ label: `${d.code} - ${d.name}`, value: d.id }))}
-          />
-          <DatePicker
-            value={dateFilter}
-            onChange={setDateFilter}
-            allowClear
-            placeholder="Filter by date"
-          />
-          <Button type="primary" icon={<SearchOutlined />} onClick={handleSearch}>
-            Search
-          </Button>
-          <Button icon={<ReloadOutlined />} onClick={() => { loadData(); loadStats(); }}>
-            Refresh
-          </Button>
-          {selectedRowKeys.length > 0 && (
-            <Button
-              type="primary"
-              icon={<CheckOutlined />}
-              onClick={handleBatchVerify}
-              style={{ backgroundColor: '#52c41a', borderColor: '#52c41a' }}
-            >
-              Verify Selected ({selectedRowKeys.length})
-            </Button>
-          )}
-        </Space>
+      <div
+        ref={containerRef}
+        className="queue-pane-shell"
+        style={{ minHeight: filledMinHeightPx }}
+      >
+        <Card className="queue-main-card">
+          <div className="queue-filters-block">
+            <Space wrap>
+              <Input
+                placeholder="Search order #, patient, test..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                onPressEnter={handleSearch}
+                style={{ width: 250 }}
+                allowClear
+              />
+              <Select
+                placeholder="Status"
+                value={statusFilter}
+                onChange={(value) => setStatusFilter(value as OrderTestStatus | 'ALL')}
+                style={{ width: 180 }}
+                options={STATUS_OPTIONS}
+                allowClear={false}
+              />
+              <Select
+                placeholder="Department"
+                value={departmentId || undefined}
+                onChange={(v) => setDepartmentId(v ?? '')}
+                style={{ width: 180 }}
+                allowClear
+                options={departments.map((d) => ({ label: `${d.code} - ${d.name}`, value: d.id }))}
+              />
+              <DatePicker
+                value={dateFilter}
+                onChange={setDateFilter}
+                allowClear
+                placeholder="Filter by date"
+              />
+              <Button type="primary" icon={<SearchOutlined />} onClick={handleSearch}>
+                Search
+              </Button>
+              <Button icon={<ReloadOutlined />} onClick={() => { loadData(); loadStats(); }}>
+                Refresh
+              </Button>
+              {selectedRowKeys.length > 0 && (
+                <Button
+                  type="primary"
+                  icon={<CheckOutlined />}
+                  onClick={handleBatchVerify}
+                  style={{ backgroundColor: '#52c41a', borderColor: '#52c41a' }}
+                >
+                  Verify Selected ({selectedRowKeys.length})
+                </Button>
+              )}
+            </Space>
+          </div>
 
-        <Table<WorklistOrderGroup>
-          className="worklist-orders-table"
-          rowKey="orderId"
-          columns={orderColumns}
-          dataSource={groupedData}
-          loading={loading}
-          showHeader
-          rowClassName={(record) => (expandedOrderIds.includes(record.orderId) ? 'worklist-order-row-expanded' : '')}
-          rowSelection={rowSelection}
-          expandable={{
-            expandedRowRender: (record) => renderExpandedTests(record),
-            expandRowByClick: true,
-            showExpandColumn: false,
-            expandedRowKeys: expandedOrderIds,
-            onExpand: (expanded, record) => {
-              setExpandedOrderIds(expanded ? [record.orderId] : []);
-            },
-          }}
-          pagination={{
-            current: page,
-            pageSize: size,
-            total,
-            showSizeChanger: false,
-            showTotal: (t) => `Total ${t} tests`,
-            onChange: (p) => setPage(p),
-          }}
-          scroll={{ x: 820 }}
-          size="small"
-        />
-      </Card>
+          <div className="queue-table-block">
+            <Table<WorklistOrderGroup>
+              className="worklist-orders-table"
+              rowKey="orderId"
+              columns={orderColumns}
+              dataSource={groupedData}
+              loading={loading}
+              showHeader
+              rowClassName={(record) => (expandedOrderIds.includes(record.orderId) ? 'worklist-order-row-expanded' : '')}
+              rowSelection={rowSelection}
+              expandable={{
+                expandedRowRender: (record) => renderExpandedTests(record),
+                expandRowByClick: true,
+                showExpandColumn: false,
+                expandedRowKeys: expandedOrderIds,
+                onExpand: (expanded, record) => {
+                  setExpandedOrderIds(expanded ? [record.orderId] : []);
+                },
+              }}
+              pagination={{
+                current: page,
+                pageSize: size,
+                total,
+                showSizeChanger: false,
+                showTotal: (t) => `Total ${t} orders`,
+                onChange: (p) => setPage(p),
+              }}
+              scroll={{ x: 820 }}
+              size="small"
+            />
+          </div>
+        </Card>
+      </div>
 
       {/* Result Entry Modal */}
       <Modal
         title={
-          <Space size="middle">
-            <span style={{ fontWeight: 600, fontSize: 16 }}>Enter Result</span>
+          <Space size={8}>
+            <span style={{ fontWeight: 600, fontSize: 15, lineHeight: 1.2 }}>Enter Result</span>
             {editingItem && (
               <Tag color="blue" style={{ margin: 0 }}>{editingItem.testName}</Tag>
             )}
@@ -1039,10 +1058,9 @@ export function WorklistPage() {
         open={resultModalOpen}
         onCancel={handleCloseResultModal}
         footer={null}
-        width={920}
+        width={960}
         className="panel-entry-modal"
         styles={{
-          body: { paddingTop: 8 },
           header: { borderBottom: isDark ? '1px solid rgba(255,255,255,0.08)' : '1px solid #f0f0f0' },
         }}
       >
@@ -1084,13 +1102,8 @@ export function WorklistPage() {
               onFinish={handleSubmitResult}
             >
               {(() => {
-                const targetItems = editingItem.testType === 'PANEL'
-                  ? (editingItem.id.startsWith('group-')
-                    ? data.filter(i => i.orderId === editingItem.orderId)
-                    : data.filter(i => i.parentOrderTestId === editingItem.id))
-                  : [editingItem];
-
-                const isPanel = targetItems.length > 1;
+                const targetItems = resolveResultModalTargets(editingItem);
+                const isPanel = editingItem.testType === 'PANEL';
 
                 return (
                   <>
@@ -1116,8 +1129,72 @@ export function WorklistPage() {
                     )}
 
                     {targetItems.map((target, idx) => {
-                      const hasParams = (target.parameterDefinitions?.length ?? 0) > 0;
+                      const parameterDefinitions = target.parameterDefinitions ?? [];
+                      const hasParams = parameterDefinitions.length > 0;
                       const panelResultControlStyle = isPanel ? { width: '100%' } : undefined;
+
+                      if (isPanel && hasParams) {
+                        return parameterDefinitions.map((def, defIndex) => {
+                          const isLastRow =
+                            idx === targetItems.length - 1 && defIndex === parameterDefinitions.length - 1;
+                          return (
+                            <div
+                              key={`${target.id}-${def.code}`}
+                              className="panel-entry-grid-row"
+                              style={{
+                                marginBottom: 0,
+                                borderBottom: !isLastRow
+                                  ? (isDark ? '1px solid rgba(255,255,255,0.05)' : '1px solid #f0f0f0')
+                                  : 'none',
+                              }}
+                            >
+                              <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap' }}>
+                                <div style={{ flex: '1 1 24%' }}>
+                                  <Text style={{ fontSize: 11, lineHeight: '15px' }}>{def.label}</Text>
+                                </div>
+                                <div style={{ flex: '1 1 40%' }}>
+                                  <Form.Item name={[target.id, 'resultParameters', def.code]} noStyle>
+                                    {def.type === 'select' ? (
+                                      <Select
+                                        allowClear
+                                        showSearch
+                                        style={{ width: '100%' }}
+                                        size="small"
+                                        placeholder="Select"
+                                        options={[
+                                          ...(def.options ?? []).map((o) => ({ label: o, value: o })),
+                                          { label: 'Other...', value: '__other__' },
+                                        ]}
+                                      />
+                                    ) : (
+                                      <Input style={{ width: '100%' }} size="small" placeholder="Result" />
+                                    )}
+                                  </Form.Item>
+                                  {def.type === 'select' && (
+                                    <Form.Item noStyle shouldUpdate>
+                                      {() => resultForm.getFieldValue([target.id, 'resultParameters', def.code]) === '__other__' && (
+                                        <Form.Item
+                                          name={[target.id, 'resultParametersCustom', def.code]}
+                                          rules={[{ required: true, message: 'Enter custom value' }]}
+                                          style={{ marginTop: 4, marginBottom: 0 }}
+                                        >
+                                          <Input size="small" placeholder="Specify custom value..." />
+                                        </Form.Item>
+                                      )}
+                                    </Form.Item>
+                                  )}
+                                </div>
+                                <div style={{ flex: '1 1 14%', textAlign: 'center', fontSize: 11 }}>
+                                  -
+                                </div>
+                                <div style={{ flex: '1 1 22%', textAlign: 'right', fontSize: 11, color: 'rgba(128,128,128,0.8)' }}>
+                                  -
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        });
+                      }
 
                       return (
                         <div key={target.id} className={isPanel ? 'panel-entry-grid-row' : undefined} style={{
@@ -1125,7 +1202,7 @@ export function WorklistPage() {
                           padding: isPanel ? undefined : 0,
                           borderBottom: isPanel && idx < targetItems.length - 1 ? (isDark ? '1px solid rgba(255,255,255,0.05)' : '1px solid #f0f0f0') : 'none'
                         }}>
-                          <div style={{ display: 'flex', alignItems: 'flex-start', flexWrap: 'wrap' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap' }}>
                             <div style={{ flex: isPanel ? '1 1 24%' : '1 1 100%', marginBottom: isPanel ? 0 : 8 }}>
                               <Text strong={!isPanel} style={{ fontSize: isPanel ? 12 : 14 }}>{target.testName}</Text>
                             </div>
@@ -1144,7 +1221,7 @@ export function WorklistPage() {
                                           style={{ width: '100%' }}
                                           placeholder="Value"
                                           precision={2}
-                                          size={isPanel ? "small" : "large"}
+                                          size={isPanel ? 'small' : 'large'}
                                         />
                                       </Form.Item>
                                       {target.resultEntryType === 'NUMERIC' && !isPanel && target.testUnit && <Text type="secondary">{target.testUnit}</Text>}
@@ -1154,7 +1231,7 @@ export function WorklistPage() {
                                       allowClear
                                       showSearch
                                       style={panelResultControlStyle}
-                                      size={isPanel ? "small" : "large"}
+                                      size={isPanel ? 'small' : 'large'}
                                       placeholder="Select"
                                       options={[
                                         ...(target.resultTextOptions ?? []).map((o) => ({ label: o.value, value: o.value })),
@@ -1162,7 +1239,7 @@ export function WorklistPage() {
                                       ]}
                                     />
                                   ) : (
-                                    <Input style={panelResultControlStyle} size={isPanel ? "small" : "large"} placeholder="Result text" />
+                                    <Input style={panelResultControlStyle} size={isPanel ? 'small' : 'large'} placeholder="Result text" />
                                   )}
                                 </Form.Item>
                               ) : (
@@ -1172,10 +1249,10 @@ export function WorklistPage() {
 
                             {isPanel && (
                               <>
-                                <div style={{ flex: '1 1 14%', textAlign: 'center', fontSize: 12 }}>
+                                <div style={{ flex: '1 1 14%', textAlign: 'center', fontSize: 11 }}>
                                   {target.testUnit || '-'}
                                 </div>
-                                <div style={{ flex: '1 1 22%', textAlign: 'right', fontSize: 12, color: 'rgba(128,128,128,0.8)' }}>
+                                <div style={{ flex: '1 1 22%', textAlign: 'right', fontSize: 11, color: 'rgba(128,128,128,0.8)' }}>
                                   {target.normalText || `${target.normalMin ?? '-'} - ${target.normalMax ?? '-'}`}
                                 </div>
                               </>
@@ -1183,7 +1260,7 @@ export function WorklistPage() {
                           </div>
 
                           {/* Qualitative "Other" field */}
-                          {target.resultEntryType === 'QUALITATIVE' && target.allowCustomResultText && (
+                          {!hasParams && target.resultEntryType === 'QUALITATIVE' && target.allowCustomResultText && (
                             <Form.Item noStyle shouldUpdate>
                               {() => resultForm.getFieldValue([target.id, 'resultText']) === '__other__' && (
                                 <div style={{ marginTop: 8, paddingLeft: isPanel ? 0 : 0 }}>
@@ -1200,7 +1277,7 @@ export function WorklistPage() {
                           )}
 
                           {/* Parameters */}
-                          {hasParams && (
+                          {hasParams && !isPanel && (
                             <div
                               className="panel-entry-params"
                               style={{
@@ -1222,14 +1299,14 @@ export function WorklistPage() {
                                       {def.type === 'select' ? (
                                         <Select
                                           allowClear
-                                          size="small"
+                                          size={isPanel ? 'middle' : 'small'}
                                           options={[
                                             ...(def.options ?? []).map((o) => ({ label: o, value: o })),
                                             { label: 'Other...', value: '__other__' },
                                           ]}
                                         />
                                       ) : (
-                                        <Input size="small" placeholder="Enter..." />
+                                        <Input size={isPanel ? 'middle' : 'small'} placeholder="Enter..." />
                                       )}
                                     </Form.Item>
                                     {/* Parameter "Other" handling could be added here if needed, keeping it simple for now */}
