@@ -76,7 +76,7 @@ export declare class OrdersService {
     private splitSamplesForDepartmentLabels;
     private resolveSampleDepartmentScope;
     private buildSampleGroupingKey;
-    private createOrderTestsForSample;
+    private bulkCreateOrderTests;
     private isOrderTestProcessed;
     private findPricing;
     getNextOrderNumber(labId: string, shiftId: string | null): Promise<string>;

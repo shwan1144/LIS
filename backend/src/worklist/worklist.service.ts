@@ -504,6 +504,167 @@ export class WorklistService {
     return saved;
   }
 
+  async batchEnterResults(
+    labId: string,
+    actor: LabActorContext,
+    actorRole: string | undefined,
+    updates: Array<{
+      orderTestId: string;
+      resultValue?: number | null;
+      resultText?: string | null;
+      comments?: string | null;
+      resultParameters?: Record<string, string> | null;
+      forceEditVerified?: boolean;
+    }>,
+  ): Promise<OrderTest[]> {
+    if (!updates.length) return [];
+
+    const orderTestIds = updates.map((u) => u.orderTestId);
+    const orderTests = await this.orderTestRepo.find({
+      where: { id: In(orderTestIds) },
+      relations: ['sample', 'sample.order', 'sample.order.patient', 'test'],
+    });
+
+    const orderTestsMap = new Map(orderTests.map((ot) => [ot.id, ot]));
+    const toSave: OrderTest[] = [];
+    const updatedOrderIds = new Set<string>();
+    const updatedParentIds = new Set<string>();
+    const auditLogs: any[] = [];
+
+    for (const data of updates) {
+      const orderTest = orderTestsMap.get(data.orderTestId);
+      if (!orderTest || orderTest.sample.order.labId !== labId) {
+        continue;
+      }
+
+      const forceEditVerified = data.forceEditVerified === true;
+      const canForceEditVerified =
+        actor.isImpersonation || actorRole === 'LAB_ADMIN' || actorRole === 'SUPER_ADMIN';
+      const isVerifiedOverride =
+        orderTest.status === OrderTestStatus.VERIFIED && forceEditVerified && canForceEditVerified;
+
+      if (orderTest.status === OrderTestStatus.VERIFIED && !isVerifiedOverride) {
+        continue;
+      }
+
+      if (data.resultValue !== undefined) {
+        orderTest.resultValue = data.resultValue;
+      }
+      if (data.comments !== undefined) {
+        orderTest.comments = data.comments || null;
+      }
+      if (data.resultParameters !== undefined) {
+        orderTest.resultParameters =
+          data.resultParameters && Object.keys(data.resultParameters).length > 0
+            ? data.resultParameters
+            : null;
+      }
+
+      const resultEntryType = this.normalizeResultEntryType(orderTest.test.resultEntryType);
+      const resultTextOptions = this.normalizeResultTextOptions(orderTest.test.resultTextOptions);
+      const normalizedResultTextInput =
+        data.resultText !== undefined ? this.normalizeResultText(data.resultText) : undefined;
+
+      if (resultEntryType === 'QUALITATIVE') {
+        const candidateText =
+          normalizedResultTextInput ?? this.normalizeResultText(orderTest.resultText);
+        if (!candidateText) continue;
+
+        const matchedOption = this.findMatchingResultTextOption(candidateText, resultTextOptions);
+        if (!matchedOption && !orderTest.test.allowCustomResultText) continue;
+
+        orderTest.resultText = matchedOption?.value ?? candidateText;
+        orderTest.resultValue = null;
+        orderTest.flag = this.toResultFlag(matchedOption?.flag ?? null);
+      } else if (resultEntryType === 'TEXT') {
+        if (data.resultText !== undefined) {
+          orderTest.resultText = normalizedResultTextInput ?? null;
+        }
+        orderTest.resultValue = null;
+        orderTest.flag = this.resolveFlagFromResultText(orderTest.resultText, resultTextOptions);
+      } else {
+        if (data.resultText !== undefined) {
+          orderTest.resultText = normalizedResultTextInput ?? null;
+        }
+
+        const optionFlag = this.resolveFlagFromResultText(orderTest.resultText, resultTextOptions);
+        if (optionFlag) {
+          orderTest.flag = optionFlag;
+        } else {
+          const patientAgeYears = this.computePatientAgeYears(
+            orderTest.sample.order.patient?.dateOfBirth ?? null,
+          );
+          orderTest.flag = this.calculateFlag(
+            orderTest.resultValue,
+            orderTest.test,
+            orderTest.sample.order.patient?.sex || null,
+            patientAgeYears,
+          );
+        }
+      }
+
+      const isUpdate = orderTest.resultedAt !== null;
+      orderTest.status = isVerifiedOverride ? OrderTestStatus.VERIFIED : OrderTestStatus.COMPLETED;
+      orderTest.rejectionReason = null;
+      orderTest.resultedAt = new Date();
+      orderTest.resultedBy = actor.userId ?? orderTest.resultedBy;
+      if (isVerifiedOverride) {
+        orderTest.verifiedAt = new Date();
+        orderTest.verifiedBy = actor.userId ?? orderTest.verifiedBy;
+      }
+
+      toSave.push(orderTest);
+      updatedOrderIds.add(orderTest.sample.orderId);
+      updatedParentIds.add(orderTest.parentOrderTestId || orderTest.id);
+
+      const impersonationAudit =
+        actor.isImpersonation && actor.platformUserId
+          ? {
+            impersonation: {
+              active: true,
+              platformUserId: actor.platformUserId,
+            },
+          }
+          : {};
+
+      auditLogs.push({
+        actorType: actor.actorType,
+        actorId: actor.actorId,
+        labId,
+        userId: actor.userId,
+        action: isUpdate ? AuditAction.RESULT_UPDATE : AuditAction.RESULT_ENTER,
+        entityType: 'order_test',
+        entityId: orderTest.id,
+        newValues: {
+          resultValue: data.resultValue,
+          resultText: data.resultText,
+          flag: orderTest.flag,
+          forceEditVerified: isVerifiedOverride,
+          ...impersonationAudit,
+        },
+        description: isVerifiedOverride
+          ? `Corrected verified result for test ${orderTest.test?.code || orderTest.id}`
+          : `${isUpdate ? 'Updated' : 'Entered'} result for test ${orderTest.test?.code || orderTest.id}`,
+      });
+    }
+
+    if (toSave.length > 0) {
+      await this.orderTestRepo.save(toSave);
+
+      for (const pid of updatedParentIds) {
+        await this.panelStatusService.recomputeAfterChildUpdate(pid);
+      }
+      for (const oid of updatedOrderIds) {
+        await this.syncOrderStatus(oid);
+      }
+      for (const log of auditLogs) {
+        await this.auditService.log(log);
+      }
+    }
+
+    return toSave;
+  }
+
   async verifyResult(
     orderTestId: string,
     labId: string,
@@ -575,19 +736,71 @@ export class WorklistService {
     labId: string,
     actor: LabActorContext,
   ): Promise<{ verified: number; failed: number }> {
-    let verified = 0;
+    if (!orderTestIds.length) return { verified: 0, failed: 0 };
+
+    const orderTests = await this.orderTestRepo.find({
+      where: { id: In(orderTestIds) },
+      relations: ['sample', 'sample.order', 'test'],
+    });
+
+    const toSave: OrderTest[] = [];
+    const updatedOrderIds = new Set<string>();
+    const updatedParentIds = new Set<string>();
+    const auditLogs: any[] = [];
     let failed = 0;
 
-    for (const id of orderTestIds) {
-      try {
-        await this.verifyResult(id, labId, actor);
-        verified++;
-      } catch {
+    for (const ot of orderTests) {
+      if (ot.sample.order.labId !== labId || ot.status === OrderTestStatus.VERIFIED || ot.status === OrderTestStatus.PENDING) {
         failed++;
+        continue;
+      }
+
+      ot.status = OrderTestStatus.VERIFIED;
+      ot.verifiedAt = new Date();
+      ot.verifiedBy = actor.userId;
+
+      toSave.push(ot);
+      updatedOrderIds.add(ot.sample.orderId);
+      updatedParentIds.add(ot.parentOrderTestId || ot.id);
+
+      const impersonationAudit = actor.isImpersonation && actor.platformUserId ? {
+        impersonation: { active: true, platformUserId: actor.platformUserId },
+      } : {};
+
+      auditLogs.push({
+        actorType: actor.actorType,
+        actorId: actor.actorId,
+        labId,
+        userId: actor.userId,
+        action: AuditAction.RESULT_VERIFY,
+        entityType: 'order_test',
+        entityId: ot.id,
+        newValues: {
+          resultValue: ot.resultValue,
+          resultText: ot.resultText,
+          flag: ot.flag,
+          status: OrderTestStatus.VERIFIED,
+          ...impersonationAudit,
+        },
+        description: `Verified result for test ${ot.test?.code || ot.id}`,
+      });
+    }
+
+    if (toSave.length > 0) {
+      await this.orderTestRepo.save(toSave);
+
+      for (const pid of updatedParentIds) {
+        await this.panelStatusService.recomputeAfterChildUpdate(pid);
+      }
+      for (const oid of updatedOrderIds) {
+        await this.syncOrderStatus(oid);
+      }
+      for (const log of auditLogs) {
+        await this.auditService.log(log);
       }
     }
 
-    return { verified, failed };
+    return { verified: toSave.length, failed };
   }
 
   async rejectResult(

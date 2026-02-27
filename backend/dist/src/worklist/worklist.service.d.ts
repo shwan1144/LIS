@@ -73,6 +73,14 @@ export declare class WorklistService {
         resultParameters?: Record<string, string> | null;
         forceEditVerified?: boolean;
     }, actorRole?: string): Promise<OrderTest>;
+    batchEnterResults(labId: string, actor: LabActorContext, actorRole: string | undefined, updates: Array<{
+        orderTestId: string;
+        resultValue?: number | null;
+        resultText?: string | null;
+        comments?: string | null;
+        resultParameters?: Record<string, string> | null;
+        forceEditVerified?: boolean;
+    }>): Promise<OrderTest[]>;
     verifyResult(orderTestId: string, labId: string, actor: LabActorContext): Promise<OrderTest>;
     verifyMultiple(orderTestIds: string[], labId: string, actor: LabActorContext): Promise<{
         verified: number;

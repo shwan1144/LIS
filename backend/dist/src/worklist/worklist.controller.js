@@ -56,6 +56,14 @@ let WorklistController = class WorklistController {
         }
         return this.worklistService.enterResult(id, labId, actor, body, req.user?.role);
     }
+    async batchEnterResults(req, body) {
+        const labId = req.user?.labId;
+        const actor = (0, lab_actor_context_1.buildLabActorContext)(req.user);
+        if (!labId) {
+            throw new Error('Lab ID not found in token');
+        }
+        return this.worklistService.batchEnterResults(labId, actor, req.user?.role, body.updates);
+    }
     async verifyResult(req, id) {
         const labId = req.user?.labId;
         const actor = (0, lab_actor_context_1.buildLabActorContext)(req.user);
@@ -111,6 +119,14 @@ __decorate([
     __metadata("design:paramtypes", [Object, String, Object]),
     __metadata("design:returntype", Promise)
 ], WorklistController.prototype, "enterResult", null);
+__decorate([
+    (0, common_1.Patch)('batch-result'),
+    __param(0, (0, common_1.Req)()),
+    __param(1, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, Object]),
+    __metadata("design:returntype", Promise)
+], WorklistController.prototype, "batchEnterResults", null);
 __decorate([
     (0, common_1.Patch)(':id/verify'),
     __param(0, (0, common_1.Req)()),

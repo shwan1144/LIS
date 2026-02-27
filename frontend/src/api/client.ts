@@ -1429,6 +1429,19 @@ export async function enterResult(
   await api.patch(`/worklist/${id}/result`, data);
 }
 
+export async function batchEnterResults(
+  updates: Array<{
+    orderTestId: string;
+    resultValue?: number | null;
+    resultText?: string | null;
+    comments?: string | null;
+    resultParameters?: Record<string, string> | null;
+    forceEditVerified?: boolean;
+  }>
+): Promise<void> {
+  await api.patch('/worklist/batch-result', { updates });
+}
+
 export interface WorklistParams {
   status?: OrderTestStatus[];
   search?: string;

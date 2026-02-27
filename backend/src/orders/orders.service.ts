@@ -144,6 +144,8 @@ export class OrdersService {
         ),
       ),
     );
+    const precomputedPricingMap = new Map<string, number>();
+    uniqueTestIds.forEach((id, idx) => precomputedPricingMap.set(id, pricingValues[idx]));
     const totalAmount = pricingValues.reduce((sum, value) => sum + value, 0);
 
     const discountPercent = Math.min(100, Math.max(0, dto.discountPercent ?? 0));
@@ -197,6 +199,9 @@ export class OrdersService {
 
       // Create samples and order tests.
       // Barcode is order-level and reused across all tubes/samples in the order.
+      const samplesToSave = [];
+      const bulkTestData = [];
+
       for (let i = 0; i < samplesToCreate.length; i++) {
         const sampleDto = samplesToCreate[i];
         const sampleBarcode = orderNumber;
@@ -222,24 +227,26 @@ export class OrdersService {
           sequenceNumber,
           qrCode: null,
         });
-        const savedSample = await sampleRepo.save(sample);
-
-        for (const testDto of sampleDto.tests) {
-          const test = testMap.get(testDto.testId);
-          if (!test) {
-            // Should not happen due to earlier validation
-            continue;
-          }
-          await this.createOrderTestsForSample(
-            manager,
-            labId,
-            savedSample.id,
-            test,
-            dto.shiftId ?? null,
-            patientType,
-          );
-        }
+        samplesToSave.push(sample);
       }
+
+      const savedSamples = await sampleRepo.save(samplesToSave);
+
+      for (let i = 0; i < samplesToCreate.length; i++) {
+        const sampleDto = samplesToCreate[i];
+        const savedSample = savedSamples[i];
+        const tests = sampleDto.tests.map(t => testMap.get(t.testId)!).filter(Boolean);
+        bulkTestData.push({ sampleId: savedSample.id, tests });
+      }
+
+      await this.bulkCreateOrderTests(
+        manager,
+        labId,
+        bulkTestData,
+        dto.shiftId ?? null,
+        patientType,
+        precomputedPricingMap,
+      );
 
       // Reload order with relations
       return (await orderRepo.findOne({
@@ -525,6 +532,8 @@ export class OrdersService {
       }
 
       // `createOrderSampleBarcodeAllocator` removed, we will grab global sequence directly
+      const bulkTestsBySample = new Map<string, Test[]>();
+
       for (const testId of uniqueTestIds) {
         if (existingRootByTestId.has(testId)) {
           continue;
@@ -573,11 +582,21 @@ export class OrdersService {
           sampleByScope.set(sampleScopeKey, targetSample);
         }
 
-        await this.createOrderTestsForSample(
+        const list = bulkTestsBySample.get(targetSample.id) || [];
+        list.push(test);
+        bulkTestsBySample.set(targetSample.id, list);
+      }
+
+      const bulkTestData = Array.from(bulkTestsBySample.entries()).map(([sampleId, tests]) => ({
+        sampleId,
+        tests,
+      }));
+
+      if (bulkTestData.length > 0) {
+        await this.bulkCreateOrderTests(
           manager,
           labId,
-          targetSample.id,
-          test,
+          bulkTestData,
           order.shiftId ?? null,
           order.patientType,
         );
@@ -691,59 +710,97 @@ export class OrdersService {
     return `tube:${tubeType ?? 'none'}`;
   }
 
-  private async createOrderTestsForSample(
+  private async bulkCreateOrderTests(
     manager: EntityManager,
     labId: string,
-    sampleId: string,
-    test: Test,
+    sampleWithTestsArr: Array<{ sampleId: string; tests: Test[] }>,
     shiftId: string | null,
     patientType: PatientType,
+    precomputedPricingMap?: Map<string, number>,
   ): Promise<void> {
     const orderTestRepo = manager.getRepository(OrderTest);
-    const panelPrice = await this.findPricing(labId, test.id, shiftId, patientType);
 
-    if (test.type === TestType.PANEL) {
-      const parentOrderTest = orderTestRepo.create({
-        labId,
-        sampleId,
-        testId: test.id,
-        parentOrderTestId: null,
-        status: OrderTestStatus.PENDING,
-        price: panelPrice,
-      });
-      const savedParent = await orderTestRepo.save(parentOrderTest);
+    const allTestIds = new Set<string>();
+    for (const item of sampleWithTestsArr) {
+      for (const t of item.tests) {
+        allTestIds.add(t.id);
+      }
+    }
+    const uniqueTestIds = Array.from(allTestIds);
+    if (uniqueTestIds.length === 0) return;
 
-      const components = await manager.getRepository(TestComponent)
+    let pricingMap = precomputedPricingMap;
+    if (!pricingMap) {
+      pricingMap = new Map<string, number>();
+      const pricingValues = await Promise.all(
+        uniqueTestIds.map((testId) => this.findPricing(labId, testId, shiftId, patientType))
+      );
+      uniqueTestIds.forEach((id, idx) => pricingMap!.set(id, pricingValues[idx]));
+    }
+
+    const panelTestIds = uniqueTestIds.filter(id => {
+      for (const item of sampleWithTestsArr) {
+        if (item.tests.find(t => t.id === id)?.type === TestType.PANEL) return true;
+      }
+      return false;
+    });
+
+    const componentsByPanelId = new Map<string, TestComponent[]>();
+    if (panelTestIds.length > 0) {
+      const allComponents = await manager.getRepository(TestComponent)
         .createQueryBuilder('component')
         .innerJoinAndSelect('component.childTest', 'childTest')
-        .where('component.panelTestId = :panelTestId', { panelTestId: test.id })
+        .where('component.panelTestId IN (:...panelTestIds)', { panelTestIds })
         .andWhere('childTest.labId = :labId', { labId })
         .orderBy('component.sortOrder', 'ASC')
         .getMany();
 
-      for (const component of components) {
-        const childOrderTest = orderTestRepo.create({
-          labId,
-          sampleId,
-          testId: component.childTestId,
-          parentOrderTestId: savedParent.id,
-          status: OrderTestStatus.PENDING,
-          price: null,
-        });
-        await orderTestRepo.save(childOrderTest);
+      for (const comp of allComponents) {
+        const list = componentsByPanelId.get(comp.panelTestId) || [];
+        list.push(comp);
+        componentsByPanelId.set(comp.panelTestId, list);
       }
-      return;
     }
 
-    const orderTest = orderTestRepo.create({
-      labId,
-      sampleId,
-      testId: test.id,
-      parentOrderTestId: null,
-      status: OrderTestStatus.PENDING,
-      price: panelPrice,
-    });
-    await orderTestRepo.save(orderTest);
+    const parentOrderTests: OrderTest[] = [];
+
+    for (const item of sampleWithTestsArr) {
+      for (const test of item.tests) {
+        const price = pricingMap.get(test.id) ?? 0;
+        const baseOrderTest = orderTestRepo.create({
+          labId,
+          sampleId: item.sampleId,
+          testId: test.id,
+          parentOrderTestId: null,
+          status: OrderTestStatus.PENDING,
+          price,
+        });
+        parentOrderTests.push(baseOrderTest);
+      }
+    }
+
+    const savedParents = await orderTestRepo.save(parentOrderTests);
+
+    const childOrderTests: OrderTest[] = [];
+    for (const parent of savedParents) {
+      const components = componentsByPanelId.get(parent.testId);
+      if (components && components.length > 0) {
+        for (const component of components) {
+          childOrderTests.push(orderTestRepo.create({
+            labId,
+            sampleId: parent.sampleId,
+            testId: component.childTestId,
+            parentOrderTestId: parent.id,
+            status: OrderTestStatus.PENDING,
+            price: null,
+          }));
+        }
+      }
+    }
+
+    if (childOrderTests.length > 0) {
+      await orderTestRepo.save(childOrderTests);
+    }
   }
 
   // Old allocator removed, global sequential is used now

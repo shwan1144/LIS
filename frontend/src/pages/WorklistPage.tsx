@@ -234,11 +234,26 @@ export function WorklistPage() {
     loadData();
   };
 
+  const resolveResultModalTargets = useCallback(
+    (item: WorklistItem): WorklistItem[] => {
+      if (item.testType !== 'PANEL') {
+        return [item];
+      }
+
+      if (item.id.startsWith('group-')) {
+        return data.filter((entry) => entry.orderId === item.orderId);
+      }
+
+      const panelChildren = data.filter(
+        (entry) => entry.orderId === item.orderId && entry.parentOrderTestId === item.id,
+      );
+      return panelChildren.length > 0 ? panelChildren : [item];
+    },
+    [data],
+  );
+
   const handleOpenResultModal = (item: WorklistItem) => {
-    const isPanel = item.testType === 'PANEL';
-    const targets = isPanel
-      ? data.filter((i) => i.parentOrderTestId === item.id)
-      : [item];
+    const targets = resolveResultModalTargets(item);
     setEditingItem(item);
 
     const formValues: any = {};
@@ -329,11 +344,7 @@ export function WorklistPage() {
     if (!editingItem) return;
 
     const isPanel = editingItem.testType === 'PANEL';
-    const targets = isPanel
-      ? (editingItem.id.startsWith('group-')
-        ? data.filter((i) => i.orderId === editingItem.orderId)
-        : data.filter((i) => i.parentOrderTestId === editingItem.id))
-      : [editingItem];
+    const targets = resolveResultModalTargets(editingItem);
 
     setSubmitting(true);
     try {
@@ -889,50 +900,51 @@ export function WorklistPage() {
           padding-bottom: 3px !important;
         }
         .panel-entry-modal .ant-modal {
-          max-width: calc(100vw - 24px) !important;
+          max-width: calc(100vw - 32px) !important;
         }
         .panel-entry-modal .ant-modal-content {
-          border-radius: 12px;
+          border-radius: 14px;
           overflow: hidden;
         }
         .panel-entry-modal .ant-modal-header {
-          padding: 10px 14px;
+          padding: 14px 18px;
           margin-bottom: 0;
         }
         .panel-entry-modal .ant-modal-body {
-          padding: 6px 10px 10px !important;
-          max-height: calc(100vh - 160px);
+          padding: 12px 16px 16px !important;
+          max-height: calc(100vh - 140px);
           overflow-y: auto;
         }
         .panel-entry-modal .panel-entry-summary {
-          margin-bottom: 8px;
-          padding: 8px 10px;
-          border-radius: 6px;
+          margin-bottom: 12px;
+          padding: 12px 14px;
+          border-radius: 8px;
         }
         .panel-entry-modal .panel-entry-grid-head {
-          padding: 6px 10px !important;
-          margin-bottom: 4px !important;
+          padding: 8px 12px !important;
+          margin-bottom: 0 !important;
         }
         .panel-entry-modal .panel-entry-grid-row {
-          padding: 4px 10px !important;
+          padding: 8px 12px !important;
           margin-bottom: 0 !important;
         }
         .panel-entry-modal .panel-entry-grid-row .ant-form-item {
           margin-bottom: 0;
         }
         .panel-entry-modal .panel-entry-params {
-          margin-top: 6px !important;
-          padding: 8px 10px !important;
+          margin-top: 8px !important;
+          padding: 10px 12px !important;
         }
         .panel-entry-modal .panel-entry-footer {
-          margin-top: 8px !important;
+          margin-top: 14px !important;
         }
         @media (max-width: 992px) {
           .panel-entry-modal .ant-modal {
-            margin: 12px auto;
+            margin: 10px auto;
           }
           .panel-entry-modal .ant-modal-body {
-            max-height: calc(100vh - 132px);
+            max-height: calc(100vh - 116px);
+            padding: 10px 12px 12px !important;
           }
         }
       `}</style>
@@ -1043,10 +1055,9 @@ export function WorklistPage() {
         open={resultModalOpen}
         onCancel={handleCloseResultModal}
         footer={null}
-        width={920}
+        width={960}
         className="panel-entry-modal"
         styles={{
-          body: { paddingTop: 8 },
           header: { borderBottom: isDark ? '1px solid rgba(255,255,255,0.08)' : '1px solid #f0f0f0' },
         }}
       >
@@ -1088,13 +1099,8 @@ export function WorklistPage() {
               onFinish={handleSubmitResult}
             >
               {(() => {
-                const targetItems = editingItem.testType === 'PANEL'
-                  ? (editingItem.id.startsWith('group-')
-                    ? data.filter(i => i.orderId === editingItem.orderId)
-                    : data.filter(i => i.parentOrderTestId === editingItem.id))
-                  : [editingItem];
-
-                const isPanel = targetItems.length > 1;
+                const targetItems = resolveResultModalTargets(editingItem);
+                const isPanel = editingItem.testType === 'PANEL';
 
                 return (
                   <>
@@ -1120,8 +1126,72 @@ export function WorklistPage() {
                     )}
 
                     {targetItems.map((target, idx) => {
-                      const hasParams = (target.parameterDefinitions?.length ?? 0) > 0;
+                      const parameterDefinitions = target.parameterDefinitions ?? [];
+                      const hasParams = parameterDefinitions.length > 0;
                       const panelResultControlStyle = isPanel ? { width: '100%' } : undefined;
+
+                      if (isPanel && hasParams) {
+                        return parameterDefinitions.map((def, defIndex) => {
+                          const isLastRow =
+                            idx === targetItems.length - 1 && defIndex === parameterDefinitions.length - 1;
+                          return (
+                            <div
+                              key={`${target.id}-${def.code}`}
+                              className="panel-entry-grid-row"
+                              style={{
+                                marginBottom: 0,
+                                borderBottom: !isLastRow
+                                  ? (isDark ? '1px solid rgba(255,255,255,0.05)' : '1px solid #f0f0f0')
+                                  : 'none',
+                              }}
+                            >
+                              <div style={{ display: 'flex', alignItems: 'flex-start', flexWrap: 'wrap' }}>
+                                <div style={{ flex: '1 1 24%' }}>
+                                  <Text style={{ fontSize: 12 }}>{def.label}</Text>
+                                </div>
+                                <div style={{ flex: '1 1 40%' }}>
+                                  <Form.Item name={[target.id, 'resultParameters', def.code]} noStyle>
+                                    {def.type === 'select' ? (
+                                      <Select
+                                        allowClear
+                                        showSearch
+                                        style={{ width: '100%' }}
+                                        size="middle"
+                                        placeholder="Select"
+                                        options={[
+                                          ...(def.options ?? []).map((o) => ({ label: o, value: o })),
+                                          { label: 'Other...', value: '__other__' },
+                                        ]}
+                                      />
+                                    ) : (
+                                      <Input style={{ width: '100%' }} size="middle" placeholder="Result" />
+                                    )}
+                                  </Form.Item>
+                                  {def.type === 'select' && (
+                                    <Form.Item noStyle shouldUpdate>
+                                      {() => resultForm.getFieldValue([target.id, 'resultParameters', def.code]) === '__other__' && (
+                                        <Form.Item
+                                          name={[target.id, 'resultParametersCustom', def.code]}
+                                          rules={[{ required: true, message: 'Enter custom value' }]}
+                                          style={{ marginTop: 8, marginBottom: 0 }}
+                                        >
+                                          <Input size="middle" placeholder="Specify custom value..." />
+                                        </Form.Item>
+                                      )}
+                                    </Form.Item>
+                                  )}
+                                </div>
+                                <div style={{ flex: '1 1 14%', textAlign: 'center', fontSize: 12 }}>
+                                  -
+                                </div>
+                                <div style={{ flex: '1 1 22%', textAlign: 'right', fontSize: 12, color: 'rgba(128,128,128,0.8)' }}>
+                                  -
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        });
+                      }
 
                       return (
                         <div key={target.id} className={isPanel ? 'panel-entry-grid-row' : undefined} style={{
@@ -1148,7 +1218,7 @@ export function WorklistPage() {
                                           style={{ width: '100%' }}
                                           placeholder="Value"
                                           precision={2}
-                                          size={isPanel ? "small" : "large"}
+                                          size={isPanel ? 'middle' : 'large'}
                                         />
                                       </Form.Item>
                                       {target.resultEntryType === 'NUMERIC' && !isPanel && target.testUnit && <Text type="secondary">{target.testUnit}</Text>}
@@ -1158,7 +1228,7 @@ export function WorklistPage() {
                                       allowClear
                                       showSearch
                                       style={panelResultControlStyle}
-                                      size={isPanel ? "small" : "large"}
+                                      size={isPanel ? 'middle' : 'large'}
                                       placeholder="Select"
                                       options={[
                                         ...(target.resultTextOptions ?? []).map((o) => ({ label: o.value, value: o.value })),
@@ -1166,7 +1236,7 @@ export function WorklistPage() {
                                       ]}
                                     />
                                   ) : (
-                                    <Input style={panelResultControlStyle} size={isPanel ? "small" : "large"} placeholder="Result text" />
+                                    <Input style={panelResultControlStyle} size={isPanel ? 'middle' : 'large'} placeholder="Result text" />
                                   )}
                                 </Form.Item>
                               ) : (
@@ -1187,7 +1257,7 @@ export function WorklistPage() {
                           </div>
 
                           {/* Qualitative "Other" field */}
-                          {target.resultEntryType === 'QUALITATIVE' && target.allowCustomResultText && (
+                          {!hasParams && target.resultEntryType === 'QUALITATIVE' && target.allowCustomResultText && (
                             <Form.Item noStyle shouldUpdate>
                               {() => resultForm.getFieldValue([target.id, 'resultText']) === '__other__' && (
                                 <div style={{ marginTop: 8, paddingLeft: isPanel ? 0 : 0 }}>
@@ -1196,7 +1266,7 @@ export function WorklistPage() {
                                     rules={[{ required: true, message: 'Enter custom text' }]}
                                     label={isPanel ? null : "Custom text"}
                                   >
-                                    <Input style={panelResultControlStyle} placeholder="Specify custom result..." size="small" />
+                                    <Input style={panelResultControlStyle} placeholder="Specify custom result..." size="middle" />
                                   </Form.Item>
                                 </div>
                               )}
@@ -1204,7 +1274,7 @@ export function WorklistPage() {
                           )}
 
                           {/* Parameters */}
-                          {hasParams && (
+                          {hasParams && !isPanel && (
                             <div
                               className="panel-entry-params"
                               style={{
@@ -1226,14 +1296,14 @@ export function WorklistPage() {
                                       {def.type === 'select' ? (
                                         <Select
                                           allowClear
-                                          size="small"
+                                          size={isPanel ? 'middle' : 'small'}
                                           options={[
                                             ...(def.options ?? []).map((o) => ({ label: o, value: o })),
                                             { label: 'Other...', value: '__other__' },
                                           ]}
                                         />
                                       ) : (
-                                        <Input size="small" placeholder="Enter..." />
+                                        <Input size={isPanel ? 'middle' : 'small'} placeholder="Enter..." />
                                       )}
                                     </Form.Item>
                                     {/* Parameter "Other" handling could be added here if needed, keeping it simple for now */}
