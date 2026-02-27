@@ -11,6 +11,7 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 var __param = (this && this.__param) || function (paramIndex, decorator) {
     return function (target, key) { decorator(target, key, paramIndex); }
 };
+var ReportsService_1;
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.ReportsService = void 0;
 const common_1 = require("@nestjs/common");
@@ -152,7 +153,7 @@ function resolveReadablePath(candidates) {
     }
     return null;
 }
-let ReportsService = class ReportsService {
+let ReportsService = ReportsService_1 = class ReportsService {
     constructor(orderRepo, orderTestRepo, patientRepo, labRepo, userRepo) {
         this.orderRepo = orderRepo;
         this.orderTestRepo = orderTestRepo;
@@ -160,6 +161,12 @@ let ReportsService = class ReportsService {
         this.labRepo = labRepo;
         this.userRepo = userRepo;
         this.browserPromise = null;
+    }
+    async onModuleInit() {
+        this.getBrowser().catch((err) => {
+            console.warn('Playwright browser pre-warm failed (will retry on first request):', err?.message ?? err);
+            this.browserPromise = null;
+        });
     }
     async getBrowser() {
         if (!this.browserPromise) {
@@ -331,13 +338,14 @@ let ReportsService = class ReportsService {
             throw new common_1.NotFoundException('Order not found');
         }
         const sampleIds = order.samples?.map((s) => s.id) ?? [];
-        const orderTests = sampleIds.length === 0
-            ? []
-            : await this.orderTestRepo.find({
+        const orderTestsPromise = sampleIds.length === 0
+            ? Promise.resolve([])
+            : this.orderTestRepo.find({
                 where: { sampleId: (0, typeorm_2.In)(sampleIds) },
                 relations: ['test', 'test.department', 'sample'],
                 order: { test: { code: 'ASC' } },
             });
+        const orderTests = await orderTestsPromise;
         const reportableOrderTests = this.getReportableOrderTests(orderTests);
         const verifiedTests = reportableOrderTests.filter((ot) => ot.status === 'VERIFIED' || !!ot.verifiedAt);
         const latestVerifiedAt = verifiedTests
@@ -570,8 +578,11 @@ let ReportsService = class ReportsService {
         ]);
         if (logoPath) {
             try {
-                const buf = (0, fs_1.readFileSync)(logoPath);
-                defaultLogoBase64 = `data:image/png;base64,${buf.toString('base64')}`;
+                if (!ReportsService_1.cachedLogo || ReportsService_1.cachedLogo.path !== logoPath) {
+                    const buf = (0, fs_1.readFileSync)(logoPath);
+                    ReportsService_1.cachedLogo = { path: logoPath, base64: `data:image/png;base64,${buf.toString('base64')}` };
+                }
+                defaultLogoBase64 = ReportsService_1.cachedLogo.base64;
             }
             catch {
             }
@@ -584,8 +595,11 @@ let ReportsService = class ReportsService {
         ]);
         if (kurdishFontPath) {
             try {
-                const fontBuf = (0, fs_1.readFileSync)(kurdishFontPath);
-                kurdishFontBase64 = `data:font/ttf;base64,${fontBuf.toString('base64')}`;
+                if (!ReportsService_1.cachedFont || ReportsService_1.cachedFont.path !== kurdishFontPath) {
+                    const fontBuf = (0, fs_1.readFileSync)(kurdishFontPath);
+                    ReportsService_1.cachedFont = { path: kurdishFontPath, base64: `data:font/ttf;base64,${fontBuf.toString('base64')}` };
+                }
+                kurdishFontBase64 = ReportsService_1.cachedFont.base64;
             }
             catch {
             }
@@ -829,7 +843,9 @@ let ReportsService = class ReportsService {
     }
 };
 exports.ReportsService = ReportsService;
-exports.ReportsService = ReportsService = __decorate([
+ReportsService.cachedLogo = null;
+ReportsService.cachedFont = null;
+exports.ReportsService = ReportsService = ReportsService_1 = __decorate([
     (0, common_1.Injectable)(),
     __param(0, (0, typeorm_1.InjectRepository)(order_entity_1.Order)),
     __param(1, (0, typeorm_1.InjectRepository)(order_test_entity_1.OrderTest)),

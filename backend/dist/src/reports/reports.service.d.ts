@@ -1,4 +1,4 @@
-import { type OnModuleDestroy } from '@nestjs/common';
+import { type OnModuleDestroy, type OnModuleInit } from '@nestjs/common';
 import { Repository } from 'typeorm';
 import { Order } from '../entities/order.entity';
 import { OrderTest } from '../entities/order-test.entity';
@@ -33,14 +33,17 @@ export interface PublicResultStatus {
     verifiedAt: string | null;
     tests: PublicResultTestItem[];
 }
-export declare class ReportsService implements OnModuleDestroy {
+export declare class ReportsService implements OnModuleInit, OnModuleDestroy {
     private readonly orderRepo;
     private readonly orderTestRepo;
     private readonly patientRepo;
     private readonly labRepo;
     private readonly userRepo;
     private browserPromise;
+    private static cachedLogo;
+    private static cachedFont;
     constructor(orderRepo: Repository<Order>, orderTestRepo: Repository<OrderTest>, patientRepo: Repository<Patient>, labRepo: Repository<Lab>, userRepo: Repository<User>);
+    onModuleInit(): Promise<void>;
     private getBrowser;
     private renderPdfFromHtml;
     onModuleDestroy(): Promise<void>;
