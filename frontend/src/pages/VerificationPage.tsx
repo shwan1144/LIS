@@ -37,6 +37,8 @@ import {
   ResultFlag,
 } from '../api/client';
 import { WorklistStatusDashboard } from '../components/WorklistStatusDashboard';
+import { useFillToViewportBottom } from '../hooks/useFillToViewportBottom';
+import './QueuePages.css';
 
 const { Title, Text } = Typography;
 const { Search } = Input;
@@ -181,6 +183,7 @@ type RejectTarget =
   | { mode: 'panel'; context: ResolvedPanelReviewContext; ids: string[] };
 
 export function VerificationPage() {
+  const { containerRef, filledMinHeightPx } = useFillToViewportBottom();
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState<WorklistItem[]>([]);
   const [total, setTotal] = useState(0);
@@ -876,89 +879,99 @@ export function VerificationPage() {
       </Title>
       <WorklistStatusDashboard stats={stats} style={{ marginBottom: 12 }} />
 
-      <Card>
-        <Space wrap style={{ marginBottom: 16 }}>
-          <Search
-            placeholder="Search patient or order..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            onSearch={() => {
-              void loadData();
-            }}
-            style={{ width: 250 }}
-            allowClear
-          />
-          <DatePicker
-            value={dateFilter}
-            onChange={setDateFilter}
-            allowClear
-            placeholder="Filter by date"
-          />
-          <Select
-            placeholder="Department"
-            value={departmentId || undefined}
-            onChange={(v) => setDepartmentId(v || '')}
-            allowClear
-            style={{ width: 150 }}
-            options={[
-              { value: '', label: 'All departments' },
-              ...departments.map((d) => ({ value: d.id, label: d.name || d.code })),
-            ]}
-          />
-          <Button
-            icon={<ReloadOutlined />}
-            onClick={() => {
-              void loadData();
-            }}
-          >
-            Refresh
-          </Button>
-          {selectedRowKeys.length > 0 && (
-            <Button
-              type="primary"
-              icon={<CheckCircleOutlined />}
-              onClick={() => {
-                void handleBatchVerify();
-              }}
-            >
-              Verify Selected ({selectedRowKeys.length})
-            </Button>
-          )}
-        </Space>
+      <div
+        ref={containerRef}
+        className="queue-pane-shell"
+        style={{ minHeight: filledMinHeightPx }}
+      >
+        <Card className="queue-main-card">
+          <div className="queue-filters-block">
+            <Space wrap>
+              <Search
+                placeholder="Search patient or order..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                onSearch={() => {
+                  void loadData();
+                }}
+                style={{ width: 250 }}
+                allowClear
+              />
+              <DatePicker
+                value={dateFilter}
+                onChange={setDateFilter}
+                allowClear
+                placeholder="Filter by date"
+              />
+              <Select
+                placeholder="Department"
+                value={departmentId || undefined}
+                onChange={(v) => setDepartmentId(v || '')}
+                allowClear
+                style={{ width: 150 }}
+                options={[
+                  { value: '', label: 'All departments' },
+                  ...departments.map((d) => ({ value: d.id, label: d.name || d.code })),
+                ]}
+              />
+              <Button
+                icon={<ReloadOutlined />}
+                onClick={() => {
+                  void loadData();
+                }}
+              >
+                Refresh
+              </Button>
+              {selectedRowKeys.length > 0 && (
+                <Button
+                  type="primary"
+                  icon={<CheckCircleOutlined />}
+                  onClick={() => {
+                    void handleBatchVerify();
+                  }}
+                >
+                  Verify Selected ({selectedRowKeys.length})
+                </Button>
+              )}
+            </Space>
+          </div>
 
-        <Table<VerificationOrderGroup>
-          className="verification-orders-table"
-          columns={orderColumns}
-          dataSource={groupedData}
-          rowKey="orderId"
-          loading={loading}
-          rowSelection={rowSelection}
-          rowClassName={(record) =>
-            expandedOrderIds.includes(record.orderId)
-              ? 'verification-order-row-expanded'
-              : ''
-          }
-          expandable={{
-            expandedRowRender: (record) => renderExpandedTests(record),
-            expandRowByClick: true,
-            showExpandColumn: false,
-            expandedRowKeys: expandedOrderIds,
-            onExpand: (expanded, record) => {
-              setExpandedOrderIds(expanded ? [record.orderId] : []);
-            },
-          }}
-          pagination={{
-            current: page,
-            pageSize: size,
-            total,
-            onChange: (p) => setPage(p),
-            showSizeChanger: false,
-            showTotal: (t) => `${t} result(s) awaiting verification`,
-          }}
-          scroll={{ x: 1060 }}
-          size="small"
-        />
-      </Card>
+          <div className="queue-table-block">
+            <Table<VerificationOrderGroup>
+              className="verification-orders-table"
+              columns={orderColumns}
+              dataSource={groupedData}
+              rowKey="orderId"
+              loading={loading}
+              rowSelection={rowSelection}
+              rowClassName={(record) =>
+                expandedOrderIds.includes(record.orderId)
+                  ? 'verification-order-row-expanded'
+                  : ''
+              }
+              expandable={{
+                expandedRowRender: (record) => renderExpandedTests(record),
+                expandRowByClick: true,
+                showExpandColumn: false,
+                expandedRowKeys: expandedOrderIds,
+                onExpand: (expanded, record) => {
+                  setExpandedOrderIds(expanded ? [record.orderId] : []);
+                },
+              }}
+              pagination={{
+                current: page,
+                pageSize: size,
+                total,
+                onChange: (p) => setPage(p),
+                showSizeChanger: false,
+                showTotal: (t) => `${t} order(s) awaiting verification`,
+              }}
+              scroll={{ x: 1060 }}
+              size="small"
+            />
+          </div>
+        </Card>
+      </div>
 
       <Modal
         title={

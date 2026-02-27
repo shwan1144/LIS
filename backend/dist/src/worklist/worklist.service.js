@@ -73,39 +73,69 @@ let WorklistService = class WorklistService {
             if (forLab.length > 0)
                 allowedDepartmentIds = forLab;
         }
-        const qb = this.orderTestRepo
-            .createQueryBuilder('ot')
-            .innerJoin('ot.sample', 'sample')
-            .innerJoin('sample.order', 'order')
-            .innerJoin('order.patient', 'patient')
-            .innerJoin('ot.test', 'test')
-            .leftJoin('test.department', 'department')
-            .where('order.labId = :labId', { labId })
-            .andWhere('ot.status IN (:...statuses)', { statuses });
-        if (allowedDepartmentIds && allowedDepartmentIds.length > 0) {
-            qb.andWhere('test.departmentId IN (:...allowedDepartmentIds)', {
-                allowedDepartmentIds,
-            });
-        }
-        if (params.departmentId) {
-            qb.andWhere('test.departmentId = :departmentId', {
-                departmentId: params.departmentId,
-            });
-        }
+        let startDate = null;
+        let endDate = null;
         if (params.date) {
             const labTimeZone = await this.getLabTimeZone(labId);
-            const { startDate, endDate } = this.getDateRangeOrThrow(params.date, labTimeZone, 'date');
-            qb.andWhere('order.registeredAt BETWEEN :startDate AND :endDate', {
-                startDate,
-                endDate,
-            });
+            const dateRange = this.getDateRangeOrThrow(params.date, labTimeZone, 'date');
+            startDate = dateRange.startDate;
+            endDate = dateRange.endDate;
         }
-        if (params.search?.trim()) {
-            const term = `%${params.search.trim()}%`;
-            const exactSearch = params.search.trim();
-            qb.andWhere('(order.orderNumber ILIKE :term OR patient.fullName ILIKE :term OR patient.patientNumber = :exactSearch OR test.code ILIKE :term)', { term, exactSearch });
+        const buildBaseQuery = () => {
+            const qb = this.orderTestRepo
+                .createQueryBuilder('ot')
+                .innerJoin('ot.sample', 'sample')
+                .innerJoin('sample.order', 'order')
+                .innerJoin('order.patient', 'patient')
+                .innerJoin('ot.test', 'test')
+                .leftJoin('test.department', 'department')
+                .where('order.labId = :labId', { labId })
+                .andWhere('ot.status IN (:...statuses)', { statuses });
+            if (allowedDepartmentIds && allowedDepartmentIds.length > 0) {
+                qb.andWhere('test.departmentId IN (:...allowedDepartmentIds)', {
+                    allowedDepartmentIds,
+                });
+            }
+            if (params.departmentId) {
+                qb.andWhere('test.departmentId = :departmentId', {
+                    departmentId: params.departmentId,
+                });
+            }
+            if (params.date) {
+                qb.andWhere('order.registeredAt BETWEEN :startDate AND :endDate', {
+                    startDate,
+                    endDate,
+                });
+            }
+            if (params.search?.trim()) {
+                const term = `%${params.search.trim()}%`;
+                const exactSearch = params.search.trim();
+                qb.andWhere('(order.orderNumber ILIKE :term OR patient.fullName ILIKE :term OR patient.patientNumber = :exactSearch OR test.code ILIKE :term)', { term, exactSearch });
+            }
+            return qb;
+        };
+        const totalRaw = await buildBaseQuery()
+            .select('COUNT(DISTINCT order.id)', 'count')
+            .getRawOne();
+        const total = Number(totalRaw?.count ?? 0);
+        const orderRows = await buildBaseQuery()
+            .select('order.id', 'orderId')
+            .addSelect('MAX(order.registeredAt)', 'registeredAt')
+            .addSelect('MIN(CASE WHEN ot.status = :rejectedStatus THEN 0 ELSE 1 END)', 'rejectedPriority')
+            .setParameter('rejectedStatus', order_test_entity_1.OrderTestStatus.REJECTED)
+            .groupBy('order.id')
+            .orderBy('"rejectedPriority"', 'ASC')
+            .addOrderBy('"registeredAt"', 'DESC')
+            .offset(skip)
+            .limit(size)
+            .getRawMany();
+        const orderIds = orderRows.map((row) => row.orderId);
+        if (orderIds.length === 0) {
+            return { items: [], total };
         }
-        qb.select([
+        const rawItems = await buildBaseQuery()
+            .andWhere('order.id IN (:...orderIds)', { orderIds })
+            .select([
             'ot.id AS id',
             'order.orderNumber AS "orderNumber"',
             'order.id AS "orderId"',
@@ -150,9 +180,8 @@ let WorklistService = class WorklistService {
             .addOrderBy('order.registeredAt', 'DESC')
             .addOrderBy('test.sortOrder', 'ASC')
             .addOrderBy('test.code', 'ASC')
-            .setParameter('rejectedStatus', order_test_entity_1.OrderTestStatus.REJECTED);
-        const total = await qb.getCount();
-        const rawItems = await qb.offset(skip).limit(size).getRawMany();
+            .setParameter('rejectedStatus', order_test_entity_1.OrderTestStatus.REJECTED)
+            .getRawMany();
         const items = rawItems.map((item) => {
             const patientAge = this.computePatientAgeYears(item.patientDob);
             const numericAgeRanges = parseJsonField(item.numericAgeRanges) ??

@@ -4,7 +4,7 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, In } from 'typeorm';
+import { Repository, In, SelectQueryBuilder } from 'typeorm';
 import { OrderTest, OrderTestStatus, ResultFlag } from '../entities/order-test.entity';
 import { Order } from '../entities/order.entity';
 import { Test } from '../entities/test.entity';
@@ -132,90 +132,125 @@ export class WorklistService {
       if (forLab.length > 0) allowedDepartmentIds = forLab;
     }
 
-    const qb = this.orderTestRepo
-      .createQueryBuilder('ot')
-      .innerJoin('ot.sample', 'sample')
-      .innerJoin('sample.order', 'order')
-      .innerJoin('order.patient', 'patient')
-      .innerJoin('ot.test', 'test')
-      .leftJoin('test.department', 'department')
-      .where('order.labId = :labId', { labId })
-      .andWhere('ot.status IN (:...statuses)', { statuses });
-
-    if (allowedDepartmentIds && allowedDepartmentIds.length > 0) {
-      qb.andWhere('test.departmentId IN (:...allowedDepartmentIds)', {
-        allowedDepartmentIds,
-      });
-    }
-
-    if (params.departmentId) {
-      qb.andWhere('test.departmentId = :departmentId', {
-        departmentId: params.departmentId,
-      });
-    }
-
-    // Filter by date
+    let startDate: Date | null = null;
+    let endDate: Date | null = null;
     if (params.date) {
       const labTimeZone = await this.getLabTimeZone(labId);
-      const { startDate, endDate } = this.getDateRangeOrThrow(params.date, labTimeZone, 'date');
-      qb.andWhere('order.registeredAt BETWEEN :startDate AND :endDate', {
-        startDate,
-        endDate,
-      });
+      const dateRange = this.getDateRangeOrThrow(params.date, labTimeZone, 'date');
+      startDate = dateRange.startDate;
+      endDate = dateRange.endDate;
     }
 
-    // Search by patient name, patient ID, or order number
-    if (params.search?.trim()) {
-      const term = `%${params.search.trim()}%`;
-      const exactSearch = params.search.trim();
-      qb.andWhere(
-        '(order.orderNumber ILIKE :term OR patient.fullName ILIKE :term OR patient.patientNumber = :exactSearch OR test.code ILIKE :term)',
-        { term, exactSearch },
-      );
+    const buildBaseQuery = (): SelectQueryBuilder<OrderTest> => {
+      const qb = this.orderTestRepo
+        .createQueryBuilder('ot')
+        .innerJoin('ot.sample', 'sample')
+        .innerJoin('sample.order', 'order')
+        .innerJoin('order.patient', 'patient')
+        .innerJoin('ot.test', 'test')
+        .leftJoin('test.department', 'department')
+        .where('order.labId = :labId', { labId })
+        .andWhere('ot.status IN (:...statuses)', { statuses });
+
+      if (allowedDepartmentIds && allowedDepartmentIds.length > 0) {
+        qb.andWhere('test.departmentId IN (:...allowedDepartmentIds)', {
+          allowedDepartmentIds,
+        });
+      }
+
+      if (params.departmentId) {
+        qb.andWhere('test.departmentId = :departmentId', {
+          departmentId: params.departmentId,
+        });
+      }
+
+      if (params.date) {
+        qb.andWhere('order.registeredAt BETWEEN :startDate AND :endDate', {
+          startDate,
+          endDate,
+        });
+      }
+
+      if (params.search?.trim()) {
+        const term = `%${params.search.trim()}%`;
+        const exactSearch = params.search.trim();
+        qb.andWhere(
+          '(order.orderNumber ILIKE :term OR patient.fullName ILIKE :term OR patient.patientNumber = :exactSearch OR test.code ILIKE :term)',
+          { term, exactSearch },
+        );
+      }
+
+      return qb;
+    };
+
+    const totalRaw = await buildBaseQuery()
+      .select('COUNT(DISTINCT order.id)', 'count')
+      .getRawOne<{ count: string }>();
+    const total = Number(totalRaw?.count ?? 0);
+
+    const orderRows = await buildBaseQuery()
+      .select('order.id', 'orderId')
+      .addSelect('MAX(order.registeredAt)', 'registeredAt')
+      .addSelect(
+        'MIN(CASE WHEN ot.status = :rejectedStatus THEN 0 ELSE 1 END)',
+        'rejectedPriority',
+      )
+      .setParameter('rejectedStatus', OrderTestStatus.REJECTED)
+      .groupBy('order.id')
+      .orderBy('"rejectedPriority"', 'ASC')
+      .addOrderBy('"registeredAt"', 'DESC')
+      .offset(skip)
+      .limit(size)
+      .getRawMany<{ orderId: string }>();
+
+    const orderIds = orderRows.map((row) => row.orderId);
+    if (orderIds.length === 0) {
+      return { items: [], total };
     }
 
-    qb.select([
-      'ot.id AS id',
-      'order.orderNumber AS "orderNumber"',
-      'order.id AS "orderId"',
-      'order.registeredAt AS "registeredAt"',
-      'sample.id AS "sampleId"',
-      'sample.tubeType AS "tubeType"',
-      'patient.fullName AS "patientName"',
-      'patient.sex AS "patientSex"',
-      'patient.dateOfBirth AS "patientDob"',
-      'test.code AS "testCode"',
-      'test.name AS "testName"',
-      'test.type AS "testType"',
-      'test.unit AS "testUnit"',
-      'test.departmentId AS "departmentId"',
-      'department.code AS "departmentCode"',
-      'department.name AS "departmentName"',
-      'test.normalMin AS "normalMin"',
-      'test.normalMax AS "normalMax"',
-      'test.normalMinMale AS "normalMinMale"',
-      'test.normalMaxMale AS "normalMaxMale"',
-      'test.normalMinFemale AS "normalMinFemale"',
-      'test.normalMaxFemale AS "normalMaxFemale"',
-      'test.numericAgeRanges AS "numericAgeRanges"',
-      'test.normalText AS "normalText"',
-      'test.resultEntryType AS "resultEntryType"',
-      'test.resultTextOptions AS "resultTextOptions"',
-      'test.allowCustomResultText AS "allowCustomResultText"',
-      'ot.status AS status',
-      'ot.resultValue AS "resultValue"',
-      'ot.resultText AS "resultText"',
-      'ot.resultParameters AS "resultParameters"',
-      'ot.rejectionReason AS "rejectionReason"',
-      'ot.flag AS flag',
-      'ot.resultedAt AS "resultedAt"',
-      'ot.resultedBy AS "resultedBy"',
-      'ot.verifiedAt AS "verifiedAt"',
-      'ot.verifiedBy AS "verifiedBy"',
-      'test.parameterDefinitions AS "parameterDefinitions"',
-      'ot.parentOrderTestId AS "parentOrderTestId"',
-    ])
-      // Keep rejected tests at the top so they can be corrected first.
+    const rawItems = await buildBaseQuery()
+      .andWhere('order.id IN (:...orderIds)', { orderIds })
+      .select([
+        'ot.id AS id',
+        'order.orderNumber AS "orderNumber"',
+        'order.id AS "orderId"',
+        'order.registeredAt AS "registeredAt"',
+        'sample.id AS "sampleId"',
+        'sample.tubeType AS "tubeType"',
+        'patient.fullName AS "patientName"',
+        'patient.sex AS "patientSex"',
+        'patient.dateOfBirth AS "patientDob"',
+        'test.code AS "testCode"',
+        'test.name AS "testName"',
+        'test.type AS "testType"',
+        'test.unit AS "testUnit"',
+        'test.departmentId AS "departmentId"',
+        'department.code AS "departmentCode"',
+        'department.name AS "departmentName"',
+        'test.normalMin AS "normalMin"',
+        'test.normalMax AS "normalMax"',
+        'test.normalMinMale AS "normalMinMale"',
+        'test.normalMaxMale AS "normalMaxMale"',
+        'test.normalMinFemale AS "normalMinFemale"',
+        'test.normalMaxFemale AS "normalMaxFemale"',
+        'test.numericAgeRanges AS "numericAgeRanges"',
+        'test.normalText AS "normalText"',
+        'test.resultEntryType AS "resultEntryType"',
+        'test.resultTextOptions AS "resultTextOptions"',
+        'test.allowCustomResultText AS "allowCustomResultText"',
+        'ot.status AS status',
+        'ot.resultValue AS "resultValue"',
+        'ot.resultText AS "resultText"',
+        'ot.resultParameters AS "resultParameters"',
+        'ot.rejectionReason AS "rejectionReason"',
+        'ot.flag AS flag',
+        'ot.resultedAt AS "resultedAt"',
+        'ot.resultedBy AS "resultedBy"',
+        'ot.verifiedAt AS "verifiedAt"',
+        'ot.verifiedBy AS "verifiedBy"',
+        'test.parameterDefinitions AS "parameterDefinitions"',
+        'ot.parentOrderTestId AS "parentOrderTestId"',
+      ])
       .orderBy(
         'CASE WHEN ot.status = :rejectedStatus THEN 0 ELSE 1 END',
         'ASC',
@@ -223,10 +258,8 @@ export class WorklistService {
       .addOrderBy('order.registeredAt', 'DESC')
       .addOrderBy('test.sortOrder', 'ASC')
       .addOrderBy('test.code', 'ASC')
-      .setParameter('rejectedStatus', OrderTestStatus.REJECTED);
-
-    const total = await qb.getCount();
-    const rawItems = await qb.offset(skip).limit(size).getRawMany();
+      .setParameter('rejectedStatus', OrderTestStatus.REJECTED)
+      .getRawMany();
 
     // Process items to calculate age and resolve normal ranges by age+sex.
     const items: WorklistItem[] = rawItems.map((item) => {

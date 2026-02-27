@@ -44,6 +44,8 @@ import {
 } from '../api/client';
 import { useTheme } from '../contexts/ThemeContext';
 import { WorklistStatusDashboard } from '../components/WorklistStatusDashboard';
+import { useFillToViewportBottom } from '../hooks/useFillToViewportBottom';
+import './QueuePages.css';
 
 const { Title, Text } = Typography;
 
@@ -149,6 +151,7 @@ function groupWorklistByOrder(items: WorklistItem[]): WorklistOrderGroup[] {
 
 export function WorklistPage() {
   const isDark = useTheme().theme === 'dark';
+  const { containerRef, filledMinHeightPx } = useFillToViewportBottom();
   const [data, setData] = useState<WorklistItem[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(false);
@@ -944,87 +947,96 @@ export function WorklistPage() {
       <Title level={4} style={{ marginTop: 0, marginBottom: 10 }}>Worklist</Title>
       <WorklistStatusDashboard stats={stats} style={{ marginBottom: 12 }} />
 
-      <Card>
-        {/* Filters */}
-        <Space style={{ marginBottom: 16 }} wrap>
-          <Input
-            placeholder="Search order #, patient, test..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            onPressEnter={handleSearch}
-            style={{ width: 250 }}
-            allowClear
-          />
-          <Select
-            placeholder="Status"
-            value={statusFilter}
-            onChange={(value) => setStatusFilter(value as OrderTestStatus | 'ALL')}
-            style={{ width: 180 }}
-            options={STATUS_OPTIONS}
-            allowClear={false}
-          />
-          <Select
-            placeholder="Department"
-            value={departmentId || undefined}
-            onChange={(v) => setDepartmentId(v ?? '')}
-            style={{ width: 180 }}
-            allowClear
-            options={departments.map((d) => ({ label: `${d.code} - ${d.name}`, value: d.id }))}
-          />
-          <DatePicker
-            value={dateFilter}
-            onChange={setDateFilter}
-            allowClear
-            placeholder="Filter by date"
-          />
-          <Button type="primary" icon={<SearchOutlined />} onClick={handleSearch}>
-            Search
-          </Button>
-          <Button icon={<ReloadOutlined />} onClick={() => { loadData(); loadStats(); }}>
-            Refresh
-          </Button>
-          {selectedRowKeys.length > 0 && (
-            <Button
-              type="primary"
-              icon={<CheckOutlined />}
-              onClick={handleBatchVerify}
-              style={{ backgroundColor: '#52c41a', borderColor: '#52c41a' }}
-            >
-              Verify Selected ({selectedRowKeys.length})
-            </Button>
-          )}
-        </Space>
+      <div
+        ref={containerRef}
+        className="queue-pane-shell"
+        style={{ minHeight: filledMinHeightPx }}
+      >
+        <Card className="queue-main-card">
+          <div className="queue-filters-block">
+            <Space wrap>
+              <Input
+                placeholder="Search order #, patient, test..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                onPressEnter={handleSearch}
+                style={{ width: 250 }}
+                allowClear
+              />
+              <Select
+                placeholder="Status"
+                value={statusFilter}
+                onChange={(value) => setStatusFilter(value as OrderTestStatus | 'ALL')}
+                style={{ width: 180 }}
+                options={STATUS_OPTIONS}
+                allowClear={false}
+              />
+              <Select
+                placeholder="Department"
+                value={departmentId || undefined}
+                onChange={(v) => setDepartmentId(v ?? '')}
+                style={{ width: 180 }}
+                allowClear
+                options={departments.map((d) => ({ label: `${d.code} - ${d.name}`, value: d.id }))}
+              />
+              <DatePicker
+                value={dateFilter}
+                onChange={setDateFilter}
+                allowClear
+                placeholder="Filter by date"
+              />
+              <Button type="primary" icon={<SearchOutlined />} onClick={handleSearch}>
+                Search
+              </Button>
+              <Button icon={<ReloadOutlined />} onClick={() => { loadData(); loadStats(); }}>
+                Refresh
+              </Button>
+              {selectedRowKeys.length > 0 && (
+                <Button
+                  type="primary"
+                  icon={<CheckOutlined />}
+                  onClick={handleBatchVerify}
+                  style={{ backgroundColor: '#52c41a', borderColor: '#52c41a' }}
+                >
+                  Verify Selected ({selectedRowKeys.length})
+                </Button>
+              )}
+            </Space>
+          </div>
 
-        <Table<WorklistOrderGroup>
-          className="worklist-orders-table"
-          rowKey="orderId"
-          columns={orderColumns}
-          dataSource={groupedData}
-          loading={loading}
-          showHeader
-          rowClassName={(record) => (expandedOrderIds.includes(record.orderId) ? 'worklist-order-row-expanded' : '')}
-          rowSelection={rowSelection}
-          expandable={{
-            expandedRowRender: (record) => renderExpandedTests(record),
-            expandRowByClick: true,
-            showExpandColumn: false,
-            expandedRowKeys: expandedOrderIds,
-            onExpand: (expanded, record) => {
-              setExpandedOrderIds(expanded ? [record.orderId] : []);
-            },
-          }}
-          pagination={{
-            current: page,
-            pageSize: size,
-            total,
-            showSizeChanger: false,
-            showTotal: (t) => `Total ${t} tests`,
-            onChange: (p) => setPage(p),
-          }}
-          scroll={{ x: 820 }}
-          size="small"
-        />
-      </Card>
+          <div className="queue-table-block">
+            <Table<WorklistOrderGroup>
+              className="worklist-orders-table"
+              rowKey="orderId"
+              columns={orderColumns}
+              dataSource={groupedData}
+              loading={loading}
+              showHeader
+              rowClassName={(record) => (expandedOrderIds.includes(record.orderId) ? 'worklist-order-row-expanded' : '')}
+              rowSelection={rowSelection}
+              expandable={{
+                expandedRowRender: (record) => renderExpandedTests(record),
+                expandRowByClick: true,
+                showExpandColumn: false,
+                expandedRowKeys: expandedOrderIds,
+                onExpand: (expanded, record) => {
+                  setExpandedOrderIds(expanded ? [record.orderId] : []);
+                },
+              }}
+              pagination={{
+                current: page,
+                pageSize: size,
+                total,
+                showSizeChanger: false,
+                showTotal: (t) => `Total ${t} orders`,
+                onChange: (p) => setPage(p),
+              }}
+              scroll={{ x: 820 }}
+              size="small"
+            />
+          </div>
+        </Card>
+      </div>
 
       {/* Result Entry Modal */}
       <Modal

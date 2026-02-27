@@ -1293,6 +1293,7 @@ export function OrdersPage() {
               ) : patientList.length > 0 ? (
                 <>
                   <div
+                    className={`order-history-scroll${isDark ? ' order-history-scroll-dark' : ''}`}
                     style={{
                       marginTop: 10,
                       flex: 1,
