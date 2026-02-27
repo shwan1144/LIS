@@ -235,12 +235,11 @@ export function WorklistPage() {
   };
 
   const handleOpenResultModal = (item: WorklistItem) => {
-    setEditingItem(item);
-
     const isPanel = item.testType === 'PANEL';
     const targets = isPanel
       ? data.filter((i) => i.parentOrderTestId === item.id)
       : [item];
+    setEditingItem(item);
 
     const formValues: any = {};
 
@@ -632,25 +631,18 @@ export function WorklistPage() {
 
     return (
       <div className="worklist-expanded-panel" style={{ padding: '4px 16px 16px' }}>
-        <Table
+        <Table<WorklistItem>
           className="worklist-subtests-table"
           size="small"
           rowKey="id"
           dataSource={visibleItems}
           pagination={false}
+          tableLayout="fixed"
           columns={[
-            {
-              title: 'Sample',
-              dataIndex: 'sampleLabel',
-              key: 'sample',
-              width: 100,
-              render: (v: string) => <Text style={{ fontSize: 12 }}>{v}</Text>,
-              onCell: () => ({ style: compactStyle }),
-            },
             {
               title: 'Test',
               key: 'test',
-              width: 220,
+              width: 300,
               render: (_: unknown, r: WorklistItem) => (
                 <div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -658,7 +650,7 @@ export function WorklistPage() {
                       {r.testCode}
                     </Tag>
                     <Text strong style={{ fontSize: 12 }}>
-                      {r.testName}
+                      {r.testAbbreviation || r.testName}
                     </Text>
                   </div>
                   {r.testType === 'PANEL' && (
@@ -673,7 +665,7 @@ export function WorklistPage() {
             {
               title: 'Result',
               key: 'result',
-              width: 160,
+              width: 220,
               render: (_: unknown, r: WorklistItem) => (
                 <div>
                   {formatWorklistResultPreview(r, group.items)}
@@ -704,7 +696,7 @@ export function WorklistPage() {
             {
               title: 'Status',
               key: 'status',
-              width: 110,
+              width: 130,
               render: (_: unknown, r: WorklistItem) => {
                 const colors: Record<OrderTestStatus, string> = {
                   PENDING: 'default',
@@ -733,7 +725,7 @@ export function WorklistPage() {
             {
               title: 'Actions',
               key: 'actions',
-              width: 180,
+              width: 170,
               align: 'right',
               render: (_: unknown, r: WorklistItem) => (
                 <Space size="small">
