@@ -1,0 +1,189 @@
+"use strict";
+var __decorate = (this && this.__decorate) || function (decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+};
+var __metadata = (this && this.__metadata) || function (k, v) {
+    if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
+};
+var RlsSessionService_1;
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.RlsSessionService = void 0;
+const common_1 = require("@nestjs/common");
+const typeorm_1 = require("typeorm");
+const security_env_1 = require("../config/security-env");
+let RlsSessionService = RlsSessionService_1 = class RlsSessionService {
+    constructor(dataSource) {
+        this.dataSource = dataSource;
+        this.logger = new common_1.Logger(RlsSessionService_1.name);
+        this.strictRlsMode = (0, security_env_1.isRlsStrictModeEnabled)();
+        this.warnedMissingRoles = new Set();
+        this.warnedMembershipRoles = new Set();
+        this.warnedMissingRolePrivileges = new Set();
+        this.warnedResetFailures = new Set();
+    }
+    async withLabContext(labId, execute) {
+        const runner = this.dataSource.createQueryRunner();
+        this.markRunnerSkipAutoContext(runner);
+        await runner.connect();
+        await runner.startTransaction();
+        try {
+            await this.applyRequestContextWithExecutor(runner.query.bind(runner), { scope: 'lab', labId }, { local: true });
+            const result = await execute(runner.manager);
+            await runner.commitTransaction();
+            return result;
+        }
+        catch (error) {
+            await runner.rollbackTransaction();
+            throw error;
+        }
+        finally {
+            await runner.release();
+        }
+    }
+    async withPlatformAdminContext(execute) {
+        const runner = this.dataSource.createQueryRunner();
+        this.markRunnerSkipAutoContext(runner);
+        await runner.connect();
+        await runner.startTransaction();
+        try {
+            await this.applyRequestContextWithExecutor(runner.query.bind(runner), { scope: 'admin', labId: null }, { local: true });
+            const result = await execute(runner.manager);
+            await runner.commitTransaction();
+            return result;
+        }
+        catch (error) {
+            await runner.rollbackTransaction();
+            throw error;
+        }
+        finally {
+            await runner.release();
+        }
+    }
+    async applyRequestContextWithExecutor(executeQuery, context, options = {}) {
+        if (context.scope === 'none') {
+            return false;
+        }
+        const useLocal = options.local === true;
+        if (context.scope === 'lab') {
+            if (!context.labId) {
+                if (this.strictRlsMode) {
+                    throw new Error('[SECURITY][RLS] Missing labId for lab-scoped DB context.');
+                }
+                return false;
+            }
+            await executeQuery(`SELECT set_config('app.current_lab_id', $1, $2)`, [context.labId, useLocal]);
+            await this.trySetRole(executeQuery, 'app_lab_user', useLocal);
+            return true;
+        }
+        await executeQuery(`SELECT set_config('app.current_lab_id', $1, $2)`, ['', useLocal]);
+        await this.trySetRole(executeQuery, 'app_platform_admin', useLocal);
+        return true;
+    }
+    async resetRequestContextWithExecutor(executeQuery) {
+        try {
+            await executeQuery(`SELECT set_config('app.current_lab_id', $1, false)`, ['']);
+            await executeQuery('RESET ROLE');
+        }
+        catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            const failureMessage = `Failed to reset DB request context: ${message}`;
+            if (this.strictRlsMode) {
+                throw new Error(`[SECURITY][RLS] ${failureMessage}`);
+            }
+            if (!this.warnedResetFailures.has(failureMessage)) {
+                this.logger.warn(failureMessage);
+                this.warnedResetFailures.add(failureMessage);
+            }
+        }
+    }
+    markRunnerSkipAutoContext(runner) {
+        const mutableRunner = runner;
+        mutableRunner.data = {
+            ...(mutableRunner.data ?? {}),
+            skipAutomaticRlsContext: true,
+        };
+    }
+    async trySetRole(executeQuery, role, useLocal) {
+        const safeRole = role.trim();
+        if (!/^[a-z_][a-z0-9_]*$/i.test(safeRole)) {
+            this.failOrWarn(`Invalid role identifier for RLS context: ${role}`, this.warnedMissingRoles);
+            return;
+        }
+        const status = await executeQuery(`
+      SELECT
+        EXISTS(SELECT 1 FROM pg_roles WHERE rolname = $1) AS "roleExists",
+        CASE
+          WHEN EXISTS(SELECT 1 FROM pg_roles WHERE rolname = $1)
+            THEN pg_has_role(current_user, $1, 'MEMBER')
+          ELSE false
+        END AS "canSetRole"
+      `, [safeRole]);
+        const roleExists = this.toBoolean(status?.[0]?.roleExists);
+        const canSetRole = this.toBoolean(status?.[0]?.canSetRole);
+        if (!roleExists) {
+            this.failOrWarn(`Skipped SET ROLE ${safeRole}: role does not exist.`, this.warnedMissingRoles);
+            return;
+        }
+        if (!canSetRole) {
+            this.failOrWarn(`Skipped SET ROLE ${safeRole}: current DB user is not a member.`, this.warnedMembershipRoles);
+            return;
+        }
+        if (safeRole === 'app_platform_admin') {
+            const hasPrivilegeRows = await executeQuery(`
+        SELECT
+          CASE
+            WHEN to_regclass('public.labs') IS NULL THEN true
+            ELSE has_table_privilege($1, 'public.labs', 'SELECT')
+          END AS "hasLabsSelect"
+        `, [safeRole]);
+            const hasLabsSelect = this.toBoolean(hasPrivilegeRows?.[0]?.hasLabsSelect);
+            if (!hasLabsSelect) {
+                this.failOrWarn(`Skipped SET ROLE ${safeRole}: role lacks SELECT privilege on public.labs.`, this.warnedMissingRolePrivileges);
+                return;
+            }
+        }
+        try {
+            await executeQuery(`${useLocal ? 'SET LOCAL ROLE' : 'SET ROLE'} ${safeRole}`);
+        }
+        catch (error) {
+            if (safeRole === 'app_platform_admin') {
+                const message = error instanceof Error ? error.message : String(error);
+                this.failOrWarn(`Skipped SET ROLE ${safeRole}: ${message}`, this.warnedMissingRolePrivileges, `${safeRole}:set-role:${message}`);
+                return;
+            }
+            throw error;
+        }
+    }
+    failOrWarn(message, warnedSet, keyOverride) {
+        if (this.strictRlsMode) {
+            throw new Error(`[SECURITY][RLS] ${message}`);
+        }
+        const key = keyOverride ?? message;
+        if (!warnedSet.has(key)) {
+            this.logger.warn(message);
+            warnedSet.add(key);
+        }
+    }
+    toBoolean(value) {
+        if (typeof value === 'boolean') {
+            return value;
+        }
+        if (typeof value === 'string') {
+            const normalized = value.trim().toLowerCase();
+            return normalized === 'true' || normalized === 't' || normalized === '1';
+        }
+        if (typeof value === 'number') {
+            return value === 1;
+        }
+        return false;
+    }
+};
+exports.RlsSessionService = RlsSessionService;
+exports.RlsSessionService = RlsSessionService = RlsSessionService_1 = __decorate([
+    (0, common_1.Injectable)(),
+    __metadata("design:paramtypes", [typeorm_1.DataSource])
+], RlsSessionService);
+//# sourceMappingURL=rls-session.service.js.map
