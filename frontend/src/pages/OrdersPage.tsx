@@ -1294,13 +1294,6 @@ export function OrdersPage() {
                 <>
                   <div
                     className={`order-history-scroll${isDark ? ' order-history-scroll-dark' : ''}`}
-                    style={{
-                      marginTop: 10,
-                      flex: 1,
-                      minHeight: 0,
-                      overflowY: 'auto',
-                      overflowX: 'hidden',
-                    }}
                   >
                     <div
                       style={{

@@ -1291,9 +1291,11 @@ export class OrdersService {
     const testCounts = await this.orderRepo.manager
       .createQueryBuilder()
       .select('s."orderId"', 'orderId')
-      .addSelect('COUNT(*)', 'totalTests')
+      // Only count root-level tests (parent rows). Panel children are excluded so a
+      // panel test counts as 1, not 1 + number-of-children.
+      .addSelect('COUNT(*) FILTER (WHERE ot."parentOrderTestId" IS NULL)', 'totalTests')
       .addSelect(
-        `SUM(CASE WHEN ot.status IN (:...readyStatuses) THEN 1 ELSE 0 END)`,
+        `SUM(CASE WHEN ot.status IN (:...readyStatuses) AND ot."parentOrderTestId" IS NULL THEN 1 ELSE 0 END)`,
         'readyTests',
       )
       .from('order_tests', 'ot')
@@ -1306,6 +1308,7 @@ export class OrdersService {
       ])
       .groupBy('s."orderId"')
       .getRawMany<{ orderId: string; totalTests: string; readyTests: string }>();
+
 
     const countMap = new Map(
       testCounts.map((row) => [

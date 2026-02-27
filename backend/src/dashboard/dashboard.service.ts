@@ -90,31 +90,33 @@ export class DashboardService {
     private readonly departmentRepo: Repository<Department>,
     private readonly ordersService: OrdersService,
     private readonly unmatchedService: UnmatchedResultsService,
-  ) {}
+  ) { }
 
   async getKpis(labId: string): Promise<DashboardKpis> {
     const totalPatients = await this.patientRepo.count();
     const ordersToday = await this.ordersService.getOrdersTodayCount(labId);
 
-    // Count completed (awaiting verification) order tests
+    // Count completed (awaiting verification) order tests — root-level only (panels = 1)
     const pendingVerification = await this.orderTestRepo
       .createQueryBuilder('ot')
       .innerJoin('ot.sample', 's')
       .innerJoin('s.order', 'o')
       .where('o.labId = :labId', { labId })
+      .andWhere('ot.parentOrderTestId IS NULL')
       .andWhere('ot.status = :status', { status: OrderTestStatus.COMPLETED })
       .getCount();
 
-    // Count critical results (CRITICAL_HIGH or CRITICAL_LOW flags)
-    // ResultFlag.CRITICAL_HIGH = 'HH', ResultFlag.CRITICAL_LOW = 'LL'
+    // Count critical results — root-level only (panels = 1)
     const criticalAlerts = await this.orderTestRepo
       .createQueryBuilder('ot')
       .innerJoin('ot.sample', 's')
       .innerJoin('s.order', 'o')
       .where('o.labId = :labId', { labId })
+      .andWhere('ot.parentOrderTestId IS NULL')
       .andWhere('ot.flag IN (:...flags)', { flags: [ResultFlag.CRITICAL_HIGH, ResultFlag.CRITICAL_LOW] })
       .andWhere('ot.status != :verified', { verified: OrderTestStatus.VERIFIED })
       .getCount();
+
 
     return {
       ordersToday,
@@ -499,10 +501,10 @@ export class DashboardService {
       filters.departmentId
         ? Promise.resolve(null)
         : base
-            .clone()
-            .andWhere('t.departmentId IS NOT NULL')
-            .select('COUNT(*)', 'count')
-            .getRawOne<{ count: string }>(),
+          .clone()
+          .andWhere('t.departmentId IS NOT NULL')
+          .select('COUNT(*)', 'count')
+          .getRawOne<{ count: string }>(),
     ]);
 
     const total = parseInt(totalsRow?.total ?? '0', 10) || 0;

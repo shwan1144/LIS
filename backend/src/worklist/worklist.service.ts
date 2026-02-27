@@ -1028,9 +1028,12 @@ export class WorklistService {
       .where('order.labId = :labId', { labId })
       .andWhere('order.registeredAt >= :today', { today })
       .andWhere('order.registeredAt < :tomorrow', { tomorrow })
+      // Exclude panel child rows — count each panel as one test, not 1 + N children.
+      .andWhere('ot."parentOrderTestId" IS NULL')
       .select('ot.status', 'status')
       .addSelect('COUNT(*)', 'count')
       .groupBy('ot.status');
+
 
     const results = await qb.getRawMany();
 
