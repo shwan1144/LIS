@@ -901,23 +901,25 @@ export function WorklistPage() {
         }
         .panel-entry-modal .ant-modal {
           max-width: calc(100vw - 32px) !important;
+          top: 20px;
+          padding-bottom: 0;
         }
         .panel-entry-modal .ant-modal-content {
           border-radius: 14px;
           overflow: hidden;
         }
         .panel-entry-modal .ant-modal-header {
-          padding: 11px 14px;
+          padding: 8px 12px;
           margin-bottom: 0;
         }
         .panel-entry-modal .ant-modal-body {
-          padding: 8px 12px 12px !important;
+          padding: 6px 12px 10px !important;
           max-height: calc(100vh - 140px);
           overflow-y: auto;
         }
         .panel-entry-modal .panel-entry-summary {
-          margin-bottom: 8px;
-          padding: 9px 10px;
+          margin-bottom: 6px;
+          padding: 7px 9px;
           border-radius: 6px;
         }
         .panel-entry-modal .panel-entry-grid-head {
@@ -941,6 +943,7 @@ export function WorklistPage() {
         @media (max-width: 992px) {
           .panel-entry-modal .ant-modal {
             margin: 10px auto;
+            top: 8px;
           }
           .panel-entry-modal .ant-modal-body {
             max-height: calc(100vh - 116px);
@@ -1045,8 +1048,8 @@ export function WorklistPage() {
       {/* Result Entry Modal */}
       <Modal
         title={
-          <Space size="middle">
-            <span style={{ fontWeight: 600, fontSize: 16 }}>Enter Result</span>
+          <Space size={8}>
+            <span style={{ fontWeight: 600, fontSize: 15, lineHeight: 1.2 }}>Enter Result</span>
             {editingItem && (
               <Tag color="blue" style={{ margin: 0 }}>{editingItem.testName}</Tag>
             )}

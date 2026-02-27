@@ -943,12 +943,12 @@ export function VerificationPage() {
           overflow: hidden;
         }
         .verification-review-modal .ant-modal-header {
-          padding: 14px 18px;
+          padding: 10px 14px;
           margin-bottom: 0;
         }
         .verification-review-modal .ant-modal-body {
-          padding: 10px 14px 14px !important;
-          max-height: calc(100vh - 128px);
+          padding: 8px 12px 10px !important;
+          max-height: calc(100vh - 72px);
           overflow-y: auto;
         }
         .verification-review-toolbar {
@@ -1085,6 +1085,7 @@ export function VerificationPage() {
         footer={null}
         width={1280}
         className="verification-review-modal"
+        style={{ top: 16 }}
       >
         {activePanelReview && (
           <Space direction="vertical" style={{ width: '100%' }} size="middle">
@@ -1131,7 +1132,6 @@ export function VerificationPage() {
               dataSource={activePanelReview.children}
               columns={panelReviewColumns}
               tableLayout="fixed"
-              scroll={{ y: 560 }}
             />
           </Space>
         )}
