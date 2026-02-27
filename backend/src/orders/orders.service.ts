@@ -770,15 +770,17 @@ export class OrdersService {
         const price = pricingMap.get(test.id) ?? 0;
 
         if (test.type === TestType.PANEL) {
-          const parentOrderTest = orderTestRepo.create({
+          // Pre-generate UUID so we can assign children immediately without hitting the DB first.
+          const parentId = require('crypto').randomUUID();
+          toSave.push(orderTestRepo.create({
+            id: parentId,
             labId,
             sampleId,
             testId: test.id,
             parentOrderTestId: null,
             status: OrderTestStatus.PENDING,
             price,
-          });
-          const savedParent = await orderTestRepo.save(parentOrderTest);
+          }));
 
           const components = componentsByPanelId.get(test.id) ?? [];
           for (const comp of components) {
@@ -786,7 +788,7 @@ export class OrdersService {
               labId,
               sampleId,
               testId: comp.childTestId,
-              parentOrderTestId: savedParent.id,
+              parentOrderTestId: parentId,
               status: OrderTestStatus.PENDING,
               price: null,
               panelSortOrder: comp.sortOrder ?? null,

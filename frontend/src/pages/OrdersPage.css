@@ -19,29 +19,39 @@
   scrollbar-color: #69b1ff rgba(22, 119, 255, 0.16);
 }
 
-.order-history-scroll::-webkit-scrollbar {
+.orders-right-card .ant-card-body {
+  scrollbar-width: thin;
+  scrollbar-color: #69b1ff rgba(22, 119, 255, 0.16);
+}
+
+.order-history-scroll::-webkit-scrollbar,
+.orders-right-card .ant-card-body::-webkit-scrollbar {
   width: 8px;
   height: 8px;
 }
 
-.order-history-scroll::-webkit-scrollbar-track {
+.order-history-scroll::-webkit-scrollbar-track,
+.orders-right-card .ant-card-body::-webkit-scrollbar-track {
   background: transparent;
   border-radius: 999px;
   margin-block: 6px;
 }
 
-.order-history-scroll::-webkit-scrollbar-thumb {
+.order-history-scroll::-webkit-scrollbar-thumb,
+.orders-right-card .ant-card-body::-webkit-scrollbar-thumb {
   background: linear-gradient(180deg, #69b1ff 0%, #1677ff 100%);
   border-radius: 999px;
   border: 2px solid transparent;
   background-clip: padding-box;
 }
 
-.order-history-scroll::-webkit-scrollbar-thumb:hover {
+.order-history-scroll::-webkit-scrollbar-thumb:hover,
+.orders-right-card .ant-card-body::-webkit-scrollbar-thumb:hover {
   background: linear-gradient(180deg, #4096ff 0%, #0958d9 100%);
 }
 
-.order-history-scroll::-webkit-scrollbar-corner {
+.order-history-scroll::-webkit-scrollbar-corner,
+.orders-right-card .ant-card-body::-webkit-scrollbar-corner {
   background: transparent;
 }
 
