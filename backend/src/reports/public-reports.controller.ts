@@ -54,7 +54,7 @@ function renderPendingPage(status: PublicResultStatus): string {
 </head>
 <body>
   <div class="card">
-    <div class="patient" dir="auto">\${escapeHtml(status.patientName)}</div>
+    <div class="patient" dir="auto">${escapeHtml(status.patientName)}</div>
     <div class="msg" dir="rtl">چاوەڕێی ئەنجامەکە بکە، هێشتا لە پرۆسەدایە</div>
     <div class="msg" dir="rtl">يرجى انتظار النتيجة، لا يزال قيد المعالجة</div>
     <div class="refresh">
@@ -96,8 +96,8 @@ function renderErrorPage(code: number, message: string): string {
   <div class="wrap">
     <div class="card">
       <h1>Result Unavailable</h1>
-      <div class="code">Error \${code}</div>
-      <div class="msg">\${escapeHtml(message)}</div>
+      <div class="code">Error ${code}</div>
+      <div class="msg">${escapeHtml(message)}</div>
     </div>
   </div>
 </body>
@@ -106,7 +106,7 @@ function renderErrorPage(code: number, message: string): string {
 
 @Controller('public/results')
 export class PublicReportsController {
-  constructor(private readonly reportsService: ReportsService) {}
+  constructor(private readonly reportsService: ReportsService) { }
 
   @Get(':id')
   async getResultStatusPage(
@@ -115,9 +115,9 @@ export class PublicReportsController {
   ) {
     try {
       const status = await this.reportsService.getPublicResultStatus(orderId);
-      
+
       if (status.ready) {
-        return res.redirect(\`/public/results/\${orderId}/pdf\`);
+        return res.redirect(`/public/results/${orderId}/pdf`);
       }
 
       res.setHeader('Content-Type', 'text/html; charset=utf-8');
@@ -140,7 +140,7 @@ export class PublicReportsController {
       res.setHeader('Content-Type', 'application/pdf');
       res.setHeader(
         'Content-Disposition',
-        \`inline; filename="results-\${orderId.substring(0, 8)}.pdf"\`,
+        `inline; filename="results-${orderId.substring(0, 8)}.pdf"`,
       );
       return res.send(pdfBuffer);
     } catch (error) {
