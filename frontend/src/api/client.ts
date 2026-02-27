@@ -1414,6 +1414,7 @@ export interface WorklistItem {
   parameterDefinitions: TestParameterDefinition[] | null;
   resultParameters: Record<string, string> | null;
   rejectionReason: string | null;
+  panelSortOrder: number | null;
 }
 
 export async function enterResult(

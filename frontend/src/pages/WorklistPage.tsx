@@ -244,13 +244,21 @@ export function WorklistPage() {
         return data.filter((entry) => entry.orderId === item.orderId);
       }
 
-      const panelChildren = data.filter(
-        (entry) => entry.orderId === item.orderId && entry.parentOrderTestId === item.id,
-      );
+      const panelChildren = data
+        .filter(
+          (entry) => entry.orderId === item.orderId && entry.parentOrderTestId === item.id,
+        )
+        .sort((a, b) => {
+          const aOrder = a.panelSortOrder ?? 9999;
+          const bOrder = b.panelSortOrder ?? 9999;
+          if (aOrder !== bOrder) return aOrder - bOrder;
+          return a.testCode.localeCompare(b.testCode);
+        });
       return panelChildren.length > 0 ? panelChildren : [item];
     },
     [data],
   );
+
 
   const handleOpenResultModal = (item: WorklistItem) => {
     const targets = resolveResultModalTargets(item);

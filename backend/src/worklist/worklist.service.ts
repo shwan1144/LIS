@@ -64,6 +64,7 @@ export interface WorklistItem {
   parameterDefinitions: TestParameterDefinition[] | null;
   resultParameters: Record<string, string> | null;
   rejectionReason: string | null;
+  panelSortOrder: number | null;
 }
 
 function parseJsonField(val: unknown): unknown {
@@ -250,12 +251,14 @@ export class WorklistService {
         'ot.verifiedBy AS "verifiedBy"',
         'test.parameterDefinitions AS "parameterDefinitions"',
         'ot.parentOrderTestId AS "parentOrderTestId"',
+        'ot.panelSortOrder AS "panelSortOrder"',
       ])
       .orderBy(
         'CASE WHEN ot.status = :rejectedStatus THEN 0 ELSE 1 END',
         'ASC',
       )
       .addOrderBy('order.registeredAt', 'DESC')
+      .addOrderBy('ot.panelSortOrder', 'ASC', 'NULLS LAST')
       .addOrderBy('test.sortOrder', 'ASC')
       .addOrderBy('test.code', 'ASC')
       .setParameter('rejectedStatus', OrderTestStatus.REJECTED)
@@ -322,6 +325,7 @@ export class WorklistService {
         parameterDefinitions: (parseJsonField(item.parameterDefinitions) as TestParameterDefinition[] | null) ?? null,
         resultParameters: (parseJsonField(item.resultParameters) as Record<string, string> | null) ?? null,
         rejectionReason: item.rejectionReason ?? null,
+        panelSortOrder: item.panelSortOrder != null ? Number(item.panelSortOrder) : null,
       };
     });
 
