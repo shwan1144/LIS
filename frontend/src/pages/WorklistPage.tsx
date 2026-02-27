@@ -907,36 +907,36 @@ export function WorklistPage() {
           overflow: hidden;
         }
         .panel-entry-modal .ant-modal-header {
-          padding: 14px 18px;
+          padding: 11px 14px;
           margin-bottom: 0;
         }
         .panel-entry-modal .ant-modal-body {
-          padding: 12px 16px 16px !important;
+          padding: 8px 12px 12px !important;
           max-height: calc(100vh - 140px);
           overflow-y: auto;
         }
         .panel-entry-modal .panel-entry-summary {
-          margin-bottom: 12px;
-          padding: 12px 14px;
-          border-radius: 8px;
+          margin-bottom: 8px;
+          padding: 9px 10px;
+          border-radius: 6px;
         }
         .panel-entry-modal .panel-entry-grid-head {
-          padding: 8px 12px !important;
+          padding: 5px 8px !important;
           margin-bottom: 0 !important;
         }
         .panel-entry-modal .panel-entry-grid-row {
-          padding: 8px 12px !important;
+          padding: 4px 8px !important;
           margin-bottom: 0 !important;
         }
         .panel-entry-modal .panel-entry-grid-row .ant-form-item {
           margin-bottom: 0;
         }
         .panel-entry-modal .panel-entry-params {
-          margin-top: 8px !important;
-          padding: 10px 12px !important;
+          margin-top: 6px !important;
+          padding: 8px 10px !important;
         }
         .panel-entry-modal .panel-entry-footer {
-          margin-top: 14px !important;
+          margin-top: 8px !important;
         }
         @media (max-width: 992px) {
           .panel-entry-modal .ant-modal {
@@ -1145,9 +1145,9 @@ export function WorklistPage() {
                                   : 'none',
                               }}
                             >
-                              <div style={{ display: 'flex', alignItems: 'flex-start', flexWrap: 'wrap' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap' }}>
                                 <div style={{ flex: '1 1 24%' }}>
-                                  <Text style={{ fontSize: 12 }}>{def.label}</Text>
+                                  <Text style={{ fontSize: 11, lineHeight: '15px' }}>{def.label}</Text>
                                 </div>
                                 <div style={{ flex: '1 1 40%' }}>
                                   <Form.Item name={[target.id, 'resultParameters', def.code]} noStyle>
@@ -1156,7 +1156,7 @@ export function WorklistPage() {
                                         allowClear
                                         showSearch
                                         style={{ width: '100%' }}
-                                        size="middle"
+                                        size="small"
                                         placeholder="Select"
                                         options={[
                                           ...(def.options ?? []).map((o) => ({ label: o, value: o })),
@@ -1164,7 +1164,7 @@ export function WorklistPage() {
                                         ]}
                                       />
                                     ) : (
-                                      <Input style={{ width: '100%' }} size="middle" placeholder="Result" />
+                                      <Input style={{ width: '100%' }} size="small" placeholder="Result" />
                                     )}
                                   </Form.Item>
                                   {def.type === 'select' && (
@@ -1173,18 +1173,18 @@ export function WorklistPage() {
                                         <Form.Item
                                           name={[target.id, 'resultParametersCustom', def.code]}
                                           rules={[{ required: true, message: 'Enter custom value' }]}
-                                          style={{ marginTop: 8, marginBottom: 0 }}
+                                          style={{ marginTop: 4, marginBottom: 0 }}
                                         >
-                                          <Input size="middle" placeholder="Specify custom value..." />
+                                          <Input size="small" placeholder="Specify custom value..." />
                                         </Form.Item>
                                       )}
                                     </Form.Item>
                                   )}
                                 </div>
-                                <div style={{ flex: '1 1 14%', textAlign: 'center', fontSize: 12 }}>
+                                <div style={{ flex: '1 1 14%', textAlign: 'center', fontSize: 11 }}>
                                   -
                                 </div>
-                                <div style={{ flex: '1 1 22%', textAlign: 'right', fontSize: 12, color: 'rgba(128,128,128,0.8)' }}>
+                                <div style={{ flex: '1 1 22%', textAlign: 'right', fontSize: 11, color: 'rgba(128,128,128,0.8)' }}>
                                   -
                                 </div>
                               </div>
@@ -1199,7 +1199,7 @@ export function WorklistPage() {
                           padding: isPanel ? undefined : 0,
                           borderBottom: isPanel && idx < targetItems.length - 1 ? (isDark ? '1px solid rgba(255,255,255,0.05)' : '1px solid #f0f0f0') : 'none'
                         }}>
-                          <div style={{ display: 'flex', alignItems: 'flex-start', flexWrap: 'wrap' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap' }}>
                             <div style={{ flex: isPanel ? '1 1 24%' : '1 1 100%', marginBottom: isPanel ? 0 : 8 }}>
                               <Text strong={!isPanel} style={{ fontSize: isPanel ? 12 : 14 }}>{target.testName}</Text>
                             </div>
@@ -1218,7 +1218,7 @@ export function WorklistPage() {
                                           style={{ width: '100%' }}
                                           placeholder="Value"
                                           precision={2}
-                                          size={isPanel ? 'middle' : 'large'}
+                                          size={isPanel ? 'small' : 'large'}
                                         />
                                       </Form.Item>
                                       {target.resultEntryType === 'NUMERIC' && !isPanel && target.testUnit && <Text type="secondary">{target.testUnit}</Text>}
@@ -1228,7 +1228,7 @@ export function WorklistPage() {
                                       allowClear
                                       showSearch
                                       style={panelResultControlStyle}
-                                      size={isPanel ? 'middle' : 'large'}
+                                      size={isPanel ? 'small' : 'large'}
                                       placeholder="Select"
                                       options={[
                                         ...(target.resultTextOptions ?? []).map((o) => ({ label: o.value, value: o.value })),
@@ -1236,7 +1236,7 @@ export function WorklistPage() {
                                       ]}
                                     />
                                   ) : (
-                                    <Input style={panelResultControlStyle} size={isPanel ? 'middle' : 'large'} placeholder="Result text" />
+                                    <Input style={panelResultControlStyle} size={isPanel ? 'small' : 'large'} placeholder="Result text" />
                                   )}
                                 </Form.Item>
                               ) : (
@@ -1246,10 +1246,10 @@ export function WorklistPage() {
 
                             {isPanel && (
                               <>
-                                <div style={{ flex: '1 1 14%', textAlign: 'center', fontSize: 12 }}>
+                                <div style={{ flex: '1 1 14%', textAlign: 'center', fontSize: 11 }}>
                                   {target.testUnit || '-'}
                                 </div>
-                                <div style={{ flex: '1 1 22%', textAlign: 'right', fontSize: 12, color: 'rgba(128,128,128,0.8)' }}>
+                                <div style={{ flex: '1 1 22%', textAlign: 'right', fontSize: 11, color: 'rgba(128,128,128,0.8)' }}>
                                   {target.normalText || `${target.normalMin ?? '-'} - ${target.normalMax ?? '-'}`}
                                 </div>
                               </>
@@ -1266,7 +1266,7 @@ export function WorklistPage() {
                                     rules={[{ required: true, message: 'Enter custom text' }]}
                                     label={isPanel ? null : "Custom text"}
                                   >
-                                    <Input style={panelResultControlStyle} placeholder="Specify custom result..." size="middle" />
+                                    <Input style={panelResultControlStyle} placeholder="Specify custom result..." size="small" />
                                   </Form.Item>
                                 </div>
                               )}
