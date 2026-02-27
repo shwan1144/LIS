@@ -218,6 +218,12 @@ export class ReportsService implements OnModuleInit, OnModuleDestroy {
     private readonly userRepo: Repository<User>,
   ) { }
 
+  onModuleInit(): void {
+    // Pre-warm the browser so the first PDF request isn't slow.
+    this.getBrowser().catch(() => { /* ignore – will retry on next call */ });
+  }
+
+
   private async getBrowser(): Promise<Browser> {
     if (!this.browserPromise) {
       this.browserPromise = (async () => {

@@ -755,29 +755,59 @@ export class OrdersService {
         .orderBy('component.sortOrder', 'ASC')
         .getMany();
 
-      for (const component of components) {
-        const childOrderTest = orderTestRepo.create({
-          labId,
-          sampleId,
-          testId: component.childTestId,
-          parentOrderTestId: savedParent.id,
-          status: OrderTestStatus.PENDING,
-          price: null,
-        });
-        await orderTestRepo.save(childOrderTest);
+      for (const comp of allComponents) {
+        const existing = componentsByPanelId.get(comp.panelTestId) ?? [];
+        existing.push(comp);
+        componentsByPanelId.set(comp.panelTestId, existing);
       }
-      return;
     }
 
-    const orderTest = orderTestRepo.create({
-      labId,
-      sampleId,
-      testId: test.id,
-      parentOrderTestId: null,
-      status: OrderTestStatus.PENDING,
-      price: panelPrice,
-    });
-    await orderTestRepo.save(orderTest);
+    // Build all OrderTest entities in one pass, then bulk-save
+    const toSave: OrderTest[] = [];
+
+    for (const { sampleId, tests } of sampleWithTestsArr) {
+      for (const test of tests) {
+        const price = pricingMap.get(test.id) ?? 0;
+
+        if (test.type === TestType.PANEL) {
+          const parentOrderTest = orderTestRepo.create({
+            labId,
+            sampleId,
+            testId: test.id,
+            parentOrderTestId: null,
+            status: OrderTestStatus.PENDING,
+            price,
+          });
+          const savedParent = await orderTestRepo.save(parentOrderTest);
+
+          const components = componentsByPanelId.get(test.id) ?? [];
+          for (const comp of components) {
+            toSave.push(orderTestRepo.create({
+              labId,
+              sampleId,
+              testId: comp.childTestId,
+              parentOrderTestId: savedParent.id,
+              status: OrderTestStatus.PENDING,
+              price: null,
+              panelSortOrder: comp.sortOrder ?? null,
+            } as OrderTest));
+          }
+        } else {
+          toSave.push(orderTestRepo.create({
+            labId,
+            sampleId,
+            testId: test.id,
+            parentOrderTestId: null,
+            status: OrderTestStatus.PENDING,
+            price,
+          }));
+        }
+      }
+    }
+
+    if (toSave.length > 0) {
+      await orderTestRepo.save(toSave);
+    }
   }
 
   private createOrderSampleBarcodeAllocator(
