@@ -46,6 +46,7 @@ let DashboardService = class DashboardService {
             .innerJoin('ot.sample', 's')
             .innerJoin('s.order', 'o')
             .where('o.labId = :labId', { labId })
+            .andWhere('ot.parentOrderTestId IS NULL')
             .andWhere('ot.status = :status', { status: order_test_entity_1.OrderTestStatus.COMPLETED })
             .getCount();
         const criticalAlerts = await this.orderTestRepo
@@ -53,6 +54,7 @@ let DashboardService = class DashboardService {
             .innerJoin('ot.sample', 's')
             .innerJoin('s.order', 'o')
             .where('o.labId = :labId', { labId })
+            .andWhere('ot.parentOrderTestId IS NULL')
             .andWhere('ot.flag IN (:...flags)', { flags: [order_test_entity_1.ResultFlag.CRITICAL_HIGH, order_test_entity_1.ResultFlag.CRITICAL_LOW] })
             .andWhere('ot.status != :verified', { verified: order_test_entity_1.OrderTestStatus.VERIFIED })
             .getCount();

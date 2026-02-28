@@ -496,46 +496,82 @@ let OrdersService = class OrdersService {
                 .orderBy('component.sortOrder', 'ASC')
                 .getMany();
             for (const comp of allComponents) {
-                const list = componentsByPanelId.get(comp.panelTestId) || [];
-                list.push(comp);
-                componentsByPanelId.set(comp.panelTestId, list);
+                const existing = componentsByPanelId.get(comp.panelTestId) ?? [];
+                existing.push(comp);
+                componentsByPanelId.set(comp.panelTestId, existing);
             }
         }
-        const parentOrderTests = [];
-        for (const item of sampleWithTestsArr) {
-            for (const test of item.tests) {
+        const toSave = [];
+        for (const { sampleId, tests } of sampleWithTestsArr) {
+            for (const test of tests) {
                 const price = pricingMap.get(test.id) ?? 0;
-                const baseOrderTest = orderTestRepo.create({
-                    labId,
-                    sampleId: item.sampleId,
-                    testId: test.id,
-                    parentOrderTestId: null,
-                    status: order_test_entity_1.OrderTestStatus.PENDING,
-                    price,
-                });
-                parentOrderTests.push(baseOrderTest);
-            }
-        }
-        const savedParents = await orderTestRepo.save(parentOrderTests);
-        const childOrderTests = [];
-        for (const parent of savedParents) {
-            const components = componentsByPanelId.get(parent.testId);
-            if (components && components.length > 0) {
-                for (const component of components) {
-                    childOrderTests.push(orderTestRepo.create({
+                if (test.type === test_entity_1.TestType.PANEL) {
+                    const parentId = require('crypto').randomUUID();
+                    toSave.push(orderTestRepo.create({
+                        id: parentId,
                         labId,
-                        sampleId: parent.sampleId,
-                        testId: component.childTestId,
-                        parentOrderTestId: parent.id,
+                        sampleId,
+                        testId: test.id,
+                        parentOrderTestId: null,
                         status: order_test_entity_1.OrderTestStatus.PENDING,
-                        price: null,
+                        price,
+                    }));
+                    const components = componentsByPanelId.get(test.id) ?? [];
+                    for (const comp of components) {
+                        toSave.push(orderTestRepo.create({
+                            labId,
+                            sampleId,
+                            testId: comp.childTestId,
+                            parentOrderTestId: parentId,
+                            status: order_test_entity_1.OrderTestStatus.PENDING,
+                            price: null,
+                            panelSortOrder: comp.sortOrder ?? null,
+                        }));
+                    }
+                }
+                else {
+                    toSave.push(orderTestRepo.create({
+                        labId,
+                        sampleId,
+                        testId: test.id,
+                        parentOrderTestId: null,
+                        status: order_test_entity_1.OrderTestStatus.PENDING,
+                        price,
                     }));
                 }
             }
         }
-        if (childOrderTests.length > 0) {
-            await orderTestRepo.save(childOrderTests);
+        if (toSave.length > 0) {
+            await orderTestRepo.save(toSave);
         }
+    }
+    createOrderSampleBarcodeAllocator(orderNumber, existingBarcodes) {
+        const normalizedOrderNumber = orderNumber?.trim() ?? '';
+        const normalizedBarcodes = existingBarcodes
+            .map((value) => (typeof value === 'string' ? value.trim() : ''))
+            .filter((value) => value.length > 0);
+        if (/^\d+$/.test(normalizedOrderNumber)) {
+            const width = normalizedOrderNumber.length;
+            let maxValue = Number(normalizedOrderNumber);
+            for (const barcode of normalizedBarcodes) {
+                if (!/^\d+$/.test(barcode))
+                    continue;
+                const value = Number(barcode);
+                if (Number.isFinite(value) && value > maxValue) {
+                    maxValue = value;
+                }
+            }
+            return () => {
+                maxValue += 1;
+                return String(maxValue).padStart(width, '0');
+            };
+        }
+        let fallbackSeq = normalizedBarcodes.length;
+        const prefix = normalizedOrderNumber || 'ORD';
+        return () => {
+            fallbackSeq += 1;
+            return `${prefix}-${String(fallbackSeq).padStart(2, '0')}`;
+        };
     }
     isOrderTestProcessed(orderTest) {
         return (orderTest.status !== order_test_entity_1.OrderTestStatus.PENDING ||
@@ -853,8 +889,8 @@ let OrdersService = class OrdersService {
         const testCounts = await this.orderRepo.manager
             .createQueryBuilder()
             .select('s."orderId"', 'orderId')
-            .addSelect('COUNT(*)', 'totalTests')
-            .addSelect(`SUM(CASE WHEN ot.status IN (:...readyStatuses) THEN 1 ELSE 0 END)`, 'readyTests')
+            .addSelect('COUNT(*) FILTER (WHERE ot."parentOrderTestId" IS NULL)', 'totalTests')
+            .addSelect(`SUM(CASE WHEN ot.status IN (:...readyStatuses) AND ot."parentOrderTestId" IS NULL THEN 1 ELSE 0 END)`, 'readyTests')
             .from('order_tests', 'ot')
             .innerJoin('samples', 's', 's.id = ot."sampleId"')
             .where('s."orderId" IN (:...orderIds)', { orderIds })
