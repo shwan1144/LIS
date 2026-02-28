@@ -92,6 +92,14 @@ function shouldAutoSeedOnBoot(): boolean {
   return process.env.AUTO_SEED_ON_BOOT === 'true';
 }
 
+function shouldRunStartupDbEnsureTasks(): boolean {
+  const explicit = process.env.STARTUP_DB_ENSURE;
+  if (explicit === undefined || explicit === null || explicit.trim() === '') {
+    return true;
+  }
+  return toBoolean(explicit);
+}
+
 function toBoolean(value: unknown): boolean {
   if (typeof value === 'boolean') return value;
   if (typeof value === 'string') {
@@ -596,26 +604,32 @@ async function bootstrap() {
   app.use(json({ limit: '10mb' }));
   app.use(urlencoded({ extended: true, limit: '10mb' }));
   const dataSource = app.get(DataSource);
-  try {
-    await ensureReportBrandingColumns(dataSource);
-  } catch (error) {
-    bootstrapLogger.warn(
-      `Failed to auto-ensure report branding columns: ${error instanceof Error ? error.message : String(error)}`,
-    );
-  }
-  try {
-    await ensureOrderFlowPerformanceIndexes(dataSource);
-  } catch (error) {
-    bootstrapLogger.warn(
-      `Failed to auto-ensure order-flow performance indexes: ${error instanceof Error ? error.message : String(error)}`,
-    );
-  }
-  try {
-    await ensureTenantRolePrivileges(dataSource);
-  } catch (error) {
-    bootstrapLogger.warn(
-      `Failed to auto-ensure tenant role privileges: ${error instanceof Error ? error.message : String(error)}`,
-    );
+  const runStartupDbEnsureTasks = shouldRunStartupDbEnsureTasks();
+  bootstrapLogger.log(
+    `startup DB ensure tasks: ${runStartupDbEnsureTasks ? 'enabled' : 'disabled'}`,
+  );
+  if (runStartupDbEnsureTasks) {
+    try {
+      await ensureReportBrandingColumns(dataSource);
+    } catch (error) {
+      bootstrapLogger.warn(
+        `Failed to auto-ensure report branding columns: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+    try {
+      await ensureOrderFlowPerformanceIndexes(dataSource);
+    } catch (error) {
+      bootstrapLogger.warn(
+        `Failed to auto-ensure order-flow performance indexes: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+    try {
+      await ensureTenantRolePrivileges(dataSource);
+    } catch (error) {
+      bootstrapLogger.warn(
+        `Failed to auto-ensure tenant role privileges: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
   }
   if (strictRlsMode) {
     await assertTenantRoleReadiness(dataSource);
