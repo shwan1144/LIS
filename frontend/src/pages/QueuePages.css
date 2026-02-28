@@ -1,0 +1,26 @@
+.queue-pane-shell {
+  display: flex;
+  flex-direction: column;
+}
+
+.queue-main-card {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.queue-main-card .ant-card-body {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+}
+
+.queue-filters-block {
+  margin-bottom: 16px;
+  flex-shrink: 0;
+}
+
+.queue-table-block {
+  min-height: 0;
+}
