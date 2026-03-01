@@ -1458,7 +1458,7 @@ export class OrdersService {
    */
   private stripHeavyOrderPayload(order: Order): Order {
     if (!order?.lab) {
-      return order;
+      return this.stripHeavyOrderTestsPayload(order);
     }
     order.lab.reportBannerDataUrl = null;
     order.lab.reportFooterDataUrl = null;
@@ -1466,6 +1466,45 @@ export class OrdersService {
     order.lab.reportWatermarkDataUrl = null;
     order.lab.onlineResultWatermarkDataUrl = null;
     order.lab.uiTestGroups = null;
+    return this.stripHeavyOrderTestsPayload(order);
+  }
+
+  /**
+   * Order details page/printing only needs compact test identity fields.
+   * Remove bulky test metadata JSON/ranges from nested order payloads.
+   */
+  private stripHeavyOrderTestsPayload(order: Order): Order {
+    for (const sample of order.samples ?? []) {
+      for (const orderTest of sample.orderTests ?? []) {
+        const testPayload = orderTest.test as unknown as Record<string, unknown> | undefined;
+        if (!testPayload) continue;
+        delete testPayload.lab;
+        delete testPayload.labId;
+        delete testPayload.department;
+        delete testPayload.type;
+        delete testPayload.unit;
+        delete testPayload.normalMin;
+        delete testPayload.normalMax;
+        delete testPayload.normalMinMale;
+        delete testPayload.normalMaxMale;
+        delete testPayload.normalMinFemale;
+        delete testPayload.normalMaxFemale;
+        delete testPayload.normalText;
+        delete testPayload.resultEntryType;
+        delete testPayload.resultTextOptions;
+        delete testPayload.allowCustomResultText;
+        delete testPayload.numericAgeRanges;
+        delete testPayload.description;
+        delete testPayload.childTestIds;
+        delete testPayload.parameterDefinitions;
+        delete testPayload.isActive;
+        delete testPayload.sortOrder;
+        delete testPayload.expectedCompletionMinutes;
+        delete testPayload.createdAt;
+        delete testPayload.updatedAt;
+        delete testPayload.orderTests;
+      }
+    }
     return order;
   }
 
