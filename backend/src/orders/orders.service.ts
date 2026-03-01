@@ -451,7 +451,7 @@ export class OrdersService {
     if (!order) {
       throw new NotFoundException('Order not found');
     }
-    return order;
+    return this.stripHeavyOrderPayload(order);
   }
 
   async updatePayment(
@@ -1452,6 +1452,23 @@ export class OrdersService {
     return Number(process.hrtime.bigint() - startedAt) / 1_000_000;
   }
 
+  /**
+   * Avoid returning large lab branding blobs in order payloads.
+   * These assets can be several MB and are not needed for order detail/workflow actions.
+   */
+  private stripHeavyOrderPayload(order: Order): Order {
+    if (!order?.lab) {
+      return order;
+    }
+    order.lab.reportBannerDataUrl = null;
+    order.lab.reportFooterDataUrl = null;
+    order.lab.reportLogoDataUrl = null;
+    order.lab.reportWatermarkDataUrl = null;
+    order.lab.onlineResultWatermarkDataUrl = null;
+    order.lab.uiTestGroups = null;
+    return order;
+  }
+
   private normalizePaymentStatus(value: string | null | undefined): 'unpaid' | 'partial' | 'paid' {
     if (value === 'paid') return 'paid';
     if (value === 'partial') return 'partial';
@@ -1508,6 +1525,7 @@ export class OrdersService {
           'samples.orderTests.test',
         ],
       });
+      orders = orders.map((order) => this.stripHeavyOrderPayload(order));
     }
     const orderMap = new Map(orders.map((o) => [o.id, o]));
 
