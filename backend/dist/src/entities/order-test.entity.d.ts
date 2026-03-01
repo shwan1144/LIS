@@ -36,6 +36,7 @@ export declare class OrderTest {
     verifiedBy: string | null;
     rejectionReason: string | null;
     comments: string | null;
+    panelSortOrder: number | null;
     createdAt: Date;
     updatedAt: Date;
     sample: Sample;

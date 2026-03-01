@@ -6,6 +6,18 @@ export enum CreateOrderView {
   FULL = 'full',
 }
 
+export enum OrderDetailView {
+  COMPACT = 'compact',
+  FULL = 'full',
+}
+
+export enum OrderResultStatus {
+  PENDING = 'PENDING',
+  COMPLETED = 'COMPLETED',
+  VERIFIED = 'VERIFIED',
+  REJECTED = 'REJECTED',
+}
+
 export interface CreateOrderSummaryDto {
   id: string;
   orderNumber: string | null;

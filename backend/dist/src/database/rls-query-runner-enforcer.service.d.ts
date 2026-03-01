@@ -15,4 +15,6 @@ export declare class RlsQueryRunnerEnforcerService implements OnModuleInit {
     private patchDataSourceCreateQueryRunner;
     private patchQueryRunner;
     private applyAutomaticRequestContext;
+    private isTransactionControlStatement;
+    private normalizeSql;
 }

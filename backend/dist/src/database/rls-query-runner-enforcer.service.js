@@ -52,41 +52,86 @@ let RlsQueryRunnerEnforcerService = RlsQueryRunnerEnforcerService_1 = class RlsQ
         const originalRelease = runner.release.bind(runner);
         const rawExecutor = (query, parameters) => originalQuery(query, parameters);
         let contextPrepared = false;
-        let shouldResetContext = false;
-        const ensureContext = async () => {
+        let shouldResetRole = false;
+        let ownsAutoTransaction = false;
+        let queryFailed = false;
+        const ensureContext = async (query) => {
             if (contextPrepared) {
                 return;
             }
+            if (this.isTransactionControlStatement(query)) {
+                return;
+            }
             contextPrepared = true;
-            shouldResetContext = await this.applyAutomaticRequestContext(runner, rawExecutor);
+            const applyResult = await this.applyAutomaticRequestContext(runner, rawExecutor);
+            shouldResetRole = applyResult.shouldResetRole;
+            ownsAutoTransaction = applyResult.ownsAutoTransaction;
         };
         const patchedQuery = (async (query, parameters, useStructuredResult) => {
-            await ensureContext();
-            if (useStructuredResult === true) {
-                return originalQuery(query, parameters, true);
+            try {
+                await ensureContext(query);
+                if (useStructuredResult === true) {
+                    return await originalQuery(query, parameters, true);
+                }
+                return await originalQuery(query, parameters);
             }
-            return originalQuery(query, parameters);
+            catch (error) {
+                queryFailed = true;
+                throw error;
+            }
         });
         runner.query = patchedQuery;
         runner.release = async () => {
+            let pendingError = null;
             try {
-                if (shouldResetContext) {
+                if (shouldResetRole) {
                     await this.rlsSessionService.resetRequestContextWithExecutor(rawExecutor);
+                }
+            }
+            catch (error) {
+                pendingError = error;
+            }
+            try {
+                if (ownsAutoTransaction && runner.isTransactionActive) {
+                    if (queryFailed) {
+                        await runner.rollbackTransaction();
+                    }
+                    else {
+                        await runner.commitTransaction();
+                    }
+                }
+            }
+            catch (error) {
+                if (!pendingError) {
+                    pendingError = error;
+                }
+            }
+            try {
+                if (runner.isTransactionActive) {
+                    await runner.rollbackTransaction();
+                }
+            }
+            catch (error) {
+                if (!pendingError) {
+                    pendingError = error;
                 }
             }
             finally {
                 await originalRelease();
+            }
+            if (pendingError) {
+                throw pendingError;
             }
         };
     }
     async applyAutomaticRequestContext(runner, executeQuery) {
         const runnerData = runner.data ?? {};
         if (runnerData.skipAutomaticRlsContext === true) {
-            return false;
+            return { shouldResetRole: false, ownsAutoTransaction: false };
         }
         const context = this.requestRlsContextService.getContext();
         if (context.scope === 'none') {
-            return false;
+            return { shouldResetRole: false, ownsAutoTransaction: false };
         }
         if (context.scope === 'lab' && !context.labId) {
             const message = 'Skipped automatic lab RLS context: lab scope is missing labId.';
@@ -94,12 +139,37 @@ let RlsQueryRunnerEnforcerService = RlsQueryRunnerEnforcerService_1 = class RlsQ
                 throw new Error(`[SECURITY][RLS] ${message}`);
             }
             this.logger.warn(message);
+            return { shouldResetRole: false, ownsAutoTransaction: false };
+        }
+        let ownsAutoTransaction = false;
+        if (!runner.isTransactionActive) {
+            await runner.startTransaction();
+            ownsAutoTransaction = true;
+        }
+        await this.rlsSessionService.applyRequestContextWithExecutor(executeQuery, context);
+        return { shouldResetRole: true, ownsAutoTransaction };
+    }
+    isTransactionControlStatement(query) {
+        const normalized = this.normalizeSql(query);
+        if (!normalized) {
             return false;
         }
-        await this.rlsSessionService.applyRequestContextWithExecutor(executeQuery, context, {
-            local: false,
-        });
-        return true;
+        return (normalized === 'BEGIN'
+            || normalized.startsWith('BEGIN ')
+            || normalized.startsWith('START TRANSACTION')
+            || normalized === 'COMMIT'
+            || normalized.startsWith('COMMIT ')
+            || normalized === 'ROLLBACK'
+            || normalized.startsWith('ROLLBACK ')
+            || normalized.startsWith('SAVEPOINT ')
+            || normalized.startsWith('RELEASE SAVEPOINT')
+            || normalized.startsWith('ROLLBACK TO SAVEPOINT')
+            || normalized.startsWith('SET TRANSACTION')
+            || normalized.startsWith('SET SESSION CHARACTERISTICS AS TRANSACTION'));
+    }
+    normalizeSql(query) {
+        const stripped = query.replace(/^\s*(?:(?:--[^\n]*\n)\s*|(?:\/\*[\s\S]*?\*\/)\s*)*/, '');
+        return stripped.trim().replace(/\s+/g, ' ').toUpperCase();
     }
 };
 exports.RlsQueryRunnerEnforcerService = RlsQueryRunnerEnforcerService;

@@ -9,8 +9,9 @@ import {
   UseGuards,
   Req,
   ParseUUIDPipe,
+  ParseEnumPipe,
 } from '@nestjs/common';
-import { WorklistService } from './worklist.service';
+import { WorklistService, WorklistView } from './worklist.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { OrderTestStatus } from '../entities/order-test.entity';
 import { buildLabActorContext } from '../types/lab-actor-context';
@@ -40,6 +41,8 @@ export class WorklistController {
     @Query('departmentId') departmentId?: string,
     @Query('page') page?: string,
     @Query('size') size?: string,
+    @Query('view', new ParseEnumPipe(WorklistView, { optional: true }))
+    view?: WorklistView,
   ) {
     const labId = req.user?.labId;
     const actor = buildLabActorContext(req.user);
@@ -64,9 +67,23 @@ export class WorklistController {
         departmentId,
         page: page ? parseInt(page, 10) : undefined,
         size: size ? parseInt(size, 10) : undefined,
+        view: view ?? WorklistView.FULL,
       },
       actor.userId ?? undefined,
     );
+  }
+
+  @Get(':id/detail')
+  async getWorklistItemDetail(
+    @Req() req: RequestWithUser,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
+    const labId = req.user?.labId;
+    const actor = buildLabActorContext(req.user);
+    if (!labId) {
+      throw new Error('Lab ID not found in token');
+    }
+    return this.worklistService.getWorklistItemDetail(id, labId, actor.userId ?? undefined);
   }
 
   @Get('stats')

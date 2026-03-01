@@ -163,8 +163,15 @@ function buildResultsReportHtml(input) {
         const code = (anyTest?.code || '').toUpperCase();
         return `${String(sortOrder).padStart(6, '0')}_${code}`;
     };
-    for (const [, arr] of childrenByParent)
-        arr.sort((a, b) => sortKey(a).localeCompare(sortKey(b)));
+    for (const [, arr] of childrenByParent) {
+        arr.sort((a, b) => {
+            const aOrder = a.panelSortOrder ?? 9999;
+            const bOrder = b.panelSortOrder ?? 9999;
+            if (aOrder !== bOrder)
+                return aOrder - bOrder;
+            return sortKey(a).localeCompare(sortKey(b));
+        });
+    }
     const flattenedTests = [];
     const addWithChildren = (ot) => {
         flattenedTests.push(ot);

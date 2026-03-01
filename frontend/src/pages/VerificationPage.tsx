@@ -18,7 +18,6 @@ import {
   CheckCircleOutlined,
   CloseCircleOutlined,
   ReloadOutlined,
-  SearchOutlined,
   UserOutlined,
 } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
@@ -26,6 +25,7 @@ import dayjs from 'dayjs';
 import {
   getDepartments,
   getWorklist,
+  getWorklistItemDetail,
   getWorklistStats,
   rejectResult,
   verifyMultipleResults,
@@ -254,6 +254,51 @@ export function VerificationPage() {
 
   const [detailModalOpen, setDetailModalOpen] = useState(false);
   const [detailItem, setDetailItem] = useState<WorklistItem | null>(null);
+  const [detailCache, setDetailCache] = useState<Record<string, WorklistItem>>({});
+  const [detailLoadingIds, setDetailLoadingIds] = useState<string[]>([]);
+  const [detailErrors, setDetailErrors] = useState<Record<string, string>>({});
+
+  const ensureWorklistDetail = useCallback(
+    async (orderTestId: string, mode: 'auto' | 'retry' = 'auto'): Promise<WorklistItem | null> => {
+      if (mode === 'auto' && detailCache[orderTestId]) {
+        return detailCache[orderTestId];
+      }
+      if (mode === 'auto' && detailLoadingIds.includes(orderTestId)) {
+        return null;
+      }
+      setDetailLoadingIds((prev) =>
+        prev.includes(orderTestId) ? prev : [...prev, orderTestId],
+      );
+      if (mode === 'retry') {
+        setDetailErrors((prev) => {
+          if (!prev[orderTestId]) return prev;
+          const next = { ...prev };
+          delete next[orderTestId];
+          return next;
+        });
+      }
+      try {
+        const item = await getWorklistItemDetail(orderTestId);
+        setDetailCache((prev) => ({ ...prev, [orderTestId]: item }));
+        setDetailErrors((prev) => {
+          if (!prev[orderTestId]) return prev;
+          const next = { ...prev };
+          delete next[orderTestId];
+          return next;
+        });
+        return item;
+      } catch {
+        setDetailErrors((prev) => ({
+          ...prev,
+          [orderTestId]: 'Failed to load panel detail metadata.',
+        }));
+        return null;
+      } finally {
+        setDetailLoadingIds((prev) => prev.filter((id) => id !== orderTestId));
+      }
+    },
+    [detailCache, detailLoadingIds],
+  );
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -265,6 +310,7 @@ export function VerificationPage() {
         departmentId: departmentId || undefined,
         page,
         size,
+        view: 'verify',
       });
       setData(result.items);
       setTotal(result.total);
@@ -306,25 +352,32 @@ export function VerificationPage() {
         item.id === panelReviewContext.panelRootId &&
         item.testType === 'PANEL' &&
         !item.parentOrderTestId,
-    );
+      );
     if (!panelRoot) return null;
+
+    const hydratedPanelRoot = detailCache[panelRoot.id]
+      ? {
+        ...panelRoot,
+        ...detailCache[panelRoot.id],
+      }
+      : panelRoot;
 
     const panelChildren = getPanelChildren(group.items, panelRoot.id);
     const virtualRows =
-      panelChildren.length === 0 ? getVirtualPanelParameterRows(panelRoot) : [];
+      panelChildren.length === 0 ? getVirtualPanelParameterRows(hydratedPanelRoot) : [];
     const reviewTargets = panelChildren.length > 0
       ? panelChildren
       : virtualRows.length > 0
         ? virtualRows
-        : [panelRoot];
+        : [hydratedPanelRoot];
 
     return {
       group,
-      panelRoot,
+      panelRoot: hydratedPanelRoot,
       children: reviewTargets,
-      hasPanelChildren: panelChildren.length > 0 || virtualRows.length > 0,
+      hasPanelChildren: panelChildren.length > 0,
     };
-  }, [groupedData, panelReviewContext]);
+  }, [detailCache, groupedData, panelReviewContext]);
 
   const reloadQueueAndStats = useCallback(async () => {
     await Promise.all([loadData(), loadStats()]);
@@ -352,6 +405,17 @@ export function VerificationPage() {
     if (activePanelReview) return;
     setPanelReviewContext(null);
   }, [panelReviewContext, activePanelReview]);
+
+  useEffect(() => {
+    if (!activePanelReview) return;
+    const realChildren = getPanelChildren(
+      activePanelReview.group.items,
+      activePanelReview.panelRoot.id,
+    );
+    if (realChildren.length > 0) return;
+    if ((activePanelReview.panelRoot.parameterDefinitions?.length ?? 0) > 0) return;
+    void ensureWorklistDetail(activePanelReview.panelRoot.id);
+  }, [activePanelReview, ensureWorklistDetail]);
 
   useEffect(() => {
     setSelectedRowKeys((keys) =>
@@ -410,6 +474,10 @@ export function VerificationPage() {
 
   const openPanelReviewModal = (group: VerificationOrderGroup, panelRoot: WorklistItem) => {
     setPanelReviewContext({ orderId: group.orderId, panelRootId: panelRoot.id });
+    const panelChildren = getPanelChildren(group.items, panelRoot.id);
+    if (panelChildren.length === 0 && (panelRoot.parameterDefinitions?.length ?? 0) === 0) {
+      void ensureWorklistDetail(panelRoot.id);
+    }
   };
 
   const handleVerifySingle = async (id: string) => {
@@ -1123,6 +1191,51 @@ export function VerificationPage() {
                 </Button>
               </div>
             </div>
+
+            {(() => {
+              const hasRealPanelChildren =
+                getPanelChildren(activePanelReview.group.items, activePanelReview.panelRoot.id).length >
+                0;
+              const needsMetadata =
+                !hasRealPanelChildren &&
+                (activePanelReview.panelRoot.parameterDefinitions?.length ?? 0) === 0;
+              if (!needsMetadata) {
+                return null;
+              }
+              const detailLoading = detailLoadingIds.includes(activePanelReview.panelRoot.id);
+              const detailError = detailErrors[activePanelReview.panelRoot.id];
+              return (
+                <div
+                  style={{
+                    border: '1px dashed #91caff',
+                    borderRadius: 8,
+                    padding: '8px 10px',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    gap: 12,
+                    flexWrap: 'wrap',
+                  }}
+                >
+                  <Text type="secondary">
+                    {detailLoading
+                      ? 'Loading panel metadata...'
+                      : detailError ||
+                        'Panel metadata is unavailable. You can still verify/reject panel result and retry metadata load.'}
+                  </Text>
+                  {!detailLoading && (
+                    <Button
+                      size="small"
+                      onClick={() => {
+                        void ensureWorklistDetail(activePanelReview.panelRoot.id, 'retry');
+                      }}
+                    >
+                      Retry metadata
+                    </Button>
+                  )}
+                </div>
+              );
+            })()}
 
             <Table<WorklistItem>
               className="verification-review-table"

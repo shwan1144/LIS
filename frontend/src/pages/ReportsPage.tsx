@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Button,
   Card,
@@ -40,12 +40,14 @@ import {
   downloadTestResultsPDF,
   enterResult,
   getLabSettings,
+  getOrder,
   getWorklistStats,
   logReportDelivery,
-  searchOrders,
+  searchOrdersHistory,
   updateOrderPayment,
+  type OrderHistoryItemDto,
+  type OrderResultStatus,
   type OrderDto,
-  type OrderStatus,
   type OrderTestDto,
   type TestParameterDefinition,
   type WorklistStats,
@@ -130,7 +132,9 @@ function cleanPhoneNumber(phone: string): string {
   return phone.replace(/\D/g, '');
 }
 
-function buildResultsMessage(order: OrderDto): string {
+function buildResultsMessage(
+  order: Pick<OrderHistoryItemDto, 'id' | 'orderNumber' | 'registeredAt' | 'patient'>,
+): string {
   const patientName = order.patient?.fullName?.trim() || 'Patient';
   const orderNum = order.orderNumber || order.id.substring(0, 8);
   const date = dayjs(order.registeredAt).format('YYYY-MM-DD');
@@ -262,32 +266,20 @@ function getRootOrderTests(order: OrderDto): OrderTestDto[] {
     .filter((test) => !test.parentOrderTestId);
 }
 
-function getResultAvailability(order: OrderDto): { ready: boolean; completed: number; total: number } {
-  // Panel-aware availability: a panel parent counts as one report test.
-  const tests = getRootOrderTests(order);
-  if (tests.length === 0) {
-    return { ready: false, completed: 0, total: 0 };
-  }
-
-  const verified = tests.filter((test) => test.status === 'VERIFIED').length;
-  const total = tests.length;
-
-  return {
-    ready: verified === total && total > 0,
-    completed: verified,
-    total,
-  };
-}
-
-function getReportStatus(order: OrderDto): Exclude<ReportStatusFilter, 'ALL'> {
-  const tests = getRootOrderTests(order);
-  if (tests.length === 0) return 'PENDING';
-
-  const statuses = tests.map((t) => t.status);
-  if (statuses.some((s) => s === 'REJECTED')) return 'REJECTED';
-  if (statuses.every((s) => s === 'VERIFIED')) return 'VERIFIED';
-  if (statuses.every((s) => s === 'COMPLETED' || s === 'VERIFIED')) return 'COMPLETED';
-  return 'PENDING';
+function getResultAvailability(
+  order: Pick<
+    OrderHistoryItemDto,
+    'testsCount' | 'readyTestsCount' | 'verifiedTestsCount' | 'resultStatus' | 'reportReady'
+  >,
+): { ready: boolean; completed: number; total: number } {
+  const total = Number(order.testsCount ?? 0) || 0;
+  const completed =
+    Number(order.verifiedTestsCount ?? order.readyTestsCount ?? 0) || 0;
+  const ready =
+    order.resultStatus === 'VERIFIED' ||
+    Boolean(order.reportReady) ||
+    (total > 0 && completed === total);
+  return { ready, completed, total };
 }
 
 function getOrderTestRows(order: OrderDto): ExpandedOrderTestRow[] {
@@ -323,7 +315,12 @@ export function ReportsPage() {
   const isDark = useTheme().theme === 'dark';
 
   const [loading, setLoading] = useState(false);
-  const [orders, setOrders] = useState<OrderDto[]>([]);
+  const [orders, setOrders] = useState<OrderHistoryItemDto[]>([]);
+  const [ordersTotal, setOrdersTotal] = useState(0);
+  const [ordersPage, setOrdersPage] = useState(1);
+  const [orderDetailsCache, setOrderDetailsCache] = useState<Record<string, OrderDto>>({});
+  const [orderDetailsLoadingIds, setOrderDetailsLoadingIds] = useState<string[]>([]);
+  const [orderDetailsErrors, setOrderDetailsErrors] = useState<Record<string, string>>({});
   const [worklistStats, setWorklistStats] = useState<WorklistStats | null>(null);
   const [selectedOrderIds, setSelectedOrderIds] = useState<string[]>([]);
   const [expandedOrderIds, setExpandedOrderIds] = useState<string[]>([]);
@@ -334,9 +331,10 @@ export function ReportsPage() {
   const [searchText, setSearchText] = useState('');
   const [statusFilter, setStatusFilter] = useState<ReportStatusFilter>('ALL');
   const [downloading, setDownloading] = useState<string | null>(null);
+  const ordersPageSize = 25;
 
   const [paymentModalOpen, setPaymentModalOpen] = useState(false);
-  const [paymentModalOrder, setPaymentModalOrder] = useState<OrderDto | null>(null);
+  const [paymentModalOrder, setPaymentModalOrder] = useState<OrderHistoryItemDto | null>(null);
   const [paymentModalPendingAction, setPaymentModalPendingAction] = useState<(() => void) | null>(null);
   const [markingPaid, setMarkingPaid] = useState(false);
 
@@ -347,14 +345,9 @@ export function ReportsPage() {
   const [editResultForm] = Form.useForm<any>();
   const compactCellStyle = { paddingTop: 6, paddingBottom: 6, fontSize: 12 };
 
-  const filteredOrders = useMemo(() => {
-    if (statusFilter === 'ALL') return orders;
-    return orders.filter((order) => getReportStatus(order) === statusFilter);
-  }, [orders, statusFilter]);
-
   const selectedOrders = useMemo(
-    () => filteredOrders.filter((order) => selectedOrderIds.includes(order.id)),
-    [filteredOrders, selectedOrderIds],
+    () => orders.filter((order) => selectedOrderIds.includes(order.id)),
+    [orders, selectedOrderIds],
   );
 
   const currentUserRole = useMemo(() => {
@@ -371,27 +364,86 @@ export function ReportsPage() {
   const canAdminEditResults =
     currentUserRole === 'LAB_ADMIN' || currentUserRole === 'SUPER_ADMIN';
 
-  const canReleaseResults = (order: OrderDto): boolean => {
+  const canReleaseResults = (order: OrderHistoryItemDto): boolean => {
     const availability = getResultAvailability(order);
     return availability.ready && order.paymentStatus === 'paid';
   };
 
-  const loadOrders = async () => {
+  const getOrderSummaryById = useCallback(
+    (orderId: string): OrderHistoryItemDto | null =>
+      orders.find((order) => order.id === orderId) ?? null,
+    [orders],
+  );
+
+  const ensureOrderDetails = useCallback(
+    async (
+      orderId: string,
+      mode: 'auto' | 'retry' = 'auto',
+    ): Promise<OrderDto | null> => {
+      if (mode === 'auto' && orderDetailsCache[orderId]) {
+        return orderDetailsCache[orderId];
+      }
+      if (mode === 'auto' && orderDetailsLoadingIds.includes(orderId)) {
+        return null;
+      }
+      setOrderDetailsLoadingIds((prev) =>
+        prev.includes(orderId) ? prev : [...prev, orderId],
+      );
+      if (mode === 'retry') {
+        setOrderDetailsErrors((prev) => {
+          if (!prev[orderId]) return prev;
+          const next = { ...prev };
+          delete next[orderId];
+          return next;
+        });
+      }
+      try {
+        const fullOrder = await getOrder(orderId, { view: 'full' });
+        setOrderDetailsCache((prev) => ({ ...prev, [orderId]: fullOrder }));
+        setOrderDetailsErrors((prev) => {
+          if (!prev[orderId]) return prev;
+          const next = { ...prev };
+          delete next[orderId];
+          return next;
+        });
+        return fullOrder;
+      } catch {
+        setOrderDetailsErrors((prev) => ({
+          ...prev,
+          [orderId]: 'Failed to load order details. Please retry.',
+        }));
+        return null;
+      } finally {
+        setOrderDetailsLoadingIds((prev) => prev.filter((id) => id !== orderId));
+      }
+    },
+    [orderDetailsCache, orderDetailsLoadingIds],
+  );
+
+  const loadOrders = async (pageOverride?: number) => {
     if (!dateRange[0] || !dateRange[1]) return;
+    const targetPage = pageOverride ?? ordersPage;
 
     setLoading(true);
     try {
       const [ordersResult, statsResult] = await Promise.all([
-        searchOrders({
+        searchOrdersHistory({
+          page: targetPage,
+          size: ordersPageSize,
           startDate: dateRange[0].format('YYYY-MM-DD'),
           endDate: dateRange[1].format('YYYY-MM-DD'),
           search: searchText.trim() || undefined,
-          size: 1000,
+          resultStatus:
+            statusFilter === 'ALL'
+              ? undefined
+              : (statusFilter as OrderResultStatus),
         }),
         getWorklistStats().catch(() => null),
       ]);
 
       setOrders(ordersResult?.items || []);
+      setOrdersTotal(Number(ordersResult?.total ?? 0));
+      setOrdersPage(Number(ordersResult?.page ?? targetPage));
       if (statsResult) {
         setWorklistStats(statsResult);
       }
@@ -400,33 +452,34 @@ export function ReportsPage() {
       console.error('Failed to load orders:', error);
       message.error('Failed to load orders');
       setOrders([]);
+      setOrdersTotal(0);
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    loadOrders();
+    void loadOrders(1);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
     if (expandedOrderIds.length === 0) return;
     const expandedId = expandedOrderIds[0];
-    if (!filteredOrders.some((order) => order.id === expandedId)) {
+    if (!orders.some((order) => order.id === expandedId)) {
       setExpandedOrderIds([]);
     }
-  }, [expandedOrderIds, filteredOrders]);
+  }, [expandedOrderIds, orders]);
 
   const hasActiveExpandedEtaRows = useMemo(() => {
     if (expandedOrderIds.length === 0) return false;
-    const expandedSet = new Set(expandedOrderIds);
-    return filteredOrders.some((order) => {
-      if (!expandedSet.has(order.id)) return false;
+    return expandedOrderIds.some((orderId) => {
+      const order = orderDetailsCache[orderId];
+      if (!order) return false;
       const rootTests = getRootOrderTests(order);
       return rootTests.some((test) => isEtaLoadingStatus(test.status));
     });
-  }, [expandedOrderIds, filteredOrders]);
+  }, [expandedOrderIds, orderDetailsCache]);
 
   useEffect(() => {
     if (!hasActiveExpandedEtaRows) return;
@@ -448,9 +501,10 @@ export function ReportsPage() {
     document.body.removeChild(link);
   };
 
-  const handleDownloadResults = async (orderId: string, order?: OrderDto) => {
-    if (order && !canReleaseResults(order)) {
-      setPaymentModalOrder(order);
+  const handleDownloadResults = async (orderId: string, order?: OrderHistoryItemDto) => {
+    const summaryOrder = order ?? getOrderSummaryById(orderId);
+    if (summaryOrder && !canReleaseResults(summaryOrder)) {
+      setPaymentModalOrder(summaryOrder);
       setPaymentModalPendingAction(() => () => handleDownloadResults(orderId));
       setPaymentModalOpen(true);
       return;
@@ -468,8 +522,8 @@ export function ReportsPage() {
         'response' in error &&
         (error as { response?: { status?: number } }).response?.status === 403;
 
-      if (is403 && order) {
-        setPaymentModalOrder(order);
+      if (is403 && summaryOrder) {
+        setPaymentModalOrder(summaryOrder);
         setPaymentModalPendingAction(() => () => handleDownloadResults(orderId));
         setPaymentModalOpen(true);
       } else {
@@ -480,9 +534,10 @@ export function ReportsPage() {
     }
   };
 
-  const handlePrintResults = async (orderId: string, order?: OrderDto) => {
-    if (order && !canReleaseResults(order)) {
-      setPaymentModalOrder(order);
+  const handlePrintResults = async (orderId: string, order?: OrderHistoryItemDto) => {
+    const summaryOrder = order ?? getOrderSummaryById(orderId);
+    if (summaryOrder && !canReleaseResults(summaryOrder)) {
+      setPaymentModalOrder(summaryOrder);
       setPaymentModalPendingAction(() => () => handlePrintResults(orderId));
       setPaymentModalOpen(true);
       return;
@@ -546,8 +601,8 @@ export function ReportsPage() {
         'response' in error &&
         (error as { response?: { status?: number } }).response?.status === 403;
 
-      if (is403 && order) {
-        setPaymentModalOrder(order);
+      if (is403 && summaryOrder) {
+        setPaymentModalOrder(summaryOrder);
         setPaymentModalPendingAction(() => () => handlePrintResults(orderId));
         setPaymentModalOpen(true);
       } else {
@@ -558,7 +613,7 @@ export function ReportsPage() {
     }
   };
 
-  const handlePrintReceipt = async (order: OrderDto) => {
+  const handlePrintReceipt = async (order: OrderHistoryItemDto) => {
     setDownloading(`receipt-${order.id}`);
     try {
       try {
@@ -571,8 +626,12 @@ export function ReportsPage() {
             );
           } else {
             try {
+              const fullOrder = await ensureOrderDetails(order.id);
+              if (!fullOrder) {
+                throw new Error('Order details unavailable for direct receipt print');
+              }
               await directPrintReceipt({
-                order,
+                order: fullOrder,
                 printerName,
               });
               message.success(`Receipt sent to ${printerName}`);
@@ -616,15 +675,15 @@ export function ReportsPage() {
     }
   };
 
-  const logDelivery = async (order: OrderDto, channel: DeliveryChannel) => {
+  const logDelivery = async (orderId: string, channel: DeliveryChannel) => {
     try {
-      await logReportDelivery(order.id, channel);
+      await logReportDelivery(orderId, channel);
     } catch (error) {
       console.error('Failed to log report delivery', error);
     }
   };
 
-  const handleSendWhatsApp = async (order: OrderDto) => {
+  const handleSendWhatsApp = async (order: OrderHistoryItemDto) => {
     if (!canReleaseResults(order)) {
       setPaymentModalOrder(order);
       setPaymentModalPendingAction(() => () => handleSendWhatsApp(order));
@@ -640,13 +699,13 @@ export function ReportsPage() {
 
     const cleanedPhone = cleanPhoneNumber(phone);
     const messageText = buildResultsMessage(order);
-    await logDelivery(order, 'WHATSAPP');
+    await logDelivery(order.id, 'WHATSAPP');
 
     const url = `https://wa.me/${cleanedPhone}?text=${encodeURIComponent(messageText)}`;
     window.open(url, '_blank');
   };
 
-  const handleSendViber = async (order: OrderDto) => {
+  const handleSendViber = async (order: OrderHistoryItemDto) => {
     if (!canReleaseResults(order)) {
       setPaymentModalOrder(order);
       setPaymentModalPendingAction(() => () => handleSendViber(order));
@@ -662,7 +721,7 @@ export function ReportsPage() {
 
     const cleanedPhone = cleanPhoneNumber(phone);
     const messageText = buildResultsMessage(order);
-    await logDelivery(order, 'VIBER');
+    await logDelivery(order.id, 'VIBER');
 
     const url = `viber://chat?number=${encodeURIComponent(cleanedPhone)}&text=${encodeURIComponent(messageText)}`;
     window.open(url, '_blank');
@@ -932,7 +991,34 @@ export function ReportsPage() {
     }
   };
 
-  const renderExpandedOrder = (order: OrderDto) => {
+  const renderExpandedOrder = (orderSummary: OrderHistoryItemDto) => {
+    const order = orderDetailsCache[orderSummary.id];
+    const loadingDetails = orderDetailsLoadingIds.includes(orderSummary.id);
+    const detailsError = orderDetailsErrors[orderSummary.id];
+
+    if (!order) {
+      return (
+        <div style={{ padding: '12px 16px' }}>
+          <Space size="middle">
+            {loadingDetails ? <Spin size="small" /> : null}
+            <Text type="secondary">
+              {loadingDetails ? 'Loading order details...' : detailsError || 'Order details not loaded yet.'}
+            </Text>
+            {!loadingDetails && (
+              <Button
+                size="small"
+                onClick={() => {
+                  void ensureOrderDetails(orderSummary.id, 'retry');
+                }}
+              >
+                Retry
+              </Button>
+            )}
+          </Space>
+        </div>
+      );
+    }
+
     const rows = getOrderTestRows(order);
     const allTestsInOrder = (order.samples ?? []).flatMap((sample) => sample.orderTests ?? []);
 
@@ -1129,7 +1215,7 @@ export function ReportsPage() {
     );
   };
 
-  const renderOrderActions = (record: OrderDto) => {
+  const renderOrderActions = (record: OrderHistoryItemDto) => {
     const hasPhone = !!record.patient?.phone;
     const availability = getResultAvailability(record);
     const reportReady = availability.ready;
@@ -1246,7 +1332,7 @@ export function ReportsPage() {
       title: 'Patient',
       key: 'patient',
       width: 260,
-      render: (_: unknown, record: OrderDto) => (
+      render: (_: unknown, record: OrderHistoryItemDto) => (
         <Space size={8} style={{ minWidth: 0 }}>
           <UserOutlined style={{ fontSize: 14, color: '#1677ff' }} />
           <Text strong ellipsis style={{ fontSize: 13 }}>
@@ -1259,9 +1345,9 @@ export function ReportsPage() {
       title: 'Status',
       key: 'statusSummary',
       width: 260,
-      render: (_: unknown, record: OrderDto) => {
+      render: (_: unknown, record: OrderHistoryItemDto) => {
         const availability = getResultAvailability(record);
-        const testsCount = getRootOrderTests(record).length;
+        const testsCount = Number(record.testsCount ?? 0) || 0;
 
         return (
           <Space size={[4, 4]} wrap>
@@ -1286,7 +1372,7 @@ export function ReportsPage() {
       title: 'Order',
       key: 'order',
       width: 210,
-      render: (_: unknown, record: OrderDto) => (
+      render: (_: unknown, record: OrderHistoryItemDto) => (
         <div style={{ minWidth: 0 }}>
           <Text type="secondary" style={{ display: 'block', fontSize: 11 }}>
             Order: {record.orderNumber || record.id.substring(0, 8)}
@@ -1301,7 +1387,7 @@ export function ReportsPage() {
       title: 'Time',
       key: 'registeredAt',
       width: 165,
-      render: (_: unknown, record: OrderDto) => (
+      render: (_: unknown, record: OrderHistoryItemDto) => (
         <Text style={{ fontSize: 12 }}>{dayjs(record.registeredAt).format('YYYY-MM-DD HH:mm')}</Text>
       ),
     },
@@ -1309,7 +1395,7 @@ export function ReportsPage() {
       title: 'Actions',
       key: 'actions',
       width: isCompactActions ? 80 : 360,
-      render: (_: unknown, record: OrderDto) => (
+      render: (_: unknown, record: OrderHistoryItemDto) => (
         <div style={{ minWidth: 0, display: 'flex', justifyContent: 'flex-end' }}>
           {renderOrderActions(record)}
         </div>
@@ -1886,7 +1972,9 @@ export function ReportsPage() {
               placeholder="Order #, patient, phone"
               value={searchText}
               onChange={(event) => setSearchText(event.target.value)}
-              onPressEnter={loadOrders}
+              onPressEnter={() => {
+                void loadOrders(1);
+              }}
               style={{ width: 260 }}
             />
 
@@ -1905,7 +1993,14 @@ export function ReportsPage() {
               ]}
             />
 
-            <Button type="primary" icon={<SearchOutlined />} onClick={loadOrders} loading={loading}>
+            <Button
+              type="primary"
+              icon={<SearchOutlined />}
+              onClick={() => {
+                void loadOrders(1);
+              }}
+              loading={loading}
+            >
               Search
             </Button>
           </Space>
@@ -1941,13 +2036,13 @@ export function ReportsPage() {
             <div style={{ textAlign: 'center', padding: 40 }}>
               <Spin size="large" />
             </div>
-          ) : filteredOrders.length === 0 ? (
+          ) : orders.length === 0 ? (
             <Empty description="No orders found" />
           ) : (
             <Table
               className="reports-orders-table"
               columns={columns}
-              dataSource={filteredOrders}
+              dataSource={orders}
               rowKey="id"
               showHeader
               rowClassName={(record) => (expandedOrderIds.includes(record.id) ? 'reports-order-row-expanded' : '')}
@@ -1957,16 +2052,27 @@ export function ReportsPage() {
               }}
               expandable={{
                 expandedRowRender: (record) => renderExpandedOrder(record),
-                rowExpandable: (record) => getOrderTestRows(record).length > 0,
+                rowExpandable: (record) => Number(record.testsCount ?? 0) > 0,
                 expandRowByClick: true,
                 showExpandColumn: false,
                 expandedRowKeys: expandedOrderIds,
                 onExpand: (expanded, record) => {
                   setExpandedOrderIds(expanded ? [record.id] : []);
+                  if (expanded) {
+                    void ensureOrderDetails(record.id);
+                  }
                 },
               }}
               scroll={{ x: 1260 }}
-              pagination={{ pageSize: 20 }}
+              pagination={{
+                current: ordersPage,
+                pageSize: ordersPageSize,
+                total: ordersTotal,
+                showSizeChanger: false,
+                onChange: (nextPage) => {
+                  void loadOrders(nextPage);
+                },
+              }}
             />
           )}
         </Space>

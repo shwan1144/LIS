@@ -2,6 +2,7 @@ import {
   Injectable,
   NotFoundException,
   BadRequestException,
+  Logger,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In, SelectQueryBuilder } from 'typeorm';
@@ -37,6 +38,7 @@ export interface WorklistItem {
   patientAge: number | null;
   testCode: string;
   testName: string;
+  testAbbreviation: string | null;
   testType: 'SINGLE' | 'PANEL';
   testUnit: string | null;
   normalMin: number | null;
@@ -67,6 +69,11 @@ export interface WorklistItem {
   panelSortOrder: number | null;
 }
 
+export enum WorklistView {
+  FULL = 'full',
+  VERIFY = 'verify',
+}
+
 function parseJsonField(val: unknown): unknown {
   if (val == null) return null;
   if (typeof val === 'object') return val;
@@ -82,6 +89,9 @@ function parseJsonField(val: unknown): unknown {
 
 @Injectable()
 export class WorklistService {
+  private readonly logger = new Logger(WorklistService.name);
+  private readonly worklistPerfLogThresholdMs = this.resolveWorklistPerfLogThresholdMs();
+
   constructor(
     @InjectRepository(OrderTest)
     private readonly orderTestRepo: Repository<OrderTest>,
@@ -108,110 +118,114 @@ export class WorklistService {
       departmentId?: string;
       page?: number;
       size?: number;
+      view?: WorklistView;
     },
     userId?: string,
   ): Promise<{ items: WorklistItem[]; total: number }> {
+    const startedAt = process.hrtime.bigint();
     const page = Math.max(1, params.page ?? 1);
     const size = Math.min(100, Math.max(1, params.size ?? 50));
     const skip = (page - 1) * size;
+    const view = params.view ?? WorklistView.FULL;
+    let total = 0;
+    let itemsCount = 0;
 
-    // Default to active work queue plus rejected tests needing re-entry.
-    const statuses = params.status?.length
-      ? params.status
-      : [OrderTestStatus.PENDING, OrderTestStatus.COMPLETED, OrderTestStatus.REJECTED];
+    try {
+      // Default to active work queue plus rejected tests needing re-entry.
+      const statuses = params.status?.length
+        ? params.status
+        : [OrderTestStatus.PENDING, OrderTestStatus.COMPLETED, OrderTestStatus.REJECTED];
 
-    // User department restriction: if user has department assignments for this lab, restrict worklist
-    let allowedDepartmentIds: string[] | null = null;
-    if (userId) {
-      const assignments = await this.userDeptRepo.find({
-        where: { userId },
-        relations: ['department'],
-      });
-      const forLab = assignments
-        .filter((a) => a.department?.labId === labId)
-        .map((a) => a.departmentId);
-      if (forLab.length > 0) allowedDepartmentIds = forLab;
-    }
-
-    let startDate: Date | null = null;
-    let endDate: Date | null = null;
-    if (params.date) {
-      const labTimeZone = await this.getLabTimeZone(labId);
-      const dateRange = this.getDateRangeOrThrow(params.date, labTimeZone, 'date');
-      startDate = dateRange.startDate;
-      endDate = dateRange.endDate;
-    }
-
-    const buildBaseQuery = (): SelectQueryBuilder<OrderTest> => {
-      const qb = this.orderTestRepo
-        .createQueryBuilder('ot')
-        .innerJoin('ot.sample', 'sample')
-        .innerJoin('sample.order', 'order')
-        .innerJoin('order.patient', 'patient')
-        .innerJoin('ot.test', 'test')
-        .leftJoin('test.department', 'department')
-        .where('order.labId = :labId', { labId })
-        .andWhere('ot.status IN (:...statuses)', { statuses });
-
-      if (allowedDepartmentIds && allowedDepartmentIds.length > 0) {
-        qb.andWhere('test.departmentId IN (:...allowedDepartmentIds)', {
-          allowedDepartmentIds,
+      // User department restriction: if user has department assignments for this lab, restrict worklist
+      let allowedDepartmentIds: string[] | null = null;
+      if (userId) {
+        const assignments = await this.userDeptRepo.find({
+          where: { userId },
+          relations: ['department'],
         });
+        const forLab = assignments
+          .filter((a) => a.department?.labId === labId)
+          .map((a) => a.departmentId);
+        if (forLab.length > 0) allowedDepartmentIds = forLab;
       }
 
-      if (params.departmentId) {
-        qb.andWhere('test.departmentId = :departmentId', {
-          departmentId: params.departmentId,
-        });
-      }
-
+      let startDate: Date | null = null;
+      let endDate: Date | null = null;
       if (params.date) {
-        qb.andWhere('order.registeredAt BETWEEN :startDate AND :endDate', {
-          startDate,
-          endDate,
-        });
+        const labTimeZone = await this.getLabTimeZone(labId);
+        const dateRange = this.getDateRangeOrThrow(params.date, labTimeZone, 'date');
+        startDate = dateRange.startDate;
+        endDate = dateRange.endDate;
       }
 
-      if (params.search?.trim()) {
-        const term = `%${params.search.trim()}%`;
-        const exactSearch = params.search.trim();
-        qb.andWhere(
-          '(order.orderNumber ILIKE :term OR patient.fullName ILIKE :term OR patient.patientNumber = :exactSearch OR test.code ILIKE :term)',
-          { term, exactSearch },
-        );
+      const buildBaseQuery = (): SelectQueryBuilder<OrderTest> => {
+        const qb = this.orderTestRepo
+          .createQueryBuilder('ot')
+          .innerJoin('ot.sample', 'sample')
+          .innerJoin('sample.order', 'order')
+          .innerJoin('order.patient', 'patient')
+          .innerJoin('ot.test', 'test')
+          .leftJoin('test.department', 'department')
+          .where('order.labId = :labId', { labId })
+          .andWhere('ot.status IN (:...statuses)', { statuses });
+
+        if (allowedDepartmentIds && allowedDepartmentIds.length > 0) {
+          qb.andWhere('test.departmentId IN (:...allowedDepartmentIds)', {
+            allowedDepartmentIds,
+          });
+        }
+
+        if (params.departmentId) {
+          qb.andWhere('test.departmentId = :departmentId', {
+            departmentId: params.departmentId,
+          });
+        }
+
+        if (params.date) {
+          qb.andWhere('order.registeredAt BETWEEN :startDate AND :endDate', {
+            startDate,
+            endDate,
+          });
+        }
+
+        if (params.search?.trim()) {
+          const term = `%${params.search.trim()}%`;
+          const exactSearch = params.search.trim();
+          qb.andWhere(
+            '(order.orderNumber ILIKE :term OR patient.fullName ILIKE :term OR patient.patientNumber = :exactSearch OR test.code ILIKE :term)',
+            { term, exactSearch },
+          );
+        }
+
+        return qb;
+      };
+
+      const totalRaw = await buildBaseQuery()
+        .select('COUNT(DISTINCT order.id)', 'count')
+        .getRawOne<{ count: string }>();
+      total = Number(totalRaw?.count ?? 0);
+
+      const orderRows = await buildBaseQuery()
+        .select('order.id', 'orderId')
+        .addSelect('MAX(order.registeredAt)', 'registeredAt')
+        .addSelect(
+          'MIN(CASE WHEN ot.status = :rejectedStatus THEN 0 ELSE 1 END)',
+          'rejectedPriority',
+        )
+        .setParameter('rejectedStatus', OrderTestStatus.REJECTED)
+        .groupBy('order.id')
+        .orderBy('"rejectedPriority"', 'ASC')
+        .addOrderBy('"registeredAt"', 'DESC')
+        .offset(skip)
+        .limit(size)
+        .getRawMany<{ orderId: string }>();
+
+      const orderIds = orderRows.map((row) => row.orderId);
+      if (orderIds.length === 0) {
+        return { items: [], total };
       }
 
-      return qb;
-    };
-
-    const totalRaw = await buildBaseQuery()
-      .select('COUNT(DISTINCT order.id)', 'count')
-      .getRawOne<{ count: string }>();
-    const total = Number(totalRaw?.count ?? 0);
-
-    const orderRows = await buildBaseQuery()
-      .select('order.id', 'orderId')
-      .addSelect('MAX(order.registeredAt)', 'registeredAt')
-      .addSelect(
-        'MIN(CASE WHEN ot.status = :rejectedStatus THEN 0 ELSE 1 END)',
-        'rejectedPriority',
-      )
-      .setParameter('rejectedStatus', OrderTestStatus.REJECTED)
-      .groupBy('order.id')
-      .orderBy('"rejectedPriority"', 'ASC')
-      .addOrderBy('"registeredAt"', 'DESC')
-      .offset(skip)
-      .limit(size)
-      .getRawMany<{ orderId: string }>();
-
-    const orderIds = orderRows.map((row) => row.orderId);
-    if (orderIds.length === 0) {
-      return { items: [], total };
-    }
-
-    const rawItems = await buildBaseQuery()
-      .andWhere('order.id IN (:...orderIds)', { orderIds })
-      .select([
+      const selectFields = [
         'ot.id AS id',
         'order.orderNumber AS "orderNumber"',
         'order.id AS "orderId"',
@@ -223,6 +237,7 @@ export class WorklistService {
         'patient.dateOfBirth AS "patientDob"',
         'test.code AS "testCode"',
         'test.name AS "testName"',
+        'test.abbreviation AS "testAbbreviation"',
         'test.type AS "testType"',
         'test.unit AS "testUnit"',
         'test.departmentId AS "departmentId"',
@@ -236,9 +251,6 @@ export class WorklistService {
         'test.normalMaxFemale AS "normalMaxFemale"',
         'test.numericAgeRanges AS "numericAgeRanges"',
         'test.normalText AS "normalText"',
-        'test.resultEntryType AS "resultEntryType"',
-        'test.resultTextOptions AS "resultTextOptions"',
-        'test.allowCustomResultText AS "allowCustomResultText"',
         'ot.status AS status',
         'ot.resultValue AS "resultValue"',
         'ot.resultText AS "resultText"',
@@ -249,87 +261,239 @@ export class WorklistService {
         'ot.resultedBy AS "resultedBy"',
         'ot.verifiedAt AS "verifiedAt"',
         'ot.verifiedBy AS "verifiedBy"',
-        'test.parameterDefinitions AS "parameterDefinitions"',
         'ot.parentOrderTestId AS "parentOrderTestId"',
         'ot.panelSortOrder AS "panelSortOrder"',
-      ])
-      .orderBy(
-        'CASE WHEN ot.status = :rejectedStatus THEN 0 ELSE 1 END',
-        'ASC',
-      )
-      .addOrderBy('order.registeredAt', 'DESC')
-      .addOrderBy('ot.panelSortOrder', 'ASC', 'NULLS LAST')
-      .addOrderBy('test.sortOrder', 'ASC')
-      .addOrderBy('test.code', 'ASC')
-      .setParameter('rejectedStatus', OrderTestStatus.REJECTED)
-      .getRawMany();
+      ];
+      if (view === WorklistView.FULL) {
+        selectFields.push(
+          'test.resultEntryType AS "resultEntryType"',
+          'test.resultTextOptions AS "resultTextOptions"',
+          'test.allowCustomResultText AS "allowCustomResultText"',
+          'test.parameterDefinitions AS "parameterDefinitions"',
+        );
+      }
 
-    // Process items to calculate age and resolve normal ranges by age+sex.
-    const items: WorklistItem[] = rawItems.map((item) => {
-      // Calculate age
-      const patientAge = this.computePatientAgeYears(item.patientDob);
-      const numericAgeRanges =
-        (parseJsonField(item.numericAgeRanges) as TestNumericAgeRange[] | null) ??
-        null;
+      const rawItems = await buildBaseQuery()
+        .andWhere('order.id IN (:...orderIds)', { orderIds })
+        .select(selectFields)
+        .orderBy(
+          'CASE WHEN ot.status = :rejectedStatus THEN 0 ELSE 1 END',
+          'ASC',
+        )
+        .addOrderBy('order.registeredAt', 'DESC')
+        .addOrderBy('ot.panelSortOrder', 'ASC', 'NULLS LAST')
+        .addOrderBy('test.sortOrder', 'ASC')
+        .addOrderBy('test.code', 'ASC')
+        .setParameter('rejectedStatus', OrderTestStatus.REJECTED)
+        .getRawMany();
+
+      // Process items to calculate age and resolve normal ranges by age+sex.
+      const items: WorklistItem[] = rawItems.map((item) => {
+        // Calculate age
+        const patientAge = this.computePatientAgeYears(item.patientDob);
+        const numericAgeRanges =
+          (parseJsonField(item.numericAgeRanges) as TestNumericAgeRange[] | null) ??
+          null;
+        const resolvedRange = resolveNumericRange(
+          {
+            normalMin: item.normalMin,
+            normalMax: item.normalMax,
+            normalMinMale: item.normalMinMale,
+            normalMaxMale: item.normalMaxMale,
+            normalMinFemale: item.normalMinFemale,
+            normalMaxFemale: item.normalMaxFemale,
+            numericAgeRanges,
+          },
+          item.patientSex,
+          patientAge,
+        );
+
+        return {
+          id: item.id,
+          orderNumber: item.orderNumber,
+          orderId: item.orderId,
+          sampleId: item.sampleId,
+          patientName: item.patientName,
+          patientSex: item.patientSex,
+          patientAge,
+          testCode: item.testCode,
+          testName: item.testName,
+          testAbbreviation: item.testAbbreviation ?? null,
+          testType: item.testType,
+          testUnit: item.testUnit,
+          normalMin: resolvedRange.normalMin,
+          normalMax: resolvedRange.normalMax,
+          normalText: item.normalText,
+          resultEntryType: this.normalizeResultEntryType(item.resultEntryType),
+          resultTextOptions:
+            (parseJsonField(item.resultTextOptions) as TestResultTextOption[] | null) ??
+            null,
+          allowCustomResultText: Boolean(item.allowCustomResultText),
+          tubeType: item.tubeType,
+          status: item.status,
+          resultValue:
+            item.resultValue !== null && item.resultValue !== undefined
+              ? parseFloat(item.resultValue)
+              : null,
+          resultText: item.resultText,
+          flag: item.flag,
+          resultedAt: item.resultedAt,
+          resultedBy: item.resultedBy ?? null,
+          verifiedAt: item.verifiedAt,
+          verifiedBy: item.verifiedBy ?? null,
+          registeredAt: item.registeredAt,
+          parentOrderTestId: item.parentOrderTestId ?? null,
+          departmentId: item.departmentId ?? null,
+          departmentCode: item.departmentCode ?? null,
+          departmentName: item.departmentName ?? null,
+          parameterDefinitions:
+            (parseJsonField(item.parameterDefinitions) as TestParameterDefinition[] | null) ??
+            null,
+          resultParameters:
+            (parseJsonField(item.resultParameters) as Record<string, string> | null) ?? null,
+          rejectionReason: item.rejectionReason ?? null,
+          panelSortOrder: item.panelSortOrder != null ? Number(item.panelSortOrder) : null,
+        };
+      });
+      itemsCount = items.length;
+
+      return { items, total };
+    } finally {
+      const durationMs = this.elapsedMs(startedAt);
+      if (durationMs >= this.worklistPerfLogThresholdMs) {
+        this.logger.warn(
+          JSON.stringify({
+            event: 'worklist.get.performance',
+            labId,
+            view,
+            page,
+            size,
+            total,
+            itemsCount,
+            durationMs: Math.round(durationMs * 100) / 100,
+            filters: {
+              statuses: params.status ?? null,
+              hasSearch: Boolean(params.search?.trim()),
+              date: params.date ?? null,
+              departmentId: params.departmentId ?? null,
+            },
+          }),
+        );
+      }
+    }
+  }
+
+  async getWorklistItemDetail(
+    orderTestId: string,
+    labId: string,
+    userId?: string,
+  ): Promise<WorklistItem> {
+    const startedAt = process.hrtime.bigint();
+    try {
+      let allowedDepartmentIds: string[] | null = null;
+      if (userId) {
+        const assignments = await this.userDeptRepo.find({
+          where: { userId },
+          relations: ['department'],
+        });
+        const forLab = assignments
+          .filter((a) => a.department?.labId === labId)
+          .map((a) => a.departmentId);
+        if (forLab.length > 0) {
+          allowedDepartmentIds = forLab;
+        }
+      }
+
+      const orderTest = await this.orderTestRepo.findOne({
+        where: { id: orderTestId },
+        relations: [
+          'sample',
+          'sample.order',
+          'sample.order.patient',
+          'test',
+          'test.department',
+        ],
+      });
+      if (!orderTest || orderTest.sample.order.labId !== labId) {
+        throw new NotFoundException('Order test not found');
+      }
+
+      if (
+        allowedDepartmentIds &&
+        allowedDepartmentIds.length > 0 &&
+        orderTest.test.departmentId &&
+        !allowedDepartmentIds.includes(orderTest.test.departmentId)
+      ) {
+        throw new NotFoundException('Order test not found');
+      }
+
+      const patientAge = this.computePatientAgeYears(orderTest.sample.order.patient?.dateOfBirth);
       const resolvedRange = resolveNumericRange(
         {
-          normalMin: item.normalMin,
-          normalMax: item.normalMax,
-          normalMinMale: item.normalMinMale,
-          normalMaxMale: item.normalMaxMale,
-          normalMinFemale: item.normalMinFemale,
-          normalMaxFemale: item.normalMaxFemale,
-          numericAgeRanges,
+          normalMin: orderTest.test.normalMin,
+          normalMax: orderTest.test.normalMax,
+          normalMinMale: orderTest.test.normalMinMale,
+          normalMaxMale: orderTest.test.normalMaxMale,
+          normalMinFemale: orderTest.test.normalMinFemale,
+          normalMaxFemale: orderTest.test.normalMaxFemale,
+          numericAgeRanges: orderTest.test.numericAgeRanges,
         },
-        item.patientSex,
+        orderTest.sample.order.patient?.sex ?? null,
         patientAge,
       );
 
       return {
-        id: item.id,
-        orderNumber: item.orderNumber,
-        orderId: item.orderId,
-        sampleId: item.sampleId,
-        patientName: item.patientName,
-        patientSex: item.patientSex,
+        id: orderTest.id,
+        orderNumber:
+          orderTest.sample.order.orderNumber ?? orderTest.sample.order.id.substring(0, 8),
+        orderId: orderTest.sample.order.id,
+        sampleId: orderTest.sample.id,
+        patientName: orderTest.sample.order.patient?.fullName ?? '-',
+        patientSex: orderTest.sample.order.patient?.sex ?? null,
         patientAge,
-        testCode: item.testCode,
-        testName: item.testName,
-        testType: item.testType,
-        testUnit: item.testUnit,
+        testCode: orderTest.test.code,
+        testName: orderTest.test.name,
+        testAbbreviation: orderTest.test.abbreviation ?? null,
+        testType: orderTest.test.type,
+        testUnit: orderTest.test.unit,
         normalMin: resolvedRange.normalMin,
         normalMax: resolvedRange.normalMax,
-        normalText: item.normalText,
-        resultEntryType: this.normalizeResultEntryType(item.resultEntryType),
-        resultTextOptions:
-          (parseJsonField(item.resultTextOptions) as TestResultTextOption[] | null) ??
-          null,
-        allowCustomResultText: Boolean(item.allowCustomResultText),
-        tubeType: item.tubeType,
-        status: item.status,
-        resultValue:
-          item.resultValue !== null && item.resultValue !== undefined
-            ? parseFloat(item.resultValue)
-            : null,
-        resultText: item.resultText,
-        flag: item.flag,
-        resultedAt: item.resultedAt,
-        resultedBy: item.resultedBy ?? null,
-        verifiedAt: item.verifiedAt,
-        verifiedBy: item.verifiedBy ?? null,
-        registeredAt: item.registeredAt,
-        parentOrderTestId: item.parentOrderTestId ?? null,
-        departmentId: item.departmentId ?? null,
-        departmentCode: item.departmentCode ?? null,
-        departmentName: item.departmentName ?? null,
-        parameterDefinitions: (parseJsonField(item.parameterDefinitions) as TestParameterDefinition[] | null) ?? null,
-        resultParameters: (parseJsonField(item.resultParameters) as Record<string, string> | null) ?? null,
-        rejectionReason: item.rejectionReason ?? null,
-        panelSortOrder: item.panelSortOrder != null ? Number(item.panelSortOrder) : null,
+        normalText: orderTest.test.normalText,
+        resultEntryType: this.normalizeResultEntryType(orderTest.test.resultEntryType),
+        resultTextOptions: this.normalizeResultTextOptions(orderTest.test.resultTextOptions),
+        allowCustomResultText: Boolean(orderTest.test.allowCustomResultText),
+        tubeType: orderTest.sample.tubeType,
+        status: orderTest.status,
+        resultValue: orderTest.resultValue ?? null,
+        resultText: orderTest.resultText ?? null,
+        flag: orderTest.flag ?? null,
+        resultedAt: orderTest.resultedAt ?? null,
+        resultedBy: orderTest.resultedBy ?? null,
+        verifiedAt: orderTest.verifiedAt ?? null,
+        verifiedBy: orderTest.verifiedBy ?? null,
+        registeredAt: orderTest.sample.order.registeredAt,
+        parentOrderTestId: orderTest.parentOrderTestId ?? null,
+        departmentId: orderTest.test.departmentId ?? null,
+        departmentCode: orderTest.test.department?.code ?? null,
+        departmentName: orderTest.test.department?.name ?? null,
+        parameterDefinitions: orderTest.test.parameterDefinitions ?? null,
+        resultParameters: orderTest.resultParameters ?? null,
+        rejectionReason: orderTest.rejectionReason ?? null,
+        panelSortOrder: orderTest.panelSortOrder ?? null,
       };
-    });
-
-    return { items, total };
+    } finally {
+      const durationMs = this.elapsedMs(startedAt);
+      if (durationMs >= this.worklistPerfLogThresholdMs) {
+        this.logger.warn(
+          JSON.stringify({
+            event: 'worklist.detail.performance',
+            labId,
+            orderTestId,
+            durationMs: Math.round(durationMs * 100) / 100,
+          }),
+        );
+      }
+    }
   }
 
   async enterResult(
@@ -1006,6 +1170,15 @@ export class WorklistService {
       age--;
     }
     return age < 0 ? null : age;
+  }
+
+  private resolveWorklistPerfLogThresholdMs(): number {
+    const parsed = Number.parseInt(process.env.WORKLIST_PERF_LOG_THRESHOLD_MS ?? '500', 10);
+    return Number.isFinite(parsed) && parsed >= 0 ? parsed : 500;
+  }
+
+  private elapsedMs(startedAt: bigint): number {
+    return Number(process.hrtime.bigint() - startedAt) / 1_000_000;
   }
 
   async getWorklistStats(labId: string): Promise<{

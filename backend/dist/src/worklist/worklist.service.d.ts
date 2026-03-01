@@ -17,6 +17,7 @@ export interface WorklistItem {
     patientAge: number | null;
     testCode: string;
     testName: string;
+    testAbbreviation: string | null;
     testType: 'SINGLE' | 'PANEL';
     testUnit: string | null;
     normalMin: number | null;
@@ -44,6 +45,11 @@ export interface WorklistItem {
     parameterDefinitions: TestParameterDefinition[] | null;
     resultParameters: Record<string, string> | null;
     rejectionReason: string | null;
+    panelSortOrder: number | null;
+}
+export declare enum WorklistView {
+    FULL = "full",
+    VERIFY = "verify"
 }
 export declare class WorklistService {
     private readonly orderTestRepo;
@@ -54,6 +60,8 @@ export declare class WorklistService {
     private readonly departmentRepo;
     private readonly panelStatusService;
     private readonly auditService;
+    private readonly logger;
+    private readonly worklistPerfLogThresholdMs;
     constructor(orderTestRepo: Repository<OrderTest>, orderRepo: Repository<Order>, testRepo: Repository<Test>, labRepo: Repository<Lab>, userDeptRepo: Repository<UserDepartmentAssignment>, departmentRepo: Repository<Department>, panelStatusService: PanelStatusService, auditService: AuditService);
     getWorklist(labId: string, params: {
         status?: OrderTestStatus[];
@@ -62,10 +70,12 @@ export declare class WorklistService {
         departmentId?: string;
         page?: number;
         size?: number;
+        view?: WorklistView;
     }, userId?: string): Promise<{
         items: WorklistItem[];
         total: number;
     }>;
+    getWorklistItemDetail(orderTestId: string, labId: string, userId?: string): Promise<WorklistItem>;
     enterResult(orderTestId: string, labId: string, actor: LabActorContext, data: {
         resultValue?: number | null;
         resultText?: string | null;
@@ -95,6 +105,8 @@ export declare class WorklistService {
     private toResultFlag;
     private calculateFlag;
     private computePatientAgeYears;
+    private resolveWorklistPerfLogThresholdMs;
+    private elapsedMs;
     getWorklistStats(labId: string): Promise<{
         pending: number;
         completed: number;

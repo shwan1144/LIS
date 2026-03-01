@@ -913,6 +913,8 @@ export type PatientType = 'WALK_IN' | 'HOSPITAL' | 'CONTRACT';
 export type TubeType = 'SERUM' | 'PLASMA' | 'WHOLE_BLOOD' | 'URINE' | 'STOOL' | 'SWAB' | 'OTHER';
 export type OrderTestStatus = 'PENDING' | 'IN_PROGRESS' | 'COMPLETED' | 'VERIFIED' | 'REJECTED';
 export type CreateOrderView = 'summary' | 'full';
+export type OrderDetailView = 'compact' | 'full';
+export type OrderResultStatus = 'PENDING' | 'COMPLETED' | 'VERIFIED' | 'REJECTED';
 
 export const OrderTestStatus = {
   PENDING: 'PENDING' as const,
@@ -1010,6 +1012,7 @@ export interface OrderSearchParams {
   size?: number;
   search?: string;
   status?: OrderStatus;
+  resultStatus?: OrderResultStatus;
   patientId?: string;
   startDate?: string;
   endDate?: string;
@@ -1038,6 +1041,11 @@ export interface OrderHistoryItemDto {
   testsCount: number;
   readyTestsCount: number;
   reportReady: boolean;
+  resultStatus?: OrderResultStatus;
+  pendingTestsCount?: number;
+  completedTestsCount?: number;
+  verifiedTestsCount?: number;
+  rejectedTestsCount?: number;
 }
 
 export interface OrderHistorySearchResult {
@@ -1063,6 +1071,11 @@ export interface OrderCreateSummaryDto {
   testsCount: number;
   readyTestsCount: number;
   reportReady: boolean;
+  resultStatus?: OrderResultStatus;
+  pendingTestsCount?: number;
+  completedTestsCount?: number;
+  verifiedTestsCount?: number;
+  rejectedTestsCount?: number;
 }
 
 export async function getOrderPriceEstimate(
@@ -1102,6 +1115,40 @@ export async function searchOrders(params: OrderSearchParams): Promise<OrderSear
 }
 
 function toHistoryItem(order: OrderDto): OrderHistoryItemDto {
+  const rootTests = (order.samples ?? [])
+    .flatMap((sample) => sample.orderTests ?? [])
+    .filter((test) => !test.parentOrderTestId);
+  const testsCount = rootTests.length > 0 ? rootTests.length : Number(order.testsCount ?? 0) || 0;
+  let pendingTestsCount = 0;
+  let completedTestsCount = 0;
+  let verifiedTestsCount = 0;
+  let rejectedTestsCount = 0;
+  for (const test of rootTests) {
+    if (test.status === 'COMPLETED') {
+      completedTestsCount += 1;
+    } else if (test.status === 'VERIFIED') {
+      verifiedTestsCount += 1;
+    } else if (test.status === 'REJECTED') {
+      rejectedTestsCount += 1;
+    } else {
+      pendingTestsCount += 1;
+    }
+  }
+  if (rootTests.length === 0 && testsCount > 0) {
+    pendingTestsCount = Math.max(
+      0,
+      testsCount - completedTestsCount - verifiedTestsCount - rejectedTestsCount,
+    );
+  }
+  const resultStatus: OrderResultStatus =
+    rejectedTestsCount > 0
+      ? 'REJECTED'
+      : testsCount > 0 && verifiedTestsCount === testsCount
+        ? 'VERIFIED'
+        : completedTestsCount > 0 && completedTestsCount + verifiedTestsCount === testsCount
+          ? 'COMPLETED'
+          : 'PENDING';
+
   return {
     id: order.id,
     orderNumber: order.orderNumber,
@@ -1114,9 +1161,14 @@ function toHistoryItem(order: OrderDto): OrderHistoryItemDto {
     finalAmount: Number(order.finalAmount ?? 0),
     patient: order.patient,
     shift: order.shift,
-    testsCount: Number(order.testsCount ?? 0) || 0,
+    testsCount,
     readyTestsCount: Number(order.readyTestsCount ?? 0) || 0,
     reportReady: Boolean(order.reportReady) || Number(order.readyTestsCount ?? 0) > 0,
+    resultStatus,
+    pendingTestsCount,
+    completedTestsCount,
+    verifiedTestsCount,
+    rejectedTestsCount,
   };
 }
 
@@ -1137,8 +1189,13 @@ export async function searchOrdersHistory(params: OrderSearchParams): Promise<Or
   }
 }
 
-export async function getOrder(id: string): Promise<OrderDto> {
-  const res = await api.get<OrderDto>(`/orders/${id}`);
+export async function getOrder(
+  id: string,
+  options: { view?: OrderDetailView } = {},
+): Promise<OrderDto> {
+  const res = await api.get<OrderDto>(`/orders/${id}`, {
+    params: options.view ? { view: options.view } : undefined,
+  });
   return res.data;
 }
 
@@ -1488,6 +1545,7 @@ export interface WorklistParams {
   departmentId?: string;
   page?: number;
   size?: number;
+  view?: 'full' | 'verify';
 }
 
 export interface WorklistResult {
@@ -1510,8 +1568,14 @@ export async function getWorklist(params: WorklistParams): Promise<WorklistResul
   if (params.departmentId) queryParams.departmentId = params.departmentId;
   if (params.page) queryParams.page = params.page.toString();
   if (params.size) queryParams.size = params.size.toString();
+  if (params.view) queryParams.view = params.view;
 
   const res = await api.get<WorklistResult>('/worklist', { params: queryParams });
+  return res.data;
+}
+
+export async function getWorklistItemDetail(id: string): Promise<WorklistItem> {
+  const res = await api.get<WorklistItem>(`/worklist/${id}/detail`);
   return res.data;
 }
 

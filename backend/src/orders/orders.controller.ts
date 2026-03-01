@@ -19,7 +19,11 @@ import { CreateOrderDto } from './dto/create-order.dto';
 import { UpdateOrderPaymentDto } from './dto/update-payment.dto';
 import { UpdateOrderTestsDto } from './dto/update-order-tests.dto';
 import { UpdateOrderDiscountDto } from './dto/update-order-discount.dto';
-import { CreateOrderView } from './dto/create-order-response.dto';
+import {
+  CreateOrderView,
+  OrderDetailView,
+  OrderResultStatus,
+} from './dto/create-order-response.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { OrderStatus } from '../entities/order.entity';
 
@@ -155,6 +159,8 @@ export class OrdersController {
     @Query('patientId') patientId?: string,
     @Query('startDate') startDate?: string,
     @Query('endDate') endDate?: string,
+    @Query('resultStatus', new ParseEnumPipe(OrderResultStatus, { optional: true }))
+    resultStatus?: OrderResultStatus,
   ) {
     const labId = req.user?.labId;
     if (!labId) {
@@ -168,16 +174,22 @@ export class OrdersController {
       patientId,
       startDate,
       endDate,
+      resultStatus,
     });
   }
 
   @Get(':id')
-  async findOne(@Req() req: RequestWithUser, @Param('id', ParseUUIDPipe) id: string) {
+  async findOne(
+    @Req() req: RequestWithUser,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Query('view', new ParseEnumPipe(OrderDetailView, { optional: true }))
+    view?: OrderDetailView,
+  ) {
     const labId = req.user?.labId;
     if (!labId) {
       throw new Error('Lab ID not found in token');
     }
-    return this.ordersService.findOne(id, labId);
+    return this.ordersService.findOne(id, labId, view ?? OrderDetailView.COMPACT);
   }
 
   @Patch(':id/payment')

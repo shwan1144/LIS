@@ -18,7 +18,12 @@ import { Pricing } from '../entities/pricing.entity';
 import { TestComponent } from '../entities/test-component.entity';
 import { LabOrdersWorklist } from '../entities/lab-orders-worklist.entity';
 import { CreateOrderDto, CreateSampleDto } from './dto/create-order.dto';
-import { CreateOrderSummaryDto, CreateOrderView } from './dto/create-order-response.dto';
+import {
+  CreateOrderSummaryDto,
+  CreateOrderView,
+  OrderDetailView,
+  OrderResultStatus,
+} from './dto/create-order-response.dto';
 import {
   nextLabCounterValue,
   nextLabCounterValueWithFloor,
@@ -52,6 +57,7 @@ export interface OrderListQueryParams {
   patientId?: string;
   startDate?: string;
   endDate?: string;
+  resultStatus?: OrderResultStatus;
 }
 
 export interface OrderHistoryItem {
@@ -67,6 +73,11 @@ export interface OrderHistoryItem {
   testsCount: number;
   readyTestsCount: number;
   reportReady: boolean;
+  resultStatus: OrderResultStatus;
+  pendingTestsCount: number;
+  completedTestsCount: number;
+  verifiedTestsCount: number;
+  rejectedTestsCount: number;
 }
 
 type OrderProgressTarget = {
@@ -75,12 +86,18 @@ type OrderProgressTarget = {
   testsCount?: number;
   readyTestsCount?: number;
   reportReady?: boolean;
+  pendingTestsCount?: number;
+  completedTestsCount?: number;
+  verifiedTestsCount?: number;
+  rejectedTestsCount?: number;
+  resultStatus?: OrderResultStatus;
 };
 
 @Injectable()
 export class OrdersService {
   private readonly logger = new Logger(OrdersService.name);
   private readonly createPerfLogThresholdMs = this.resolveCreatePerfLogThresholdMs();
+  private readonly orderHistoryPerfLogThresholdMs = this.resolveOrderHistoryPerfLogThresholdMs();
   private readonly orderTestInsertChunkSize = this.resolveOrderTestInsertChunkSize();
 
   constructor(
@@ -387,71 +404,134 @@ export class OrdersService {
     size: number;
     totalPages: number;
   }> {
+    const startedAt = process.hrtime.bigint();
     const page = Math.max(1, params.page ?? 1);
     const size = Math.min(100, Math.max(1, params.size ?? 20));
     const skip = (page - 1) * size;
+    let total = 0;
+    let itemsCount = 0;
+    try {
+      const qb = this.orderRepo
+        .createQueryBuilder('order')
+        .leftJoinAndSelect('order.patient', 'patient')
+        .leftJoinAndSelect('order.shift', 'shift')
+        .where('order.labId = :labId', { labId });
 
-    const qb = this.orderRepo
-      .createQueryBuilder('order')
-      .leftJoinAndSelect('order.patient', 'patient')
-      .leftJoinAndSelect('order.shift', 'shift')
-      .where('order.labId = :labId', { labId });
+      await this.applyOrderQueryFilters(qb, labId, params);
 
-    await this.applyOrderQueryFilters(qb, labId, params);
+      qb.orderBy('order.registeredAt', 'DESC').skip(skip).take(size);
 
-    qb.orderBy('order.registeredAt', 'DESC').skip(skip).take(size);
+      const [orders, nextTotal] = await qb.getManyAndCount();
+      total = nextTotal;
+      await this.enrichOrdersWithProgress(orders as OrderProgressTarget[]);
 
-    const [orders, total] = await qb.getManyAndCount();
-    await this.enrichOrdersWithProgress(orders as OrderProgressTarget[]);
+      const items: OrderHistoryItem[] = orders.map((order) => {
+        const payload = order as unknown as Record<string, unknown>;
+        const testsCount = Number(payload.testsCount ?? 0) || 0;
+        const readyTestsCount = Number(payload.readyTestsCount ?? 0) || 0;
+        const pendingTestsCount = Number(payload.pendingTestsCount ?? 0) || 0;
+        const completedTestsCount = Number(payload.completedTestsCount ?? 0) || 0;
+        const verifiedTestsCount = Number(payload.verifiedTestsCount ?? 0) || 0;
+        const rejectedTestsCount = Number(payload.rejectedTestsCount ?? 0) || 0;
+        const reportReady = Boolean(payload.reportReady) || readyTestsCount > 0;
+        const resultStatus = this.normalizeOrderResultStatus(payload.resultStatus, {
+          testsCount,
+          completedTestsCount,
+          verifiedTestsCount,
+          rejectedTestsCount,
+        });
 
-    const items: OrderHistoryItem[] = orders.map((order) => {
-      const testsCount = Number((order as unknown as Record<string, unknown>).testsCount ?? 0) || 0;
-      const readyTestsCount =
-        Number((order as unknown as Record<string, unknown>).readyTestsCount ?? 0) || 0;
-      const reportReady =
-        Boolean((order as unknown as Record<string, unknown>).reportReady) || readyTestsCount > 0;
+        return {
+          id: order.id,
+          orderNumber: order.orderNumber,
+          status: order.status,
+          registeredAt: order.registeredAt,
+          paymentStatus: this.normalizePaymentStatus(order.paymentStatus),
+          paidAmount: order.paidAmount != null ? Number(order.paidAmount) : null,
+          finalAmount: Number(order.finalAmount ?? 0),
+          patient: order.patient,
+          shift: order.shift ?? null,
+          testsCount,
+          readyTestsCount,
+          reportReady,
+          resultStatus,
+          pendingTestsCount,
+          completedTestsCount,
+          verifiedTestsCount,
+          rejectedTestsCount,
+        };
+      });
+      itemsCount = items.length;
 
       return {
-        id: order.id,
-        orderNumber: order.orderNumber,
-        status: order.status,
-        registeredAt: order.registeredAt,
-        paymentStatus: this.normalizePaymentStatus(order.paymentStatus),
-        paidAmount: order.paidAmount != null ? Number(order.paidAmount) : null,
-        finalAmount: Number(order.finalAmount ?? 0),
-        patient: order.patient,
-        shift: order.shift ?? null,
-        testsCount,
-        readyTestsCount,
-        reportReady,
+        items,
+        total,
+        page,
+        size,
+        totalPages: Math.ceil(total / size),
       };
-    });
-
-    return {
-      items,
-      total,
-      page,
-      size,
-      totalPages: Math.ceil(total / size),
-    };
+    } finally {
+      const durationMs = this.elapsedMs(startedAt);
+      if (durationMs >= this.orderHistoryPerfLogThresholdMs) {
+        this.logger.warn(
+          JSON.stringify({
+            event: 'orders.history.performance',
+            labId,
+            page,
+            size,
+            total,
+            itemsCount,
+            durationMs: Math.round(durationMs * 100) / 100,
+            filters: {
+              status: params.status ?? null,
+              resultStatus: params.resultStatus ?? null,
+              hasSearch: Boolean(params.search?.trim()),
+              patientId: params.patientId ?? null,
+              startDate: params.startDate ?? null,
+              endDate: params.endDate ?? null,
+            },
+          }),
+        );
+      }
+    }
   }
 
-  async findOne(id: string, labId: string): Promise<Order> {
-    const order = await this.orderRepo.findOne({
-      where: { id, labId },
-      relations: [
-        'patient',
-        'lab',
-        'shift',
-        'samples',
-        'samples.orderTests',
-        'samples.orderTests.test',
-      ],
-    });
-    if (!order) {
-      throw new NotFoundException('Order not found');
+  async findOne(
+    id: string,
+    labId: string,
+    view: OrderDetailView = OrderDetailView.COMPACT,
+  ): Promise<Order> {
+    const startedAt = process.hrtime.bigint();
+    try {
+      const order = await this.orderRepo.findOne({
+        where: { id, labId },
+        relations: [
+          'patient',
+          'lab',
+          'shift',
+          'samples',
+          'samples.orderTests',
+          'samples.orderTests.test',
+        ],
+      });
+      if (!order) {
+        throw new NotFoundException('Order not found');
+      }
+      return this.stripHeavyOrderPayload(order, view);
+    } finally {
+      const durationMs = this.elapsedMs(startedAt);
+      if (durationMs >= this.orderHistoryPerfLogThresholdMs) {
+        this.logger.warn(
+          JSON.stringify({
+            event: 'orders.findOne.performance',
+            labId,
+            orderId: id,
+            view,
+            durationMs: Math.round(durationMs * 100) / 100,
+          }),
+        );
+      }
     }
-    return this.stripHeavyOrderPayload(order);
   }
 
   async updatePayment(
@@ -1364,6 +1444,83 @@ export class OrdersService {
       const { endDate } = this.getDateRangeOrThrow(params.endDate, labTimeZone, 'endDate');
       qb.andWhere('order.registeredAt <= :endDate', { endDate });
     }
+
+    if (params.resultStatus) {
+      this.applyOrderResultStatusFilter(qb, params.resultStatus);
+    }
+  }
+
+  private applyOrderResultStatusFilter(
+    qb: SelectQueryBuilder<Order>,
+    resultStatus: OrderResultStatus,
+  ): void {
+    const hasRootTestsSql = `EXISTS (
+      SELECT 1
+      FROM samples s
+      INNER JOIN order_tests ot ON ot."sampleId" = s.id
+      WHERE s."orderId" = "order"."id"
+        AND ot."parentOrderTestId" IS NULL
+    )`;
+    const hasRejectedSql = `EXISTS (
+      SELECT 1
+      FROM samples s
+      INNER JOIN order_tests ot ON ot."sampleId" = s.id
+      WHERE s."orderId" = "order"."id"
+        AND ot."parentOrderTestId" IS NULL
+        AND ot.status = :resultRejected
+    )`;
+    const hasNonVerifiedSql = `EXISTS (
+      SELECT 1
+      FROM samples s
+      INNER JOIN order_tests ot ON ot."sampleId" = s.id
+      WHERE s."orderId" = "order"."id"
+        AND ot."parentOrderTestId" IS NULL
+        AND ot.status <> :resultVerified
+    )`;
+    const hasCompletedSql = `EXISTS (
+      SELECT 1
+      FROM samples s
+      INNER JOIN order_tests ot ON ot."sampleId" = s.id
+      WHERE s."orderId" = "order"."id"
+        AND ot."parentOrderTestId" IS NULL
+        AND ot.status = :resultCompleted
+    )`;
+    const hasOutsideCompletedVerifiedSql = `EXISTS (
+      SELECT 1
+      FROM samples s
+      INNER JOIN order_tests ot ON ot."sampleId" = s.id
+      WHERE s."orderId" = "order"."id"
+        AND ot."parentOrderTestId" IS NULL
+        AND ot.status NOT IN (:...completedOrVerifiedStatuses)
+    )`;
+
+    const verifiedCondition = `(${hasRootTestsSql} AND NOT (${hasNonVerifiedSql}))`;
+    const completedCondition = `(${hasCompletedSql} AND NOT (${hasOutsideCompletedVerifiedSql}))`;
+    const pendingCondition = `(NOT (${hasRejectedSql}) AND NOT ${verifiedCondition} AND NOT ${completedCondition})`;
+
+    qb.setParameter('resultRejected', OrderTestStatus.REJECTED);
+    qb.setParameter('resultVerified', OrderTestStatus.VERIFIED);
+    qb.setParameter('resultCompleted', OrderTestStatus.COMPLETED);
+    qb.setParameter('completedOrVerifiedStatuses', [
+      OrderTestStatus.COMPLETED,
+      OrderTestStatus.VERIFIED,
+    ]);
+
+    switch (resultStatus) {
+      case OrderResultStatus.REJECTED:
+        qb.andWhere(hasRejectedSql);
+        return;
+      case OrderResultStatus.VERIFIED:
+        qb.andWhere(verifiedCondition);
+        return;
+      case OrderResultStatus.COMPLETED:
+        qb.andWhere(completedCondition);
+        return;
+      case OrderResultStatus.PENDING:
+      default:
+        qb.andWhere(pendingCondition);
+        return;
+    }
   }
 
   private async enrichOrdersWithProgress(items: OrderProgressTarget[]): Promise<void> {
@@ -1401,6 +1558,22 @@ export class OrdersService {
         `SUM(CASE WHEN ot.status IN (:...readyStatuses) AND ot."parentOrderTestId" IS NULL THEN 1 ELSE 0 END)`,
         'readyTests',
       )
+      .addSelect(
+        `SUM(CASE WHEN ot.status IN (:...pendingStatuses) AND ot."parentOrderTestId" IS NULL THEN 1 ELSE 0 END)`,
+        'pendingTests',
+      )
+      .addSelect(
+        `SUM(CASE WHEN ot.status = :completedStatus AND ot."parentOrderTestId" IS NULL THEN 1 ELSE 0 END)`,
+        'completedTests',
+      )
+      .addSelect(
+        `SUM(CASE WHEN ot.status = :verifiedStatus AND ot."parentOrderTestId" IS NULL THEN 1 ELSE 0 END)`,
+        'verifiedTests',
+      )
+      .addSelect(
+        `SUM(CASE WHEN ot.status = :rejectedStatus AND ot."parentOrderTestId" IS NULL THEN 1 ELSE 0 END)`,
+        'rejectedTests',
+      )
       .from('order_tests', 'ot')
       .innerJoin('samples', 's', 's.id = ot."sampleId"')
       .where('s."orderId" IN (:...orderIds)', { orderIds })
@@ -1409,8 +1582,20 @@ export class OrdersService {
         OrderTestStatus.VERIFIED,
         OrderTestStatus.REJECTED,
       ])
+      .setParameter('pendingStatuses', [OrderTestStatus.PENDING, OrderTestStatus.IN_PROGRESS])
+      .setParameter('completedStatus', OrderTestStatus.COMPLETED)
+      .setParameter('verifiedStatus', OrderTestStatus.VERIFIED)
+      .setParameter('rejectedStatus', OrderTestStatus.REJECTED)
       .groupBy('s."orderId"')
-      .getRawMany<{ orderId: string; totalTests: string; readyTests: string }>();
+      .getRawMany<{
+        orderId: string;
+        totalTests: string;
+        readyTests: string;
+        pendingTests: string;
+        completedTests: string;
+        verifiedTests: string;
+        rejectedTests: string;
+      }>();
 
 
     const countMap = new Map(
@@ -1419,15 +1604,36 @@ export class OrdersService {
         {
           totalTests: parseInt(row.totalTests, 10) || 0,
           readyTests: parseInt(row.readyTests, 10) || 0,
+          pendingTests: parseInt(row.pendingTests, 10) || 0,
+          completedTests: parseInt(row.completedTests, 10) || 0,
+          verifiedTests: parseInt(row.verifiedTests, 10) || 0,
+          rejectedTests: parseInt(row.rejectedTests, 10) || 0,
         },
       ]),
     );
 
     for (const order of items) {
-      const counts = countMap.get(order.id) || { totalTests: 0, readyTests: 0 };
+      const counts = countMap.get(order.id) || {
+        totalTests: 0,
+        readyTests: 0,
+        pendingTests: 0,
+        completedTests: 0,
+        verifiedTests: 0,
+        rejectedTests: 0,
+      };
       order.testsCount = counts.totalTests;
       order.readyTestsCount = counts.readyTests;
+      order.pendingTestsCount = counts.pendingTests;
+      order.completedTestsCount = counts.completedTests;
+      order.verifiedTestsCount = counts.verifiedTests;
+      order.rejectedTestsCount = counts.rejectedTests;
       order.reportReady = counts.readyTests > 0;
+      order.resultStatus = this.normalizeOrderResultStatus(undefined, {
+        testsCount: counts.totalTests,
+        completedTestsCount: counts.completedTests,
+        verifiedTestsCount: counts.verifiedTests,
+        rejectedTestsCount: counts.rejectedTests,
+      });
 
       if (order.status !== OrderStatus.CANCELLED && progressedSet.has(order.id)) {
         order.status = OrderStatus.COMPLETED;
@@ -1437,6 +1643,11 @@ export class OrdersService {
 
   private resolveCreatePerfLogThresholdMs(): number {
     const parsed = Number.parseInt(process.env.ORDER_CREATE_PERF_LOG_THRESHOLD_MS ?? '500', 10);
+    return Number.isFinite(parsed) && parsed >= 0 ? parsed : 500;
+  }
+
+  private resolveOrderHistoryPerfLogThresholdMs(): number {
+    const parsed = Number.parseInt(process.env.ORDER_HISTORY_PERF_LOG_THRESHOLD_MS ?? '500', 10);
     return Number.isFinite(parsed) && parsed >= 0 ? parsed : 500;
   }
 
@@ -1456,9 +1667,14 @@ export class OrdersService {
    * Avoid returning large lab branding blobs in order payloads.
    * These assets can be several MB and are not needed for order detail/workflow actions.
    */
-  private stripHeavyOrderPayload(order: Order): Order {
+  private stripHeavyOrderPayload(
+    order: Order,
+    detailView: OrderDetailView = OrderDetailView.COMPACT,
+  ): Order {
     if (!order?.lab) {
-      return this.stripHeavyOrderTestsPayload(order);
+      return detailView === OrderDetailView.COMPACT
+        ? this.stripHeavyOrderTestsPayload(order)
+        : order;
     }
     order.lab.reportBannerDataUrl = null;
     order.lab.reportFooterDataUrl = null;
@@ -1466,7 +1682,9 @@ export class OrdersService {
     order.lab.reportWatermarkDataUrl = null;
     order.lab.onlineResultWatermarkDataUrl = null;
     order.lab.uiTestGroups = null;
-    return this.stripHeavyOrderTestsPayload(order);
+    return detailView === OrderDetailView.COMPACT
+      ? this.stripHeavyOrderTestsPayload(order)
+      : order;
   }
 
   /**
@@ -1512,6 +1730,35 @@ export class OrdersService {
     if (value === 'paid') return 'paid';
     if (value === 'partial') return 'partial';
     return 'unpaid';
+  }
+
+  private normalizeOrderResultStatus(
+    value: unknown,
+    counts: {
+      testsCount: number;
+      completedTestsCount: number;
+      verifiedTestsCount: number;
+      rejectedTestsCount: number;
+    },
+  ): OrderResultStatus {
+    if (value === OrderResultStatus.PENDING) return OrderResultStatus.PENDING;
+    if (value === OrderResultStatus.COMPLETED) return OrderResultStatus.COMPLETED;
+    if (value === OrderResultStatus.VERIFIED) return OrderResultStatus.VERIFIED;
+    if (value === OrderResultStatus.REJECTED) return OrderResultStatus.REJECTED;
+
+    if (counts.rejectedTestsCount > 0) {
+      return OrderResultStatus.REJECTED;
+    }
+    if (counts.testsCount > 0 && counts.verifiedTestsCount === counts.testsCount) {
+      return OrderResultStatus.VERIFIED;
+    }
+    if (
+      counts.completedTestsCount > 0 &&
+      counts.completedTestsCount + counts.verifiedTestsCount === counts.testsCount
+    ) {
+      return OrderResultStatus.COMPLETED;
+    }
+    return OrderResultStatus.PENDING;
   }
 
   private async getLabTimeZone(

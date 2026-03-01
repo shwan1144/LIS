@@ -162,11 +162,8 @@ let ReportsService = ReportsService_1 = class ReportsService {
         this.userRepo = userRepo;
         this.browserPromise = null;
     }
-    async onModuleInit() {
-        this.getBrowser().catch((err) => {
-            console.warn('Playwright browser pre-warm failed (will retry on first request):', err?.message ?? err);
-            this.browserPromise = null;
-        });
+    onModuleInit() {
+        this.getBrowser().catch(() => { });
     }
     async getBrowser() {
         if (!this.browserPromise) {
@@ -312,7 +309,15 @@ let ReportsService = ReportsService_1 = class ReportsService {
                 list.push(ot);
         }
         for (const [, children] of panelChildrenByParent) {
-            children.sort((a, b) => sortKey(a).localeCompare(sortKey(b)));
+            children.sort((a, b) => {
+                const aOrder = a.panelSortOrder ?? 9999;
+                const bOrder = b.panelSortOrder ?? 9999;
+                if (aOrder !== bOrder)
+                    return aOrder - bOrder;
+                const aCode = (a.test?.code || '').toUpperCase();
+                const bCode = (b.test?.code || '').toUpperCase();
+                return aCode.localeCompare(bCode);
+            });
         }
         const regularTests = orderTests
             .filter((ot) => !panelParentIds.has(ot.id) &&
@@ -339,8 +344,8 @@ let ReportsService = ReportsService_1 = class ReportsService {
         }
         const sampleIds = order.samples?.map((s) => s.id) ?? [];
         const orderTestsPromise = sampleIds.length === 0
-            ? Promise.resolve([])
-            : this.orderTestRepo.find({
+            ? []
+            : await this.orderTestRepo.find({
                 where: { sampleId: (0, typeorm_2.In)(sampleIds) },
                 relations: ['test', 'test.department', 'sample'],
                 order: { test: { code: 'ASC' } },

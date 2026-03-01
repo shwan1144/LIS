@@ -113,6 +113,10 @@ __decorate([
     __metadata("design:type", Object)
 ], OrderTest.prototype, "comments", void 0);
 __decorate([
+    (0, typeorm_1.Column)({ type: 'int', nullable: true }),
+    __metadata("design:type", Object)
+], OrderTest.prototype, "panelSortOrder", void 0);
+__decorate([
     (0, typeorm_1.CreateDateColumn)(),
     __metadata("design:type", Date)
 ], OrderTest.prototype, "createdAt", void 0);

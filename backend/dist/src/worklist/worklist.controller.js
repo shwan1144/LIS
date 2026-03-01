@@ -22,7 +22,7 @@ let WorklistController = class WorklistController {
     constructor(worklistService) {
         this.worklistService = worklistService;
     }
-    async getWorklist(req, status, search, date, departmentId, page, size) {
+    async getWorklist(req, status, search, date, departmentId, page, size, view) {
         const labId = req.user?.labId;
         const actor = (0, lab_actor_context_1.buildLabActorContext)(req.user);
         if (!labId) {
@@ -39,7 +39,16 @@ let WorklistController = class WorklistController {
             departmentId,
             page: page ? parseInt(page, 10) : undefined,
             size: size ? parseInt(size, 10) : undefined,
+            view: view ?? worklist_service_1.WorklistView.FULL,
         }, actor.userId ?? undefined);
+    }
+    async getWorklistItemDetail(req, id) {
+        const labId = req.user?.labId;
+        const actor = (0, lab_actor_context_1.buildLabActorContext)(req.user);
+        if (!labId) {
+            throw new Error('Lab ID not found in token');
+        }
+        return this.worklistService.getWorklistItemDetail(id, labId, actor.userId ?? undefined);
     }
     async getStats(req) {
         const labId = req.user?.labId;
@@ -99,10 +108,19 @@ __decorate([
     __param(4, (0, common_1.Query)('departmentId')),
     __param(5, (0, common_1.Query)('page')),
     __param(6, (0, common_1.Query)('size')),
+    __param(7, (0, common_1.Query)('view', new common_1.ParseEnumPipe(worklist_service_1.WorklistView, { optional: true }))),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [Object, String, String, String, String, String, String]),
+    __metadata("design:paramtypes", [Object, String, String, String, String, String, String, String]),
     __metadata("design:returntype", Promise)
 ], WorklistController.prototype, "getWorklist", null);
+__decorate([
+    (0, common_1.Get)(':id/detail'),
+    __param(0, (0, common_1.Req)()),
+    __param(1, (0, common_1.Param)('id', common_1.ParseUUIDPipe)),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, String]),
+    __metadata("design:returntype", Promise)
+], WorklistController.prototype, "getWorklistItemDetail", null);
 __decorate([
     (0, common_1.Get)('stats'),
     __param(0, (0, common_1.Req)()),

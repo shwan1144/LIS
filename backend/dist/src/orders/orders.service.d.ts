@@ -8,6 +8,7 @@ import { Pricing } from '../entities/pricing.entity';
 import { TestComponent } from '../entities/test-component.entity';
 import { LabOrdersWorklist } from '../entities/lab-orders-worklist.entity';
 import { CreateOrderDto } from './dto/create-order.dto';
+import { CreateOrderSummaryDto, CreateOrderView, OrderDetailView, OrderResultStatus } from './dto/create-order-response.dto';
 export interface WorklistItemStored {
     rowId: string;
     patientId: string;
@@ -26,6 +27,7 @@ export interface OrderListQueryParams {
     patientId?: string;
     startDate?: string;
     endDate?: string;
+    resultStatus?: OrderResultStatus;
 }
 export interface OrderHistoryItem {
     id: string;
@@ -40,6 +42,11 @@ export interface OrderHistoryItem {
     testsCount: number;
     readyTestsCount: number;
     reportReady: boolean;
+    resultStatus: OrderResultStatus;
+    pendingTestsCount: number;
+    completedTestsCount: number;
+    verifiedTestsCount: number;
+    rejectedTestsCount: number;
 }
 export declare class OrdersService {
     private readonly orderRepo;
@@ -50,8 +57,12 @@ export declare class OrdersService {
     private readonly pricingRepo;
     private readonly testComponentRepo;
     private readonly worklistRepo;
+    private readonly logger;
+    private readonly createPerfLogThresholdMs;
+    private readonly orderHistoryPerfLogThresholdMs;
+    private readonly orderTestInsertChunkSize;
     constructor(orderRepo: Repository<Order>, patientRepo: Repository<Patient>, labRepo: Repository<Lab>, shiftRepo: Repository<Shift>, testRepo: Repository<Test>, pricingRepo: Repository<Pricing>, testComponentRepo: Repository<TestComponent>, worklistRepo: Repository<LabOrdersWorklist>);
-    create(labId: string, dto: CreateOrderDto): Promise<Order>;
+    create(labId: string, dto: CreateOrderDto, view?: CreateOrderView): Promise<Order | CreateOrderSummaryDto>;
     findAll(labId: string, params: OrderListQueryParams): Promise<{
         items: Order[];
         total: number;
@@ -66,7 +77,7 @@ export declare class OrdersService {
         size: number;
         totalPages: number;
     }>;
-    findOne(id: string, labId: string): Promise<Order>;
+    findOne(id: string, labId: string, view?: OrderDetailView): Promise<Order>;
     updatePayment(id: string, labId: string, data: {
         paymentStatus: 'unpaid' | 'partial' | 'paid';
         paidAmount?: number;
@@ -109,8 +120,16 @@ export declare class OrdersService {
         revenue: number;
     }>;
     private applyOrderQueryFilters;
+    private applyOrderResultStatusFilter;
     private enrichOrdersWithProgress;
+    private resolveCreatePerfLogThresholdMs;
+    private resolveOrderHistoryPerfLogThresholdMs;
+    private resolveOrderTestInsertChunkSize;
+    private elapsedMs;
+    private stripHeavyOrderPayload;
+    private stripHeavyOrderTestsPayload;
     private normalizePaymentStatus;
+    private normalizeOrderResultStatus;
     private getLabTimeZone;
     private getDateRangeOrThrow;
     getWorklist(labId: string, shiftId: string | null): Promise<WorklistItemResponse[]>;

@@ -11,6 +11,7 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 var __param = (this && this.__param) || function (paramIndex, decorator) {
     return function (target, key) { decorator(target, key, paramIndex); }
 };
+var OrdersController_1;
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.OrdersController = void 0;
 const common_1 = require("@nestjs/common");
@@ -19,17 +20,32 @@ const create_order_dto_1 = require("./dto/create-order.dto");
 const update_payment_dto_1 = require("./dto/update-payment.dto");
 const update_order_tests_dto_1 = require("./dto/update-order-tests.dto");
 const update_order_discount_dto_1 = require("./dto/update-order-discount.dto");
+const create_order_response_dto_1 = require("./dto/create-order-response.dto");
 const jwt_auth_guard_1 = require("../auth/jwt-auth.guard");
-let OrdersController = class OrdersController {
+let OrdersController = OrdersController_1 = class OrdersController {
     constructor(ordersService) {
         this.ordersService = ordersService;
+        this.logger = new common_1.Logger(OrdersController_1.name);
     }
-    async create(req, dto) {
+    async create(req, dto, view) {
+        const requestStartedAt = process.hrtime.bigint();
+        const selectedView = view ?? create_order_response_dto_1.CreateOrderView.SUMMARY;
         const labId = req.user?.labId;
-        if (!labId) {
-            throw new Error('Lab ID not found in token');
+        try {
+            if (!labId) {
+                throw new Error('Lab ID not found in token');
+            }
+            return await this.ordersService.create(labId, dto, selectedView);
         }
-        return this.ordersService.create(labId, dto);
+        finally {
+            const durationMs = Number(process.hrtime.bigint() - requestStartedAt) / 1_000_000;
+            this.logger.log(JSON.stringify({
+                event: 'orders.create.request',
+                view: selectedView,
+                labId: labId ?? null,
+                durationMs: Math.round(durationMs * 100) / 100,
+            }));
+        }
     }
     async findAll(req, page, size, search, status, patientId, startDate, endDate) {
         const labId = req.user?.labId;
@@ -85,7 +101,7 @@ let OrdersController = class OrdersController {
         await this.ordersService.saveWorklist(labId, body.shiftId ?? null, items);
         return { ok: true };
     }
-    async findHistory(req, page, size, search, status, patientId, startDate, endDate) {
+    async findHistory(req, page, size, search, status, patientId, startDate, endDate, resultStatus) {
         const labId = req.user?.labId;
         if (!labId) {
             throw new Error('Lab ID not found in token');
@@ -98,14 +114,15 @@ let OrdersController = class OrdersController {
             patientId,
             startDate,
             endDate,
+            resultStatus,
         });
     }
-    async findOne(req, id) {
+    async findOne(req, id, view) {
         const labId = req.user?.labId;
         if (!labId) {
             throw new Error('Lab ID not found in token');
         }
-        return this.ordersService.findOne(id, labId);
+        return this.ordersService.findOne(id, labId, view ?? create_order_response_dto_1.OrderDetailView.COMPACT);
     }
     async updatePayment(req, id, dto) {
         const labId = req.user?.labId;
@@ -138,8 +155,9 @@ __decorate([
     (0, common_1.UsePipes)(new common_1.ValidationPipe({ whitelist: true })),
     __param(0, (0, common_1.Req)()),
     __param(1, (0, common_1.Body)()),
+    __param(2, (0, common_1.Query)('view', new common_1.ParseEnumPipe(create_order_response_dto_1.CreateOrderView, { optional: true }))),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [Object, create_order_dto_1.CreateOrderDto]),
+    __metadata("design:paramtypes", [Object, create_order_dto_1.CreateOrderDto, String]),
     __metadata("design:returntype", Promise)
 ], OrdersController.prototype, "create", null);
 __decorate([
@@ -206,16 +224,18 @@ __decorate([
     __param(5, (0, common_1.Query)('patientId')),
     __param(6, (0, common_1.Query)('startDate')),
     __param(7, (0, common_1.Query)('endDate')),
+    __param(8, (0, common_1.Query)('resultStatus', new common_1.ParseEnumPipe(create_order_response_dto_1.OrderResultStatus, { optional: true }))),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [Object, String, String, String, String, String, String, String]),
+    __metadata("design:paramtypes", [Object, String, String, String, String, String, String, String, String]),
     __metadata("design:returntype", Promise)
 ], OrdersController.prototype, "findHistory", null);
 __decorate([
     (0, common_1.Get)(':id'),
     __param(0, (0, common_1.Req)()),
     __param(1, (0, common_1.Param)('id', common_1.ParseUUIDPipe)),
+    __param(2, (0, common_1.Query)('view', new common_1.ParseEnumPipe(create_order_response_dto_1.OrderDetailView, { optional: true }))),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [Object, String]),
+    __metadata("design:paramtypes", [Object, String, String]),
     __metadata("design:returntype", Promise)
 ], OrdersController.prototype, "findOne", null);
 __decorate([
@@ -248,7 +268,7 @@ __decorate([
     __metadata("design:paramtypes", [Object, String, update_order_tests_dto_1.UpdateOrderTestsDto]),
     __metadata("design:returntype", Promise)
 ], OrdersController.prototype, "updateOrderTests", null);
-exports.OrdersController = OrdersController = __decorate([
+exports.OrdersController = OrdersController = OrdersController_1 = __decorate([
     (0, common_1.Controller)('orders'),
     (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
     __metadata("design:paramtypes", [orders_service_1.OrdersService])

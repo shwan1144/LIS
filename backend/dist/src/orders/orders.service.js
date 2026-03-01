@@ -11,9 +11,11 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 var __param = (this && this.__param) || function (paramIndex, decorator) {
     return function (target, key) { decorator(target, key, paramIndex); }
 };
+var OrdersService_1;
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.OrdersService = void 0;
 const common_1 = require("@nestjs/common");
+const crypto_1 = require("crypto");
 const typeorm_1 = require("@nestjs/typeorm");
 const typeorm_2 = require("typeorm");
 const order_entity_1 = require("../entities/order.entity");
@@ -26,9 +28,10 @@ const test_entity_1 = require("../entities/test.entity");
 const pricing_entity_1 = require("../entities/pricing.entity");
 const test_component_entity_1 = require("../entities/test-component.entity");
 const lab_orders_worklist_entity_1 = require("../entities/lab-orders-worklist.entity");
+const create_order_response_dto_1 = require("./dto/create-order-response.dto");
 const lab_counter_util_1 = require("../database/lab-counter.util");
 const lab_timezone_util_1 = require("../database/lab-timezone.util");
-let OrdersService = class OrdersService {
+let OrdersService = OrdersService_1 = class OrdersService {
     constructor(orderRepo, patientRepo, labRepo, shiftRepo, testRepo, pricingRepo, testComponentRepo, worklistRepo) {
         this.orderRepo = orderRepo;
         this.patientRepo = patientRepo;
@@ -38,107 +41,198 @@ let OrdersService = class OrdersService {
         this.pricingRepo = pricingRepo;
         this.testComponentRepo = testComponentRepo;
         this.worklistRepo = worklistRepo;
+        this.logger = new common_1.Logger(OrdersService_1.name);
+        this.createPerfLogThresholdMs = this.resolveCreatePerfLogThresholdMs();
+        this.orderHistoryPerfLogThresholdMs = this.resolveOrderHistoryPerfLogThresholdMs();
+        this.orderTestInsertChunkSize = this.resolveOrderTestInsertChunkSize();
     }
-    async create(labId, dto) {
-        const patient = await this.patientRepo.findOne({
-            where: { id: dto.patientId },
-        });
-        if (!patient) {
-            throw new common_1.NotFoundException('Patient not found');
-        }
-        const lab = await this.labRepo.findOne({ where: { id: labId } });
-        if (!lab) {
-            throw new common_1.NotFoundException('Lab not found');
-        }
-        let shift = null;
-        if (dto.shiftId) {
-            shift = await this.shiftRepo.findOne({
-                where: { id: dto.shiftId, labId },
+    async create(labId, dto, view = create_order_response_dto_1.CreateOrderView.SUMMARY) {
+        const totalStartedAt = process.hrtime.bigint();
+        const requestedTestsCount = dto.samples.reduce((sum, sample) => sum + (sample.tests?.length ?? 0), 0);
+        const testIds = dto.samples.flatMap((s) => (s.tests ?? []).map((t) => t.testId));
+        const uniqueTestIds = [...new Set(testIds)];
+        const timings = {
+            validationMs: 0,
+            pricingResolutionMs: 0,
+            counterOrderNumberGenerationMs: 0,
+            sampleInsertMs: 0,
+            orderTestInsertMs: 0,
+            responseBuildMs: 0,
+        };
+        try {
+            const validationStartedAt = process.hrtime.bigint();
+            const patientPromise = this.patientRepo.findOne({
+                where: { id: dto.patientId },
             });
-            if (!shift) {
+            const labPromise = this.labRepo.findOne({ where: { id: labId } });
+            const shiftPromise = dto.shiftId
+                ? this.shiftRepo.findOne({
+                    where: { id: dto.shiftId, labId },
+                })
+                : Promise.resolve(null);
+            const testsPromise = uniqueTestIds.length > 0
+                ? this.testRepo.find({
+                    where: uniqueTestIds.map((id) => ({ id, labId })),
+                })
+                : Promise.resolve([]);
+            const [patient, lab, shift, tests] = await Promise.all([
+                patientPromise,
+                labPromise,
+                shiftPromise,
+                testsPromise,
+            ]);
+            if (!patient) {
+                throw new common_1.NotFoundException('Patient not found');
+            }
+            if (!lab) {
+                throw new common_1.NotFoundException('Lab not found');
+            }
+            if (dto.shiftId && !shift) {
                 throw new common_1.NotFoundException('Shift not found or not assigned to this lab');
             }
-        }
-        const testIds = dto.samples.flatMap((s) => s.tests.map((t) => t.testId));
-        const uniqueTestIds = [...new Set(testIds)];
-        const tests = await this.testRepo.find({
-            where: uniqueTestIds.map((id) => ({ id, labId })),
-        });
-        if (tests.length !== uniqueTestIds.length) {
-            throw new common_1.NotFoundException('One or more tests not found');
-        }
-        const testMap = new Map(tests.map((t) => [t.id, t]));
-        const patientType = dto.patientType || order_entity_1.PatientType.WALK_IN;
-        const pricingValues = await Promise.all(uniqueTestIds.map((testId) => this.findPricing(labId, testId, dto.shiftId || null, patientType)));
-        const precomputedPricingMap = new Map();
-        uniqueTestIds.forEach((id, idx) => precomputedPricingMap.set(id, pricingValues[idx]));
-        const totalAmount = pricingValues.reduce((sum, value) => sum + value, 0);
-        const discountPercent = Math.min(100, Math.max(0, dto.discountPercent ?? 0));
-        const finalAmount = Math.round(totalAmount * (1 - discountPercent / 100) * 100) / 100;
-        const labelSequenceBy = lab.labelSequenceBy === 'department' ? 'department' : 'tube_type';
-        const sequenceResetBy = lab.sequenceResetBy === 'shift' ? 'shift' : 'day';
-        const effectiveShiftId = sequenceResetBy === 'shift' ? dto.shiftId || null : null;
-        const samplesToCreate = labelSequenceBy === 'department'
-            ? this.splitSamplesForDepartmentLabels(dto.samples, testMap)
-            : dto.samples;
-        return this.orderRepo.manager.transaction(async (manager) => {
-            const orderRepo = manager.getRepository(order_entity_1.Order);
-            const sampleRepo = manager.getRepository(sample_entity_1.Sample);
-            const now = new Date();
-            const labTimeZone = (0, lab_timezone_util_1.normalizeLabTimeZone)(lab.timezone);
-            const counterDateKey = (0, lab_timezone_util_1.formatDateKeyForTimeZone)(now, labTimeZone);
-            const orderNumber = await this.generateOrderNumber(labId, dto.shiftId || null, 1, manager, {
-                now,
-                timeZone: labTimeZone,
-                dateKey: counterDateKey,
-            });
-            const order = orderRepo.create({
-                patientId: dto.patientId,
-                labId,
-                shiftId: dto.shiftId || null,
-                orderNumber,
-                status: order_entity_1.OrderStatus.REGISTERED,
-                patientType,
-                notes: dto.notes || null,
-                totalAmount,
-                discountPercent,
-                finalAmount,
-                registeredAt: new Date(),
-            });
-            const savedOrder = await orderRepo.save(order);
-            const samplesToSave = [];
-            const bulkTestData = [];
-            for (let i = 0; i < samplesToCreate.length; i++) {
-                const sampleDto = samplesToCreate[i];
-                const sampleBarcode = orderNumber;
-                const scopeKey = labelSequenceBy === 'department'
-                    ? this.resolveSampleDepartmentScope(sampleDto.tests, testMap)
-                    : (sampleDto.tubeType ?? null);
-                const sequenceNumber = await this.getNextSequenceForScope(labId, sequenceResetBy, effectiveShiftId, scopeKey, labelSequenceBy, counterDateKey, manager);
-                const sample = sampleRepo.create({
-                    labId,
-                    orderId: savedOrder.id,
-                    sampleId: null,
-                    tubeType: sampleDto.tubeType || null,
-                    barcode: sampleBarcode,
-                    sequenceNumber,
-                    qrCode: null,
+            if (tests.length !== uniqueTestIds.length) {
+                throw new common_1.NotFoundException('One or more tests not found');
+            }
+            const testMap = new Map(tests.map((test) => [test.id, test]));
+            timings.validationMs = this.elapsedMs(validationStartedAt);
+            const pricingStartedAt = process.hrtime.bigint();
+            const patientType = dto.patientType || order_entity_1.PatientType.WALK_IN;
+            const pricingValues = uniqueTestIds.length > 0
+                ? await Promise.all(uniqueTestIds.map((testId) => this.findPricing(labId, testId, dto.shiftId || null, patientType)))
+                : [];
+            const precomputedPricingMap = new Map();
+            uniqueTestIds.forEach((id, idx) => precomputedPricingMap.set(id, pricingValues[idx]));
+            const totalAmount = pricingValues.reduce((sum, value) => sum + value, 0);
+            const discountPercent = Math.min(100, Math.max(0, dto.discountPercent ?? 0));
+            const finalAmount = Math.round(totalAmount * (1 - discountPercent / 100) * 100) / 100;
+            timings.pricingResolutionMs = this.elapsedMs(pricingStartedAt);
+            const labelSequenceBy = lab.labelSequenceBy === 'department' ? 'department' : 'tube_type';
+            const sequenceResetBy = lab.sequenceResetBy === 'shift' ? 'shift' : 'day';
+            const effectiveShiftId = sequenceResetBy === 'shift' ? dto.shiftId || null : null;
+            const samplesToCreate = labelSequenceBy === 'department'
+                ? this.splitSamplesForDepartmentLabels(dto.samples, testMap)
+                : dto.samples;
+            return await this.orderRepo.manager.transaction(async (manager) => {
+                const orderRepo = manager.getRepository(order_entity_1.Order);
+                const sampleRepo = manager.getRepository(sample_entity_1.Sample);
+                const now = new Date();
+                const labTimeZone = (0, lab_timezone_util_1.normalizeLabTimeZone)(lab.timezone);
+                const counterDateKey = (0, lab_timezone_util_1.formatDateKeyForTimeZone)(now, labTimeZone);
+                const counterStartedAt = process.hrtime.bigint();
+                const orderNumber = await this.generateOrderNumber(labId, dto.shiftId || null, 1, manager, {
+                    now,
+                    timeZone: labTimeZone,
+                    dateKey: counterDateKey,
                 });
-                samplesToSave.push(sample);
+                timings.counterOrderNumberGenerationMs = this.elapsedMs(counterStartedAt);
+                const orderId = (0, crypto_1.randomUUID)();
+                await orderRepo.insert({
+                    id: orderId,
+                    patientId: dto.patientId,
+                    labId,
+                    shiftId: dto.shiftId || null,
+                    orderNumber,
+                    status: order_entity_1.OrderStatus.REGISTERED,
+                    patientType,
+                    notes: dto.notes || null,
+                    totalAmount,
+                    discountPercent,
+                    finalAmount,
+                    paymentStatus: 'unpaid',
+                    paidAmount: null,
+                    registeredAt: now,
+                });
+                const sampleInsertStartedAt = process.hrtime.bigint();
+                const samplesToInsert = [];
+                const bulkTestData = [];
+                for (const sampleDto of samplesToCreate) {
+                    const sampleRowId = (0, crypto_1.randomUUID)();
+                    const scopeKey = labelSequenceBy === 'department'
+                        ? this.resolveSampleDepartmentScope(sampleDto.tests, testMap)
+                        : (sampleDto.tubeType ?? null);
+                    const sequenceNumber = await this.getNextSequenceForScope(labId, sequenceResetBy, effectiveShiftId, scopeKey, labelSequenceBy, counterDateKey, manager);
+                    samplesToInsert.push({
+                        id: sampleRowId,
+                        labId,
+                        orderId,
+                        sampleId: null,
+                        tubeType: sampleDto.tubeType || null,
+                        barcode: orderNumber,
+                        sequenceNumber,
+                        qrCode: null,
+                    });
+                    const testsForSample = (sampleDto.tests ?? [])
+                        .map((selected) => testMap.get(selected.testId))
+                        .filter((entry) => Boolean(entry));
+                    bulkTestData.push({ sampleId: sampleRowId, tests: testsForSample });
+                }
+                if (samplesToInsert.length > 0) {
+                    await sampleRepo.insert(samplesToInsert);
+                }
+                timings.sampleInsertMs = this.elapsedMs(sampleInsertStartedAt);
+                const orderTestInsertStartedAt = process.hrtime.bigint();
+                const rootTestsCount = await this.bulkCreateOrderTests(manager, labId, bulkTestData, dto.shiftId ?? null, patientType, precomputedPricingMap);
+                timings.orderTestInsertMs = this.elapsedMs(orderTestInsertStartedAt);
+                const responseBuildStartedAt = process.hrtime.bigint();
+                if (view === create_order_response_dto_1.CreateOrderView.FULL) {
+                    const fullOrder = await orderRepo.findOne({
+                        where: { id: orderId },
+                        relations: ['patient', 'lab', 'shift', 'samples', 'samples.orderTests', 'samples.orderTests.test'],
+                    });
+                    timings.responseBuildMs = this.elapsedMs(responseBuildStartedAt);
+                    if (!fullOrder) {
+                        throw new common_1.NotFoundException('Order not found');
+                    }
+                    return fullOrder;
+                }
+                const summary = {
+                    id: orderId,
+                    orderNumber,
+                    status: order_entity_1.OrderStatus.REGISTERED,
+                    registeredAt: now,
+                    paymentStatus: 'unpaid',
+                    paidAmount: null,
+                    totalAmount: Math.round(totalAmount * 100) / 100,
+                    discountPercent,
+                    finalAmount,
+                    patient,
+                    shift: shift
+                        ? {
+                            id: shift.id,
+                            code: shift.code,
+                            name: shift.name,
+                        }
+                        : null,
+                    testsCount: rootTestsCount,
+                    readyTestsCount: 0,
+                    reportReady: false,
+                };
+                timings.responseBuildMs = this.elapsedMs(responseBuildStartedAt);
+                return summary;
+            });
+        }
+        finally {
+            const totalMs = this.elapsedMs(totalStartedAt);
+            if (totalMs >= this.createPerfLogThresholdMs) {
+                this.logger.warn(JSON.stringify({
+                    event: 'orders.create.performance',
+                    labId,
+                    view,
+                    durationMs: Math.round(totalMs * 100) / 100,
+                    requestedSamplesCount: dto.samples.length,
+                    requestedTestsCount,
+                    uniqueTestsCount: uniqueTestIds.length,
+                    timingsMs: {
+                        validation: Math.round(timings.validationMs * 100) / 100,
+                        pricingResolution: Math.round(timings.pricingResolutionMs * 100) / 100,
+                        counterOrderNumberGeneration: Math.round(timings.counterOrderNumberGenerationMs * 100) / 100,
+                        sampleInsert: Math.round(timings.sampleInsertMs * 100) / 100,
+                        orderTestInsert: Math.round(timings.orderTestInsertMs * 100) / 100,
+                        responseBuild: Math.round(timings.responseBuildMs * 100) / 100,
+                    },
+                }));
             }
-            const savedSamples = await sampleRepo.save(samplesToSave);
-            for (let i = 0; i < samplesToCreate.length; i++) {
-                const sampleDto = samplesToCreate[i];
-                const savedSample = savedSamples[i];
-                const tests = sampleDto.tests.map(t => testMap.get(t.testId)).filter(Boolean);
-                bulkTestData.push({ sampleId: savedSample.id, tests });
-            }
-            await this.bulkCreateOrderTests(manager, labId, bulkTestData, dto.shiftId ?? null, patientType, precomputedPricingMap);
-            return (await orderRepo.findOne({
-                where: { id: savedOrder.id },
-                relations: ['patient', 'lab', 'shift', 'samples', 'samples.orderTests', 'samples.orderTests.test'],
-            }));
-        });
+        }
     }
     async findAll(labId, params) {
         const page = Math.max(1, params.page ?? 1);
@@ -165,61 +259,121 @@ let OrdersService = class OrdersService {
         };
     }
     async findHistory(labId, params) {
+        const startedAt = process.hrtime.bigint();
         const page = Math.max(1, params.page ?? 1);
         const size = Math.min(100, Math.max(1, params.size ?? 20));
         const skip = (page - 1) * size;
-        const qb = this.orderRepo
-            .createQueryBuilder('order')
-            .leftJoinAndSelect('order.patient', 'patient')
-            .leftJoinAndSelect('order.shift', 'shift')
-            .where('order.labId = :labId', { labId });
-        await this.applyOrderQueryFilters(qb, labId, params);
-        qb.orderBy('order.registeredAt', 'DESC').skip(skip).take(size);
-        const [orders, total] = await qb.getManyAndCount();
-        await this.enrichOrdersWithProgress(orders);
-        const items = orders.map((order) => {
-            const testsCount = Number(order.testsCount ?? 0) || 0;
-            const readyTestsCount = Number(order.readyTestsCount ?? 0) || 0;
-            const reportReady = Boolean(order.reportReady) || readyTestsCount > 0;
+        let total = 0;
+        let itemsCount = 0;
+        try {
+            const qb = this.orderRepo
+                .createQueryBuilder('order')
+                .leftJoinAndSelect('order.patient', 'patient')
+                .leftJoinAndSelect('order.shift', 'shift')
+                .where('order.labId = :labId', { labId });
+            await this.applyOrderQueryFilters(qb, labId, params);
+            qb.orderBy('order.registeredAt', 'DESC').skip(skip).take(size);
+            const [orders, nextTotal] = await qb.getManyAndCount();
+            total = nextTotal;
+            await this.enrichOrdersWithProgress(orders);
+            const items = orders.map((order) => {
+                const payload = order;
+                const testsCount = Number(payload.testsCount ?? 0) || 0;
+                const readyTestsCount = Number(payload.readyTestsCount ?? 0) || 0;
+                const pendingTestsCount = Number(payload.pendingTestsCount ?? 0) || 0;
+                const completedTestsCount = Number(payload.completedTestsCount ?? 0) || 0;
+                const verifiedTestsCount = Number(payload.verifiedTestsCount ?? 0) || 0;
+                const rejectedTestsCount = Number(payload.rejectedTestsCount ?? 0) || 0;
+                const reportReady = Boolean(payload.reportReady) || readyTestsCount > 0;
+                const resultStatus = this.normalizeOrderResultStatus(payload.resultStatus, {
+                    testsCount,
+                    completedTestsCount,
+                    verifiedTestsCount,
+                    rejectedTestsCount,
+                });
+                return {
+                    id: order.id,
+                    orderNumber: order.orderNumber,
+                    status: order.status,
+                    registeredAt: order.registeredAt,
+                    paymentStatus: this.normalizePaymentStatus(order.paymentStatus),
+                    paidAmount: order.paidAmount != null ? Number(order.paidAmount) : null,
+                    finalAmount: Number(order.finalAmount ?? 0),
+                    patient: order.patient,
+                    shift: order.shift ?? null,
+                    testsCount,
+                    readyTestsCount,
+                    reportReady,
+                    resultStatus,
+                    pendingTestsCount,
+                    completedTestsCount,
+                    verifiedTestsCount,
+                    rejectedTestsCount,
+                };
+            });
+            itemsCount = items.length;
             return {
-                id: order.id,
-                orderNumber: order.orderNumber,
-                status: order.status,
-                registeredAt: order.registeredAt,
-                paymentStatus: this.normalizePaymentStatus(order.paymentStatus),
-                paidAmount: order.paidAmount != null ? Number(order.paidAmount) : null,
-                finalAmount: Number(order.finalAmount ?? 0),
-                patient: order.patient,
-                shift: order.shift ?? null,
-                testsCount,
-                readyTestsCount,
-                reportReady,
+                items,
+                total,
+                page,
+                size,
+                totalPages: Math.ceil(total / size),
             };
-        });
-        return {
-            items,
-            total,
-            page,
-            size,
-            totalPages: Math.ceil(total / size),
-        };
-    }
-    async findOne(id, labId) {
-        const order = await this.orderRepo.findOne({
-            where: { id, labId },
-            relations: [
-                'patient',
-                'lab',
-                'shift',
-                'samples',
-                'samples.orderTests',
-                'samples.orderTests.test',
-            ],
-        });
-        if (!order) {
-            throw new common_1.NotFoundException('Order not found');
         }
-        return order;
+        finally {
+            const durationMs = this.elapsedMs(startedAt);
+            if (durationMs >= this.orderHistoryPerfLogThresholdMs) {
+                this.logger.warn(JSON.stringify({
+                    event: 'orders.history.performance',
+                    labId,
+                    page,
+                    size,
+                    total,
+                    itemsCount,
+                    durationMs: Math.round(durationMs * 100) / 100,
+                    filters: {
+                        status: params.status ?? null,
+                        resultStatus: params.resultStatus ?? null,
+                        hasSearch: Boolean(params.search?.trim()),
+                        patientId: params.patientId ?? null,
+                        startDate: params.startDate ?? null,
+                        endDate: params.endDate ?? null,
+                    },
+                }));
+            }
+        }
+    }
+    async findOne(id, labId, view = create_order_response_dto_1.OrderDetailView.COMPACT) {
+        const startedAt = process.hrtime.bigint();
+        try {
+            const order = await this.orderRepo.findOne({
+                where: { id, labId },
+                relations: [
+                    'patient',
+                    'lab',
+                    'shift',
+                    'samples',
+                    'samples.orderTests',
+                    'samples.orderTests.test',
+                ],
+            });
+            if (!order) {
+                throw new common_1.NotFoundException('Order not found');
+            }
+            return this.stripHeavyOrderPayload(order, view);
+        }
+        finally {
+            const durationMs = this.elapsedMs(startedAt);
+            if (durationMs >= this.orderHistoryPerfLogThresholdMs) {
+                this.logger.warn(JSON.stringify({
+                    event: 'orders.findOne.performance',
+                    labId,
+                    orderId: id,
+                    view,
+                    durationMs: Math.round(durationMs * 100) / 100,
+                }));
+            }
+        }
     }
     async updatePayment(id, labId, data) {
         const order = await this.orderRepo.findOne({ where: { id, labId } });
@@ -463,29 +617,26 @@ let OrdersService = class OrdersService {
         return `tube:${tubeType ?? 'none'}`;
     }
     async bulkCreateOrderTests(manager, labId, sampleWithTestsArr, shiftId, patientType, precomputedPricingMap) {
-        const orderTestRepo = manager.getRepository(order_test_entity_1.OrderTest);
         const allTestIds = new Set();
+        const panelTestIdSet = new Set();
         for (const item of sampleWithTestsArr) {
             for (const t of item.tests) {
                 allTestIds.add(t.id);
+                if (t.type === test_entity_1.TestType.PANEL) {
+                    panelTestIdSet.add(t.id);
+                }
             }
         }
         const uniqueTestIds = Array.from(allTestIds);
         if (uniqueTestIds.length === 0)
-            return;
+            return 0;
         let pricingMap = precomputedPricingMap;
         if (!pricingMap) {
             pricingMap = new Map();
             const pricingValues = await Promise.all(uniqueTestIds.map((testId) => this.findPricing(labId, testId, shiftId, patientType)));
             uniqueTestIds.forEach((id, idx) => pricingMap.set(id, pricingValues[idx]));
         }
-        const panelTestIds = uniqueTestIds.filter(id => {
-            for (const item of sampleWithTestsArr) {
-                if (item.tests.find(t => t.id === id)?.type === test_entity_1.TestType.PANEL)
-                    return true;
-            }
-            return false;
-        });
+        const panelTestIds = Array.from(panelTestIdSet);
         const componentsByPanelId = new Map();
         if (panelTestIds.length > 0) {
             const allComponents = await manager.getRepository(test_component_entity_1.TestComponent)
@@ -501,13 +652,15 @@ let OrdersService = class OrdersService {
                 componentsByPanelId.set(comp.panelTestId, existing);
             }
         }
-        const toSave = [];
+        const rows = [];
+        let rootTestsCount = 0;
         for (const { sampleId, tests } of sampleWithTestsArr) {
             for (const test of tests) {
                 const price = pricingMap.get(test.id) ?? 0;
+                rootTestsCount += 1;
                 if (test.type === test_entity_1.TestType.PANEL) {
-                    const parentId = require('crypto').randomUUID();
-                    toSave.push(orderTestRepo.create({
+                    const parentId = (0, crypto_1.randomUUID)();
+                    rows.push({
                         id: parentId,
                         labId,
                         sampleId,
@@ -515,10 +668,10 @@ let OrdersService = class OrdersService {
                         parentOrderTestId: null,
                         status: order_test_entity_1.OrderTestStatus.PENDING,
                         price,
-                    }));
+                    });
                     const components = componentsByPanelId.get(test.id) ?? [];
                     for (const comp of components) {
-                        toSave.push(orderTestRepo.create({
+                        rows.push({
                             labId,
                             sampleId,
                             testId: comp.childTestId,
@@ -526,24 +679,33 @@ let OrdersService = class OrdersService {
                             status: order_test_entity_1.OrderTestStatus.PENDING,
                             price: null,
                             panelSortOrder: comp.sortOrder ?? null,
-                        }));
+                        });
                     }
                 }
                 else {
-                    toSave.push(orderTestRepo.create({
+                    rows.push({
                         labId,
                         sampleId,
                         testId: test.id,
                         parentOrderTestId: null,
                         status: order_test_entity_1.OrderTestStatus.PENDING,
                         price,
-                    }));
+                    });
                 }
             }
         }
-        if (toSave.length > 0) {
-            await orderTestRepo.save(toSave);
+        if (rows.length > 0) {
+            for (let offset = 0; offset < rows.length; offset += this.orderTestInsertChunkSize) {
+                const chunk = rows.slice(offset, offset + this.orderTestInsertChunkSize);
+                await manager
+                    .createQueryBuilder()
+                    .insert()
+                    .into(order_test_entity_1.OrderTest)
+                    .values(chunk)
+                    .execute();
+            }
         }
+        return rootTestsCount;
     }
     createOrderSampleBarcodeAllocator(orderNumber, existingBarcodes) {
         const normalizedOrderNumber = orderNumber?.trim() ?? '';
@@ -863,6 +1025,75 @@ let OrdersService = class OrdersService {
             const { endDate } = this.getDateRangeOrThrow(params.endDate, labTimeZone, 'endDate');
             qb.andWhere('order.registeredAt <= :endDate', { endDate });
         }
+        if (params.resultStatus) {
+            this.applyOrderResultStatusFilter(qb, params.resultStatus);
+        }
+    }
+    applyOrderResultStatusFilter(qb, resultStatus) {
+        const hasRootTestsSql = `EXISTS (
+      SELECT 1
+      FROM samples s
+      INNER JOIN order_tests ot ON ot."sampleId" = s.id
+      WHERE s."orderId" = "order"."id"
+        AND ot."parentOrderTestId" IS NULL
+    )`;
+        const hasRejectedSql = `EXISTS (
+      SELECT 1
+      FROM samples s
+      INNER JOIN order_tests ot ON ot."sampleId" = s.id
+      WHERE s."orderId" = "order"."id"
+        AND ot."parentOrderTestId" IS NULL
+        AND ot.status = :resultRejected
+    )`;
+        const hasNonVerifiedSql = `EXISTS (
+      SELECT 1
+      FROM samples s
+      INNER JOIN order_tests ot ON ot."sampleId" = s.id
+      WHERE s."orderId" = "order"."id"
+        AND ot."parentOrderTestId" IS NULL
+        AND ot.status <> :resultVerified
+    )`;
+        const hasCompletedSql = `EXISTS (
+      SELECT 1
+      FROM samples s
+      INNER JOIN order_tests ot ON ot."sampleId" = s.id
+      WHERE s."orderId" = "order"."id"
+        AND ot."parentOrderTestId" IS NULL
+        AND ot.status = :resultCompleted
+    )`;
+        const hasOutsideCompletedVerifiedSql = `EXISTS (
+      SELECT 1
+      FROM samples s
+      INNER JOIN order_tests ot ON ot."sampleId" = s.id
+      WHERE s."orderId" = "order"."id"
+        AND ot."parentOrderTestId" IS NULL
+        AND ot.status NOT IN (:...completedOrVerifiedStatuses)
+    )`;
+        const verifiedCondition = `(${hasRootTestsSql} AND NOT (${hasNonVerifiedSql}))`;
+        const completedCondition = `(${hasCompletedSql} AND NOT (${hasOutsideCompletedVerifiedSql}))`;
+        const pendingCondition = `(NOT (${hasRejectedSql}) AND NOT ${verifiedCondition} AND NOT ${completedCondition})`;
+        qb.setParameter('resultRejected', order_test_entity_1.OrderTestStatus.REJECTED);
+        qb.setParameter('resultVerified', order_test_entity_1.OrderTestStatus.VERIFIED);
+        qb.setParameter('resultCompleted', order_test_entity_1.OrderTestStatus.COMPLETED);
+        qb.setParameter('completedOrVerifiedStatuses', [
+            order_test_entity_1.OrderTestStatus.COMPLETED,
+            order_test_entity_1.OrderTestStatus.VERIFIED,
+        ]);
+        switch (resultStatus) {
+            case create_order_response_dto_1.OrderResultStatus.REJECTED:
+                qb.andWhere(hasRejectedSql);
+                return;
+            case create_order_response_dto_1.OrderResultStatus.VERIFIED:
+                qb.andWhere(verifiedCondition);
+                return;
+            case create_order_response_dto_1.OrderResultStatus.COMPLETED:
+                qb.andWhere(completedCondition);
+                return;
+            case create_order_response_dto_1.OrderResultStatus.PENDING:
+            default:
+                qb.andWhere(pendingCondition);
+                return;
+        }
     }
     async enrichOrdersWithProgress(items) {
         if (items.length === 0) {
@@ -891,6 +1122,10 @@ let OrdersService = class OrdersService {
             .select('s."orderId"', 'orderId')
             .addSelect('COUNT(*) FILTER (WHERE ot."parentOrderTestId" IS NULL)', 'totalTests')
             .addSelect(`SUM(CASE WHEN ot.status IN (:...readyStatuses) AND ot."parentOrderTestId" IS NULL THEN 1 ELSE 0 END)`, 'readyTests')
+            .addSelect(`SUM(CASE WHEN ot.status IN (:...pendingStatuses) AND ot."parentOrderTestId" IS NULL THEN 1 ELSE 0 END)`, 'pendingTests')
+            .addSelect(`SUM(CASE WHEN ot.status = :completedStatus AND ot."parentOrderTestId" IS NULL THEN 1 ELSE 0 END)`, 'completedTests')
+            .addSelect(`SUM(CASE WHEN ot.status = :verifiedStatus AND ot."parentOrderTestId" IS NULL THEN 1 ELSE 0 END)`, 'verifiedTests')
+            .addSelect(`SUM(CASE WHEN ot.status = :rejectedStatus AND ot."parentOrderTestId" IS NULL THEN 1 ELSE 0 END)`, 'rejectedTests')
             .from('order_tests', 'ot')
             .innerJoin('samples', 's', 's.id = ot."sampleId"')
             .where('s."orderId" IN (:...orderIds)', { orderIds })
@@ -899,6 +1134,10 @@ let OrdersService = class OrdersService {
             order_test_entity_1.OrderTestStatus.VERIFIED,
             order_test_entity_1.OrderTestStatus.REJECTED,
         ])
+            .setParameter('pendingStatuses', [order_test_entity_1.OrderTestStatus.PENDING, order_test_entity_1.OrderTestStatus.IN_PROGRESS])
+            .setParameter('completedStatus', order_test_entity_1.OrderTestStatus.COMPLETED)
+            .setParameter('verifiedStatus', order_test_entity_1.OrderTestStatus.VERIFIED)
+            .setParameter('rejectedStatus', order_test_entity_1.OrderTestStatus.REJECTED)
             .groupBy('s."orderId"')
             .getRawMany();
         const countMap = new Map(testCounts.map((row) => [
@@ -906,17 +1145,107 @@ let OrdersService = class OrdersService {
             {
                 totalTests: parseInt(row.totalTests, 10) || 0,
                 readyTests: parseInt(row.readyTests, 10) || 0,
+                pendingTests: parseInt(row.pendingTests, 10) || 0,
+                completedTests: parseInt(row.completedTests, 10) || 0,
+                verifiedTests: parseInt(row.verifiedTests, 10) || 0,
+                rejectedTests: parseInt(row.rejectedTests, 10) || 0,
             },
         ]));
         for (const order of items) {
-            const counts = countMap.get(order.id) || { totalTests: 0, readyTests: 0 };
+            const counts = countMap.get(order.id) || {
+                totalTests: 0,
+                readyTests: 0,
+                pendingTests: 0,
+                completedTests: 0,
+                verifiedTests: 0,
+                rejectedTests: 0,
+            };
             order.testsCount = counts.totalTests;
             order.readyTestsCount = counts.readyTests;
+            order.pendingTestsCount = counts.pendingTests;
+            order.completedTestsCount = counts.completedTests;
+            order.verifiedTestsCount = counts.verifiedTests;
+            order.rejectedTestsCount = counts.rejectedTests;
             order.reportReady = counts.readyTests > 0;
+            order.resultStatus = this.normalizeOrderResultStatus(undefined, {
+                testsCount: counts.totalTests,
+                completedTestsCount: counts.completedTests,
+                verifiedTestsCount: counts.verifiedTests,
+                rejectedTestsCount: counts.rejectedTests,
+            });
             if (order.status !== order_entity_1.OrderStatus.CANCELLED && progressedSet.has(order.id)) {
                 order.status = order_entity_1.OrderStatus.COMPLETED;
             }
         }
+    }
+    resolveCreatePerfLogThresholdMs() {
+        const parsed = Number.parseInt(process.env.ORDER_CREATE_PERF_LOG_THRESHOLD_MS ?? '500', 10);
+        return Number.isFinite(parsed) && parsed >= 0 ? parsed : 500;
+    }
+    resolveOrderHistoryPerfLogThresholdMs() {
+        const parsed = Number.parseInt(process.env.ORDER_HISTORY_PERF_LOG_THRESHOLD_MS ?? '500', 10);
+        return Number.isFinite(parsed) && parsed >= 0 ? parsed : 500;
+    }
+    resolveOrderTestInsertChunkSize() {
+        const parsed = Number.parseInt(process.env.ORDER_TEST_INSERT_CHUNK_SIZE ?? '250', 10);
+        if (!Number.isFinite(parsed) || parsed <= 0) {
+            return 250;
+        }
+        return Math.max(50, Math.min(parsed, 2000));
+    }
+    elapsedMs(startedAt) {
+        return Number(process.hrtime.bigint() - startedAt) / 1_000_000;
+    }
+    stripHeavyOrderPayload(order, detailView = create_order_response_dto_1.OrderDetailView.COMPACT) {
+        if (!order?.lab) {
+            return detailView === create_order_response_dto_1.OrderDetailView.COMPACT
+                ? this.stripHeavyOrderTestsPayload(order)
+                : order;
+        }
+        order.lab.reportBannerDataUrl = null;
+        order.lab.reportFooterDataUrl = null;
+        order.lab.reportLogoDataUrl = null;
+        order.lab.reportWatermarkDataUrl = null;
+        order.lab.onlineResultWatermarkDataUrl = null;
+        order.lab.uiTestGroups = null;
+        return detailView === create_order_response_dto_1.OrderDetailView.COMPACT
+            ? this.stripHeavyOrderTestsPayload(order)
+            : order;
+    }
+    stripHeavyOrderTestsPayload(order) {
+        for (const sample of order.samples ?? []) {
+            for (const orderTest of sample.orderTests ?? []) {
+                const testPayload = orderTest.test;
+                if (!testPayload)
+                    continue;
+                delete testPayload.lab;
+                delete testPayload.labId;
+                delete testPayload.department;
+                delete testPayload.type;
+                delete testPayload.unit;
+                delete testPayload.normalMin;
+                delete testPayload.normalMax;
+                delete testPayload.normalMinMale;
+                delete testPayload.normalMaxMale;
+                delete testPayload.normalMinFemale;
+                delete testPayload.normalMaxFemale;
+                delete testPayload.normalText;
+                delete testPayload.resultEntryType;
+                delete testPayload.resultTextOptions;
+                delete testPayload.allowCustomResultText;
+                delete testPayload.numericAgeRanges;
+                delete testPayload.description;
+                delete testPayload.childTestIds;
+                delete testPayload.parameterDefinitions;
+                delete testPayload.isActive;
+                delete testPayload.sortOrder;
+                delete testPayload.expectedCompletionMinutes;
+                delete testPayload.createdAt;
+                delete testPayload.updatedAt;
+                delete testPayload.orderTests;
+            }
+        }
+        return order;
     }
     normalizePaymentStatus(value) {
         if (value === 'paid')
@@ -924,6 +1253,27 @@ let OrdersService = class OrdersService {
         if (value === 'partial')
             return 'partial';
         return 'unpaid';
+    }
+    normalizeOrderResultStatus(value, counts) {
+        if (value === create_order_response_dto_1.OrderResultStatus.PENDING)
+            return create_order_response_dto_1.OrderResultStatus.PENDING;
+        if (value === create_order_response_dto_1.OrderResultStatus.COMPLETED)
+            return create_order_response_dto_1.OrderResultStatus.COMPLETED;
+        if (value === create_order_response_dto_1.OrderResultStatus.VERIFIED)
+            return create_order_response_dto_1.OrderResultStatus.VERIFIED;
+        if (value === create_order_response_dto_1.OrderResultStatus.REJECTED)
+            return create_order_response_dto_1.OrderResultStatus.REJECTED;
+        if (counts.rejectedTestsCount > 0) {
+            return create_order_response_dto_1.OrderResultStatus.REJECTED;
+        }
+        if (counts.testsCount > 0 && counts.verifiedTestsCount === counts.testsCount) {
+            return create_order_response_dto_1.OrderResultStatus.VERIFIED;
+        }
+        if (counts.completedTestsCount > 0 &&
+            counts.completedTestsCount + counts.verifiedTestsCount === counts.testsCount) {
+            return create_order_response_dto_1.OrderResultStatus.COMPLETED;
+        }
+        return create_order_response_dto_1.OrderResultStatus.PENDING;
     }
     async getLabTimeZone(labId, manager = this.orderRepo.manager) {
         const lab = await manager.getRepository(lab_entity_1.Lab).findOne({ where: { id: labId } });
@@ -965,6 +1315,7 @@ let OrdersService = class OrdersService {
                     'samples.orderTests.test',
                 ],
             });
+            orders = orders.map((order) => this.stripHeavyOrderPayload(order));
         }
         const orderMap = new Map(orders.map((o) => [o.id, o]));
         return raw
@@ -984,7 +1335,7 @@ let OrdersService = class OrdersService {
     }
 };
 exports.OrdersService = OrdersService;
-exports.OrdersService = OrdersService = __decorate([
+exports.OrdersService = OrdersService = OrdersService_1 = __decorate([
     (0, common_1.Injectable)(),
     __param(0, (0, typeorm_1.InjectRepository)(order_entity_1.Order)),
     __param(1, (0, typeorm_1.InjectRepository)(patient_entity_1.Patient)),

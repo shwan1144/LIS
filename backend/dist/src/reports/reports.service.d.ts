@@ -43,7 +43,7 @@ export declare class ReportsService implements OnModuleInit, OnModuleDestroy {
     private static cachedLogo;
     private static cachedFont;
     constructor(orderRepo: Repository<Order>, orderTestRepo: Repository<OrderTest>, patientRepo: Repository<Patient>, labRepo: Repository<Lab>, userRepo: Repository<User>);
-    onModuleInit(): Promise<void>;
+    onModuleInit(): void;
     private getBrowser;
     private renderPdfFromHtml;
     onModuleDestroy(): Promise<void>;
