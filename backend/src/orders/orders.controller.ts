@@ -12,12 +12,14 @@ import {
   UseGuards,
   Req,
   ParseEnumPipe,
+  Logger,
 } from '@nestjs/common';
 import { OrdersService } from './orders.service';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { UpdateOrderPaymentDto } from './dto/update-payment.dto';
 import { UpdateOrderTestsDto } from './dto/update-order-tests.dto';
 import { UpdateOrderDiscountDto } from './dto/update-order-discount.dto';
+import { CreateOrderView } from './dto/create-order-response.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { OrderStatus } from '../entities/order.entity';
 
@@ -28,16 +30,37 @@ interface RequestWithUser {
 @Controller('orders')
 @UseGuards(JwtAuthGuard)
 export class OrdersController {
+  private readonly logger = new Logger(OrdersController.name);
+
   constructor(private readonly ordersService: OrdersService) {}
 
   @Post()
   @UsePipes(new ValidationPipe({ whitelist: true }))
-  async create(@Req() req: RequestWithUser, @Body() dto: CreateOrderDto) {
+  async create(
+    @Req() req: RequestWithUser,
+    @Body() dto: CreateOrderDto,
+    @Query('view', new ParseEnumPipe(CreateOrderView, { optional: true }))
+    view?: CreateOrderView,
+  ) {
+    const requestStartedAt = process.hrtime.bigint();
+    const selectedView = view ?? CreateOrderView.SUMMARY;
     const labId = req.user?.labId;
-    if (!labId) {
-      throw new Error('Lab ID not found in token');
+    try {
+      if (!labId) {
+        throw new Error('Lab ID not found in token');
+      }
+      return await this.ordersService.create(labId, dto, selectedView);
+    } finally {
+      const durationMs = Number(process.hrtime.bigint() - requestStartedAt) / 1_000_000;
+      this.logger.log(
+        JSON.stringify({
+          event: 'orders.create.request',
+          view: selectedView,
+          labId: labId ?? null,
+          durationMs: Math.round(durationMs * 100) / 100,
+        }),
+      );
     }
-    return this.ordersService.create(labId, dto);
   }
 
   @Get()

@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import axios from 'axios';
 import {
   Card,
   Button,
@@ -50,6 +51,7 @@ import {
   type PatientDto,
   type TestDto,
   type OrderDto,
+  type OrderCreateSummaryDto,
   type OrderHistoryItemDto,
   type OrderStatus,
   type DepartmentDto,
@@ -85,6 +87,8 @@ interface OrderListRow {
 }
 
 const ORDER_PAGE_SIZE = 25;
+const CREATE_ORDER_TIMEOUT_MS = 15_000;
+const CREATE_ORDER_SLOW_FEEDBACK_MS = 1_200;
 const ORDER_STATUS_FILTERS: Array<{ label: string; value: 'ALL' | OrderStatus }> = [
   { label: 'All statuses', value: 'ALL' },
   { label: 'Registered', value: 'REGISTERED' },
@@ -126,6 +130,27 @@ function getShiftTagColor(shiftLabel: string): (typeof SHIFT_COLOR_PALETTE)[numb
 }
 
 function toOrderHistoryItem(order: OrderDto): OrderHistoryItemDto {
+  const readyTestsCount = Number(order.readyTestsCount ?? 0) || 0;
+  return {
+    id: order.id,
+    orderNumber: order.orderNumber,
+    status: order.status,
+    registeredAt: order.registeredAt,
+    paymentStatus:
+      order.paymentStatus === 'paid' || order.paymentStatus === 'partial'
+        ? order.paymentStatus
+        : 'unpaid',
+    paidAmount: order.paidAmount != null ? Number(order.paidAmount) : null,
+    finalAmount: Number(order.finalAmount ?? 0),
+    patient: order.patient,
+    shift: order.shift,
+    testsCount: Number(order.testsCount ?? 0) || 0,
+    readyTestsCount,
+    reportReady: Boolean(order.reportReady) || readyTestsCount > 0,
+  };
+}
+
+function toOrderHistoryItemFromSummary(order: OrderCreateSummaryDto): OrderHistoryItemDto {
   const readyTestsCount = Number(order.readyTestsCount ?? 0) || 0;
   return {
     id: order.id,
@@ -715,6 +740,15 @@ export function OrdersPage() {
       return;
     }
 
+    const slowMessageKey = 'orders-create-slow-feedback';
+    const slowFeedbackTimer = window.setTimeout(() => {
+      message.loading({
+        key: slowMessageKey,
+        content: 'Still creating order...',
+        duration: 0,
+      });
+    }, CREATE_ORDER_SLOW_FEEDBACK_MS);
+
     setSubmitting(true);
     try {
       const testsByTube = selectedTests.reduce(
@@ -738,12 +772,14 @@ export function OrdersPage() {
         })),
       };
 
-      const createdOrder = await createOrder(orderData);
-      const historyItem = toOrderHistoryItem(createdOrder);
+      const createdOrder = await createOrder(orderData, {
+        view: 'summary',
+        timeoutMs: CREATE_ORDER_TIMEOUT_MS,
+      });
+      const historyItem = toOrderHistoryItemFromSummary(createdOrder);
       const lockedRowId = `order-${createdOrder.id}`;
       const selectedDraftRowId = selectedRowId ?? `draft-${selectedPatient.id}`;
 
-      setOrderDetailsCache((prev) => ({ ...prev, [createdOrder.id]: createdOrder }));
       setOrderDetailsErrors((prev) => {
         if (!prev[createdOrder.id]) return prev;
         const next = { ...prev };
@@ -773,6 +809,7 @@ export function OrdersPage() {
       });
       setSelectedRowId(lockedRowId);
       setListTotal((prev) => prev + 1);
+      void fetchOrderDetails(createdOrder.id, 'auto');
 
       setDraftPatient(null);
       setSelectedTests([]);
@@ -785,6 +822,10 @@ export function OrdersPage() {
       });
       message.success('Order created successfully');
     } catch (err: unknown) {
+      if (axios.isAxiosError(err) && err.code === 'ECONNABORTED') {
+        message.error('Order creation timed out after 15 seconds. Check history before retrying.');
+        return;
+      }
       const msg =
         err && typeof err === 'object' && 'response' in err
           ? (err as { response?: { data?: { message?: string } } }).response?.data
@@ -792,6 +833,8 @@ export function OrdersPage() {
           : 'Order creation failed';
       message.error(msg || 'Order creation failed');
     } finally {
+      window.clearTimeout(slowFeedbackTimer);
+      message.destroy(slowMessageKey);
       setSubmitting(false);
     }
   };

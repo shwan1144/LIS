@@ -912,6 +912,7 @@ export type OrderStatus = 'REGISTERED' | 'COLLECTED' | 'IN_PROGRESS' | 'COMPLETE
 export type PatientType = 'WALK_IN' | 'HOSPITAL' | 'CONTRACT';
 export type TubeType = 'SERUM' | 'PLASMA' | 'WHOLE_BLOOD' | 'URINE' | 'STOOL' | 'SWAB' | 'OTHER';
 export type OrderTestStatus = 'PENDING' | 'IN_PROGRESS' | 'COMPLETED' | 'VERIFIED' | 'REJECTED';
+export type CreateOrderView = 'summary' | 'full';
 
 export const OrderTestStatus = {
   PENDING: 'PENDING' as const,
@@ -1045,6 +1046,23 @@ export interface OrderHistorySearchResult {
   totalPages: number;
 }
 
+export interface OrderCreateSummaryDto {
+  id: string;
+  orderNumber: string | null;
+  status: OrderStatus;
+  registeredAt: string;
+  paymentStatus: 'unpaid' | 'partial' | 'paid';
+  paidAmount: number | null;
+  totalAmount: number;
+  discountPercent: number;
+  finalAmount: number;
+  patient: PatientDto;
+  shift: { id: string; code: string; name: string | null } | null;
+  testsCount: number;
+  readyTestsCount: number;
+  reportReady: boolean;
+}
+
 export async function getOrderPriceEstimate(
   testIds: string[],
   shiftId?: string | null
@@ -1055,8 +1073,24 @@ export async function getOrderPriceEstimate(
   return res.data;
 }
 
-export async function createOrder(data: CreateOrderDto): Promise<OrderDto> {
-  const res = await api.post<OrderDto>('/orders', data);
+export async function createOrder(
+  data: CreateOrderDto,
+  options?: { view?: 'summary'; timeoutMs?: number },
+): Promise<OrderCreateSummaryDto>;
+export async function createOrder(
+  data: CreateOrderDto,
+  options: { view: 'full'; timeoutMs?: number },
+): Promise<OrderDto>;
+export async function createOrder(
+  data: CreateOrderDto,
+  options: { view?: CreateOrderView; timeoutMs?: number } = {},
+): Promise<OrderCreateSummaryDto | OrderDto> {
+  const view = options.view ?? 'summary';
+  const timeout = options.timeoutMs ?? 15_000;
+  const res = await api.post<OrderCreateSummaryDto | OrderDto>('/orders', data, {
+    params: { view },
+    timeout,
+  });
   return res.data;
 }
 

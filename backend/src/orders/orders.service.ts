@@ -2,7 +2,9 @@ import {
   Injectable,
   NotFoundException,
   BadRequestException,
+  Logger,
 } from '@nestjs/common';
+import { randomUUID } from 'crypto';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, Between, EntityManager, SelectQueryBuilder } from 'typeorm';
 import { Order, OrderStatus, PatientType } from '../entities/order.entity';
@@ -16,6 +18,7 @@ import { Pricing } from '../entities/pricing.entity';
 import { TestComponent } from '../entities/test-component.entity';
 import { LabOrdersWorklist } from '../entities/lab-orders-worklist.entity';
 import { CreateOrderDto, CreateSampleDto } from './dto/create-order.dto';
+import { CreateOrderSummaryDto, CreateOrderView } from './dto/create-order-response.dto';
 import {
   nextLabCounterValue,
   nextLabCounterValueWithFloor,
@@ -76,6 +79,10 @@ type OrderProgressTarget = {
 
 @Injectable()
 export class OrdersService {
+  private readonly logger = new Logger(OrdersService.name);
+  private readonly createPerfLogThresholdMs = this.resolveCreatePerfLogThresholdMs();
+  private readonly orderTestInsertChunkSize = this.resolveOrderTestInsertChunkSize();
+
   constructor(
     @InjectRepository(Order)
     private readonly orderRepo: Repository<Order>,
@@ -95,165 +102,252 @@ export class OrdersService {
     private readonly worklistRepo: Repository<LabOrdersWorklist>,
   ) { }
 
-  async create(labId: string, dto: CreateOrderDto): Promise<Order> {
-    // Validate patient exists
-    const patient = await this.patientRepo.findOne({
-      where: { id: dto.patientId },
-    });
-    if (!patient) {
-      throw new NotFoundException('Patient not found');
-    }
+  async create(
+    labId: string,
+    dto: CreateOrderDto,
+    view: CreateOrderView = CreateOrderView.SUMMARY,
+  ): Promise<Order | CreateOrderSummaryDto> {
+    const totalStartedAt = process.hrtime.bigint();
+    const requestedTestsCount = dto.samples.reduce(
+      (sum, sample) => sum + (sample.tests?.length ?? 0),
+      0,
+    );
+    const testIds = dto.samples.flatMap((s) => (s.tests ?? []).map((t) => t.testId));
+    const uniqueTestIds = [...new Set(testIds)];
+    const timings = {
+      validationMs: 0,
+      pricingResolutionMs: 0,
+      counterOrderNumberGenerationMs: 0,
+      sampleInsertMs: 0,
+      orderTestInsertMs: 0,
+      responseBuildMs: 0,
+    };
 
-    // Validate lab exists
-    const lab = await this.labRepo.findOne({ where: { id: labId } });
-    if (!lab) {
-      throw new NotFoundException('Lab not found');
-    }
-
-    // Validate shift if provided
-    let shift: Shift | null = null;
-    if (dto.shiftId) {
-      shift = await this.shiftRepo.findOne({
-        where: { id: dto.shiftId, labId },
+    try {
+      const validationStartedAt = process.hrtime.bigint();
+      const patientPromise = this.patientRepo.findOne({
+        where: { id: dto.patientId },
       });
-      if (!shift) {
+      const labPromise = this.labRepo.findOne({ where: { id: labId } });
+      const shiftPromise: Promise<Shift | null> = dto.shiftId
+        ? this.shiftRepo.findOne({
+          where: { id: dto.shiftId, labId },
+        })
+        : Promise.resolve(null);
+      const testsPromise: Promise<Test[]> =
+        uniqueTestIds.length > 0
+          ? this.testRepo.find({
+            where: uniqueTestIds.map((id) => ({ id, labId })),
+          })
+          : Promise.resolve([]);
+
+      const [patient, lab, shift, tests] = await Promise.all([
+        patientPromise,
+        labPromise,
+        shiftPromise,
+        testsPromise,
+      ]);
+
+      if (!patient) {
+        throw new NotFoundException('Patient not found');
+      }
+      if (!lab) {
+        throw new NotFoundException('Lab not found');
+      }
+      if (dto.shiftId && !shift) {
         throw new NotFoundException('Shift not found or not assigned to this lab');
       }
-    }
+      if (tests.length !== uniqueTestIds.length) {
+        throw new NotFoundException('One or more tests not found');
+      }
+      const testMap = new Map<string, Test>(tests.map((test) => [test.id, test]));
+      timings.validationMs = this.elapsedMs(validationStartedAt);
 
-    // Validate tests exist
-    const testIds = dto.samples.flatMap((s) => s.tests.map((t) => t.testId));
-    const uniqueTestIds = [...new Set(testIds)];
-    const tests = await this.testRepo.find({
-      where: uniqueTestIds.map((id) => ({ id, labId })),
-    });
-    if (tests.length !== uniqueTestIds.length) {
-      throw new NotFoundException('One or more tests not found');
-    }
-    const testMap = new Map<string, Test>(tests.map((t) => [t.id, t]));
+      const pricingStartedAt = process.hrtime.bigint();
+      const patientType = dto.patientType || PatientType.WALK_IN;
+      const pricingValues =
+        uniqueTestIds.length > 0
+          ? await Promise.all(
+            uniqueTestIds.map((testId) =>
+              this.findPricing(
+                labId,
+                testId,
+                dto.shiftId || null,
+                patientType,
+              ),
+            ),
+          )
+          : [];
+      const precomputedPricingMap = new Map<string, number>();
+      uniqueTestIds.forEach((id, idx) => precomputedPricingMap.set(id, pricingValues[idx]));
+      const totalAmount = pricingValues.reduce((sum, value) => sum + value, 0);
+      const discountPercent = Math.min(100, Math.max(0, dto.discountPercent ?? 0));
+      const finalAmount = Math.round(totalAmount * (1 - discountPercent / 100) * 100) / 100;
+      timings.pricingResolutionMs = this.elapsedMs(pricingStartedAt);
 
-    // Calculate pricing
-    const patientType = dto.patientType || PatientType.WALK_IN;
-    const pricingValues = await Promise.all(
-      uniqueTestIds.map((testId) =>
-        this.findPricing(
+      const labelSequenceBy = lab.labelSequenceBy === 'department' ? 'department' : 'tube_type';
+      const sequenceResetBy = lab.sequenceResetBy === 'shift' ? 'shift' : 'day';
+      const effectiveShiftId =
+        sequenceResetBy === 'shift' ? dto.shiftId || null : null;
+      const samplesToCreate =
+        labelSequenceBy === 'department'
+          ? this.splitSamplesForDepartmentLabels(dto.samples, testMap)
+          : dto.samples;
+
+      return await this.orderRepo.manager.transaction(async (manager) => {
+        const orderRepo = manager.getRepository(Order);
+        const sampleRepo = manager.getRepository(Sample);
+        const now = new Date();
+        const labTimeZone = normalizeLabTimeZone(lab.timezone);
+        const counterDateKey = formatDateKeyForTimeZone(now, labTimeZone);
+
+        const counterStartedAt = process.hrtime.bigint();
+        const orderNumber = await this.generateOrderNumber(
           labId,
-          testId,
           dto.shiftId || null,
-          patientType,
-        ),
-      ),
-    );
-    const precomputedPricingMap = new Map<string, number>();
-    uniqueTestIds.forEach((id, idx) => precomputedPricingMap.set(id, pricingValues[idx]));
-    const totalAmount = pricingValues.reduce((sum, value) => sum + value, 0);
-
-    const discountPercent = Math.min(100, Math.max(0, dto.discountPercent ?? 0));
-    const finalAmount = Math.round(totalAmount * (1 - discountPercent / 100) * 100) / 100;
-
-    const labelSequenceBy = lab.labelSequenceBy === 'department' ? 'department' : 'tube_type';
-    const sequenceResetBy = lab.sequenceResetBy === 'shift' ? 'shift' : 'day';
-    const effectiveShiftId =
-      sequenceResetBy === 'shift' ? dto.shiftId || null : null;
-    const samplesToCreate =
-      labelSequenceBy === 'department'
-        ? this.splitSamplesForDepartmentLabels(dto.samples, testMap)
-        : dto.samples;
-
-    return this.orderRepo.manager.transaction(async (manager) => {
-      const orderRepo = manager.getRepository(Order);
-      const sampleRepo = manager.getRepository(Sample);
-      const now = new Date();
-      const labTimeZone = normalizeLabTimeZone(lab.timezone);
-      const counterDateKey = formatDateKeyForTimeZone(now, labTimeZone);
-
-      // Generate order number once per order (sequential per lab, per day).
-      const orderNumber = await this.generateOrderNumber(
-        labId,
-        dto.shiftId || null,
-        1,
-        manager,
-        {
-          now,
-          timeZone: labTimeZone,
-          dateKey: counterDateKey,
-        },
-      );
-
-      // Create order
-      const order = orderRepo.create({
-        patientId: dto.patientId,
-        labId,
-        shiftId: dto.shiftId || null,
-        orderNumber,
-        status: OrderStatus.REGISTERED,
-        patientType,
-        notes: dto.notes || null,
-        totalAmount,
-        discountPercent,
-        finalAmount,
-        registeredAt: new Date(),
-      });
-
-      const savedOrder = await orderRepo.save(order);
-
-      // Create samples and order tests.
-      // Barcode is order-level and reused across all tubes/samples in the order.
-      const samplesToSave = [];
-      const bulkTestData = [];
-
-      for (let i = 0; i < samplesToCreate.length; i++) {
-        const sampleDto = samplesToCreate[i];
-        const sampleBarcode = orderNumber;
-        const scopeKey =
-          labelSequenceBy === 'department'
-            ? this.resolveSampleDepartmentScope(sampleDto.tests, testMap)
-            : (sampleDto.tubeType ?? null);
-        const sequenceNumber = await this.getNextSequenceForScope(
-          labId,
-          sequenceResetBy,
-          effectiveShiftId,
-          scopeKey,
-          labelSequenceBy,
-          counterDateKey,
+          1,
           manager,
+          {
+            now,
+            timeZone: labTimeZone,
+            dateKey: counterDateKey,
+          },
         );
-        const sample = sampleRepo.create({
+        timings.counterOrderNumberGenerationMs = this.elapsedMs(counterStartedAt);
+
+        const orderId = randomUUID();
+        await orderRepo.insert({
+          id: orderId,
+          patientId: dto.patientId,
           labId,
-          orderId: savedOrder.id,
-          sampleId: null,
-          tubeType: sampleDto.tubeType || null,
-          barcode: sampleBarcode,
-          sequenceNumber,
-          qrCode: null,
+          shiftId: dto.shiftId || null,
+          orderNumber,
+          status: OrderStatus.REGISTERED,
+          patientType,
+          notes: dto.notes || null,
+          totalAmount,
+          discountPercent,
+          finalAmount,
+          paymentStatus: 'unpaid',
+          paidAmount: null,
+          registeredAt: now,
         });
-        samplesToSave.push(sample);
+
+        const sampleInsertStartedAt = process.hrtime.bigint();
+        const samplesToInsert: Array<Partial<Sample>> = [];
+        const bulkTestData: Array<{ sampleId: string; tests: Test[] }> = [];
+        for (const sampleDto of samplesToCreate) {
+          const sampleRowId = randomUUID();
+          const scopeKey =
+            labelSequenceBy === 'department'
+              ? this.resolveSampleDepartmentScope(sampleDto.tests, testMap)
+              : (sampleDto.tubeType ?? null);
+          const sequenceNumber = await this.getNextSequenceForScope(
+            labId,
+            sequenceResetBy,
+            effectiveShiftId,
+            scopeKey,
+            labelSequenceBy,
+            counterDateKey,
+            manager,
+          );
+
+          samplesToInsert.push({
+            id: sampleRowId,
+            labId,
+            orderId,
+            sampleId: null,
+            tubeType: sampleDto.tubeType || null,
+            barcode: orderNumber,
+            sequenceNumber,
+            qrCode: null,
+          });
+
+          const testsForSample = (sampleDto.tests ?? [])
+            .map((selected) => testMap.get(selected.testId))
+            .filter((entry): entry is Test => Boolean(entry));
+          bulkTestData.push({ sampleId: sampleRowId, tests: testsForSample });
+        }
+
+        if (samplesToInsert.length > 0) {
+          await sampleRepo.insert(samplesToInsert);
+        }
+        timings.sampleInsertMs = this.elapsedMs(sampleInsertStartedAt);
+
+        const orderTestInsertStartedAt = process.hrtime.bigint();
+        const rootTestsCount = await this.bulkCreateOrderTests(
+          manager,
+          labId,
+          bulkTestData,
+          dto.shiftId ?? null,
+          patientType,
+          precomputedPricingMap,
+        );
+        timings.orderTestInsertMs = this.elapsedMs(orderTestInsertStartedAt);
+
+        const responseBuildStartedAt = process.hrtime.bigint();
+        if (view === CreateOrderView.FULL) {
+          const fullOrder = await orderRepo.findOne({
+            where: { id: orderId },
+            relations: ['patient', 'lab', 'shift', 'samples', 'samples.orderTests', 'samples.orderTests.test'],
+          });
+          timings.responseBuildMs = this.elapsedMs(responseBuildStartedAt);
+          if (!fullOrder) {
+            throw new NotFoundException('Order not found');
+          }
+          return fullOrder;
+        }
+
+        const summary: CreateOrderSummaryDto = {
+          id: orderId,
+          orderNumber,
+          status: OrderStatus.REGISTERED,
+          registeredAt: now,
+          paymentStatus: 'unpaid',
+          paidAmount: null,
+          totalAmount: Math.round(totalAmount * 100) / 100,
+          discountPercent,
+          finalAmount,
+          patient,
+          shift: shift
+            ? {
+              id: shift.id,
+              code: shift.code,
+              name: shift.name,
+            }
+            : null,
+          testsCount: rootTestsCount,
+          readyTestsCount: 0,
+          reportReady: false,
+        };
+        timings.responseBuildMs = this.elapsedMs(responseBuildStartedAt);
+        return summary;
+      });
+    } finally {
+      const totalMs = this.elapsedMs(totalStartedAt);
+      if (totalMs >= this.createPerfLogThresholdMs) {
+        this.logger.warn(
+          JSON.stringify({
+            event: 'orders.create.performance',
+            labId,
+            view,
+            durationMs: Math.round(totalMs * 100) / 100,
+            requestedSamplesCount: dto.samples.length,
+            requestedTestsCount,
+            uniqueTestsCount: uniqueTestIds.length,
+            timingsMs: {
+              validation: Math.round(timings.validationMs * 100) / 100,
+              pricingResolution: Math.round(timings.pricingResolutionMs * 100) / 100,
+              counterOrderNumberGeneration:
+                Math.round(timings.counterOrderNumberGenerationMs * 100) / 100,
+              sampleInsert: Math.round(timings.sampleInsertMs * 100) / 100,
+              orderTestInsert: Math.round(timings.orderTestInsertMs * 100) / 100,
+              responseBuild: Math.round(timings.responseBuildMs * 100) / 100,
+            },
+          }),
+        );
       }
-
-      const savedSamples = await sampleRepo.save(samplesToSave);
-
-      for (let i = 0; i < samplesToCreate.length; i++) {
-        const sampleDto = samplesToCreate[i];
-        const savedSample = savedSamples[i];
-        const tests = sampleDto.tests.map(t => testMap.get(t.testId)!).filter(Boolean);
-        bulkTestData.push({ sampleId: savedSample.id, tests });
-      }
-
-      await this.bulkCreateOrderTests(
-        manager,
-        labId,
-        bulkTestData,
-        dto.shiftId ?? null,
-        patientType,
-        precomputedPricingMap,
-      );
-
-      // Reload order with relations
-      return (await orderRepo.findOne({
-        where: { id: savedOrder.id },
-        relations: ['patient', 'lab', 'shift', 'samples', 'samples.orderTests', 'samples.orderTests.test'],
-      })) as Order;
-    });
+    }
   }
 
   async findAll(labId: string, params: OrderListQueryParams) {
@@ -717,17 +811,19 @@ export class OrdersService {
     shiftId: string | null,
     patientType: PatientType,
     precomputedPricingMap?: Map<string, number>,
-  ): Promise<void> {
-    const orderTestRepo = manager.getRepository(OrderTest);
-
+  ): Promise<number> {
     const allTestIds = new Set<string>();
+    const panelTestIdSet = new Set<string>();
     for (const item of sampleWithTestsArr) {
       for (const t of item.tests) {
         allTestIds.add(t.id);
+        if (t.type === TestType.PANEL) {
+          panelTestIdSet.add(t.id);
+        }
       }
     }
     const uniqueTestIds = Array.from(allTestIds);
-    if (uniqueTestIds.length === 0) return;
+    if (uniqueTestIds.length === 0) return 0;
 
     let pricingMap = precomputedPricingMap;
     if (!pricingMap) {
@@ -738,12 +834,7 @@ export class OrdersService {
       uniqueTestIds.forEach((id, idx) => pricingMap!.set(id, pricingValues[idx]));
     }
 
-    const panelTestIds = uniqueTestIds.filter(id => {
-      for (const item of sampleWithTestsArr) {
-        if (item.tests.find(t => t.id === id)?.type === TestType.PANEL) return true;
-      }
-      return false;
-    });
+    const panelTestIds = Array.from(panelTestIdSet);
 
     const componentsByPanelId = new Map<string, TestComponent[]>();
     if (panelTestIds.length > 0) {
@@ -762,17 +853,17 @@ export class OrdersService {
       }
     }
 
-    // Build all OrderTest entities in one pass, then bulk-save
-    const toSave: OrderTest[] = [];
+    const rows: Array<Partial<OrderTest>> = [];
+    let rootTestsCount = 0;
 
     for (const { sampleId, tests } of sampleWithTestsArr) {
       for (const test of tests) {
         const price = pricingMap.get(test.id) ?? 0;
+        rootTestsCount += 1;
 
         if (test.type === TestType.PANEL) {
-          // Pre-generate UUID so we can assign children immediately without hitting the DB first.
-          const parentId = require('crypto').randomUUID();
-          toSave.push(orderTestRepo.create({
+          const parentId = randomUUID();
+          rows.push({
             id: parentId,
             labId,
             sampleId,
@@ -780,11 +871,11 @@ export class OrdersService {
             parentOrderTestId: null,
             status: OrderTestStatus.PENDING,
             price,
-          }));
+          });
 
           const components = componentsByPanelId.get(test.id) ?? [];
           for (const comp of components) {
-            toSave.push(orderTestRepo.create({
+            rows.push({
               labId,
               sampleId,
               testId: comp.childTestId,
@@ -792,24 +883,34 @@ export class OrdersService {
               status: OrderTestStatus.PENDING,
               price: null,
               panelSortOrder: comp.sortOrder ?? null,
-            } as OrderTest));
+            });
           }
         } else {
-          toSave.push(orderTestRepo.create({
+          rows.push({
             labId,
             sampleId,
             testId: test.id,
             parentOrderTestId: null,
             status: OrderTestStatus.PENDING,
             price,
-          }));
+          });
         }
       }
     }
 
-    if (toSave.length > 0) {
-      await orderTestRepo.save(toSave);
+    if (rows.length > 0) {
+      for (let offset = 0; offset < rows.length; offset += this.orderTestInsertChunkSize) {
+        const chunk = rows.slice(offset, offset + this.orderTestInsertChunkSize);
+        await manager
+          .createQueryBuilder()
+          .insert()
+          .into(OrderTest)
+          .values(chunk)
+          .execute();
+      }
     }
+
+    return rootTestsCount;
   }
 
   private createOrderSampleBarcodeAllocator(
@@ -1332,6 +1433,23 @@ export class OrdersService {
         order.status = OrderStatus.COMPLETED;
       }
     }
+  }
+
+  private resolveCreatePerfLogThresholdMs(): number {
+    const parsed = Number.parseInt(process.env.ORDER_CREATE_PERF_LOG_THRESHOLD_MS ?? '500', 10);
+    return Number.isFinite(parsed) && parsed >= 0 ? parsed : 500;
+  }
+
+  private resolveOrderTestInsertChunkSize(): number {
+    const parsed = Number.parseInt(process.env.ORDER_TEST_INSERT_CHUNK_SIZE ?? '250', 10);
+    if (!Number.isFinite(parsed) || parsed <= 0) {
+      return 250;
+    }
+    return Math.max(50, Math.min(parsed, 2000));
+  }
+
+  private elapsedMs(startedAt: bigint): number {
+    return Number(process.hrtime.bigint() - startedAt) / 1_000_000;
   }
 
   private normalizePaymentStatus(value: string | null | undefined): 'unpaid' | 'partial' | 'paid' {
