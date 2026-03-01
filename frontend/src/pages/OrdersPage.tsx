@@ -141,6 +141,8 @@ function toOrderHistoryItem(order: OrderDto): OrderHistoryItemDto {
         ? order.paymentStatus
         : 'unpaid',
     paidAmount: order.paidAmount != null ? Number(order.paidAmount) : null,
+    totalAmount: Number(order.totalAmount ?? 0),
+    discountPercent: Number(order.discountPercent ?? 0),
     finalAmount: Number(order.finalAmount ?? 0),
     patient: order.patient,
     shift: order.shift,
@@ -162,6 +164,8 @@ function toOrderHistoryItemFromSummary(order: OrderCreateSummaryDto): OrderHisto
         ? order.paymentStatus
         : 'unpaid',
     paidAmount: order.paidAmount != null ? Number(order.paidAmount) : null,
+    totalAmount: Number(order.totalAmount ?? 0),
+    discountPercent: Number(order.discountPercent ?? 0),
     finalAmount: Number(order.finalAmount ?? 0),
     patient: order.patient,
     shift: order.shift,
@@ -253,15 +257,21 @@ export function OrdersPage() {
   const selectedOrderDetailsError =
     selectedCreatedOrderSummary != null ? orderDetailsErrors[selectedCreatedOrderSummary.id] ?? null : null;
   const lockedOrderContextActive = isSelectedLocked && selectedCreatedOrderSummary != null;
-  const lockedOrderActionsReady = lockedOrderContextActive && selectedCreatedOrder != null;
   const lockedOrderActionsBusy =
     submitting ||
     updatingPayment ||
     updatingDiscount ||
     savingEditedTests ||
     printingAction !== null;
-  const lockedOrderActionsDisabled = lockedOrderActionsBusy || !lockedOrderActionsReady;
-  const lockedOrderActionDisabledTitle = lockedOrderActionsBusy
+  const lockedOrderBaseActionsDisabled = lockedOrderActionsBusy || !lockedOrderContextActive;
+  const lockedOrderDetailActionsDisabled =
+    lockedOrderActionsBusy || !lockedOrderContextActive || !selectedCreatedOrder;
+  const lockedOrderBaseActionDisabledTitle = lockedOrderActionsBusy
+    ? 'Please wait until the current action finishes.'
+    : !lockedOrderContextActive
+      ? 'Select a locked order to use these actions.'
+      : undefined;
+  const lockedOrderDetailActionDisabledTitle = lockedOrderActionsBusy
     ? 'Please wait until the current action finishes.'
     : !lockedOrderContextActive
       ? 'Select a locked order to use these actions.'
@@ -649,15 +659,19 @@ export function OrdersPage() {
   ]);
 
   useEffect(() => {
-    if (!isSelectedLocked || !selectedCreatedOrder) return;
+    if (!isSelectedLocked) return;
+    const sourceDiscount =
+      selectedCreatedOrder?.discountPercent ??
+      selectedCreatedOrderSummary?.discountPercent;
+    if (sourceDiscount == null) return;
     const normalizedDiscount = Math.min(
       100,
-      Math.max(0, Number(selectedCreatedOrder.discountPercent ?? 0)),
+      Math.max(0, Number(sourceDiscount)),
     );
     setDiscountPercent((current) =>
       Math.abs(current - normalizedDiscount) < 0.001 ? current : normalizedDiscount,
     );
-  }, [isSelectedLocked, selectedCreatedOrder]);
+  }, [isSelectedLocked, selectedCreatedOrder, selectedCreatedOrderSummary]);
 
   useEffect(() => () => {
     if (discountSaveTimerRef.current !== null) {
@@ -921,17 +935,27 @@ export function OrdersPage() {
   };
 
   const handleLockedEditTests = () => {
-    if (lockedOrderActionsDisabled || !selectedCreatedOrder) return;
+    if (lockedOrderActionsBusy || !lockedOrderContextActive || !selectedCreatedOrderSummary) return;
+    if (!selectedCreatedOrder) {
+      void fetchOrderDetails(selectedCreatedOrderSummary.id, 'auto');
+      message.info('Order details are still loading. Please try again in a moment.');
+      return;
+    }
     openEditTestsModal();
   };
 
   const handleLockedPrint = (type: 'receipt' | 'labels') => {
-    if (lockedOrderActionsDisabled || !selectedCreatedOrder) return;
+    if (lockedOrderActionsBusy || !lockedOrderContextActive || !selectedCreatedOrderSummary) return;
+    if (!selectedCreatedOrder) {
+      void fetchOrderDetails(selectedCreatedOrderSummary.id, 'auto');
+      message.info('Order details are still loading. Please try again in a moment.');
+      return;
+    }
     void openPrint(selectedCreatedOrder, type);
   };
 
   const handleLockedMarkPaid = async () => {
-    if (lockedOrderActionsDisabled || !selectedCreatedOrderSummary) return;
+    if (lockedOrderBaseActionsDisabled || !selectedCreatedOrderSummary) return;
     setUpdatingPayment(true);
     try {
       const updated = await updateOrderPayment(selectedCreatedOrderSummary.id, {
@@ -947,7 +971,7 @@ export function OrdersPage() {
   };
 
   const handleLockedMarkUnpaid = async () => {
-    if (lockedOrderActionsDisabled || !selectedCreatedOrderSummary) return;
+    if (lockedOrderBaseActionsDisabled || !selectedCreatedOrderSummary) return;
     setUpdatingPayment(true);
     try {
       const updated = await updateOrderPayment(selectedCreatedOrderSummary.id, {
@@ -964,7 +988,7 @@ export function OrdersPage() {
   };
 
   const handleLockedOpenPartialPayment = () => {
-    if (lockedOrderActionsDisabled || !selectedCreatedOrderSummary) return;
+    if (lockedOrderBaseActionsDisabled || !selectedCreatedOrderSummary) return;
     setPartialPaymentAmount(
       selectedCreatedOrderSummary?.paidAmount != null ? Number(selectedCreatedOrderSummary.paidAmount) : 0,
     );
@@ -972,16 +996,19 @@ export function OrdersPage() {
   };
 
   const handleLockedStartNewOrder = () => {
-    if (lockedOrderActionsDisabled || !selectedCreatedOrderSummary || !selectedPatient) return;
+    if (lockedOrderBaseActionsDisabled || !selectedCreatedOrderSummary || !selectedPatient) return;
     addNewOrderForPatient(selectedCreatedOrderSummary.patient ?? selectedPatient);
   };
 
   const handleSummaryDiscountChange = (value: number | null) => {
     const normalized = Math.min(100, Math.max(0, Number(value ?? 0)));
     setDiscountPercent(normalized);
-    if (!isSelectedLocked || !selectedCreatedOrderSummary || !selectedCreatedOrder) return;
+    if (!isSelectedLocked || !selectedCreatedOrderSummary) return;
 
-    const serverDiscount = Math.min(100, Math.max(0, Number(selectedCreatedOrder.discountPercent ?? 0)));
+    const serverDiscount = Math.min(
+      100,
+      Math.max(0, Number(selectedCreatedOrder?.discountPercent ?? selectedCreatedOrderSummary.discountPercent ?? 0)),
+    );
     if (Math.abs(serverDiscount - normalized) < 0.001) return;
 
     if (discountSaveTimerRef.current !== null) {
@@ -994,9 +1021,12 @@ export function OrdersPage() {
   };
 
   const handleSummaryDiscountCommit = async (nextDiscount?: number) => {
-    if (!isSelectedLocked || !selectedCreatedOrderSummary || !selectedCreatedOrder) return;
+    if (!isSelectedLocked || !selectedCreatedOrderSummary) return;
     const normalized = Math.round(Math.min(100, Math.max(0, nextDiscount ?? discountPercent)) * 100) / 100;
-    const serverDiscount = Math.min(100, Math.max(0, Number(selectedCreatedOrder.discountPercent ?? 0)));
+    const serverDiscount = Math.min(
+      100,
+      Math.max(0, Number(selectedCreatedOrder?.discountPercent ?? selectedCreatedOrderSummary.discountPercent ?? 0)),
+    );
     if (Math.abs(serverDiscount - normalized) < 0.001) return;
 
     if (discountSaveTimerRef.current !== null) {
@@ -1028,7 +1058,6 @@ export function OrdersPage() {
   };
 
   const totalTests = selectedTests.length;
-  const totalAfterDiscount = Math.round(subtotal * (1 - discountPercent / 100) * 100) / 100;
   const totalPages = Math.max(1, Math.ceil(listTotal / ORDER_PAGE_SIZE));
   const lockedOrderTestsCount = Number(
     selectedCreatedOrderSummary?.testsCount ??
@@ -1036,6 +1065,7 @@ export function OrdersPage() {
   );
   const lockedOrderSubtotal = Number(
     selectedCreatedOrder?.totalAmount ??
+    selectedCreatedOrderSummary?.totalAmount ??
     selectedCreatedOrderSummary?.finalAmount ??
     0,
   );
@@ -1089,7 +1119,7 @@ export function OrdersPage() {
               value={discountPercent}
               onChange={handleSummaryDiscountChange}
               onBlur={() => void handleSummaryDiscountCommit()}
-              disabled={submitting || updatingDiscount || (isSelectedLocked && !selectedCreatedOrder)}
+              disabled={submitting || updatingDiscount}
               style={{ width: 70 }}
             />
             <span className="order-summary-suffix">%</span>
@@ -1127,8 +1157,8 @@ export function OrdersPage() {
           icon={<PlusOutlined />}
           onClick={handleLockedStartNewOrder}
           size="large"
-          disabled={lockedOrderActionsDisabled}
-          title={lockedOrderActionDisabledTitle}
+          disabled={lockedOrderBaseActionsDisabled}
+          title={lockedOrderBaseActionDisabledTitle}
           className="locked-order-new-btn"
         >
           New order for this patient
@@ -1138,8 +1168,8 @@ export function OrdersPage() {
           onClick={handleLockedEditTests}
           size="large"
           loading={savingEditedTests}
-          disabled={lockedOrderActionsDisabled}
-          title={lockedOrderActionDisabledTitle}
+          disabled={lockedOrderDetailActionsDisabled}
+          title={lockedOrderDetailActionDisabledTitle}
         >
           Edit tests
         </Button>
@@ -1149,8 +1179,8 @@ export function OrdersPage() {
           onClick={() => handleLockedPrint('receipt')}
           size="large"
           loading={printingAction === 'receipt'}
-          disabled={lockedOrderActionsDisabled}
-          title={lockedOrderActionDisabledTitle}
+          disabled={lockedOrderDetailActionsDisabled}
+          title={lockedOrderDetailActionDisabledTitle}
         >
           Receipt
         </Button>
@@ -1159,8 +1189,8 @@ export function OrdersPage() {
           onClick={() => handleLockedPrint('labels')}
           size="large"
           loading={printingAction === 'labels'}
-          disabled={lockedOrderActionsDisabled}
-          title={lockedOrderActionDisabledTitle}
+          disabled={lockedOrderDetailActionsDisabled}
+          title={lockedOrderDetailActionDisabledTitle}
         >
           Labels
         </Button>
@@ -1171,8 +1201,8 @@ export function OrdersPage() {
               loading={updatingPayment}
               onClick={() => void handleLockedMarkPaid()}
               size="large"
-              disabled={lockedOrderActionsDisabled}
-              title={lockedOrderActionDisabledTitle}
+              disabled={lockedOrderBaseActionsDisabled}
+              title={lockedOrderBaseActionDisabledTitle}
             >
               Mark as paid
             </Button>
@@ -1180,8 +1210,8 @@ export function OrdersPage() {
               loading={updatingPayment}
               onClick={handleLockedOpenPartialPayment}
               size="large"
-              disabled={lockedOrderActionsDisabled}
-              title={lockedOrderActionDisabledTitle}
+              disabled={lockedOrderBaseActionsDisabled}
+              title={lockedOrderBaseActionDisabledTitle}
             >
               Partially paid
             </Button>
@@ -1198,8 +1228,8 @@ export function OrdersPage() {
               backgroundColor: 'rgba(82, 196, 26, 0.1)',
             }}
             onClick={() => void handleLockedMarkUnpaid()}
-            disabled={lockedOrderActionsDisabled}
-            title={lockedOrderActionDisabledTitle}
+            disabled={lockedOrderBaseActionsDisabled}
+            title={lockedOrderBaseActionDisabledTitle}
           >
             Paid (Click to Unpay)
           </Button>
@@ -1211,8 +1241,8 @@ export function OrdersPage() {
               loading={updatingPayment}
               onClick={() => void handleLockedMarkPaid()}
               size="large"
-              disabled={lockedOrderActionsDisabled}
-              title={lockedOrderActionDisabledTitle}
+              disabled={lockedOrderBaseActionsDisabled}
+              title={lockedOrderBaseActionDisabledTitle}
             >
               Mark as paid
             </Button>
@@ -1226,8 +1256,8 @@ export function OrdersPage() {
                 backgroundColor: 'rgba(250, 173, 20, 0.1)',
               }}
               onClick={handleLockedOpenPartialPayment}
-              disabled={lockedOrderActionsDisabled}
-              title={lockedOrderActionDisabledTitle}
+              disabled={lockedOrderBaseActionsDisabled}
+              title={lockedOrderBaseActionDisabledTitle}
             >
               Partially paid
               {selectedCreatedOrderSummary?.paidAmount != null &&

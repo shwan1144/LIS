@@ -1030,6 +1030,8 @@ export interface OrderHistoryItemDto {
   registeredAt: string;
   paymentStatus: 'unpaid' | 'partial' | 'paid';
   paidAmount: number | null;
+  totalAmount?: number;
+  discountPercent?: number;
   finalAmount: number;
   patient: PatientDto;
   shift: { id: string; code: string; name: string | null } | null;
@@ -1107,6 +1109,8 @@ function toHistoryItem(order: OrderDto): OrderHistoryItemDto {
     registeredAt: order.registeredAt,
     paymentStatus: order.paymentStatus === 'paid' || order.paymentStatus === 'partial' ? order.paymentStatus : 'unpaid',
     paidAmount: order.paidAmount != null ? Number(order.paidAmount) : null,
+    totalAmount: Number(order.totalAmount ?? 0),
+    discountPercent: Number(order.discountPercent ?? 0),
     finalAmount: Number(order.finalAmount ?? 0),
     patient: order.patient,
     shift: order.shift,
