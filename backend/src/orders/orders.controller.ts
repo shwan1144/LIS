@@ -11,7 +11,8 @@ import {
   ParseUUIDPipe,
   UseGuards,
   Req,
-  ParseEnumPipe,
+  BadRequestException,
+  Logger,
 } from '@nestjs/common';
 import { OrdersService } from './orders.service';
 import { CreateOrderDto } from './dto/create-order.dto';
@@ -20,6 +21,7 @@ import { UpdateOrderTestsDto } from './dto/update-order-tests.dto';
 import { UpdateOrderDiscountDto } from './dto/update-order-discount.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { OrderStatus } from '../entities/order.entity';
+import type { OrderCreateView } from './orders.service';
 
 interface RequestWithUser {
   user: { userId: string; username: string; labId: string };
@@ -28,16 +30,49 @@ interface RequestWithUser {
 @Controller('orders')
 @UseGuards(JwtAuthGuard)
 export class OrdersController {
+  private readonly logger = new Logger(OrdersController.name);
+
   constructor(private readonly ordersService: OrdersService) {}
 
   @Post()
   @UsePipes(new ValidationPipe({ whitelist: true }))
-  async create(@Req() req: RequestWithUser, @Body() dto: CreateOrderDto) {
+  async create(
+    @Req() req: RequestWithUser,
+    @Body() dto: CreateOrderDto,
+    @Query('view') view?: string,
+  ) {
     const labId = req.user?.labId;
     if (!labId) {
       throw new Error('Lab ID not found in token');
     }
-    return this.ordersService.create(labId, dto);
+
+    let responseView: OrderCreateView = 'summary';
+    if (view) {
+      const normalizedView = view.trim().toLowerCase();
+      if (normalizedView === 'full') {
+        responseView = 'full';
+      } else if (normalizedView === 'summary') {
+        responseView = 'summary';
+      } else {
+        throw new BadRequestException('Invalid "view" query. Allowed values: summary, full.');
+      }
+    }
+
+    const startedAt = Date.now();
+    try {
+      return await this.ordersService.create(labId, dto, responseView);
+    } finally {
+      const totalMs = Date.now() - startedAt;
+      if (totalMs > 500) {
+        this.logger.warn(
+          `[orders.create][slow] ${JSON.stringify({
+            labId,
+            view: responseView,
+            totalMs,
+          })}`,
+        );
+      }
+    }
   }
 
   @Get()

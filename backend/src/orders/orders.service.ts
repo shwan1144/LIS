@@ -2,9 +2,11 @@ import {
   Injectable,
   NotFoundException,
   BadRequestException,
+  Logger,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, Between, EntityManager, SelectQueryBuilder } from 'typeorm';
+import { randomUUID } from 'crypto';
 import { Order, OrderStatus, PatientType } from '../entities/order.entity';
 import { Sample, TubeType as SampleTubeType } from '../entities/sample.entity';
 import { OrderTest, OrderTestStatus } from '../entities/order-test.entity';
@@ -66,6 +68,27 @@ export interface OrderHistoryItem {
   reportReady: boolean;
 }
 
+export type OrderCreateView = 'summary' | 'full';
+
+export interface CreateOrderSummaryDto {
+  id: string;
+  orderNumber: string | null;
+  status: OrderStatus;
+  registeredAt: Date;
+  paymentStatus: 'unpaid' | 'partial' | 'paid';
+  paidAmount: number | null;
+  totalAmount: number;
+  discountPercent: number;
+  finalAmount: number;
+  patient: Patient;
+  shift: { id: string; code: string; name: string | null } | null;
+  testsCount: number;
+  readyTestsCount: number;
+  reportReady: boolean;
+}
+
+const SLOW_CREATE_LOG_THRESHOLD_MS = 500;
+
 type OrderProgressTarget = {
   id: string;
   status: OrderStatus;
@@ -76,6 +99,8 @@ type OrderProgressTarget = {
 
 @Injectable()
 export class OrdersService {
+  private readonly logger = new Logger(OrdersService.name);
+
   constructor(
     @InjectRepository(Order)
     private readonly orderRepo: Repository<Order>,
@@ -95,41 +120,61 @@ export class OrdersService {
     private readonly worklistRepo: Repository<LabOrdersWorklist>,
   ) { }
 
-  async create(labId: string, dto: CreateOrderDto): Promise<Order> {
+  async create(
+    labId: string,
+    dto: CreateOrderDto,
+    view: OrderCreateView = 'summary',
+  ): Promise<Order | CreateOrderSummaryDto> {
+    const startedAt = Date.now();
+    const phaseDurations: Record<string, number> = {};
+    let phaseStartAt = startedAt;
+    const markPhase = (name: string) => {
+      const now = Date.now();
+      phaseDurations[name] = now - phaseStartAt;
+      phaseStartAt = now;
+    };
+
+    const testIds = dto.samples.flatMap((s) => s.tests.map((t) => t.testId));
+    const uniqueTestIds = [...new Set(testIds)];
+    if (uniqueTestIds.length === 0) {
+      throw new BadRequestException('At least one test is required');
+    }
+
+    const [patient, lab, shift, tests] = await Promise.all([
+      this.patientRepo.findOne({ where: { id: dto.patientId } }),
+      this.labRepo.findOne({ where: { id: labId } }),
+      dto.shiftId
+        ? this.shiftRepo.findOne({ where: { id: dto.shiftId, labId } })
+        : Promise.resolve<Shift | null>(null),
+      uniqueTestIds.length > 0
+        ? this.testRepo.find({
+            where: uniqueTestIds.map((id) => ({ id, labId })),
+          })
+        : Promise.resolve<Test[]>([]),
+    ]);
+    markPhase('validation_lookup');
+
     // Validate patient exists
-    const patient = await this.patientRepo.findOne({
-      where: { id: dto.patientId },
-    });
     if (!patient) {
       throw new NotFoundException('Patient not found');
     }
 
     // Validate lab exists
-    const lab = await this.labRepo.findOne({ where: { id: labId } });
     if (!lab) {
       throw new NotFoundException('Lab not found');
     }
 
     // Validate shift if provided
-    let shift: Shift | null = null;
-    if (dto.shiftId) {
-      shift = await this.shiftRepo.findOne({
-        where: { id: dto.shiftId, labId },
-      });
-      if (!shift) {
-        throw new NotFoundException('Shift not found or not assigned to this lab');
-      }
+    if (dto.shiftId && !shift) {
+      throw new NotFoundException('Shift not found or not assigned to this lab');
     }
 
     // Validate tests exist
-    const testIds = dto.samples.flatMap((s) => s.tests.map((t) => t.testId));
-    const uniqueTestIds = [...new Set(testIds)];
-    const tests = await this.testRepo.find({
-      where: uniqueTestIds.map((id) => ({ id, labId })),
-    });
     if (tests.length !== uniqueTestIds.length) {
       throw new NotFoundException('One or more tests not found');
     }
+    markPhase('validation_checks');
+
     const testMap = new Map<string, Test>(tests.map((t) => [t.id, t]));
 
     // Calculate pricing
@@ -140,6 +185,7 @@ export class OrdersService {
       dto.shiftId || null,
       patientType,
     );
+    markPhase('pricing_resolution');
     const totalAmount = uniqueTestIds.reduce(
       (sum, testId) => sum + (precomputedPricingMap.get(testId) ?? 0),
       0,
@@ -156,13 +202,25 @@ export class OrdersService {
       labelSequenceBy === 'department'
         ? this.splitSamplesForDepartmentLabels(dto.samples, testMap)
         : dto.samples;
+    const rootTestsCount = samplesToCreate.reduce(
+      (sum, sample) => sum + (sample.tests?.length ?? 0),
+      0,
+    );
 
-    return this.orderRepo.manager.transaction(async (manager) => {
+    const txPhaseDurations: Record<string, number> = {};
+    const txStartedAt = Date.now();
+    const created = await this.orderRepo.manager.transaction(async (manager) => {
       const orderRepo = manager.getRepository(Order);
       const sampleRepo = manager.getRepository(Sample);
       const now = new Date();
       const labTimeZone = normalizeLabTimeZone(lab.timezone);
       const counterDateKey = formatDateKeyForTimeZone(now, labTimeZone);
+      let txPhaseStartAt = Date.now();
+      const markTxPhase = (name: string) => {
+        const txNow = Date.now();
+        txPhaseDurations[name] = txNow - txPhaseStartAt;
+        txPhaseStartAt = txNow;
+      };
 
       // Generate order number once per order (sequential per lab, per day).
       const orderNumber = await this.generateOrderNumber(
@@ -176,27 +234,51 @@ export class OrdersService {
           dateKey: counterDateKey,
         },
       );
+      markTxPhase('counter_order_number');
 
       // Create order
-      const order = orderRepo.create({
-        patientId: dto.patientId,
-        labId,
-        shiftId: dto.shiftId || null,
-        orderNumber,
-        status: OrderStatus.REGISTERED,
-        patientType,
-        notes: dto.notes || null,
-        totalAmount,
-        discountPercent,
-        finalAmount,
-        registeredAt: new Date(),
-      });
-
-      const savedOrder = await orderRepo.save(order);
+      const orderInsertResult = await orderRepo
+        .createQueryBuilder()
+        .insert()
+        .into(Order)
+        .values({
+          patientId: dto.patientId,
+          labId,
+          shiftId: dto.shiftId || null,
+          orderNumber,
+          status: OrderStatus.REGISTERED,
+          patientType,
+          notes: dto.notes || null,
+          totalAmount,
+          discountPercent,
+          finalAmount,
+          paymentStatus: 'unpaid',
+          paidAmount: null,
+          registeredAt: now,
+        })
+        .returning(['id'])
+        .execute();
+      const savedOrderId = String(
+        orderInsertResult.raw?.[0]?.id ??
+          orderInsertResult.identifiers?.[0]?.id ??
+          '',
+      );
+      if (!savedOrderId) {
+        throw new Error('Failed to create order: missing generated id');
+      }
+      markTxPhase('order_insert');
 
       // Create samples and order tests.
       // Barcode is order-level and reused across all tubes/samples in the order.
-      const samplesToSave = [];
+      const sampleRows: Array<{
+        labId: string;
+        orderId: string;
+        sampleId: null;
+        tubeType: SampleTubeType | null;
+        barcode: string | null;
+        sequenceNumber: number;
+        qrCode: null;
+      }> = [];
       const bulkTestData = [];
 
       for (let i = 0; i < samplesToCreate.length; i++) {
@@ -215,25 +297,37 @@ export class OrdersService {
           counterDateKey,
           manager,
         );
-        const sample = sampleRepo.create({
+        sampleRows.push({
           labId,
-          orderId: savedOrder.id,
-          sampleId: null,
-          tubeType: sampleDto.tubeType || null,
+          orderId: savedOrderId,
+          sampleId: null as null,
+          tubeType: (sampleDto.tubeType || null) as SampleTubeType | null,
           barcode: sampleBarcode,
           sequenceNumber,
-          qrCode: null,
+          qrCode: null as null,
         });
-        samplesToSave.push(sample);
       }
 
-      const savedSamples = await sampleRepo.save(samplesToSave);
+      const sampleInsertResult = await sampleRepo
+        .createQueryBuilder()
+        .insert()
+        .into(Sample)
+        .values(sampleRows)
+        .returning(['id'])
+        .execute();
+      const savedSampleIds = (sampleInsertResult.raw ?? [])
+        .map((row: { id?: string }) => row?.id)
+        .filter((value: string | undefined): value is string => Boolean(value));
+      if (savedSampleIds.length !== samplesToCreate.length) {
+        throw new Error('Failed to create samples: unexpected insert result');
+      }
+      markTxPhase('samples_insert');
 
       for (let i = 0; i < samplesToCreate.length; i++) {
         const sampleDto = samplesToCreate[i];
-        const savedSample = savedSamples[i];
+        const savedSampleId = savedSampleIds[i];
         const tests = sampleDto.tests.map(t => testMap.get(t.testId)!).filter(Boolean);
-        bulkTestData.push({ sampleId: savedSample.id, tests });
+        bulkTestData.push({ sampleId: savedSampleId, tests });
       }
 
       await this.bulkCreateOrderTests(
@@ -244,13 +338,76 @@ export class OrdersService {
         patientType,
         precomputedPricingMap,
       );
+      markTxPhase('order_tests_insert');
 
-      // Reload order with relations
-      return (await orderRepo.findOne({
-        where: { id: savedOrder.id },
-        relations: ['patient', 'lab', 'shift', 'samples', 'samples.orderTests', 'samples.orderTests.test'],
-      })) as Order;
+      if (view === 'full') {
+        const fullOrder = (await orderRepo.findOne({
+          where: { id: savedOrderId },
+          relations: [
+            'patient',
+            'lab',
+            'shift',
+            'samples',
+            'samples.orderTests',
+            'samples.orderTests.test',
+          ],
+        })) as Order;
+        markTxPhase('response_build');
+        return fullOrder;
+      }
+
+      const summary: CreateOrderSummaryDto = {
+        id: savedOrderId,
+        orderNumber,
+        status: OrderStatus.REGISTERED,
+        registeredAt: now,
+        paymentStatus: 'unpaid',
+        paidAmount: null,
+        totalAmount,
+        discountPercent,
+        finalAmount,
+        patient,
+        shift: shift
+          ? {
+              id: shift.id,
+              code: shift.code,
+              name: shift.name ?? null,
+            }
+          : null,
+        testsCount: rootTestsCount,
+        readyTestsCount: 0,
+        reportReady: false,
+      };
+      markTxPhase('response_build');
+      return summary;
     });
+    phaseDurations.transaction_total = Date.now() - txStartedAt;
+    phaseDurations.transaction_counter_order_number =
+      txPhaseDurations.counter_order_number ?? 0;
+    phaseDurations.transaction_order_insert =
+      txPhaseDurations.order_insert ?? 0;
+    phaseDurations.transaction_samples_insert =
+      txPhaseDurations.samples_insert ?? 0;
+    phaseDurations.transaction_order_tests_insert =
+      txPhaseDurations.order_tests_insert ?? 0;
+    phaseDurations.transaction_response_build =
+      txPhaseDurations.response_build ?? 0;
+
+    const totalMs = Date.now() - startedAt;
+    if (totalMs > SLOW_CREATE_LOG_THRESHOLD_MS) {
+      this.logger.warn(
+        `[orders.create][slow] ${JSON.stringify({
+          labId,
+          view,
+          testsCount: rootTestsCount,
+          uniqueTestsCount: uniqueTestIds.length,
+          totalMs,
+          phases: phaseDurations,
+        })}`,
+      );
+    }
+
+    return created;
   }
 
   async findAll(labId: string, params: OrderListQueryParams) {
@@ -761,8 +918,17 @@ export class OrdersService {
       }
     }
 
-    // Build all OrderTest entities in one pass, then bulk-save
-    const toSave: OrderTest[] = [];
+    // Build all OrderTest rows in one pass, then bulk insert by chunks.
+    const rowsToInsert: Array<{
+      id?: string;
+      labId: string;
+      sampleId: string;
+      testId: string;
+      parentOrderTestId: string | null;
+      status: OrderTestStatus;
+      price: number | null;
+      panelSortOrder?: number | null;
+    }> = [];
 
     for (const { sampleId, tests } of sampleWithTestsArr) {
       for (const test of tests) {
@@ -770,8 +936,8 @@ export class OrdersService {
 
         if (test.type === TestType.PANEL) {
           // Pre-generate UUID so we can assign children immediately without hitting the DB first.
-          const parentId = require('crypto').randomUUID();
-          toSave.push(orderTestRepo.create({
+          const parentId = randomUUID();
+          rowsToInsert.push({
             id: parentId,
             labId,
             sampleId,
@@ -779,11 +945,11 @@ export class OrdersService {
             parentOrderTestId: null,
             status: OrderTestStatus.PENDING,
             price,
-          }));
+          });
 
           const components = componentsByPanelId.get(test.id) ?? [];
           for (const comp of components) {
-            toSave.push(orderTestRepo.create({
+            rowsToInsert.push({
               labId,
               sampleId,
               testId: comp.childTestId,
@@ -791,23 +957,31 @@ export class OrdersService {
               status: OrderTestStatus.PENDING,
               price: null,
               panelSortOrder: comp.sortOrder ?? null,
-            } as OrderTest));
+            });
           }
         } else {
-          toSave.push(orderTestRepo.create({
+          rowsToInsert.push({
             labId,
             sampleId,
             testId: test.id,
             parentOrderTestId: null,
             status: OrderTestStatus.PENDING,
             price,
-          }));
+          });
         }
       }
     }
 
-    if (toSave.length > 0) {
-      await orderTestRepo.save(toSave);
+    if (rowsToInsert.length > 0) {
+      const chunkSize = 500;
+      for (let index = 0; index < rowsToInsert.length; index += chunkSize) {
+        await orderTestRepo
+          .createQueryBuilder()
+          .insert()
+          .into(OrderTest)
+          .values(rowsToInsert.slice(index, index + chunkSize))
+          .execute();
+      }
     }
   }
 

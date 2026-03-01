@@ -1004,6 +1004,27 @@ export interface CreateOrderDto {
   samples: CreateSampleDto[];
 }
 
+export type OrderCreateView = 'summary' | 'full';
+
+export interface OrderCreateSummaryDto {
+  id: string;
+  orderNumber: string | null;
+  status: OrderStatus;
+  registeredAt: string;
+  paymentStatus: 'unpaid' | 'partial' | 'paid';
+  paidAmount: number | null;
+  totalAmount: number;
+  discountPercent: number;
+  finalAmount: number;
+  patient: PatientDto;
+  shift: { id: string; code: string; name: string | null } | null;
+  testsCount: number;
+  readyTestsCount: number;
+  reportReady: boolean;
+}
+
+export type OrderCreateResponse = OrderCreateSummaryDto | OrderDto;
+
 export interface OrderSearchParams {
   page?: number;
   size?: number;
@@ -1055,8 +1076,15 @@ export async function getOrderPriceEstimate(
   return res.data;
 }
 
-export async function createOrder(data: CreateOrderDto): Promise<OrderDto> {
-  const res = await api.post<OrderDto>('/orders', data);
+export async function createOrder(
+  data: CreateOrderDto,
+  options?: { view?: OrderCreateView },
+): Promise<OrderCreateResponse> {
+  const view = options?.view ?? 'summary';
+  const res = await api.post<OrderCreateResponse>('/orders', data, {
+    params: { view },
+    timeout: 15000,
+  });
   return res.data;
 }
 

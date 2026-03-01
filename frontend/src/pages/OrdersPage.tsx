@@ -707,6 +707,16 @@ export function OrdersPage() {
     }
 
     setSubmitting(true);
+    let slowMessageShown = false;
+    const slowMessageKey = 'orders-create-slow';
+    const slowMessageTimer = window.setTimeout(() => {
+      slowMessageShown = true;
+      message.loading({
+        key: slowMessageKey,
+        content: 'Still creating order...',
+        duration: 0,
+      });
+    }, 1500);
     try {
       const testsByTube = selectedTests.reduce(
         (acc, test) => {
@@ -729,12 +739,33 @@ export function OrdersPage() {
         })),
       };
 
-      const createdOrder = await createOrder(orderData);
-      const historyItem = toOrderHistoryItem(createdOrder);
+      const createdOrder = await createOrder(orderData, { view: 'summary' });
+      const historyItem: OrderHistoryItemDto = {
+        id: createdOrder.id,
+        orderNumber: createdOrder.orderNumber,
+        status: createdOrder.status,
+        registeredAt: createdOrder.registeredAt,
+        paymentStatus:
+          createdOrder.paymentStatus === 'paid' || createdOrder.paymentStatus === 'partial'
+            ? createdOrder.paymentStatus
+            : 'unpaid',
+        paidAmount: createdOrder.paidAmount != null ? Number(createdOrder.paidAmount) : null,
+        finalAmount: Number(createdOrder.finalAmount ?? 0),
+        patient: createdOrder.patient,
+        shift: createdOrder.shift ?? null,
+        testsCount: Number(createdOrder.testsCount ?? 0) || 0,
+        readyTestsCount: Number(createdOrder.readyTestsCount ?? 0) || 0,
+        reportReady: Boolean(createdOrder.reportReady) || Number(createdOrder.readyTestsCount ?? 0) > 0,
+      };
       const lockedRowId = `order-${createdOrder.id}`;
       const selectedDraftRowId = selectedRowId ?? `draft-${selectedPatient.id}`;
 
-      setOrderDetailsCache((prev) => ({ ...prev, [createdOrder.id]: createdOrder }));
+      setOrderDetailsCache((prev) => {
+        if (!prev[createdOrder.id]) return prev;
+        const next = { ...prev };
+        delete next[createdOrder.id];
+        return next;
+      });
       setOrderDetailsErrors((prev) => {
         if (!prev[createdOrder.id]) return prev;
         const next = { ...prev };
@@ -776,13 +807,37 @@ export function OrdersPage() {
       });
       message.success('Order created successfully');
     } catch (err: unknown) {
-      const msg =
+      const isTimeout =
+        Boolean(
+          err &&
+            typeof err === 'object' &&
+            'code' in err &&
+            (err as { code?: string }).code === 'ECONNABORTED',
+        ) ||
+        Boolean(
+          err &&
+            typeof err === 'object' &&
+            'message' in err &&
+            typeof (err as { message?: string }).message === 'string' &&
+            (err as { message: string }).message.toLowerCase().includes('timeout'),
+        );
+      if (isTimeout) {
+        message.error('Create order request timed out after 15 seconds. Please retry.');
+        return;
+      }
+
+      const serverMessage =
         err && typeof err === 'object' && 'response' in err
-          ? (err as { response?: { data?: { message?: string } } }).response?.data
-            ?.message
-          : 'Order creation failed';
+          ? (err as { response?: { data?: { message?: string | string[] } } }).response?.data?.message
+          : null;
+      const msg =
+        Array.isArray(serverMessage) ? serverMessage.join(', ') : serverMessage;
       message.error(msg || 'Order creation failed');
     } finally {
+      window.clearTimeout(slowMessageTimer);
+      if (slowMessageShown) {
+        message.destroy(slowMessageKey);
+      }
       setSubmitting(false);
     }
   };
