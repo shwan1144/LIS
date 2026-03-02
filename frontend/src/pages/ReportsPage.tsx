@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Button,
   Card,
@@ -66,6 +66,7 @@ import {
 const { RangePicker } = DatePicker;
 const { Title, Text } = Typography;
 const { useBreakpoint } = Grid;
+const REPORT_PDF_CACHE_TTL_MS = 2 * 60 * 1000;
 
 type EditResultMode = 'SINGLE' | 'PANEL';
 type ReportStatusFilter = 'ALL' | 'PENDING' | 'COMPLETED' | 'VERIFIED' | 'REJECTED';
@@ -346,8 +347,9 @@ export function ReportsPage() {
 
   const [paymentModalOpen, setPaymentModalOpen] = useState(false);
   const [paymentModalOrder, setPaymentModalOrder] = useState<OrderHistoryItemDto | null>(null);
-  const [paymentModalPendingAction, setPaymentModalPendingAction] = useState<(() => void) | null>(null);
+  const [paymentModalPendingAction, setPaymentModalPendingAction] = useState<(() => Promise<void> | void) | null>(null);
   const [markingPaid, setMarkingPaid] = useState(false);
+  const resultsPdfCacheRef = useRef<Record<string, { blob: Blob; cachedAt: number }>>({});
 
   const [editResultModalOpen, setEditResultModalOpen] = useState(false);
   const [editResultContext, setEditResultContext] = useState<EditResultContext | null>(null);
@@ -553,21 +555,40 @@ export function ReportsPage() {
     document.body.removeChild(link);
   };
 
-  const handleDownloadResults = async (orderId: string, order?: OrderHistoryItemDto) => {
+  const getResultsPdfBlob = useCallback(async (orderId: string): Promise<Blob> => {
+    const cached = resultsPdfCacheRef.current[orderId];
+    const now = Date.now();
+    if (cached && now - cached.cachedAt <= REPORT_PDF_CACHE_TTL_MS) {
+      return cached.blob;
+    }
+
+    const blob = await downloadTestResultsPDF(orderId);
+    resultsPdfCacheRef.current[orderId] = { blob, cachedAt: now };
+    return blob;
+  }, []);
+
+  const handleDownloadResults = async (
+    orderId: string,
+    order?: OrderHistoryItemDto,
+    options?: { skipPaymentCheck?: boolean },
+  ) => {
     const summaryOrder = order ?? getOrderSummaryById(orderId);
-    if (summaryOrder && !canReleaseResults(summaryOrder)) {
+    const skipPaymentCheck = options?.skipPaymentCheck === true;
+    if (!skipPaymentCheck && summaryOrder && !canReleaseResults(summaryOrder)) {
       setPaymentModalOrder(summaryOrder);
-      setPaymentModalPendingAction(() => () => handleDownloadResults(orderId));
+      setPaymentModalPendingAction(
+        () => () => handleDownloadResults(orderId, summaryOrder, { skipPaymentCheck: true }),
+      );
       setPaymentModalOpen(true);
       return;
     }
 
     setDownloading(`results-${orderId}`);
     try {
-      const blob = await downloadTestResultsPDF(orderId);
+      const blob = await getResultsPdfBlob(orderId);
       triggerPdfDownload(blob, `results-${orderId.substring(0, 8)}.pdf`);
       message.success('Results report downloaded');
-      await trackReportAction(orderId, 'PDF');
+      void trackReportAction(orderId, 'PDF');
     } catch (error: unknown) {
       const is403 =
         error &&
@@ -577,7 +598,9 @@ export function ReportsPage() {
 
       if (is403 && summaryOrder) {
         setPaymentModalOrder(summaryOrder);
-        setPaymentModalPendingAction(() => () => handleDownloadResults(orderId));
+        setPaymentModalPendingAction(
+          () => () => handleDownloadResults(orderId, summaryOrder, { skipPaymentCheck: true }),
+        );
         setPaymentModalOpen(true);
       } else {
         message.error('Failed to download results report');
@@ -587,22 +610,31 @@ export function ReportsPage() {
     }
   };
 
-  const handlePrintResults = async (orderId: string, order?: OrderHistoryItemDto) => {
+  const handlePrintResults = async (
+    orderId: string,
+    order?: OrderHistoryItemDto,
+    options?: { skipPaymentCheck?: boolean },
+  ) => {
     const summaryOrder = order ?? getOrderSummaryById(orderId);
-    if (summaryOrder && !canReleaseResults(summaryOrder)) {
+    const skipPaymentCheck = options?.skipPaymentCheck === true;
+    if (!skipPaymentCheck && summaryOrder && !canReleaseResults(summaryOrder)) {
       setPaymentModalOrder(summaryOrder);
-      setPaymentModalPendingAction(() => () => handlePrintResults(orderId));
+      setPaymentModalPendingAction(
+        () => () => handlePrintResults(orderId, summaryOrder, { skipPaymentCheck: true }),
+      );
       setPaymentModalOpen(true);
       return;
     }
 
     setDownloading(`print-${orderId}`);
     try {
-      const blob = await downloadTestResultsPDF(orderId);
+      const [blob, settings] = await Promise.all([
+        getResultsPdfBlob(orderId),
+        getLabSettings().catch(() => null),
+      ]);
       try {
-        const settings = await getLabSettings();
-        const printerName = settings.printing?.reportPrinterName?.trim();
-        if (settings.printing?.mode === 'direct_qz' && printerName) {
+        const printerName = settings?.printing?.reportPrinterName?.trim();
+        if (settings?.printing?.mode === 'direct_qz' && printerName) {
           if (isVirtualSavePrinterName(printerName)) {
             message.info(
               `Report printer "${printerName}" is a virtual PDF/XPS printer. Using browser print so Save dialog can appear.`,
@@ -615,7 +647,7 @@ export function ReportsPage() {
                 printerName,
               });
               message.success(`Report sent to ${printerName}`);
-              await trackReportAction(orderId, 'PRINT');
+              void trackReportAction(orderId, 'PRINT');
               return;
             } catch (error) {
               message.warning(`${getDirectPrintErrorMessage(error)} Falling back to browser print.`);
@@ -648,7 +680,7 @@ export function ReportsPage() {
         }
       };
       document.body.appendChild(iframe);
-      await trackReportAction(orderId, 'PRINT');
+      void trackReportAction(orderId, 'PRINT');
     } catch (error: unknown) {
       const is403 =
         error &&
@@ -658,7 +690,9 @@ export function ReportsPage() {
 
       if (is403 && summaryOrder) {
         setPaymentModalOrder(summaryOrder);
-        setPaymentModalPendingAction(() => () => handlePrintResults(orderId));
+        setPaymentModalPendingAction(
+          () => () => handlePrintResults(orderId, summaryOrder, { skipPaymentCheck: true }),
+        );
         setPaymentModalOpen(true);
       } else {
         message.error('Failed to load results for printing');
@@ -730,10 +764,15 @@ export function ReportsPage() {
     }
   };
 
-  const handleSendWhatsApp = async (order: OrderHistoryItemDto) => {
-    if (!canReleaseResults(order)) {
+  const handleSendWhatsApp = async (
+    order: OrderHistoryItemDto,
+    options?: { skipPaymentCheck?: boolean },
+  ) => {
+    if (!options?.skipPaymentCheck && !canReleaseResults(order)) {
       setPaymentModalOrder(order);
-      setPaymentModalPendingAction(() => () => handleSendWhatsApp(order));
+      setPaymentModalPendingAction(
+        () => () => handleSendWhatsApp(order, { skipPaymentCheck: true }),
+      );
       setPaymentModalOpen(true);
       return;
     }
@@ -746,16 +785,21 @@ export function ReportsPage() {
 
     const cleanedPhone = cleanPhoneNumber(phone);
     const messageText = buildResultsMessage(order);
-    await trackReportAction(order.id, 'WHATSAPP');
+    void trackReportAction(order.id, 'WHATSAPP');
 
     const url = `https://wa.me/${cleanedPhone}?text=${encodeURIComponent(messageText)}`;
     window.open(url, '_blank');
   };
 
-  const handleSendViber = async (order: OrderHistoryItemDto) => {
-    if (!canReleaseResults(order)) {
+  const handleSendViber = async (
+    order: OrderHistoryItemDto,
+    options?: { skipPaymentCheck?: boolean },
+  ) => {
+    if (!options?.skipPaymentCheck && !canReleaseResults(order)) {
       setPaymentModalOrder(order);
-      setPaymentModalPendingAction(() => () => handleSendViber(order));
+      setPaymentModalPendingAction(
+        () => () => handleSendViber(order, { skipPaymentCheck: true }),
+      );
       setPaymentModalOpen(true);
       return;
     }
@@ -768,7 +812,7 @@ export function ReportsPage() {
 
     const cleanedPhone = cleanPhoneNumber(phone);
     const messageText = buildResultsMessage(order);
-    await trackReportAction(order.id, 'VIBER');
+    void trackReportAction(order.id, 'VIBER');
 
     const url = `viber://chat?number=${encodeURIComponent(cleanedPhone)}&text=${encodeURIComponent(messageText)}`;
     window.open(url, '_blank');
@@ -1396,22 +1440,34 @@ export function ReportsPage() {
 
     setMarkingPaid(true);
     try {
-      await updateOrderPayment(order.id, { paymentStatus: 'paid' });
+      const updated = await updateOrderPayment(order.id, { paymentStatus: 'paid' });
       message.success('Order marked as paid');
-      await loadOrders();
 
       const action = paymentModalPendingAction;
       setPaymentModalOpen(false);
       setPaymentModalOrder(null);
       setPaymentModalPendingAction(null);
+      setOrders((prev) =>
+        prev.map((item) =>
+          item.id === order.id
+            ? {
+              ...item,
+              paymentStatus: 'paid',
+              paidAmount: Number(updated.paidAmount ?? updated.finalAmount ?? item.finalAmount ?? 0),
+            }
+            : item,
+        ),
+      );
 
       try {
         if (typeof action === 'function') {
-          action();
+          await action();
         }
       } catch {
         // no-op
       }
+
+      void loadOrders();
     } catch {
       message.error('Failed to mark as paid');
     } finally {
