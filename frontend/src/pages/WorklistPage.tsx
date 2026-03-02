@@ -717,11 +717,11 @@ export function WorklistPage() {
           overflow: hidden;
         }
         .panel-entry-modal .ant-modal-header {
-          padding: 6px 10px;
+          padding: 5px 8px;
           margin-bottom: 0;
         }
         .panel-entry-modal .ant-modal-body {
-          padding: 6px 10px 8px !important;
+          padding: 5px 8px 6px !important;
           max-height: calc(100vh - 140px);
           overflow-y: auto;
         }
@@ -939,14 +939,14 @@ export function WorklistPage() {
                   fontSize: 11,
                   textTransform: 'uppercase',
                   letterSpacing: '0.5px',
-                  padding: '3px 6px',
+                  padding: '2px 6px',
                 }}
               >
-                <div style={{ flex: '1 1 32%' }}>Test</div>
-                <div style={{ flex: '1 1 32%' }}>Result</div>
-                <div style={{ flex: '1 1 10%', textAlign: 'center' }}>Unit</div>
-                <div style={{ flex: '1 1 11%', textAlign: 'center' }}>Flag</div>
-                <div style={{ flex: '1 1 15%', textAlign: 'right' }}>Ref. Range</div>
+                <div style={{ flex: '1 1 40%' }}>Test</div>
+                <div style={{ flex: '1 1 26%' }}>Result</div>
+                <div style={{ flex: '1 1 8%', textAlign: 'center' }}>Unit</div>
+                <div style={{ flex: '1 1 10%', textAlign: 'center' }}>Flag</div>
+                <div style={{ flex: '1 1 16%', textAlign: 'right' }}>Ref. Range</div>
               </div>
 
               {orderedModalItems.map((target, index) => {
@@ -967,9 +967,9 @@ export function WorklistPage() {
                       <div
                         style={{
                           borderTop: '1px dashed #91caff',
-                          marginTop: 2,
-                          paddingTop: 5,
-                          marginBottom: 2,
+                          marginTop: 1,
+                          paddingTop: 3,
+                          marginBottom: 1,
                         }}
                       >
                         <Text strong style={{ fontSize: 11 }}>
@@ -981,7 +981,7 @@ export function WorklistPage() {
                       style={{
                         display: 'flex',
                         alignItems: 'flex-start',
-                        padding: '2px 6px',
+                        padding: '1px 6px',
                         borderBottom:
                           index < orderedModalItems.length - 1
                             ? isDark
@@ -995,7 +995,7 @@ export function WorklistPage() {
                           : 'transparent',
                       }}
                     >
-                      <div style={{ flex: '1 1 32%', paddingRight: 8 }}>
+                      <div style={{ flex: '1 1 40%', paddingRight: 8 }}>
                         <Space size={6}>
                           {isPanelRoot ? (
                             <Tag color="purple" style={{ margin: 0, fontSize: 10 }}>
@@ -1008,10 +1008,16 @@ export function WorklistPage() {
                             </Tag>
                           ) : null}
                         </Space>
-                        <div style={{ marginTop: 2, paddingLeft: isPanelChild ? 10 : 0 }}>
+                        <div style={{ marginTop: 1, paddingLeft: isPanelChild ? 10 : 0 }}>
                           <Text
                             strong={isPanelRoot}
-                            style={{ fontSize: 11, lineHeight: '14px' }}
+                            style={{
+                              fontSize: 11,
+                              lineHeight: '13px',
+                              display: 'block',
+                              whiteSpace: 'normal',
+                              wordBreak: 'break-word',
+                            }}
                           >
                             {target.testName}
                           </Text>
@@ -1023,7 +1029,7 @@ export function WorklistPage() {
                         )}
                       </div>
 
-                      <div style={{ flex: '1 1 32%', paddingRight: 8 }}>
+                      <div style={{ flex: '1 1 26%', paddingRight: 8 }}>
                         {isPanelRoot ? (
                           <Text type="secondary" style={{ fontSize: 11 }}>
                             Panel header
@@ -1137,10 +1143,10 @@ export function WorklistPage() {
                         )}
                       </div>
 
-                      <div style={{ flex: '1 1 10%', textAlign: 'center', fontSize: 10 }}>
+                      <div style={{ flex: '1 1 8%', textAlign: 'center', fontSize: 10 }}>
                         {target.testUnit || '-'}
                       </div>
-                      <div style={{ flex: '1 1 11%', textAlign: 'center' }}>
+                      <div style={{ flex: '1 1 10%', textAlign: 'center' }}>
                         {displayFlag ? (
                           <Tag
                             color={FLAG_COLOR[displayFlag] || 'default'}
@@ -1154,7 +1160,7 @@ export function WorklistPage() {
                           </Text>
                         )}
                       </div>
-                      <div style={{ flex: '1 1 15%', textAlign: 'right', fontSize: 10 }}>
+                      <div style={{ flex: '1 1 16%', textAlign: 'right', fontSize: 10 }}>
                         {formatReferenceRange(target)}
                       </div>
                     </div>

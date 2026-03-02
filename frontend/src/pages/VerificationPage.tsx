@@ -427,10 +427,10 @@ export function VerificationPage() {
           padding-bottom: 4px !important;
         }
         .verification-review-modal .ant-modal-header {
-          padding: 6px 10px !important;
+          padding: 5px 8px !important;
         }
         .verification-review-modal .ant-modal-body {
-          padding: 6px 10px 8px !important;
+          padding: 5px 8px 6px !important;
           max-height: calc(100vh - 140px);
           overflow-y: auto;
         }
@@ -586,16 +586,16 @@ export function VerificationPage() {
                 fontSize: 11,
                 textTransform: 'uppercase',
                 letterSpacing: '0.5px',
-                padding: '3px 6px',
+                padding: '2px 6px',
               }}
             >
-              <div style={{ flex: '1 1 26%' }}>Test</div>
-              <div style={{ flex: '1 1 26%' }}>Result</div>
-              <div style={{ flex: '1 1 10%', textAlign: 'center' }}>Unit</div>
-              <div style={{ flex: '1 1 12%', textAlign: 'center' }}>Flag</div>
-              <div style={{ flex: '1 1 12%', textAlign: 'center' }}>Status</div>
-              <div style={{ flex: '1 1 14%', textAlign: 'right' }}>Ref. Range</div>
-              <div style={{ flex: '1 1 22%', textAlign: 'right' }}>Action</div>
+              <div style={{ flex: '1 1 32%' }}>Test</div>
+              <div style={{ flex: '1 1 18%' }}>Result</div>
+              <div style={{ flex: '1 1 8%', textAlign: 'center' }}>Unit</div>
+              <div style={{ flex: '1 1 9%', textAlign: 'center' }}>Flag</div>
+              <div style={{ flex: '1 1 8%', textAlign: 'center' }}>Status</div>
+              <div style={{ flex: '1 1 9%', textAlign: 'right' }}>Ref. Range</div>
+              <div style={{ flex: '1 1 16%', textAlign: 'right' }}>Action</div>
             </div>
 
             {orderedReviewItems.map((item, index) => {
@@ -617,9 +617,9 @@ export function VerificationPage() {
                     <div
                       style={{
                         borderTop: '1px dashed #91caff',
-                        marginTop: 2,
-                        paddingTop: 5,
-                        marginBottom: 2,
+                        marginTop: 1,
+                        paddingTop: 3,
+                        marginBottom: 1,
                       }}
                     >
                       <Text strong style={{ fontSize: 11 }}>
@@ -631,7 +631,7 @@ export function VerificationPage() {
                     style={{
                       display: 'flex',
                       alignItems: 'flex-start',
-                      padding: '2px 6px',
+                      padding: '1px 6px',
                       borderBottom:
                         index < orderedReviewItems.length - 1
                           ? '1px solid #f0f0f0'
@@ -639,7 +639,7 @@ export function VerificationPage() {
                       backgroundColor: isPanelRoot ? 'rgba(114,46,209,0.08)' : 'transparent',
                     }}
                   >
-                    <div style={{ flex: '1 1 26%', paddingRight: 8 }}>
+                    <div style={{ flex: '1 1 32%', paddingRight: 8 }}>
                       <Space size={6}>
                         {isPanelRoot && (
                           <Tag color="purple" style={{ margin: 0, fontSize: 10 }}>
@@ -652,8 +652,17 @@ export function VerificationPage() {
                           </Tag>
                         )}
                       </Space>
-                      <div style={{ marginTop: 2, paddingLeft: isPanelChild ? 10 : 0 }}>
-                        <Text strong={isPanelRoot} style={{ fontSize: 11, lineHeight: '14px' }}>
+                      <div style={{ marginTop: 1, paddingLeft: isPanelChild ? 10 : 0 }}>
+                        <Text
+                          strong={isPanelRoot}
+                          style={{
+                            fontSize: 11,
+                            lineHeight: '13px',
+                            display: 'block',
+                            whiteSpace: 'normal',
+                            wordBreak: 'break-word',
+                          }}
+                        >
                           {item.testName}
                         </Text>
                       </div>
@@ -664,15 +673,15 @@ export function VerificationPage() {
                       )}
                     </div>
 
-                    <div style={{ flex: '1 1 26%', paddingRight: 8 }}>
+                    <div style={{ flex: '1 1 18%', paddingRight: 8 }}>
                       <Text style={{ fontSize: 11 }}>{isPanelRoot ? 'Panel group' : formatResult(item)}</Text>
                     </div>
 
-                    <div style={{ flex: '1 1 10%', textAlign: 'center', fontSize: 10 }}>
+                    <div style={{ flex: '1 1 8%', textAlign: 'center', fontSize: 10 }}>
                       {item.testUnit || '-'}
                     </div>
 
-                    <div style={{ flex: '1 1 12%', textAlign: 'center' }}>
+                    <div style={{ flex: '1 1 9%', textAlign: 'center' }}>
                       {item.flag ? (
                         <Tag color={FLAG_COLOR[item.flag] || 'default'} style={{ margin: 0, fontSize: 10 }}>
                           {FLAG_LABEL[item.flag] || item.flag}
@@ -684,17 +693,17 @@ export function VerificationPage() {
                       )}
                     </div>
 
-                    <div style={{ flex: '1 1 12%', textAlign: 'center' }}>
+                    <div style={{ flex: '1 1 8%', textAlign: 'center' }}>
                       <Tag color={STATUS_COLOR[item.status] || 'default'} style={{ margin: 0, fontSize: 10 }}>
                         {item.status.replace('_', ' ')}
                       </Tag>
                     </div>
 
-                    <div style={{ flex: '1 1 14%', textAlign: 'right', fontSize: 10 }}>
+                    <div style={{ flex: '1 1 9%', textAlign: 'right', fontSize: 10 }}>
                       {formatReferenceRange(item)}
                     </div>
 
-                    <div style={{ flex: '1 1 22%', textAlign: 'right' }}>
+                    <div style={{ flex: '1 1 16%', textAlign: 'right' }}>
                       <Space size={6} style={{ justifyContent: 'flex-end' }}>
                         <Button
                           type="link"
