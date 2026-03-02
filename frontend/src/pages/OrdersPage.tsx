@@ -64,6 +64,7 @@ import {
   directPrintReceipt,
   getDirectPrintErrorMessage,
 } from '../printing/direct-print';
+import { buildKeyboardSearchVariants } from '../utils/keyboard-map';
 import './OrdersPage.css';
 
 const { Title, Text } = Typography;
@@ -506,11 +507,12 @@ export function OrdersPage() {
 
   const filteredTests = useMemo(() => {
     if (!testSearch.trim()) return testOptions;
-    const search = testSearch.toLowerCase();
+    const searchVariants = buildKeyboardSearchVariants(testSearch);
     return testOptions.filter(
-      (t) =>
-        t.name.toLowerCase().includes(search) ||
-        t.code.toLowerCase().includes(search)
+      (t) => {
+        const haystack = `${t.code} ${(t as any).abbreviation ?? ''} ${t.name}`.toLowerCase();
+        return searchVariants.some((variant) => haystack.includes(variant));
+      },
     );
   }, [testOptions, testSearch]);
 
@@ -1933,6 +1935,12 @@ export function OrdersPage() {
             value={null}
             onChange={handleAddEditingTest}
             optionFilterProp="label"
+            filterOption={(input, option) => {
+              const label = String(option?.label ?? '').toLowerCase();
+              const variants = buildKeyboardSearchVariants(input);
+              if (variants.length === 0) return true;
+              return variants.some((variant) => label.includes(variant));
+            }}
             options={testOptions.map((test) => ({
               value: test.id,
               label: (test as any).abbreviation ? `${test.code} - ${(test as any).abbreviation} - ${test.name} (${test.tubeType})` : `${test.code} - ${test.name} (${test.tubeType})`,
