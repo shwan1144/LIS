@@ -7,9 +7,15 @@ This runbook switches backend build mode from `Railpack` to `Dockerfile` so Play
 In Dockploy backend service settings:
 
 1. Set `Build Type` to `Dockerfile`.
-2. Set Dockerfile path:
-- If service root is repo root: `backend/Dockerfile`
-- If service root is `backend`: `Dockerfile`
+2. Set service root + Dockerfile path consistently:
+- If service root is repo root: Dockerfile path = `backend/Dockerfile`
+- If service root is `backend`: Dockerfile path = `Dockerfile`
+
+3. Set `.env` file path consistently with service root:
+- If service root is repo root: env file path = `backend/.env`
+- If service root is `backend`: env file path = `.env`
+
+Do not prefix `backend/` twice. If root is already `backend`, `backend/.env` becomes invalid (`.../code/backend/backend/.env`).
 
 ## 2. Force Clean Rebuild
 
@@ -71,3 +77,19 @@ Use `reports.results_pdf.performance` fields to isolate bottleneck:
 
 Then optimize only the dominant phase.
 
+## 6. Common Dockploy Path Error
+
+Error:
+
+`cannot create .../code/backend/backend/.env: Directory nonexistent`
+
+Meaning:
+
+Your service root is already `backend`, but env file path is also set to `backend/.env`.
+
+Fix:
+
+1. Keep root as `backend`
+2. Change Dockerfile path to `Dockerfile`
+3. Change env file path to `.env`
+4. Redeploy with clear build cache
