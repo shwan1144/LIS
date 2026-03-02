@@ -67,6 +67,50 @@ const FLAG_LABEL: Record<ResultFlag, string> = {
   ABN: 'Abnormal',
 };
 
+function normalizeResultFlag(flag: string | null | undefined): ResultFlag | null {
+  const normalized = String(flag ?? '').trim().toUpperCase();
+  if (normalized === 'N') return 'N';
+  if (normalized === 'H') return 'H';
+  if (normalized === 'L') return 'L';
+  if (normalized === 'HH') return 'HH';
+  if (normalized === 'LL') return 'LL';
+  if (normalized === 'POS') return 'POS';
+  if (normalized === 'NEG') return 'NEG';
+  if (normalized === 'ABN') return 'ABN';
+  return null;
+}
+
+function resolveFlagFromResultText(
+  resultText: string | null,
+  options: Array<{ value: string; flag?: string | null }> | null | undefined,
+): ResultFlag | null {
+  if (!resultText || !options?.length) return null;
+  const candidate = resultText.trim().toLowerCase();
+  const matched = options.find((option) => option.value.trim().toLowerCase() === candidate);
+  return normalizeResultFlag(matched?.flag ?? null);
+}
+
+function calculateNumericFlagFromRange(
+  resultValue: number | null,
+  normalMin: number | null,
+  normalMax: number | null,
+): ResultFlag | null {
+  if (resultValue === null) return null;
+  if (normalMin === null && normalMax === null) return null;
+
+  if (normalMax !== null && resultValue > normalMax) {
+    const criticalHigh = normalMax * 1.5;
+    return resultValue > criticalHigh ? 'HH' : 'H';
+  }
+
+  if (normalMin !== null && resultValue < normalMin) {
+    const criticalLow = normalMin * 0.5;
+    return resultValue < criticalLow ? 'LL' : 'L';
+  }
+
+  return 'N';
+}
+
 function formatReferenceRange(item: WorklistItem): string {
   if (item.normalText?.trim()) return item.normalText.trim();
   if (item.normalMin != null || item.normalMax != null) {
@@ -231,6 +275,7 @@ export function WorklistPage() {
   const [modalOrder, setModalOrder] = useState<WorklistOrderModalDto | null>(null);
   const [modalLoading, setModalLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [liveFlags, setLiveFlags] = useState<Record<string, ResultFlag | null>>({});
   const [resultForm] = Form.useForm<any>();
 
   const loadRows = useCallback(async () => {
@@ -305,12 +350,77 @@ export function WorklistPage() {
       if (idx < 0) return;
       const nextTargetId = editableTargetIds[idx + 1];
       if (!nextTargetId) return;
-      const nextElement = document.getElementById(
-        `result-input-${nextTargetId}`,
+      const targetRoot = document.querySelector(
+        `[data-entry-target-id="${nextTargetId}"]`,
       ) as HTMLElement | null;
-      nextElement?.focus();
+      if (!targetRoot) return;
+
+      const focusTarget =
+        targetRoot.matches('input,textarea')
+          ? targetRoot
+          : (targetRoot.querySelector('input,textarea') as HTMLElement | null);
+      (focusTarget ?? targetRoot).focus();
     },
     [editableTargetIds],
+  );
+
+  const recomputeLiveFlags = useCallback(
+    (allValues: Record<string, any>) => {
+      const nextFlags: Record<string, ResultFlag | null> = {};
+
+      for (const target of orderedModalItems) {
+        if (target.testType === 'PANEL') continue;
+
+        const values = allValues[target.id] ?? {};
+        const resultEntryType = target.resultEntryType ?? 'NUMERIC';
+        let resultText =
+          values.resultText != null ? String(values.resultText).trim() : '';
+        if (resultText === '__other__') {
+          resultText =
+            values.customResultText != null
+              ? String(values.customResultText).trim()
+              : '';
+        }
+
+        if (resultEntryType === 'QUALITATIVE' || resultEntryType === 'TEXT') {
+          nextFlags[target.id] =
+            resolveFlagFromResultText(
+              resultText || null,
+              target.resultTextOptions ?? null,
+            ) ?? target.flag ?? null;
+          continue;
+        }
+
+        const optionFlag = resolveFlagFromResultText(
+          resultText || null,
+          target.resultTextOptions ?? null,
+        );
+        if (optionFlag) {
+          nextFlags[target.id] = optionFlag;
+          continue;
+        }
+
+        const rawNumeric = values.resultValue;
+        const numericValue =
+          rawNumeric === null || rawNumeric === undefined || rawNumeric === ''
+            ? null
+            : Number(rawNumeric);
+        const safeNumericValue =
+          numericValue != null && Number.isFinite(numericValue)
+            ? numericValue
+            : null;
+
+        nextFlags[target.id] =
+          calculateNumericFlagFromRange(
+            safeNumericValue,
+            target.normalMin ?? null,
+            target.normalMax ?? null,
+          ) ?? target.flag ?? null;
+      }
+
+      setLiveFlags(nextFlags);
+    },
+    [orderedModalItems],
   );
 
   const openEntryModal = useCallback(
@@ -323,7 +433,15 @@ export function WorklistPage() {
           departmentId: departmentId || undefined,
         });
         setModalOrder(payload);
-        resultForm.setFieldsValue(buildInitialFormValues(sortModalItems(payload.items)));
+        const initialValues = buildInitialFormValues(sortModalItems(payload.items));
+        resultForm.setFieldsValue(initialValues);
+        const initialFlags: Record<string, ResultFlag | null> = {};
+        for (const item of payload.items) {
+          if (item.testType !== 'PANEL') {
+            initialFlags[item.id] = item.flag ?? null;
+          }
+        }
+        setLiveFlags(initialFlags);
         setResultModalOpen(true);
       } catch {
         message.error('Failed to load order tests');
@@ -364,6 +482,13 @@ export function WorklistPage() {
           });
           setModalOrder(refreshed);
           resultForm.setFieldsValue(buildInitialFormValues(sortModalItems(refreshed.items)));
+          const refreshedFlags: Record<string, ResultFlag | null> = {};
+          for (const item of refreshed.items) {
+            if (item.testType !== 'PANEL') {
+              refreshedFlags[item.id] = item.flag ?? null;
+            }
+          }
+          setLiveFlags(refreshedFlags);
         }
       } catch {
         message.error('Failed to verify order tests');
@@ -443,6 +568,13 @@ export function WorklistPage() {
       });
       setModalOrder(refreshed);
       resultForm.setFieldsValue(buildInitialFormValues(sortModalItems(refreshed.items)));
+      const refreshedFlags: Record<string, ResultFlag | null> = {};
+      for (const item of refreshed.items) {
+        if (item.testType !== 'PANEL') {
+          refreshedFlags[item.id] = item.flag ?? null;
+        }
+      }
+      setLiveFlags(refreshedFlags);
       await Promise.all([loadRows(), loadStats()]);
     } catch {
       message.error('Failed to save results');
@@ -593,6 +725,18 @@ export function WorklistPage() {
           max-height: calc(100vh - 140px);
           overflow-y: auto;
         }
+        .panel-entry-modal .ant-form-item {
+          margin-bottom: 0 !important;
+        }
+        .panel-entry-modal .ant-input-number,
+        .panel-entry-modal .ant-input,
+        .panel-entry-modal .ant-select-selector {
+          min-height: 26px !important;
+          height: 26px !important;
+        }
+        .panel-entry-modal .ant-input-number-input {
+          height: 24px !important;
+        }
       `}</style>
 
       <Title level={4} style={{ marginTop: 0, marginBottom: 10 }}>
@@ -687,6 +831,7 @@ export function WorklistPage() {
         onCancel={() => {
           setResultModalOpen(false);
           setModalOrder(null);
+          setLiveFlags({});
           resultForm.resetFields();
         }}
         footer={null}
@@ -749,6 +894,7 @@ export function WorklistPage() {
                 onClick={() => {
                   setResultModalOpen(false);
                   setModalOrder(null);
+                  setLiveFlags({});
                   resultForm.resetFields();
                 }}
               >
@@ -765,7 +911,14 @@ export function WorklistPage() {
               </Button>
             </div>
 
-            <Form form={resultForm} layout="vertical" onFinish={handleSubmitResult}>
+            <Form
+              form={resultForm}
+              layout="vertical"
+              onFinish={handleSubmitResult}
+              onValuesChange={(_, allValues) => {
+                recomputeLiveFlags(allValues as Record<string, any>);
+              }}
+            >
               <div
                 style={{
                   display: 'flex',
@@ -778,7 +931,7 @@ export function WorklistPage() {
                   fontSize: 12,
                   textTransform: 'uppercase',
                   letterSpacing: '0.5px',
-                  padding: '6px 8px',
+                  padding: '5px 8px',
                 }}
               >
                 <div style={{ flex: '1 1 32%' }}>Test</div>
@@ -795,6 +948,10 @@ export function WorklistPage() {
                 const isReadOnly = target.status === 'VERIFIED' || isPanelRoot;
                 const parameterDefinitions = target.parameterDefinitions ?? [];
                 const hasParams = parameterDefinitions.length > 0;
+                const displayFlag =
+                  target.testType === 'PANEL'
+                    ? null
+                    : (liveFlags[target.id] ?? target.flag ?? null);
 
                 return (
                   <div key={target.id}>
@@ -816,7 +973,7 @@ export function WorklistPage() {
                       style={{
                         display: 'flex',
                         alignItems: 'flex-start',
-                        padding: '6px 8px',
+                        padding: '4px 8px',
                         borderBottom:
                           index < orderedModalItems.length - 1
                             ? isDark
@@ -879,6 +1036,7 @@ export function WorklistPage() {
                                     allowClear
                                     size="small"
                                     disabled={isReadOnly}
+                                    data-entry-target-id={target.id}
                                     options={[
                                       ...(definition.options ?? []).map((option) => ({
                                         label: option,
@@ -886,9 +1044,25 @@ export function WorklistPage() {
                                       })),
                                       { label: 'Other...', value: '__other__' },
                                     ]}
+                                    onKeyDown={(event) => {
+                                      if (event.key === 'ArrowDown') {
+                                        event.preventDefault();
+                                        focusNextEditableInput(target.id);
+                                      }
+                                    }}
                                   />
                                 ) : (
-                                  <Input size="small" disabled={isReadOnly} />
+                                  <Input
+                                    size="small"
+                                    disabled={isReadOnly}
+                                    data-entry-target-id={target.id}
+                                    onKeyDown={(event) => {
+                                      if (event.key === 'ArrowDown') {
+                                        event.preventDefault();
+                                        focusNextEditableInput(target.id);
+                                      }
+                                    }}
+                                  />
                                 )}
                               </Form.Item>
                             ))}
@@ -901,9 +1075,9 @@ export function WorklistPage() {
                             {target.resultEntryType === 'NUMERIC' ? (
                               <InputNumber
                                 id={`result-input-${target.id}`}
+                                data-entry-target-id={target.id}
                                 style={{ width: '100%' }}
                                 size="small"
-                                precision={2}
                                 disabled={isReadOnly}
                                 onKeyDown={(event) => {
                                   if (event.key === 'ArrowDown') {
@@ -916,6 +1090,7 @@ export function WorklistPage() {
                               (target.resultTextOptions?.length ?? 0) > 0 ? (
                               <Select
                                 id={`result-input-${target.id}`}
+                                data-entry-target-id={target.id}
                                 allowClear
                                 showSearch
                                 size="small"
@@ -939,6 +1114,7 @@ export function WorklistPage() {
                             ) : (
                               <Input
                                 id={`result-input-${target.id}`}
+                                data-entry-target-id={target.id}
                                 size="small"
                                 disabled={isReadOnly}
                                 onKeyDown={(event) => {
@@ -957,12 +1133,12 @@ export function WorklistPage() {
                         {target.testUnit || '-'}
                       </div>
                       <div style={{ flex: '1 1 11%', textAlign: 'center' }}>
-                        {target.flag ? (
+                        {displayFlag ? (
                           <Tag
-                            color={FLAG_COLOR[target.flag] || 'default'}
+                            color={FLAG_COLOR[displayFlag] || 'default'}
                             style={{ margin: 0, fontSize: 10 }}
                           >
-                            {FLAG_LABEL[target.flag] || target.flag}
+                            {FLAG_LABEL[displayFlag] || displayFlag}
                           </Tag>
                         ) : (
                           <Text type="secondary" style={{ fontSize: 11 }}>

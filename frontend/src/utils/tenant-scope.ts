@@ -14,7 +14,7 @@ export function getCurrentAuthScope(hostname = getHostname()): AuthScope {
 }
 
 export function resolveApiBaseUrl(envBase?: string): string {
-  const fallback = 'http://localhost:3000';
+  const fallback = 'http://localhost:3001';
   if (typeof window === 'undefined') {
     return envBase || fallback;
   }
@@ -24,7 +24,7 @@ export function resolveApiBaseUrl(envBase?: string): string {
   const normalizedEnv = envBase?.trim();
 
   if (!normalizedEnv) {
-    const port = hostname === 'localhost' || hostname.endsWith('.localhost') ? ':3000' : '';
+    const port = hostname === 'localhost' || hostname.endsWith('.localhost') ? ':3001' : '';
     return `${protocol}//${hostname}${port}`;
   }
 
@@ -36,7 +36,7 @@ export function resolveApiBaseUrl(envBase?: string): string {
     // Local multi-subdomain dev: keep current host (lab01.localhost, admin.localhost),
     // but preserve API protocol/port/path from VITE_API_URL.
     if (isLocal && isLocalApiHost) {
-      const port = parsed.port || '3000';
+      const port = parsed.port || '3001';
       const pathname = parsed.pathname === '/' ? '' : parsed.pathname.replace(/\/+$/, '');
       return `${parsed.protocol}//${hostname}:${port}${pathname}`;
     }
