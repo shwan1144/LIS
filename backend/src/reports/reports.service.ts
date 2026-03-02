@@ -1,8 +1,9 @@
-import { Injectable, NotFoundException, ForbiddenException, type OnModuleDestroy, type OnModuleInit } from '@nestjs/common';
+import { Injectable, NotFoundException, ForbiddenException, Logger, type OnModuleDestroy, type OnModuleInit } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In } from 'typeorm';
 import { readFileSync, existsSync } from 'fs';
 import { join } from 'path';
+import { createHash } from 'crypto';
 // require() for CommonJS interop (pdfkit has no default export in some builds)
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const PDFDocument = require('pdfkit');
@@ -215,7 +216,18 @@ function resolveReadablePath(candidates: string[]): string | null {
 
 @Injectable()
 export class ReportsService implements OnModuleInit, OnModuleDestroy {
+  private readonly logger = new Logger(ReportsService.name);
   private browserPromise: Promise<Browser> | null = null;
+  private readonly pdfCache = new Map<string, { buffer: Buffer; expiresAt: number; lastAccessedAt: number }>();
+  private readonly pdfInFlight = new Map<string, Promise<Buffer>>();
+  private readonly pdfCacheTtlMs = this.parseEnvInt('REPORTS_PDF_CACHE_TTL_MS', 120_000, 0, 900_000);
+  private readonly pdfCacheMaxEntries = this.parseEnvInt('REPORTS_PDF_CACHE_MAX_ENTRIES', 30, 1, 1000);
+  private readonly pdfPerfLogThresholdMs = this.parseEnvInt(
+    'REPORTS_PDF_PERF_LOG_THRESHOLD_MS',
+    500,
+    0,
+    60_000,
+  );
 
   // ── Static in-memory caches for files that never change at runtime ──
   private static cachedLogo: { path: string; base64: string } | null = null;
@@ -235,6 +247,16 @@ export class ReportsService implements OnModuleInit, OnModuleDestroy {
     @InjectRepository(AuditLog)
     private readonly auditLogRepo: Repository<AuditLog>,
   ) { }
+
+  private parseEnvInt(name: string, fallback: number, min: number, max: number): number {
+    const raw = process.env[name];
+    if (!raw) return fallback;
+    const parsed = Number.parseInt(raw, 10);
+    if (!Number.isFinite(parsed)) return fallback;
+    if (parsed < min) return min;
+    if (parsed > max) return max;
+    return parsed;
+  }
 
   onModuleInit(): void {
     // Pre-warm the browser so the first PDF request isn't slow.
@@ -283,15 +305,116 @@ export class ReportsService implements OnModuleInit, OnModuleDestroy {
   }
 
   async onModuleDestroy(): Promise<void> {
-    if (!this.browserPromise) return;
+    const browserPromise = this.browserPromise;
+    this.browserPromise = null;
+    this.pdfCache.clear();
+    this.pdfInFlight.clear();
+    if (!browserPromise) return;
     try {
-      const browser = await this.browserPromise;
+      const browser = await browserPromise;
       await browser.close();
     } catch {
       // ignore
-    } finally {
-      this.browserPromise = null;
     }
+  }
+
+  private buildReportPdfCacheKey(input: {
+    labId: string;
+    order: Order;
+    reportableOrderTests: OrderTest[];
+    latestVerifiedAt: Date | null;
+    bypassPaymentCheck: boolean;
+  }): string {
+    const reportableFingerprint = input.reportableOrderTests
+      .map((ot) => {
+        const updatedAtMs = ot.updatedAt ? new Date(ot.updatedAt).getTime() : 0;
+        const resultValue = ot.resultValue == null ? '' : String(ot.resultValue);
+        const resultText = ot.resultText?.trim() ?? '';
+        return `${ot.id}:${updatedAtMs}:${ot.status}:${ot.flag ?? ''}:${resultValue}:${resultText}`;
+      })
+      .sort()
+      .join('|');
+
+    const rawKey = [
+      input.labId,
+      input.order.id,
+      input.order.paymentStatus,
+      input.order.updatedAt ? new Date(input.order.updatedAt).toISOString() : '-',
+      input.order.lab?.updatedAt ? new Date(input.order.lab.updatedAt).toISOString() : '-',
+      input.latestVerifiedAt ? new Date(input.latestVerifiedAt).toISOString() : '-',
+      input.bypassPaymentCheck ? 'bypass' : 'strict',
+      String(input.reportableOrderTests.length),
+      reportableFingerprint,
+    ].join('::');
+
+    return createHash('sha1').update(rawKey).digest('hex');
+  }
+
+  private getCachedPdf(cacheKey: string): Buffer | null {
+    if (this.pdfCacheTtlMs <= 0) return null;
+    const now = Date.now();
+    const entry = this.pdfCache.get(cacheKey);
+    if (!entry) return null;
+    if (entry.expiresAt <= now) {
+      this.pdfCache.delete(cacheKey);
+      return null;
+    }
+    entry.lastAccessedAt = now;
+    return Buffer.from(entry.buffer);
+  }
+
+  private setCachedPdf(cacheKey: string, pdf: Buffer): void {
+    if (this.pdfCacheTtlMs <= 0) return;
+    const now = Date.now();
+    this.pdfCache.set(cacheKey, {
+      buffer: Buffer.from(pdf),
+      expiresAt: now + this.pdfCacheTtlMs,
+      lastAccessedAt: now,
+    });
+
+    for (const [key, entry] of this.pdfCache) {
+      if (entry.expiresAt <= now) this.pdfCache.delete(key);
+    }
+
+    if (this.pdfCache.size <= this.pdfCacheMaxEntries) return;
+    const oldest = [...this.pdfCache.entries()]
+      .sort((a, b) => a[1].lastAccessedAt - b[1].lastAccessedAt)
+      .slice(0, this.pdfCache.size - this.pdfCacheMaxEntries);
+    for (const [key] of oldest) {
+      this.pdfCache.delete(key);
+    }
+  }
+
+  private logResultsPdfPerformance(input: {
+    orderId: string;
+    labId: string;
+    totalMs: number;
+    snapshotMs: number;
+    verifierLookupMs?: number;
+    assetsMs?: number;
+    htmlMs?: number;
+    renderMs?: number;
+    fallbackMs?: number;
+    cacheHit: boolean;
+    inFlightJoin: boolean;
+  }): void {
+    if (input.totalMs < this.pdfPerfLogThresholdMs) return;
+    this.logger.log(
+      JSON.stringify({
+        event: 'reports.results_pdf.performance',
+        orderId: input.orderId,
+        labId: input.labId,
+        totalMs: input.totalMs,
+        snapshotMs: input.snapshotMs,
+        verifierLookupMs: input.verifierLookupMs ?? 0,
+        assetsMs: input.assetsMs ?? 0,
+        htmlMs: input.htmlMs ?? 0,
+        renderMs: input.renderMs ?? 0,
+        fallbackMs: input.fallbackMs ?? 0,
+        cacheHit: input.cacheHit,
+        inFlightJoin: input.inFlightJoin,
+      }),
+    );
   }
 
   async ensureOrderBelongsToLab(orderId: string, labId: string): Promise<void> {
@@ -543,18 +666,13 @@ export class ReportsService implements OnModuleInit, OnModuleDestroy {
   }> {
     const where = labId ? { id: orderId, labId } : { id: orderId };
 
-    // ── Optimization: fetch order + all sample-IDs in one query, then fire
-    //    the orderTests query in parallel with any remaining async work ──
+    // Keep order query lightweight; fetch tests separately by sample.orderId.
     const order = await this.orderRepo.findOne({
       where,
       relations: [
         'patient',
         'lab',
         'shift',
-        'samples',
-        'samples.orderTests',
-        'samples.orderTests.test',
-        'samples.orderTests.test.department',
       ],
     });
 
@@ -562,22 +680,15 @@ export class ReportsService implements OnModuleInit, OnModuleDestroy {
       throw new NotFoundException('Order not found');
     }
 
-    const sampleIds = order.samples?.map((s) => s.id) ?? [];
-
-    // Run the dedicated orderTests query in parallel with anything else
-    // (at this point it's the only remaining async op, so we await it directly
-    //  but the promise is created immediately after the first query returns,
-    //  meaning DB pipeline overlap is maximised).
-    const orderTestsPromise =
-      sampleIds.length === 0
-        ? []
-        : await this.orderTestRepo.find({
-          where: { sampleId: In(sampleIds) },
-          relations: ['test', 'test.department', 'sample'],
-          order: { test: { code: 'ASC' } },
-        });
-
-    const orderTests = await orderTestsPromise;
+    const orderTests = await this.orderTestRepo
+      .createQueryBuilder('orderTest')
+      .innerJoin('orderTest.sample', 'sample')
+      .leftJoinAndSelect('orderTest.test', 'test')
+      .leftJoinAndSelect('test.department', 'department')
+      .where('sample.orderId = :orderId', { orderId: order.id })
+      .orderBy('COALESCE(test.sortOrder, 0)', 'ASC')
+      .addOrderBy('test.code', 'ASC')
+      .getMany();
 
     const reportableOrderTests = this.getReportableOrderTests(orderTests);
     const verifiedTests = reportableOrderTests.filter(
@@ -832,115 +943,194 @@ export class ReportsService implements OnModuleInit, OnModuleDestroy {
     labId: string,
     options?: { bypassPaymentCheck?: boolean },
   ): Promise<Buffer> {
+    const startMs = Date.now();
+    const snapshotStartMs = Date.now();
     const { order, reportableOrderTests, verifiedTests, latestVerifiedAt } =
       await this.loadOrderResultsSnapshot(orderId, labId);
+    const snapshotMs = Date.now() - snapshotStartMs;
+    const bypassPaymentCheck = !!options?.bypassPaymentCheck;
 
-    if (!options?.bypassPaymentCheck && order.paymentStatus !== 'paid') {
+    if (!bypassPaymentCheck && order.paymentStatus !== 'paid') {
       throw new ForbiddenException(
         'Order is unpaid or partially paid. Complete payment to download or print results.',
       );
     }
 
-    const verifierIds = [
-      ...new Set(
-        reportableOrderTests
-          .map((ot) => ot.verifiedBy)
-          .filter((id): id is string => Boolean(id)),
-      ),
-    ];
-    const verifiers =
-      verifierIds.length === 0
-        ? []
-        : await this.userRepo.find({
-          where: verifierIds.map((id) => ({ id })),
-        });
-    const verifierNameMap = new Map(
-      verifiers.map((u) => [u.id, u.fullName || u.username || u.id.substring(0, 8)]),
-    );
-
-    const verifierNames = [
-      ...new Set(
-        verifiedTests
-          .map((ot) => (ot.verifiedBy ? verifierNameMap.get(ot.verifiedBy) || ot.verifiedBy : null))
-          .filter((name): name is string => Boolean(name)),
-      ),
-    ];
-    const comments = [
-      ...new Set(
-        reportableOrderTests
-          .map((ot) => ot.comments?.trim())
-          .filter((value): value is string => Boolean(value)),
-      ),
-    ];
-
-    // ── Optimization: logo and font files are immutable at runtime – serve
-    //    from in-memory cache after the first read to avoid repeated disk I/O.
-    let defaultLogoBase64: string | undefined;
-    const logoPath = resolveReadablePath([
-      join(__dirname, 'logo.png'),
-      join(process.cwd(), 'dist', 'src', 'reports', 'logo.png'),
-      join(process.cwd(), 'src', 'reports', 'logo.png'),
-    ]);
-    if (logoPath) {
-      try {
-        if (!ReportsService.cachedLogo || ReportsService.cachedLogo.path !== logoPath) {
-          const buf = readFileSync(logoPath);
-          ReportsService.cachedLogo = { path: logoPath, base64: `data:image/png;base64,${buf.toString('base64')}` };
-        }
-        defaultLogoBase64 = ReportsService.cachedLogo.base64;
-      } catch {
-        // ignore
-      }
-    }
-
-    let kurdishFontBase64: string | undefined;
-    const kurdishFontPath = resolveReadablePath([
-      join(__dirname, 'fonts', 'NotoNaskhArabic-Regular.ttf'),
-      join(process.cwd(), 'dist', 'src', 'reports', 'fonts', 'NotoNaskhArabic-Regular.ttf'),
-      join(process.cwd(), 'src', 'reports', 'fonts', 'NotoNaskhArabic-Regular.ttf'),
-    ]);
-    if (kurdishFontPath) {
-      try {
-        if (!ReportsService.cachedFont || ReportsService.cachedFont.path !== kurdishFontPath) {
-          const fontBuf = readFileSync(kurdishFontPath);
-          ReportsService.cachedFont = { path: kurdishFontPath, base64: `data:font/ttf;base64,${fontBuf.toString('base64')}` };
-        }
-        kurdishFontBase64 = ReportsService.cachedFont.base64;
-      } catch {
-        // ignore
-      }
-    }
-
-    const html = buildResultsReportHtml({
+    const cacheKey = this.buildReportPdfCacheKey({
+      labId,
       order,
-      orderTests: reportableOrderTests,
-      verifiedCount: verifiedTests.length,
-      reportableCount: reportableOrderTests.length,
-      verifiers: verifierNames,
-      latestVerifiedAt: latestVerifiedAt ?? null,
-      comments,
-      defaultLogoBase64,
-      kurdishFontBase64,
+      reportableOrderTests,
+      latestVerifiedAt,
+      bypassPaymentCheck,
     });
+    const cachedPdf = this.getCachedPdf(cacheKey);
+    if (cachedPdf) {
+      this.logResultsPdfPerformance({
+        orderId,
+        labId,
+        totalMs: Date.now() - startMs,
+        snapshotMs,
+        cacheHit: true,
+        inFlightJoin: false,
+      });
+      return cachedPdf;
+    }
 
-    try {
-      return await this.renderPdfFromHtml(html);
-    } catch (error) {
-      const allowFallback = process.env.REPORTS_PDF_FALLBACK !== 'false';
-      if (!allowFallback) {
-        throw error;
-      }
-      console.error(
-        'Playwright PDF rendering failed; falling back to PDFKit renderer.',
-        error,
+    const existingInFlight = this.pdfInFlight.get(cacheKey);
+    if (existingInFlight) {
+      const pdf = await existingInFlight;
+      this.logResultsPdfPerformance({
+        orderId,
+        labId,
+        totalMs: Date.now() - startMs,
+        snapshotMs,
+        cacheHit: false,
+        inFlightJoin: true,
+      });
+      return Buffer.from(pdf);
+    }
+
+    let verifierLookupMs = 0;
+    let assetsMs = 0;
+    let htmlMs = 0;
+    let renderMs = 0;
+    let fallbackMs = 0;
+
+    const generatePromise = (async () => {
+      const verifierLookupStartMs = Date.now();
+      const verifierIds = [
+        ...new Set(
+          reportableOrderTests
+            .map((ot) => ot.verifiedBy)
+            .filter((id): id is string => Boolean(id)),
+        ),
+      ];
+      const verifiers =
+        verifierIds.length === 0
+          ? []
+          : await this.userRepo.find({
+            where: verifierIds.map((id) => ({ id })),
+          });
+      verifierLookupMs = Date.now() - verifierLookupStartMs;
+      const verifierNameMap = new Map(
+        verifiers.map((u) => [u.id, u.fullName || u.username || u.id.substring(0, 8)]),
       );
-      return this.renderTestResultsFallbackPDF({
+
+      const verifierNames = [
+        ...new Set(
+          verifiedTests
+            .map((ot) => (ot.verifiedBy ? verifierNameMap.get(ot.verifiedBy) || ot.verifiedBy : null))
+            .filter((name): name is string => Boolean(name)),
+        ),
+      ];
+      const comments = [
+        ...new Set(
+          reportableOrderTests
+            .map((ot) => ot.comments?.trim())
+            .filter((value): value is string => Boolean(value)),
+        ),
+      ];
+
+      // Optimization: logo and font files are immutable at runtime - serve
+      // from in-memory cache after the first read to avoid repeated disk I/O.
+      const assetsStartMs = Date.now();
+      let defaultLogoBase64: string | undefined;
+      const logoPath = resolveReadablePath([
+        join(__dirname, 'logo.png'),
+        join(process.cwd(), 'dist', 'src', 'reports', 'logo.png'),
+        join(process.cwd(), 'src', 'reports', 'logo.png'),
+      ]);
+      if (logoPath) {
+        try {
+          if (!ReportsService.cachedLogo || ReportsService.cachedLogo.path !== logoPath) {
+            const buf = readFileSync(logoPath);
+            ReportsService.cachedLogo = { path: logoPath, base64: `data:image/png;base64,${buf.toString('base64')}` };
+          }
+          defaultLogoBase64 = ReportsService.cachedLogo.base64;
+        } catch {
+          // ignore
+        }
+      }
+
+      let kurdishFontBase64: string | undefined;
+      const kurdishFontPath = resolveReadablePath([
+        join(__dirname, 'fonts', 'NotoNaskhArabic-Regular.ttf'),
+        join(process.cwd(), 'dist', 'src', 'reports', 'fonts', 'NotoNaskhArabic-Regular.ttf'),
+        join(process.cwd(), 'src', 'reports', 'fonts', 'NotoNaskhArabic-Regular.ttf'),
+      ]);
+      if (kurdishFontPath) {
+        try {
+          if (!ReportsService.cachedFont || ReportsService.cachedFont.path !== kurdishFontPath) {
+            const fontBuf = readFileSync(kurdishFontPath);
+            ReportsService.cachedFont = { path: kurdishFontPath, base64: `data:font/ttf;base64,${fontBuf.toString('base64')}` };
+          }
+          kurdishFontBase64 = ReportsService.cachedFont.base64;
+        } catch {
+          // ignore
+        }
+      }
+      assetsMs = Date.now() - assetsStartMs;
+
+      const htmlStartMs = Date.now();
+      const html = buildResultsReportHtml({
         order,
         orderTests: reportableOrderTests,
+        verifiedCount: verifiedTests.length,
+        reportableCount: reportableOrderTests.length,
         verifiers: verifierNames,
         latestVerifiedAt: latestVerifiedAt ?? null,
         comments,
+        defaultLogoBase64,
+        kurdishFontBase64,
       });
+      htmlMs = Date.now() - htmlStartMs;
+
+      try {
+        const renderStartMs = Date.now();
+        const pdf = await this.renderPdfFromHtml(html);
+        renderMs = Date.now() - renderStartMs;
+        return pdf;
+      } catch (error) {
+        const allowFallback = process.env.REPORTS_PDF_FALLBACK !== 'false';
+        if (!allowFallback) {
+          throw error;
+        }
+        this.logger.warn(
+          `Playwright PDF rendering failed; using fallback renderer for order ${order.id}.`,
+        );
+        const fallbackStartMs = Date.now();
+        const fallbackPdf = await this.renderTestResultsFallbackPDF({
+          order,
+          orderTests: reportableOrderTests,
+          verifiers: verifierNames,
+          latestVerifiedAt: latestVerifiedAt ?? null,
+          comments,
+        });
+        fallbackMs = Date.now() - fallbackStartMs;
+        return fallbackPdf;
+      }
+    })();
+
+    this.pdfInFlight.set(cacheKey, generatePromise);
+    try {
+      const pdf = await generatePromise;
+      this.setCachedPdf(cacheKey, pdf);
+      this.logResultsPdfPerformance({
+        orderId,
+        labId,
+        totalMs: Date.now() - startMs,
+        snapshotMs,
+        verifierLookupMs,
+        assetsMs,
+        htmlMs,
+        renderMs,
+        fallbackMs,
+        cacheHit: false,
+        inFlightJoin: false,
+      });
+      return Buffer.from(pdf);
+    } finally {
+      this.pdfInFlight.delete(cacheKey);
     }
   }
 
