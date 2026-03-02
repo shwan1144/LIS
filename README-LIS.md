@@ -1,5 +1,10 @@
 # LIS – Phase 1 (Backend + Frontend)
 
+## Deployment Runbooks
+
+- Dockploy backend Dockerfile switch for fast Reports PDF/Print:
+  - `DOCKPLOY_BACKEND_DOCKERFILE_SWITCH.md`
+
 ## Quick start (Windows)
 
 1. **Use PowerShell**, not Command Prompt (cmd). In Cursor: Terminal → New Terminal (or set default profile to PowerShell). Do **not** paste long error text into the terminal — each line will run as a command.
