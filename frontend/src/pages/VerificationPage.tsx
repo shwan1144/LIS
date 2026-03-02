@@ -419,12 +419,20 @@ export function VerificationPage() {
         .verification-orders-table .ant-table-thead > tr > th {
           font-weight: 700;
           font-size: 12px;
-          padding-top: 6px !important;
-          padding-bottom: 6px !important;
+          padding-top: 4px !important;
+          padding-bottom: 4px !important;
         }
         .verification-orders-table .ant-table-tbody > tr > td {
-          padding-top: 7px !important;
-          padding-bottom: 7px !important;
+          padding-top: 4px !important;
+          padding-bottom: 4px !important;
+        }
+        .verification-review-modal .ant-modal-header {
+          padding: 6px 10px !important;
+        }
+        .verification-review-modal .ant-modal-body {
+          padding: 6px 10px 8px !important;
+          max-height: calc(100vh - 140px);
+          overflow-y: auto;
         }
       `}</style>
 
@@ -523,6 +531,7 @@ export function VerificationPage() {
         }}
         footer={null}
         width={1050}
+        className="verification-review-modal"
       >
         {reviewLoading ? (
           <div style={{ padding: 28, textAlign: 'center' }}>
@@ -532,8 +541,8 @@ export function VerificationPage() {
           <div>
             <div
               style={{
-                marginBottom: 10,
-                padding: '8px 10px',
+                marginBottom: 6,
+                padding: '6px 8px',
                 borderRadius: 6,
                 backgroundColor: '#fafafa',
                 border: '1px solid #f0f0f0',
@@ -547,7 +556,7 @@ export function VerificationPage() {
               </Space>
             </div>
 
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginBottom: 10 }}>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 6, marginBottom: 6 }}>
               <Button
                 icon={<CheckCircleOutlined />}
                 loading={working}
@@ -574,10 +583,10 @@ export function VerificationPage() {
                 borderRadius: '6px 6px 0 0',
                 borderBottom: '1px solid #e8e8e8',
                 fontWeight: 600,
-                fontSize: 12,
+                fontSize: 11,
                 textTransform: 'uppercase',
                 letterSpacing: '0.5px',
-                padding: '6px 8px',
+                padding: '3px 6px',
               }}
             >
               <div style={{ flex: '1 1 26%' }}>Test</div>
@@ -608,9 +617,9 @@ export function VerificationPage() {
                     <div
                       style={{
                         borderTop: '1px dashed #91caff',
-                        marginTop: 4,
-                        paddingTop: 8,
-                        marginBottom: 4,
+                        marginTop: 2,
+                        paddingTop: 5,
+                        marginBottom: 2,
                       }}
                     >
                       <Text strong style={{ fontSize: 11 }}>
@@ -622,7 +631,7 @@ export function VerificationPage() {
                     style={{
                       display: 'flex',
                       alignItems: 'flex-start',
-                      padding: '6px 8px',
+                      padding: '2px 6px',
                       borderBottom:
                         index < orderedReviewItems.length - 1
                           ? '1px solid #f0f0f0'
@@ -644,7 +653,7 @@ export function VerificationPage() {
                         )}
                       </Space>
                       <div style={{ marginTop: 2, paddingLeft: isPanelChild ? 10 : 0 }}>
-                        <Text strong={isPanelRoot} style={{ fontSize: 12, lineHeight: '15px' }}>
+                        <Text strong={isPanelRoot} style={{ fontSize: 11, lineHeight: '14px' }}>
                           {item.testName}
                         </Text>
                       </div>
@@ -656,10 +665,10 @@ export function VerificationPage() {
                     </div>
 
                     <div style={{ flex: '1 1 26%', paddingRight: 8 }}>
-                      <Text style={{ fontSize: 12 }}>{isPanelRoot ? 'Panel group' : formatResult(item)}</Text>
+                      <Text style={{ fontSize: 11 }}>{isPanelRoot ? 'Panel group' : formatResult(item)}</Text>
                     </div>
 
-                    <div style={{ flex: '1 1 10%', textAlign: 'center', fontSize: 11 }}>
+                    <div style={{ flex: '1 1 10%', textAlign: 'center', fontSize: 10 }}>
                       {item.testUnit || '-'}
                     </div>
 
@@ -669,7 +678,7 @@ export function VerificationPage() {
                           {FLAG_LABEL[item.flag] || item.flag}
                         </Tag>
                       ) : (
-                        <Text type="secondary" style={{ fontSize: 11 }}>
+                        <Text type="secondary" style={{ fontSize: 10 }}>
                           -
                         </Text>
                       )}
@@ -681,7 +690,7 @@ export function VerificationPage() {
                       </Tag>
                     </div>
 
-                    <div style={{ flex: '1 1 14%', textAlign: 'right', fontSize: 11 }}>
+                    <div style={{ flex: '1 1 14%', textAlign: 'right', fontSize: 10 }}>
                       {formatReferenceRange(item)}
                     </div>
 

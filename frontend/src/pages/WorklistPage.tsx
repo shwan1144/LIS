@@ -700,12 +700,12 @@ export function WorklistPage() {
           border-bottom: 1px solid ${isDark ? 'rgba(255,255,255,0.14)' : '#d9e5ff'} !important;
           font-weight: 700;
           font-size: 12px;
-          padding-top: 6px !important;
-          padding-bottom: 6px !important;
+          padding-top: 4px !important;
+          padding-bottom: 4px !important;
         }
         .worklist-orders-table .ant-table-tbody > tr > td {
-          padding-top: 7px !important;
-          padding-bottom: 7px !important;
+          padding-top: 4px !important;
+          padding-bottom: 4px !important;
         }
         .panel-entry-modal .ant-modal {
           max-width: calc(100vw - 32px) !important;
@@ -717,25 +717,33 @@ export function WorklistPage() {
           overflow: hidden;
         }
         .panel-entry-modal .ant-modal-header {
-          padding: 8px 12px;
+          padding: 6px 10px;
           margin-bottom: 0;
         }
         .panel-entry-modal .ant-modal-body {
-          padding: 8px 12px 12px !important;
+          padding: 6px 10px 8px !important;
           max-height: calc(100vh - 140px);
           overflow-y: auto;
         }
         .panel-entry-modal .ant-form-item {
           margin-bottom: 0 !important;
         }
+        .panel-entry-modal .ant-form-item-label {
+          padding-bottom: 0 !important;
+        }
+        .panel-entry-modal .ant-form-item-label > label {
+          font-size: 10px !important;
+          line-height: 1.1 !important;
+          min-height: 12px !important;
+        }
         .panel-entry-modal .ant-input-number,
         .panel-entry-modal .ant-input,
         .panel-entry-modal .ant-select-selector {
-          min-height: 26px !important;
-          height: 26px !important;
+          min-height: 24px !important;
+          height: 24px !important;
         }
         .panel-entry-modal .ant-input-number-input {
-          height: 24px !important;
+          height: 22px !important;
         }
       `}</style>
 
@@ -853,8 +861,8 @@ export function WorklistPage() {
           <div>
             <div
               style={{
-                marginBottom: 8,
-                padding: '8px 10px',
+                marginBottom: 6,
+                padding: '6px 8px',
                 borderRadius: 6,
                 backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : '#fafafa',
                 border: isDark
@@ -887,7 +895,7 @@ export function WorklistPage() {
                 display: 'flex',
                 justifyContent: 'flex-end',
                 gap: 8,
-                marginBottom: 8,
+                marginBottom: 6,
               }}
             >
               <Button
@@ -928,10 +936,10 @@ export function WorklistPage() {
                     ? '1px solid rgba(255,255,255,0.1)'
                     : '1px solid #e8e8e8',
                   fontWeight: 600,
-                  fontSize: 12,
+                  fontSize: 11,
                   textTransform: 'uppercase',
                   letterSpacing: '0.5px',
-                  padding: '5px 8px',
+                  padding: '3px 6px',
                 }}
               >
                 <div style={{ flex: '1 1 32%' }}>Test</div>
@@ -959,9 +967,9 @@ export function WorklistPage() {
                       <div
                         style={{
                           borderTop: '1px dashed #91caff',
-                          marginTop: 4,
-                          paddingTop: 8,
-                          marginBottom: 4,
+                          marginTop: 2,
+                          paddingTop: 5,
+                          marginBottom: 2,
                         }}
                       >
                         <Text strong style={{ fontSize: 11 }}>
@@ -973,7 +981,7 @@ export function WorklistPage() {
                       style={{
                         display: 'flex',
                         alignItems: 'flex-start',
-                        padding: '4px 8px',
+                        padding: '2px 6px',
                         borderBottom:
                           index < orderedModalItems.length - 1
                             ? isDark
@@ -1003,7 +1011,7 @@ export function WorklistPage() {
                         <div style={{ marginTop: 2, paddingLeft: isPanelChild ? 10 : 0 }}>
                           <Text
                             strong={isPanelRoot}
-                            style={{ fontSize: 12, lineHeight: '15px' }}
+                            style={{ fontSize: 11, lineHeight: '14px' }}
                           >
                             {target.testName}
                           </Text>
@@ -1021,7 +1029,7 @@ export function WorklistPage() {
                             Panel header
                           </Text>
                         ) : hasParams ? (
-                          <Space direction="vertical" style={{ width: '100%' }} size={4}>
+                          <Space direction="vertical" style={{ width: '100%' }} size={2}>
                             {parameterDefinitions.map((definition: TestParameterDefinition) => (
                               <Form.Item
                                 key={`${target.id}-${definition.code}`}
@@ -1129,7 +1137,7 @@ export function WorklistPage() {
                         )}
                       </div>
 
-                      <div style={{ flex: '1 1 10%', textAlign: 'center', fontSize: 11 }}>
+                      <div style={{ flex: '1 1 10%', textAlign: 'center', fontSize: 10 }}>
                         {target.testUnit || '-'}
                       </div>
                       <div style={{ flex: '1 1 11%', textAlign: 'center' }}>
@@ -1141,12 +1149,12 @@ export function WorklistPage() {
                             {FLAG_LABEL[displayFlag] || displayFlag}
                           </Tag>
                         ) : (
-                          <Text type="secondary" style={{ fontSize: 11 }}>
+                          <Text type="secondary" style={{ fontSize: 10 }}>
                             -
                           </Text>
                         )}
                       </div>
-                      <div style={{ flex: '1 1 15%', textAlign: 'right', fontSize: 11 }}>
+                      <div style={{ flex: '1 1 15%', textAlign: 'right', fontSize: 10 }}>
                         {formatReferenceRange(target)}
                       </div>
                     </div>
