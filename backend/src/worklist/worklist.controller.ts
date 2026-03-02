@@ -11,7 +11,11 @@ import {
   ParseUUIDPipe,
   ParseEnumPipe,
 } from '@nestjs/common';
-import { WorklistService, WorklistView } from './worklist.service';
+import {
+  WorklistOrderMode,
+  WorklistService,
+  WorklistView,
+} from './worklist.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { OrderTestStatus } from '../entities/order-test.entity';
 import { buildLabActorContext } from '../types/lab-actor-context';
@@ -68,6 +72,62 @@ export class WorklistController {
         page: page ? parseInt(page, 10) : undefined,
         size: size ? parseInt(size, 10) : undefined,
         view: view ?? WorklistView.FULL,
+      },
+      actor.userId ?? undefined,
+    );
+  }
+
+  @Get('orders')
+  async getWorklistOrders(
+    @Req() req: RequestWithUser,
+    @Query('search') search?: string,
+    @Query('date') date?: string,
+    @Query('departmentId') departmentId?: string,
+    @Query('page') page?: string,
+    @Query('size') size?: string,
+    @Query('mode', new ParseEnumPipe(WorklistOrderMode, { optional: true }))
+    mode?: WorklistOrderMode,
+  ) {
+    const labId = req.user?.labId;
+    const actor = buildLabActorContext(req.user);
+    if (!labId) {
+      throw new Error('Lab ID not found in token');
+    }
+
+    return this.worklistService.getWorklistOrders(
+      labId,
+      {
+        search,
+        date,
+        departmentId,
+        page: page ? parseInt(page, 10) : undefined,
+        size: size ? parseInt(size, 10) : undefined,
+        mode: mode ?? WorklistOrderMode.ENTRY,
+      },
+      actor.userId ?? undefined,
+    );
+  }
+
+  @Get('orders/:orderId/tests')
+  async getWorklistOrderTests(
+    @Req() req: RequestWithUser,
+    @Param('orderId', ParseUUIDPipe) orderId: string,
+    @Query('departmentId') departmentId?: string,
+    @Query('mode', new ParseEnumPipe(WorklistOrderMode, { optional: true }))
+    mode?: WorklistOrderMode,
+  ) {
+    const labId = req.user?.labId;
+    const actor = buildLabActorContext(req.user);
+    if (!labId) {
+      throw new Error('Lab ID not found in token');
+    }
+
+    return this.worklistService.getWorklistOrderTests(
+      orderId,
+      labId,
+      {
+        departmentId,
+        mode: mode ?? WorklistOrderMode.ENTRY,
       },
       actor.userId ?? undefined,
     );

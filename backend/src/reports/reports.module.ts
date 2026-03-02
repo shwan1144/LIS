@@ -8,9 +8,10 @@ import { OrderTest } from '../entities/order-test.entity';
 import { Patient } from '../entities/patient.entity';
 import { Lab } from '../entities/lab.entity';
 import { User } from '../entities/user.entity';
+import { AuditLog } from '../entities/audit-log.entity';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Order, OrderTest, Patient, Lab, User])],
+  imports: [TypeOrmModule.forFeature([Order, OrderTest, Patient, Lab, User, AuditLog])],
   controllers: [ReportsController, PublicReportsController],
   providers: [ReportsService],
   exports: [ReportsService],

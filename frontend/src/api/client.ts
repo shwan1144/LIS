@@ -1267,8 +1267,39 @@ export async function downloadTestResultsPDF(orderId: string): Promise<Blob> {
   return res.data;
 }
 
+export type ReportActionKind = 'PDF' | 'PRINT' | 'WHATSAPP' | 'VIBER';
+
+export interface ReportActionFlagsDto {
+  pdf: boolean;
+  print: boolean;
+  whatsapp: boolean;
+  viber: boolean;
+  timestamps?: {
+    pdf?: string | null;
+    print?: string | null;
+    whatsapp?: string | null;
+    viber?: string | null;
+  };
+}
+
+export async function logReportAction(orderId: string, action: ReportActionKind): Promise<void> {
+  await api.post(`/reports/orders/${orderId}/action-log`, { action });
+}
+
+export async function getReportActionFlags(
+  orderIds: string[],
+): Promise<Record<string, ReportActionFlagsDto>> {
+  if (orderIds.length === 0) {
+    return {};
+  }
+  const res = await api.get<Record<string, ReportActionFlagsDto>>('/reports/orders/action-flags', {
+    params: { orderIds: orderIds.join(',') },
+  });
+  return res.data;
+}
+
 export async function logReportDelivery(orderId: string, channel: 'WHATSAPP' | 'VIBER'): Promise<void> {
-  await api.post(`/reports/orders/${orderId}/delivery-log`, { channel });
+  await logReportAction(orderId, channel);
 }
 
 // Today's patients (patients registered today)
@@ -1553,6 +1584,43 @@ export interface WorklistResult {
   total: number;
 }
 
+export type WorklistOrderMode = 'entry' | 'verify';
+
+export interface WorklistOrderSummaryDto {
+  orderId: string;
+  orderNumber: string;
+  registeredAt: string;
+  patientName: string;
+  patientSex: string | null;
+  patientAge: number | null;
+  progressTotalRoot: number;
+  progressPending: number;
+  progressCompleted: number;
+  progressVerified: number;
+  progressRejected: number;
+  firstRejectedReason: string | null;
+  hasEnterable: boolean;
+  hasVerifiable: boolean;
+}
+
+export interface WorklistOrderSummaryResult {
+  items: WorklistOrderSummaryDto[];
+  total: number;
+  page: number;
+  size: number;
+  totalPages: number;
+}
+
+export interface WorklistOrderModalDto {
+  orderId: string;
+  orderNumber: string;
+  registeredAt: string;
+  patientName: string;
+  patientSex: string | null;
+  patientAge: number | null;
+  items: WorklistItem[];
+}
+
 export interface WorklistStats {
   pending: number;
   completed: number;
@@ -1576,6 +1644,44 @@ export async function getWorklist(params: WorklistParams): Promise<WorklistResul
 
 export async function getWorklistItemDetail(id: string): Promise<WorklistItem> {
   const res = await api.get<WorklistItem>(`/worklist/${id}/detail`);
+  return res.data;
+}
+
+export async function getWorklistOrders(params: {
+  search?: string;
+  date?: string;
+  departmentId?: string;
+  page?: number;
+  size?: number;
+  mode?: WorklistOrderMode;
+}): Promise<WorklistOrderSummaryResult> {
+  const queryParams: Record<string, string> = {};
+  if (params.search) queryParams.search = params.search;
+  if (params.date) queryParams.date = params.date;
+  if (params.departmentId) queryParams.departmentId = params.departmentId;
+  if (params.page) queryParams.page = params.page.toString();
+  if (params.size) queryParams.size = params.size.toString();
+  if (params.mode) queryParams.mode = params.mode;
+
+  const res = await api.get<WorklistOrderSummaryResult>('/worklist/orders', {
+    params: queryParams,
+  });
+  return res.data;
+}
+
+export async function getWorklistOrderTests(
+  orderId: string,
+  params: {
+    mode?: WorklistOrderMode;
+    departmentId?: string;
+  } = {},
+): Promise<WorklistOrderModalDto> {
+  const queryParams: Record<string, string> = {};
+  if (params.mode) queryParams.mode = params.mode;
+  if (params.departmentId) queryParams.departmentId = params.departmentId;
+  const res = await api.get<WorklistOrderModalDto>(`/worklist/orders/${orderId}/tests`, {
+    params: queryParams,
+  });
   return res.data;
 }
 

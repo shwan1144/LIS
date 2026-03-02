@@ -5,6 +5,7 @@ import { OrderTest } from '../entities/order-test.entity';
 import { Patient } from '../entities/patient.entity';
 import { Lab } from '../entities/lab.entity';
 import { User } from '../entities/user.entity';
+import { AuditLog } from '../entities/audit-log.entity';
 export interface PublicResultTestItem {
     orderTestId: string;
     testCode: string;
@@ -33,20 +34,37 @@ export interface PublicResultStatus {
     verifiedAt: string | null;
     tests: PublicResultTestItem[];
 }
+export type ReportActionKind = 'PDF' | 'PRINT' | 'WHATSAPP' | 'VIBER';
+export type ReportActionFlags = {
+    pdf: boolean;
+    print: boolean;
+    whatsapp: boolean;
+    viber: boolean;
+    timestamps: {
+        pdf: string | null;
+        print: string | null;
+        whatsapp: string | null;
+        viber: string | null;
+    };
+};
 export declare class ReportsService implements OnModuleInit, OnModuleDestroy {
     private readonly orderRepo;
     private readonly orderTestRepo;
     private readonly patientRepo;
     private readonly labRepo;
     private readonly userRepo;
+    private readonly auditLogRepo;
     private browserPromise;
     private static cachedLogo;
     private static cachedFont;
-    constructor(orderRepo: Repository<Order>, orderTestRepo: Repository<OrderTest>, patientRepo: Repository<Patient>, labRepo: Repository<Lab>, userRepo: Repository<User>);
+    constructor(orderRepo: Repository<Order>, orderTestRepo: Repository<OrderTest>, patientRepo: Repository<Patient>, labRepo: Repository<Lab>, userRepo: Repository<User>, auditLogRepo: Repository<AuditLog>);
     onModuleInit(): void;
     private getBrowser;
     private renderPdfFromHtml;
     onModuleDestroy(): Promise<void>;
+    ensureOrderBelongsToLab(orderId: string, labId: string): Promise<void>;
+    getOrderActionFlags(labId: string, orderIds: string[]): Promise<Record<string, ReportActionFlags>>;
+    private resolveReportActionKindFromAudit;
     private decodeImageDataUrl;
     private applyFallbackPageBranding;
     private getReportableOrderTests;

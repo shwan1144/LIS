@@ -24,6 +24,32 @@ let ReportsController = class ReportsController {
         this.reportsService = reportsService;
         this.auditService = auditService;
     }
+    async getOrderActionFlags(req, orderIdsRaw = '', res) {
+        const labId = req.user?.labId;
+        if (!labId) {
+            return res.status(401).json({ message: 'Lab ID not found in token' });
+        }
+        const orderIds = (orderIdsRaw ?? '')
+            .split(',')
+            .map((value) => value.trim())
+            .filter((value) => value.length > 0);
+        const flags = await this.reportsService.getOrderActionFlags(labId, orderIds);
+        return res.status(200).json(flags);
+    }
+    async logReportAction(req, orderId, body, res) {
+        const labId = req.user?.labId;
+        if (!labId) {
+            return res.status(401).json({ message: 'Lab ID not found in token' });
+        }
+        const action = String(body?.action ?? '')
+            .trim()
+            .toUpperCase();
+        if (!['PDF', 'PRINT', 'WHATSAPP', 'VIBER'].includes(action)) {
+            return res.status(400).json({ message: 'action must be PDF, PRINT, WHATSAPP, or VIBER' });
+        }
+        await this.logReportActionInternal(req, orderId, action);
+        return res.status(201).json({ success: true });
+    }
     async getOrderReceiptPDF(req, orderId, res) {
         const labId = req.user?.labId;
         const actor = (0, lab_actor_context_1.buildLabActorContext)(req.user);
@@ -120,13 +146,22 @@ let ReportsController = class ReportsController {
     }
     async logReportDelivery(req, orderId, body, res) {
         const labId = req.user?.labId;
-        const actor = (0, lab_actor_context_1.buildLabActorContext)(req.user);
         if (!labId) {
             return res.status(401).json({ message: 'Lab ID not found in token' });
         }
         if (!body?.channel || !['WHATSAPP', 'VIBER'].includes(body.channel)) {
             return res.status(400).json({ message: 'channel must be WHATSAPP or VIBER' });
         }
+        await this.logReportActionInternal(req, orderId, body.channel);
+        return res.status(201).json({ success: true });
+    }
+    async logReportActionInternal(req, orderId, actionKind) {
+        const labId = req.user?.labId;
+        if (!labId) {
+            return;
+        }
+        await this.reportsService.ensureOrderBelongsToLab(orderId, labId);
+        const actor = (0, lab_actor_context_1.buildLabActorContext)(req.user);
         const impersonationAudit = actor.isImpersonation && actor.platformUserId
             ? {
                 impersonation: {
@@ -143,15 +178,33 @@ let ReportsController = class ReportsController {
             action: audit_log_entity_1.AuditAction.REPORT_PRINT,
             entityType: 'order',
             entityId: orderId,
-            description: `Shared report link via ${body.channel} for order ${orderId}`,
-            newValues: { channel: body.channel, ...impersonationAudit },
+            description: `Report action ${actionKind} for order ${orderId}`,
+            newValues: { actionKind, ...impersonationAudit },
             ipAddress: req.ip ?? null,
             userAgent: req.headers?.['user-agent'] ?? null,
         });
-        return res.status(201).json({ success: true });
     }
 };
 exports.ReportsController = ReportsController;
+__decorate([
+    (0, common_1.Get)('orders/action-flags'),
+    __param(0, (0, common_1.Req)()),
+    __param(1, (0, common_1.Query)('orderIds')),
+    __param(2, (0, common_1.Res)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, Object, Object]),
+    __metadata("design:returntype", Promise)
+], ReportsController.prototype, "getOrderActionFlags", null);
+__decorate([
+    (0, common_1.Post)('orders/:id/action-log'),
+    __param(0, (0, common_1.Req)()),
+    __param(1, (0, common_1.Param)('id', common_1.ParseUUIDPipe)),
+    __param(2, (0, common_1.Body)()),
+    __param(3, (0, common_1.Res)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, String, Object, Object]),
+    __metadata("design:returntype", Promise)
+], ReportsController.prototype, "logReportAction", null);
 __decorate([
     (0, common_1.Get)('orders/:id/receipt'),
     __param(0, (0, common_1.Req)()),

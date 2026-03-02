@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Button,
   Card,
@@ -13,34 +13,30 @@ import {
   Space,
   Table,
   Tag,
-  Tooltip,
   Typography,
   message,
 } from 'antd';
 import {
-  SearchOutlined,
   CheckCircleOutlined,
-  CloseCircleOutlined,
   ReloadOutlined,
-  CheckOutlined,
-  UserOutlined,
-  EditOutlined,
+  SearchOutlined,
 } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import dayjs from 'dayjs';
 import {
-  getWorklist,
-  getWorklistStats,
   enterResult,
-  verifyResult,
-  verifyMultipleResults,
-  rejectResult,
   getDepartments,
-  type WorklistItem,
-  type WorklistStats,
-  type OrderTestStatus,
-  type ResultFlag,
+  getWorklistOrderTests,
+  getWorklistOrders,
+  getWorklistStats,
+  verifyMultipleResults,
   type DepartmentDto,
+  type ResultFlag,
+  type TestParameterDefinition,
+  type WorklistItem,
+  type WorklistOrderModalDto,
+  type WorklistOrderSummaryDto,
+  type WorklistStats,
 } from '../api/client';
 import { useTheme } from '../contexts/ThemeContext';
 import { WorklistStatusDashboard } from '../components/WorklistStatusDashboard';
@@ -49,863 +45,535 @@ import './QueuePages.css';
 
 const { Title, Text } = Typography;
 
-const STATUS_OPTIONS = [
-  { label: 'All statuses', value: 'ALL' },
-  { label: 'Pending', value: 'PENDING' },
-  { label: 'Completed', value: 'COMPLETED' },
-  { label: 'Verified', value: 'VERIFIED' },
-  { label: 'Rejected', value: 'REJECTED' },
-];
-
-const getFlagColor = (flag: ResultFlag | null): string => {
-  switch (flag) {
-    case 'HH':
-      return '#ff4d4f';
-    case 'H':
-      return '#fa8c16';
-    case 'LL':
-      return '#ff4d4f';
-    case 'L':
-      return '#1890ff';
-    case 'N':
-      return '#52c41a';
-    case 'POS':
-      return '#ff4d4f';
-    case 'NEG':
-      return '#52c41a';
-    case 'ABN':
-      return '#722ed1';
-    default:
-      return '#d9d9d9';
-  }
+const FLAG_COLOR: Record<ResultFlag, string> = {
+  N: 'green',
+  H: 'orange',
+  L: 'blue',
+  HH: 'red',
+  LL: 'red',
+  POS: 'red',
+  NEG: 'green',
+  ABN: 'purple',
 };
 
-const getFlagLabel = (flag: ResultFlag | null): string => {
-  switch (flag) {
-    case 'HH':
-      return 'Critical High';
-    case 'H':
-      return 'High';
-    case 'LL':
-      return 'Critical Low';
-    case 'L':
-      return 'Low';
-    case 'N':
-      return 'Normal';
-    case 'POS':
-      return 'Positive';
-    case 'NEG':
-      return 'Negative';
-    case 'ABN':
-      return 'Abnormal';
-    default:
-      return '';
-  }
+const FLAG_LABEL: Record<ResultFlag, string> = {
+  N: 'Normal',
+  H: 'High',
+  L: 'Low',
+  HH: 'Critical High',
+  LL: 'Critical Low',
+  POS: 'Positive',
+  NEG: 'Negative',
+  ABN: 'Abnormal',
 };
 
-/** One row per order; items are the worklist tests for that order */
-interface WorklistOrderGroup {
-  orderId: string;
-  orderNumber: string;
-  patientName: string;
-  patientAge: number | null;
-  patientSex: string | null;
-  registeredAt: string;
-  items: WorklistItem[];
+function formatReferenceRange(item: WorklistItem): string {
+  if (item.normalText?.trim()) return item.normalText.trim();
+  if (item.normalMin != null || item.normalMax != null) {
+    return `${item.normalMin ?? '-'} - ${item.normalMax ?? '-'}${item.testUnit ? ` ${item.testUnit}` : ''}`;
+  }
+  return '-';
 }
 
-function groupWorklistByOrder(items: WorklistItem[]): WorklistOrderGroup[] {
-  const byOrder = new Map<string, WorklistItem[]>();
-  for (const item of items) {
-    const list = byOrder.get(item.orderId) ?? [];
-    list.push(item);
-    byOrder.set(item.orderId, list);
+function sortModalItems(items: WorklistItem[]): WorklistItem[] {
+  const roots = items.filter((item) => !item.parentOrderTestId);
+  const rootIds = new Set(roots.map((item) => item.id));
+  const children = items.filter((item) => Boolean(item.parentOrderTestId));
+
+  const sortByOrder = (a: WorklistItem, b: WorklistItem) => {
+    const aOrder = a.panelSortOrder ?? 9999;
+    const bOrder = b.panelSortOrder ?? 9999;
+    if (aOrder !== bOrder) return aOrder - bOrder;
+    return a.testCode.localeCompare(b.testCode);
+  };
+
+  const singleRoots = roots
+    .filter((item) => item.testType !== 'PANEL')
+    .sort(sortByOrder);
+  const panelRoots = roots
+    .filter((item) => item.testType === 'PANEL')
+    .sort(sortByOrder);
+
+  const childrenByParent = new Map<string, WorklistItem[]>();
+  for (const child of children) {
+    const parentId = child.parentOrderTestId;
+    if (!parentId) continue;
+    const list = childrenByParent.get(parentId) ?? [];
+    list.push(child);
+    childrenByParent.set(parentId, list);
   }
-  return Array.from(byOrder.entries())
-    .map(([orderId, orderItems]) => {
-      const first = orderItems[0];
-      return {
-        orderId,
-        orderNumber: first.orderNumber,
-        patientName: first.patientName,
-        patientAge: first.patientAge,
-        patientSex: first.patientSex,
-        registeredAt: first.registeredAt,
-        items: orderItems,
-      };
-    })
-    .filter((group) => {
-      // Exclude orders that don't have any visible top-level items
-      // (e.g. they only contain rejected panel child tests)
-      return group.items.some((i) => !i.parentOrderTestId);
-    })
-    .sort((a, b) => {
-      const aTop = a.items.filter((i) => !i.parentOrderTestId);
-      const bTop = b.items.filter((i) => !i.parentOrderTestId);
-      const aHasRejected = aTop.some((i) => i.status === 'REJECTED');
-      const bHasRejected = bTop.some((i) => i.status === 'REJECTED');
-      if (aHasRejected !== bHasRejected) return aHasRejected ? -1 : 1;
-      return dayjs(b.registeredAt).valueOf() - dayjs(a.registeredAt).valueOf();
+  for (const list of childrenByParent.values()) {
+    list.sort(sortByOrder);
+  }
+
+  const ordered: WorklistItem[] = [...singleRoots];
+  for (const panelRoot of panelRoots) {
+    ordered.push(panelRoot);
+    ordered.push(...(childrenByParent.get(panelRoot.id) ?? []));
+  }
+
+  const orphanChildren = children
+    .filter((item) => !rootIds.has(item.parentOrderTestId ?? ''))
+    .sort(sortByOrder);
+  ordered.push(...orphanChildren);
+
+  return ordered;
+}
+
+function buildInitialFormValues(items: WorklistItem[]): Record<string, unknown> {
+  const values: Record<string, unknown> = {};
+
+  for (const target of items) {
+    if (target.testType === 'PANEL') {
+      continue;
+    }
+
+    const existingParams = target.resultParameters ?? {};
+    const defsByCode = new Map(
+      (target.parameterDefinitions ?? []).map((definition) => [
+        definition.code,
+        definition,
+      ]),
+    );
+
+    const resultParametersInitial: Record<string, string> = {};
+    const resultParametersCustomInitial: Record<string, string> = {};
+    const defaults: Record<string, string> = {};
+
+    (target.parameterDefinitions ?? []).forEach((definition) => {
+      if (
+        definition.defaultValue != null &&
+        definition.defaultValue.trim() !== '' &&
+        (existingParams[definition.code] == null ||
+          String(existingParams[definition.code]).trim() === '')
+      ) {
+        defaults[definition.code] = definition.defaultValue.trim();
+      }
     });
+
+    for (const [code, rawValue] of Object.entries(existingParams)) {
+      const value = rawValue != null ? String(rawValue).trim() : '';
+      if (!value) continue;
+      const definition = defsByCode.get(code);
+      if (definition?.type === 'select') {
+        const known = new Set(
+          (definition.options ?? []).map((option) => option.trim().toLowerCase()),
+        );
+        if (known.size > 0 && !known.has(value.toLowerCase())) {
+          resultParametersInitial[code] = '__other__';
+          resultParametersCustomInitial[code] = value;
+          continue;
+        }
+      }
+      resultParametersInitial[code] = value;
+    }
+
+    const qualitativeOptions = target.resultTextOptions ?? [];
+    const defaultQualitativeOption =
+      qualitativeOptions.find((option) => option.isDefault)?.value ??
+      qualitativeOptions[0]?.value;
+    const knownOptionValues = new Set(
+      qualitativeOptions.map((option) => option.value.trim().toLowerCase()),
+    );
+
+    let initialResultText = target.resultText ?? undefined;
+    let customResultText: string | undefined;
+
+    if (target.resultEntryType === 'QUALITATIVE') {
+      if (!initialResultText && defaultQualitativeOption) {
+        initialResultText = defaultQualitativeOption;
+      }
+      if (
+        initialResultText &&
+        target.allowCustomResultText &&
+        !knownOptionValues.has(initialResultText.trim().toLowerCase())
+      ) {
+        customResultText = initialResultText;
+        initialResultText = '__other__';
+      }
+    }
+
+    values[target.id] = {
+      resultValue:
+        target.resultEntryType === 'QUALITATIVE' || target.resultEntryType === 'TEXT'
+          ? undefined
+          : target.resultValue ?? undefined,
+      resultText: initialResultText,
+      customResultText,
+      resultParameters: { ...defaults, ...resultParametersInitial },
+      resultParametersCustom: resultParametersCustomInitial,
+    };
+  }
+
+  return values;
 }
 
 export function WorklistPage() {
   const isDark = useTheme().theme === 'dark';
   const { containerRef, filledMinHeightPx } = useFillToViewportBottom();
-  const [data, setData] = useState<WorklistItem[]>([]);
-  const [total, setTotal] = useState(0);
+
   const [loading, setLoading] = useState(false);
+  const [rows, setRows] = useState<WorklistOrderSummaryDto[]>([]);
+  const [total, setTotal] = useState(0);
   const [stats, setStats] = useState<WorklistStats | null>(null);
 
-  // Filters
   const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState<OrderTestStatus | 'ALL'>('ALL');
   const [dateFilter, setDateFilter] = useState<dayjs.Dayjs | null>(dayjs());
   const [departmentId, setDepartmentId] = useState<string | ''>('');
   const [departments, setDepartments] = useState<DepartmentDto[]>([]);
   const [page, setPage] = useState(1);
-  const [size] = useState(50);
+  const [size] = useState(25);
 
-  // Selection for batch verify
-  const [selectedRowKeys, setSelectedRowKeys] = useState<string[]>([]);
-  const [expandedOrderIds, setExpandedOrderIds] = useState<string[]>([]);
+  const [verifyLoadingOrderId, setVerifyLoadingOrderId] = useState<string | null>(null);
+  const [entryLoadingOrderId, setEntryLoadingOrderId] = useState<string | null>(null);
 
-  // Result entry modal
   const [resultModalOpen, setResultModalOpen] = useState(false);
-  const [editingItem, setEditingItem] = useState<WorklistItem | null>(null);
-  const [resultForm] = Form.useForm<any>();
+  const [modalOrder, setModalOrder] = useState<WorklistOrderModalDto | null>(null);
+  const [modalLoading, setModalLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [resultForm] = Form.useForm<any>();
 
-  // Reject modal
-  const [rejectModalOpen, setRejectModalOpen] = useState(false);
-  const [rejectingItem, setRejectingItem] = useState<WorklistItem | null>(null);
-  const [rejectReason, setRejectReason] = useState('');
-
-  const loadData = useCallback(async () => {
+  const loadRows = useCallback(async () => {
     setLoading(true);
     try {
-      const result = await getWorklist({
-        status: statusFilter === 'ALL' ? undefined : [statusFilter],
+      const result = await getWorklistOrders({
+        mode: 'entry',
         search: search.trim() || undefined,
         date: dateFilter?.format('YYYY-MM-DD'),
         departmentId: departmentId || undefined,
         page,
         size,
       });
-      setData(result.items);
-      setTotal(result.total);
+      setRows(result.items ?? []);
+      setTotal(Number(result.total ?? 0));
     } catch {
       message.error('Failed to load worklist');
+      setRows([]);
+      setTotal(0);
     } finally {
       setLoading(false);
     }
-  }, [statusFilter, search, dateFilter, departmentId, page, size]);
+  }, [dateFilter, departmentId, page, search, size]);
 
   const loadStats = useCallback(async () => {
     try {
       const result = await getWorklistStats();
       setStats(result);
     } catch {
-      // Silently fail for stats
+      setStats(null);
     }
   }, []);
 
-  const groupedData = useMemo(() => groupWorklistByOrder(data), [data]);
-
   useEffect(() => {
-    getDepartments().then(setDepartments).catch(() => { });
+    void getDepartments()
+      .then(setDepartments)
+      .catch(() => undefined);
   }, []);
 
   useEffect(() => {
-    loadData();
-    loadStats();
-  }, [loadData, loadStats]);
+    void loadRows();
+  }, [loadRows]);
 
   useEffect(() => {
-    if (expandedOrderIds.length === 0) return;
-    const expandedId = expandedOrderIds[0];
-    if (!groupedData.some((group) => group.orderId === expandedId)) {
-      setExpandedOrderIds([]);
-    }
-  }, [expandedOrderIds, groupedData]);
+    void loadStats();
+  }, [loadStats]);
+
+  const orderedModalItems = useMemo(
+    () => sortModalItems(modalOrder?.items ?? []),
+    [modalOrder],
+  );
+
+  const editableTargetIds = useMemo(
+    () =>
+      orderedModalItems
+        .filter((item) => item.testType !== 'PANEL' && item.status !== 'VERIFIED')
+        .map((item) => item.id),
+    [orderedModalItems],
+  );
+
+  const firstPanelIndex = useMemo(
+    () =>
+      orderedModalItems.findIndex(
+        (item) => item.testType === 'PANEL' && !item.parentOrderTestId,
+      ),
+    [orderedModalItems],
+  );
+
+  const focusNextEditableInput = useCallback(
+    (currentTargetId: string) => {
+      const idx = editableTargetIds.indexOf(currentTargetId);
+      if (idx < 0) return;
+      const nextTargetId = editableTargetIds[idx + 1];
+      if (!nextTargetId) return;
+      const nextElement = document.getElementById(
+        `result-input-${nextTargetId}`,
+      ) as HTMLElement | null;
+      nextElement?.focus();
+    },
+    [editableTargetIds],
+  );
+
+  const openEntryModal = useCallback(
+    async (order: WorklistOrderSummaryDto) => {
+      setEntryLoadingOrderId(order.orderId);
+      setModalLoading(true);
+      try {
+        const payload = await getWorklistOrderTests(order.orderId, {
+          mode: 'entry',
+          departmentId: departmentId || undefined,
+        });
+        setModalOrder(payload);
+        resultForm.setFieldsValue(buildInitialFormValues(sortModalItems(payload.items)));
+        setResultModalOpen(true);
+      } catch {
+        message.error('Failed to load order tests');
+      } finally {
+        setModalLoading(false);
+        setEntryLoadingOrderId(null);
+      }
+    },
+    [departmentId, resultForm],
+  );
+
+  const handleVerifyOrder = useCallback(
+    async (order: WorklistOrderSummaryDto) => {
+      setVerifyLoadingOrderId(order.orderId);
+      try {
+        const payload = await getWorklistOrderTests(order.orderId, {
+          mode: 'entry',
+          departmentId: departmentId || undefined,
+        });
+        const completedIds = payload.items
+          .filter((item) => item.status === 'COMPLETED')
+          .map((item) => item.id);
+        if (completedIds.length === 0) {
+          message.warning('No completed tests to verify in this order');
+          return;
+        }
+        const result = await verifyMultipleResults(completedIds);
+        message.success(
+          `Verified ${result.verified} result(s)${
+            result.failed > 0 ? `, ${result.failed} failed` : ''
+          }`,
+        );
+        await Promise.all([loadRows(), loadStats()]);
+        if (modalOrder?.orderId === order.orderId) {
+          const refreshed = await getWorklistOrderTests(order.orderId, {
+            mode: 'entry',
+            departmentId: departmentId || undefined,
+          });
+          setModalOrder(refreshed);
+          resultForm.setFieldsValue(buildInitialFormValues(sortModalItems(refreshed.items)));
+        }
+      } catch {
+        message.error('Failed to verify order tests');
+      } finally {
+        setVerifyLoadingOrderId(null);
+      }
+    },
+    [departmentId, loadRows, loadStats, modalOrder?.orderId, resultForm],
+  );
 
   const handleSearch = () => {
     setPage(1);
-    loadData();
+    void loadRows();
   };
 
-  const resolveResultModalTargets = useCallback(
-    (item: WorklistItem): WorklistItem[] => {
-      if (item.testType !== 'PANEL') {
-        return [item];
-      }
-
-      if (item.id.startsWith('group-')) {
-        return data.filter((entry) => entry.orderId === item.orderId);
-      }
-
-      const panelChildren = data
-        .filter(
-          (entry) => entry.orderId === item.orderId && entry.parentOrderTestId === item.id,
-        )
-        .sort((a, b) => {
-          const aOrder = a.panelSortOrder ?? 9999;
-          const bOrder = b.panelSortOrder ?? 9999;
-          if (aOrder !== bOrder) return aOrder - bOrder;
-          return a.testCode.localeCompare(b.testCode);
-        });
-      return panelChildren.length > 0 ? panelChildren : [item];
-    },
-    [data],
-  );
-
-
-  const handleOpenResultModal = (item: WorklistItem) => {
-    const targets = resolveResultModalTargets(item);
-    setEditingItem(item);
-
-    const formValues: any = {};
-
-    targets.forEach((target) => {
-      const existingParams = target.resultParameters ?? {};
-      const defsByCode = new Map(
-        (target.parameterDefinitions ?? []).map((definition) => [
-          definition.code,
-          definition,
-        ]),
-      );
-
-      const resultParametersInitial: Record<string, string> = {};
-      const resultParametersCustomInitial: Record<string, string> = {};
-      const defaults: Record<string, string> = {};
-
-      (target.parameterDefinitions ?? []).forEach((def) => {
-        if (def.defaultValue != null && def.defaultValue.trim() !== '' && (existingParams[def.code] == null || String(existingParams[def.code]).trim() === '')) {
-          defaults[def.code] = def.defaultValue.trim();
-        }
-      });
-
-      for (const [code, rawValue] of Object.entries(existingParams)) {
-        const value = rawValue != null ? String(rawValue).trim() : '';
-        if (!value) continue;
-        const definition = defsByCode.get(code);
-        if (definition?.type === 'select') {
-          const known = new Set(
-            (definition.options ?? []).map((option) => option.trim().toLowerCase()),
-          );
-          if (known.size > 0 && !known.has(value.toLowerCase())) {
-            resultParametersInitial[code] = '__other__';
-            resultParametersCustomInitial[code] = value;
-            continue;
-          }
-        }
-        resultParametersInitial[code] = value;
-      }
-
-      const qualitativeOptions = target.resultTextOptions ?? [];
-      const defaultQualitativeOption =
-        qualitativeOptions.find((option) => option.isDefault)?.value ??
-        qualitativeOptions[0]?.value;
-      const knownOptionValues = new Set(
-        qualitativeOptions.map((option) => option.value.trim().toLowerCase()),
-      );
-
-      let initialResultText = target.resultText ?? undefined;
-      let customResultText: string | undefined;
-
-      if (target.resultEntryType === 'QUALITATIVE') {
-        if (!initialResultText && defaultQualitativeOption) {
-          initialResultText = defaultQualitativeOption;
-        }
-        if (
-          initialResultText &&
-          target.allowCustomResultText &&
-          !knownOptionValues.has(initialResultText.trim().toLowerCase())
-        ) {
-          customResultText = initialResultText;
-          initialResultText = '__other__';
-        }
-      }
-
-      formValues[target.id] = {
-        resultValue: target.resultEntryType === 'QUALITATIVE' || target.resultEntryType === 'TEXT'
-          ? undefined
-          : target.resultValue,
-        resultText: initialResultText,
-        customResultText,
-        resultParameters: { ...defaults, ...resultParametersInitial },
-        resultParametersCustom: resultParametersCustomInitial,
-      };
-    });
-
-    resultForm.setFieldsValue(formValues);
-    setResultModalOpen(true);
-  };
-
-  const handleCloseResultModal = () => {
-    setResultModalOpen(false);
-    setEditingItem(null);
-    resultForm.resetFields();
-  };
-
-  const handleSubmitResult = async (values: any) => {
-    if (!editingItem) return;
-
-    const isPanel = editingItem.testType === 'PANEL';
-    const targets = resolveResultModalTargets(editingItem);
+  const handleSubmitResult = async (values: Record<string, any>) => {
+    if (!modalOrder) return;
+    const targets = orderedModalItems.filter(
+      (item) => item.testType !== 'PANEL' && item.status !== 'VERIFIED',
+    );
+    if (targets.length === 0) {
+      message.info('No editable tests in this order');
+      return;
+    }
 
     setSubmitting(true);
     try {
-      const savePromises = targets.map(async (target) => {
-        const itemValues = values[target.id] || {};
-        const resultParamsEntries: [string, string][] = [];
-        const rawParams = itemValues.resultParameters ?? {};
-        const rawCustomParams = itemValues.resultParametersCustom ?? {};
+      await Promise.all(
+        targets.map(async (target) => {
+          const itemValues = values[target.id] || {};
+          const rawParams = itemValues.resultParameters ?? {};
+          const rawCustomParams = itemValues.resultParametersCustom ?? {};
+          const resultParamsEntries: Array<[string, string]> = [];
 
-        for (const [code, rawValue] of Object.entries(rawParams)) {
-          const value = rawValue != null ? String(rawValue).trim() : '';
-          if (!value) continue;
-          if (value === '__other__') {
-            const customValue = rawCustomParams[code] != null ? String(rawCustomParams[code]).trim() : '';
-            if (!customValue) continue;
-            resultParamsEntries.push([code, customValue]);
-            continue;
+          for (const [code, rawValue] of Object.entries(rawParams)) {
+            const value = rawValue != null ? String(rawValue).trim() : '';
+            if (!value) continue;
+            if (value === '__other__') {
+              const customValue =
+                rawCustomParams[code] != null
+                  ? String(rawCustomParams[code]).trim()
+                  : '';
+              if (!customValue) continue;
+              resultParamsEntries.push([code, customValue]);
+              continue;
+            }
+            resultParamsEntries.push([code, value]);
           }
-          resultParamsEntries.push([code, value]);
-        }
 
-        const resultParams = Object.fromEntries(resultParamsEntries);
-        const selectedResultText = itemValues.resultText?.trim() || '';
-        const finalResultText =
-          selectedResultText === '__other__'
-            ? itemValues.customResultText?.trim() || ''
-            : selectedResultText;
+          const resultParameters = Object.fromEntries(resultParamsEntries);
+          const hasResultParameters = Object.keys(resultParameters).length > 0;
+          const resultEntryType = target.resultEntryType ?? 'NUMERIC';
+          let resultValue = itemValues.resultValue ?? null;
+          let resultText = itemValues.resultText?.trim() || null;
 
-        const isQualitative = target.resultEntryType === 'QUALITATIVE';
-        const isTextOnly = target.resultEntryType === 'TEXT';
+          if (resultEntryType === 'QUALITATIVE') {
+            if (resultText === '__other__') {
+              resultText = itemValues.customResultText?.trim() || null;
+            }
+            resultValue = null;
+          } else if (resultEntryType === 'TEXT') {
+            resultValue = null;
+          }
 
-        return enterResult(target.id, {
-          resultValue: isQualitative || isTextOnly ? null : itemValues.resultValue ?? null,
-          resultText: finalResultText || null,
-          resultParameters: Object.keys(resultParams).length > 0 ? resultParams : null,
-        });
+          await enterResult(target.id, {
+            resultValue,
+            resultText,
+            resultParameters: hasResultParameters ? resultParameters : null,
+          });
+        }),
+      );
+
+      message.success('Results saved');
+      const refreshed = await getWorklistOrderTests(modalOrder.orderId, {
+        mode: 'entry',
+        departmentId: departmentId || undefined,
       });
-
-      await Promise.all(savePromises);
-      message.success(isPanel ? 'Panel results saved' : 'Result saved');
-      handleCloseResultModal();
-      loadData();
-      loadStats();
+      setModalOrder(refreshed);
+      resultForm.setFieldsValue(buildInitialFormValues(sortModalItems(refreshed.items)));
+      await Promise.all([loadRows(), loadStats()]);
     } catch {
-      message.error('Failed to save result(s)');
+      message.error('Failed to save results');
     } finally {
       setSubmitting(false);
     }
   };
 
-  const handleVerify = async (id: string) => {
-    try {
-      await verifyResult(id);
-      message.success('Result verified');
-      loadData();
-      loadStats();
-    } catch (err: unknown) {
-      const msg = err && typeof err === 'object' && 'response' in err
-        ? (err as { response?: { data?: { message?: string } } }).response?.data?.message
-        : 'Failed to verify';
-      message.error(msg || 'Failed to verify');
-    }
-  };
-
-  const handleBatchVerify = async () => {
-    if (selectedRowKeys.length === 0) return;
-    const idsToVerify = groupedData
-      .filter((g) => selectedRowKeys.includes(g.orderId))
-      .flatMap((g) => g.items.filter((i) => i.status === 'COMPLETED').map((i) => i.id));
-    if (idsToVerify.length === 0) {
-      message.warning('No completed results to verify in selected orders');
-      return;
-    }
-    try {
-      const result = await verifyMultipleResults(idsToVerify);
-      message.success(`Verified ${result.verified} result(s)${result.failed > 0 ? `, ${result.failed} failed` : ''}`);
-      setSelectedRowKeys([]);
-      loadData();
-      loadStats();
-    } catch {
-      message.error('Failed to verify results');
-    }
-  };
-
-  const handleOpenRejectModal = (item: WorklistItem) => {
-    setRejectingItem(item);
-    setRejectReason('');
-    setRejectModalOpen(true);
-  };
-
-  const handleReject = async () => {
-    if (!rejectingItem || !rejectReason.trim()) return;
-
-    try {
-      await rejectResult(rejectingItem.id, rejectReason);
-      message.success('Result rejected');
-      setRejectModalOpen(false);
-      setRejectingItem(null);
-      loadData();
-      loadStats();
-    } catch {
-      message.error('Failed to reject result');
-    }
-  };
-
-  const queueGridTemplate = 'minmax(220px, 1.8fr) minmax(180px, 1.4fr) 120px 140px';
-
-  const orderColumns: ColumnsType<WorklistOrderGroup> = [
+  const queueColumns: ColumnsType<WorklistOrderSummaryDto> = [
     {
-      title: (
-        <div className="worklist-queue-header" style={{ gridTemplateColumns: queueGridTemplate }}>
-          <span className="worklist-queue-header-item worklist-queue-header-item-patient">Patient</span>
-          <span className="worklist-queue-header-item">Progress</span>
-          <span className="worklist-queue-header-item">Order #</span>
-          <span className="worklist-queue-header-item">Date/Time</span>
+      title: 'Patient',
+      dataIndex: 'patientName',
+      key: 'patientName',
+      width: 280,
+      render: (_: unknown, record) => (
+        <div>
+          <Text strong style={{ display: 'block', fontSize: 13, lineHeight: '16px' }}>
+            {record.patientName}
+          </Text>
+          <Text type="secondary" style={{ fontSize: 11, lineHeight: '14px' }}>
+            {record.patientAge != null ? `${record.patientAge}y` : '-'}
+          </Text>
         </div>
       ),
-      key: 'queue',
-      render: (_, g) => {
-        const topLevelItems = g.items.filter((i) => !i.parentOrderTestId);
-        const pending = topLevelItems.filter((i) => i.status === 'PENDING' || i.status === 'IN_PROGRESS').length;
-        const completed = topLevelItems.filter((i) => i.status === 'COMPLETED').length;
-        const verified = topLevelItems.filter((i) => i.status === 'VERIFIED').length;
-        const rejected = topLevelItems.filter((i) => i.status === 'REJECTED').length;
-        const firstRejectedReason = topLevelItems.find(
-          (i) => i.status === 'REJECTED' && i.rejectionReason?.trim(),
-        )?.rejectionReason;
-
-        return (
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: queueGridTemplate,
-              alignItems: 'center',
-              columnGap: 8,
+    },
+    {
+      title: 'Progress',
+      key: 'progress',
+      width: 350,
+      render: (_: unknown, record) => (
+        <Space size={[4, 4]} wrap>
+          <Tag style={{ margin: 0 }}>
+            {record.progressTotalRoot} tests
+          </Tag>
+          {record.progressPending > 0 && (
+            <Tag style={{ margin: 0 }}>
+              Pending {record.progressPending}
+            </Tag>
+          )}
+          {record.progressCompleted > 0 && (
+            <Tag color="processing" style={{ margin: 0 }}>
+              Completed {record.progressCompleted}
+            </Tag>
+          )}
+          {record.progressVerified > 0 && (
+            <Tag color="success" style={{ margin: 0 }}>
+              Verified {record.progressVerified}
+            </Tag>
+          )}
+          {record.progressRejected > 0 && (
+            <Tag color="error" style={{ margin: 0 }}>
+              Rejected {record.progressRejected}
+            </Tag>
+          )}
+          {record.firstRejectedReason?.trim() && (
+            <Text type="danger" style={{ fontSize: 11 }}>
+              Reason: {record.firstRejectedReason}
+            </Text>
+          )}
+        </Space>
+      ),
+    },
+    {
+      title: 'Order Number',
+      key: 'orderNumber',
+      width: 180,
+      render: (_: unknown, record) => (
+        <Text type="secondary" style={{ fontSize: 12 }}>
+          {record.orderNumber}
+        </Text>
+      ),
+    },
+    {
+      title: 'Order Time',
+      key: 'registeredAt',
+      width: 180,
+      render: (_: unknown, record) => (
+        <Text type="secondary" style={{ fontSize: 12 }}>
+          {dayjs(record.registeredAt).format('YYYY-MM-DD HH:mm')}
+        </Text>
+      ),
+    },
+    {
+      title: 'Action',
+      key: 'action',
+      width: 220,
+      render: (_: unknown, record) => (
+        <Space size={6}>
+          <Button
+            type="primary"
+            size="small"
+            ghost
+            loading={entryLoadingOrderId === record.orderId}
+            onClick={() => {
+              void openEntryModal(record);
             }}
           >
-            <Space size={8} style={{ minWidth: 0 }}>
-              <UserOutlined style={{ fontSize: 14, color: '#1677ff' }} />
-              <div style={{ minWidth: 0 }}>
-                <Text strong ellipsis style={{ display: 'block', fontSize: 13, lineHeight: '16px' }}>
-                  {g.patientName}
-                </Text>
-                <Text type="secondary" style={{ fontSize: 11, lineHeight: '14px' }}>
-                  {g.patientAge !== null ? `${g.patientAge}y` : '-'} {g.patientSex || '-'}
-                </Text>
-              </div>
-            </Space>
-
-            <Space size={[4, 4]} wrap>
-              <Tag style={{ margin: 0 }}>{topLevelItems.length} test{topLevelItems.length !== 1 ? 's' : ''}</Tag>
-              {pending > 0 && <Tag color="default" style={{ margin: 0 }}>Pending {pending}</Tag>}
-              {completed > 0 && <Tag color="processing" style={{ margin: 0 }}>Completed {completed}</Tag>}
-              {verified > 0 && <Tag color="success" style={{ margin: 0 }}>Verified {verified}</Tag>}
-              {rejected > 0 && <Tag color="error" style={{ margin: 0 }}>Rejected {rejected}</Tag>}
-              {firstRejectedReason && (
-                <Text type="danger" style={{ fontSize: 11 }}>
-                  Reason: {firstRejectedReason}
-                </Text>
-              )}
-            </Space>
-
-            <Text type="secondary" style={{ fontSize: 12 }}>
-              {g.orderNumber}
-            </Text>
-
-            <Text type="secondary" style={{ fontSize: 12 }}>
-              {dayjs(g.registeredAt).format('YYYY-MM-DD HH:mm')}
-            </Text>
-          </div>
-        );
-      },
+            Enter
+          </Button>
+          <Button
+            type="primary"
+            size="small"
+            icon={<CheckCircleOutlined />}
+            loading={verifyLoadingOrderId === record.orderId}
+            disabled={!record.hasVerifiable}
+            onClick={() => {
+              void handleVerifyOrder(record);
+            }}
+          >
+            Verify
+          </Button>
+        </Space>
+      ),
     },
   ];
-
-  const rowSelection = {
-    selectedRowKeys,
-    onChange: (keys: React.Key[]) => setSelectedRowKeys(keys as string[]),
-    getCheckboxProps: (record: WorklistOrderGroup) => {
-      const topLevel = record.items.filter((i) => !i.parentOrderTestId);
-      return { disabled: !topLevel.some((i) => i.status === 'COMPLETED') };
-    },
-  };
-
-  const formatWorklistResultPreview = (item: WorklistItem, allItems: WorklistItem[]): React.ReactNode => {
-    if (item.testType === 'PANEL') {
-      const children = allItems.filter(i => i.parentOrderTestId === item.id);
-      const total = children.length;
-      const completed = children.filter(i => i.status === 'COMPLETED' || i.status === 'VERIFIED').length;
-      if (total === 0) return <Text type="secondary" italic>No tests</Text>;
-      const percent = Math.round((completed / total) * 100);
-      return (
-        <Space size={4}>
-          <Text strong={completed > 0} style={{ fontSize: 12 }}>
-            {completed}/{total} done
-          </Text>
-          {completed > 0 && <Text type="secondary" style={{ fontSize: 11 }}>({percent}%)</Text>}
-        </Space>
-      );
-    }
-
-    if (item.resultValue !== null) {
-      return (
-        <Space size={4}>
-          <Text strong style={{ fontSize: 12 }}>{item.resultValue}</Text>
-          {item.testUnit && <Text type="secondary" style={{ fontSize: 11 }}>{item.testUnit}</Text>}
-        </Space>
-      );
-    }
-    if (item.resultText) {
-      return <Text style={{ fontSize: 12 }} ellipsis title={item.resultText}>{item.resultText}</Text>;
-    }
-    return <Text type="secondary" style={{ fontSize: 12 }}>-</Text>;
-  };
-
-  const handleOpenOrderResultModal = (group: WorklistOrderGroup) => {
-    // Create a virtual "panel" item to trigger the modal logic for the whole group
-    const virtualItem: WorklistItem = {
-      ...group.items[0],
-      id: `group-${group.orderId}`,
-      testType: 'PANEL',
-      testName: 'Order Results',
-      testCode: 'ORDER',
-    };
-
-    setEditingItem(virtualItem);
-    const formValues: any = {};
-    group.items.forEach((target) => {
-      const existingParams = target.resultParameters ?? {};
-      const defsByCode = new Map((target.parameterDefinitions ?? []).map((d) => [d.code, d]));
-      const resultParametersInitial: Record<string, string> = {};
-      const resultParametersCustomInitial: Record<string, string> = {};
-      const defaults: Record<string, string> = {};
-
-      (target.parameterDefinitions ?? []).forEach((def) => {
-        if (
-          def.defaultValue != null &&
-          def.defaultValue.trim() !== '' &&
-          (existingParams[def.code] == null || String(existingParams[def.code]).trim() === '')
-        ) {
-          defaults[def.code] = def.defaultValue.trim();
-        }
-      });
-
-      for (const [code, rawValue] of Object.entries(existingParams)) {
-        const value = rawValue != null ? String(rawValue).trim() : '';
-        if (!value) continue;
-        const definition = defsByCode.get(code);
-        if (definition?.type === 'select') {
-          const known = new Set((definition.options ?? []).map((o) => o.trim().toLowerCase()));
-          if (known.size > 0 && !known.has(value.toLowerCase())) {
-            resultParametersInitial[code] = '__other__';
-            resultParametersCustomInitial[code] = value;
-            continue;
-          }
-        }
-        resultParametersInitial[code] = value;
-      }
-
-      let initialResultText = target.resultText ?? undefined;
-      let customResultText: string | undefined;
-      if (target.resultEntryType === 'QUALITATIVE') {
-        const qualitativeOptions = target.resultTextOptions ?? [];
-        const defaultOpt = qualitativeOptions.find((o) => o.isDefault)?.value ?? qualitativeOptions[0]?.value;
-        const known = new Set(qualitativeOptions.map((o) => o.value.trim().toLowerCase()));
-        if (!initialResultText && defaultOpt) initialResultText = defaultOpt;
-        if (initialResultText && target.allowCustomResultText && !known.has(initialResultText.trim().toLowerCase())) {
-          customResultText = initialResultText;
-          initialResultText = '__other__';
-        }
-      }
-
-      formValues[target.id] = {
-        resultValue:
-          target.resultEntryType === 'QUALITATIVE' || target.resultEntryType === 'TEXT'
-            ? undefined
-            : target.resultValue,
-        resultText: initialResultText,
-        customResultText,
-        resultParameters: { ...defaults, ...resultParametersInitial },
-        resultParametersCustom: resultParametersCustomInitial,
-      };
-    });
-    resultForm.setFieldsValue(formValues);
-    setResultModalOpen(true);
-  };
-
-  const renderExpandedTests = (group: WorklistOrderGroup) => {
-    // Keep the list compact with root tests only. Panel child tests will be entered via the panel's modal.
-    const visibleItems = group.items.filter(
-      (i) => !i.parentOrderTestId
-    );
-
-    const compactStyle = { paddingTop: 6, paddingBottom: 6, fontSize: 12 };
-
-    return (
-      <div className="worklist-expanded-panel" style={{ padding: '4px 16px 16px' }}>
-        <Table<WorklistItem>
-          className="worklist-subtests-table"
-          size="small"
-          rowKey="id"
-          dataSource={visibleItems}
-          pagination={false}
-          tableLayout="fixed"
-          columns={[
-            {
-              title: 'Test',
-              key: 'test',
-              width: 300,
-              render: (_: unknown, r: WorklistItem) => (
-                <div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <Tag color="blue" style={{ margin: 0, fontSize: 10, lineHeight: '16px' }}>
-                      {r.testCode}
-                    </Tag>
-                    <Text strong style={{ fontSize: 12 }}>
-                      {r.testAbbreviation || r.testName}
-                    </Text>
-                  </div>
-                  {r.testType === 'PANEL' && (
-                    <Text type="secondary" style={{ fontSize: 10 }}>
-                      Panel Test
-                    </Text>
-                  )}
-                </div>
-              ),
-              onCell: () => ({ style: compactStyle }),
-            },
-            {
-              title: 'Result',
-              key: 'result',
-              width: 220,
-              render: (_: unknown, r: WorklistItem) => (
-                <div>
-                  {formatWorklistResultPreview(r, group.items)}
-                  {r.testType !== 'PANEL' && (r.normalMin !== null || r.normalMax !== null || r.normalText) && (
-                    <div style={{ fontSize: 10, color: 'rgba(128,128,128,0.7)', marginTop: 2 }}>
-                      Range:{' '}
-                      {r.normalText || `${r.normalMin ?? '-'} - ${r.normalMax ?? '-'} ${r.testUnit || ''}`}
-                    </div>
-                  )}
-                </div>
-              ),
-              onCell: () => ({ style: compactStyle }),
-            },
-            {
-              title: 'Flag',
-              key: 'flag',
-              width: 100,
-              render: (_: unknown, r: WorklistItem) => {
-                if (!r.flag || r.flag === 'N') return <Text type="secondary">-</Text>;
-                return (
-                  <Tag color={getFlagColor(r.flag)} style={{ margin: 0, fontSize: 10 }}>
-                    {getFlagLabel(r.flag) || r.flag}
-                  </Tag>
-                );
-              },
-              onCell: () => ({ style: compactStyle }),
-            },
-            {
-              title: 'Status',
-              key: 'status',
-              width: 130,
-              render: (_: unknown, r: WorklistItem) => {
-                const colors: Record<OrderTestStatus, string> = {
-                  PENDING: 'default',
-                  IN_PROGRESS: 'processing',
-                  COMPLETED: 'warning',
-                  VERIFIED: 'success',
-                  REJECTED: 'error',
-                };
-                return (
-                  <div>
-                    <Tag color={colors[r.status]} style={{ margin: 0, fontSize: 10 }}>
-                      {r.status}
-                    </Tag>
-                    {r.status === 'REJECTED' && r.rejectionReason?.trim() && (
-                      <div style={{ marginTop: 2 }}>
-                        <Text type="danger" style={{ fontSize: 10 }}>
-                          {r.rejectionReason}
-                        </Text>
-                      </div>
-                    )}
-                  </div>
-                );
-              },
-              onCell: () => ({ style: compactStyle }),
-            },
-            {
-              title: 'Actions',
-              key: 'actions',
-              width: 170,
-              align: 'right',
-              render: (_: unknown, r: WorklistItem) => (
-                <Space size="small">
-                  {r.status !== 'VERIFIED' && (
-                    <Button
-                      type="primary"
-                      size="small"
-                      ghost
-                      onClick={() => handleOpenResultModal(r)}
-                      style={{ fontSize: 11, height: 24 }}
-                    >
-                      {r.status === 'REJECTED'
-                        ? 'Re-enter'
-                        : r.resultValue !== null || r.resultText
-                          ? 'Edit'
-                          : 'Enter'}
-                    </Button>
-                  )}
-                  {r.status === 'COMPLETED' && (
-                    <Space size={4}>
-                      <Tooltip title="Verify Result">
-                        <Button
-                          type="primary"
-                          size="small"
-                          icon={<CheckCircleOutlined style={{ fontSize: 12 }} />}
-                          onClick={() => handleVerify(r.id)}
-                          style={{
-                            backgroundColor: '#52c41a',
-                            borderColor: '#52c41a',
-                            height: 24,
-                            width: 24,
-                            padding: 0,
-                          }}
-                        />
-                      </Tooltip>
-                      <Tooltip title="Reject/Repeat">
-                        <Button
-                          danger
-                          size="small"
-                          icon={<CloseCircleOutlined style={{ fontSize: 12 }} />}
-                          onClick={() => handleOpenRejectModal(r)}
-                          style={{ height: 24, width: 24, padding: 0 }}
-                        />
-                      </Tooltip>
-                    </Space>
-                  )}
-                  {r.status === 'VERIFIED' && (
-                    <Text type="success" style={{ fontSize: 11 }}>
-                      <CheckCircleOutlined /> Verified
-                    </Text>
-                  )}
-                  {r.status === 'REJECTED' && (
-                    <Text type="danger" style={{ fontSize: 11 }}>
-                      <CloseCircleOutlined /> Re-entry required
-                    </Text>
-                  )}
-                </Space>
-              ),
-              onCell: () => ({ style: compactStyle }),
-            },
-          ]}
-        />
-      </div>
-    );
-  };
-
 
   return (
     <div>
       <style>{`
-        .worklist-orders-table .ant-table-thead {
-          display: table-header-group !important;
-          visibility: visible !important;
-        }
-        .worklist-orders-table .ant-table-thead > tr {
-          display: table-row !important;
-        }
         .worklist-orders-table .ant-table-thead > tr > th {
           background: ${isDark ? 'rgba(255,255,255,0.06)' : '#f5f8ff'} !important;
           color: ${isDark ? 'rgba(255,255,255,0.9)' : 'rgba(0,0,0,0.88)'} !important;
           border-bottom: 1px solid ${isDark ? 'rgba(255,255,255,0.14)' : '#d9e5ff'} !important;
           font-weight: 700;
           font-size: 12px;
-          padding-top: 5px !important;
-          padding-bottom: 5px !important;
-        }
-        .worklist-queue-header {
-          display: grid;
-          align-items: center;
-          column-gap: 8px;
-          width: 100%;
-        }
-        .worklist-queue-header-item {
-          font-size: 11px;
-          font-weight: 700;
-          line-height: 14px;
-          text-transform: uppercase;
-          letter-spacing: 0.2px;
-          white-space: nowrap;
-        }
-        .worklist-queue-header-item-patient {
-          padding-left: 22px;
+          padding-top: 6px !important;
+          padding-bottom: 6px !important;
         }
         .worklist-orders-table .ant-table-tbody > tr > td {
-          padding-top: 5px !important;
-          padding-bottom: 5px !important;
-        }
-        .worklist-orders-table .worklist-order-row-expanded > td {
-          background: #f7fbff !important;
-          border-top: 1px solid #91caff !important;
-          border-bottom: 0 !important;
-        }
-        .worklist-orders-table .worklist-order-row-expanded > td:first-child {
-          border-left: 2px solid #1677ff !important;
-          border-top-left-radius: 8px !important;
-        }
-        .worklist-orders-table .worklist-order-row-expanded > td:last-child {
-          border-right: 1px solid #91caff !important;
-          border-top-right-radius: 8px !important;
-        }
-        .worklist-orders-table .ant-table-expanded-row > td {
-          padding: 4px 10px 8px !important;
-          background: transparent !important;
-          border-left: 2px solid #1677ff !important;
-          border-right: 1px solid #91caff !important;
-          border-bottom: 1px solid #91caff !important;
-          border-bottom-left-radius: 8px !important;
-          border-bottom-right-radius: 8px !important;
-        }
-        .worklist-expanded-panel {
-          border: 0;
-          border-radius: 0;
-          overflow: hidden;
-          background: transparent;
-        }
-        .worklist-expanded-panel .ant-table-container {
-          border-radius: 0;
-        }
-        html[data-theme='dark'] .worklist-orders-table .worklist-order-row-expanded > td {
-          background: rgba(255, 255, 255, 0.04) !important;
-          border-top-color: rgba(100, 168, 255, 0.55) !important;
-        }
-        html[data-theme='dark'] .worklist-orders-table .worklist-order-row-expanded > td:first-child {
-          border-left-color: #3c89e8 !important;
-        }
-        html[data-theme='dark'] .worklist-orders-table .worklist-order-row-expanded > td:last-child {
-          border-right-color: rgba(100, 168, 255, 0.55) !important;
-        }
-        html[data-theme='dark'] .worklist-orders-table .ant-table-expanded-row > td {
-          border-left-color: #3c89e8 !important;
-          border-right-color: rgba(100, 168, 255, 0.55) !important;
-          border-bottom-color: rgba(100, 168, 255, 0.55) !important;
-        }
-        .worklist-subtests-table .ant-table-thead > tr > th {
-          padding-top: 3px !important;
-          padding-bottom: 3px !important;
-          font-size: 11px;
-        }
-        .worklist-subtests-table .ant-table-tbody > tr > td {
-          padding-top: 3px !important;
-          padding-bottom: 3px !important;
+          padding-top: 7px !important;
+          padding-bottom: 7px !important;
         }
         .panel-entry-modal .ant-modal {
           max-width: calc(100vw - 32px) !important;
@@ -921,45 +589,15 @@ export function WorklistPage() {
           margin-bottom: 0;
         }
         .panel-entry-modal .ant-modal-body {
-          padding: 6px 12px 10px !important;
+          padding: 8px 12px 12px !important;
           max-height: calc(100vh - 140px);
           overflow-y: auto;
         }
-        .panel-entry-modal .panel-entry-summary {
-          margin-bottom: 6px;
-          padding: 7px 9px;
-          border-radius: 6px;
-        }
-        .panel-entry-modal .panel-entry-grid-head {
-          padding: 5px 8px !important;
-          margin-bottom: 0 !important;
-        }
-        .panel-entry-modal .panel-entry-grid-row {
-          padding: 4px 8px !important;
-          margin-bottom: 0 !important;
-        }
-        .panel-entry-modal .panel-entry-grid-row .ant-form-item {
-          margin-bottom: 0;
-        }
-        .panel-entry-modal .panel-entry-params {
-          margin-top: 6px !important;
-          padding: 8px 10px !important;
-        }
-        .panel-entry-modal .panel-entry-footer {
-          margin-top: 8px !important;
-        }
-        @media (max-width: 992px) {
-          .panel-entry-modal .ant-modal {
-            margin: 10px auto;
-            top: 8px;
-          }
-          .panel-entry-modal .ant-modal-body {
-            max-height: calc(100vh - 116px);
-            padding: 10px 12px 12px !important;
-          }
-        }
       `}</style>
-      <Title level={4} style={{ marginTop: 0, marginBottom: 10 }}>Worklist</Title>
+
+      <Title level={4} style={{ marginTop: 0, marginBottom: 10 }}>
+        Worklist
+      </Title>
       <WorklistStatusDashboard stats={stats} style={{ marginBottom: 12 }} />
 
       <div
@@ -973,26 +611,21 @@ export function WorklistPage() {
               <Input
                 placeholder="Search order #, patient, test..."
                 value={search}
-                onChange={(e) => setSearch(e.target.value)}
+                onChange={(event) => setSearch(event.target.value)}
                 onPressEnter={handleSearch}
                 style={{ width: 250 }}
                 allowClear
               />
               <Select
-                placeholder="Status"
-                value={statusFilter}
-                onChange={(value) => setStatusFilter(value as OrderTestStatus | 'ALL')}
-                style={{ width: 180 }}
-                options={STATUS_OPTIONS}
-                allowClear={false}
-              />
-              <Select
                 placeholder="Department"
                 value={departmentId || undefined}
-                onChange={(v) => setDepartmentId(v ?? '')}
-                style={{ width: 180 }}
+                onChange={(value) => setDepartmentId(value ?? '')}
+                style={{ width: 200 }}
                 allowClear
-                options={departments.map((d) => ({ label: `${d.code} - ${d.name}`, value: d.id }))}
+                options={departments.map((department) => ({
+                  label: `${department.code} - ${department.name}`,
+                  value: department.id,
+                }))}
               />
               <DatePicker
                 value={dateFilter}
@@ -1003,367 +636,352 @@ export function WorklistPage() {
               <Button type="primary" icon={<SearchOutlined />} onClick={handleSearch}>
                 Search
               </Button>
-              <Button icon={<ReloadOutlined />} onClick={() => { loadData(); loadStats(); }}>
+              <Button
+                icon={<ReloadOutlined />}
+                onClick={() => {
+                  void Promise.all([loadRows(), loadStats()]);
+                }}
+              >
                 Refresh
               </Button>
-              {selectedRowKeys.length > 0 && (
-                <Button
-                  type="primary"
-                  icon={<CheckOutlined />}
-                  onClick={handleBatchVerify}
-                  style={{ backgroundColor: '#52c41a', borderColor: '#52c41a' }}
-                >
-                  Verify Selected ({selectedRowKeys.length})
-                </Button>
-              )}
             </Space>
           </div>
 
           <div className="queue-table-block">
-            <Table<WorklistOrderGroup>
+            <Table<WorklistOrderSummaryDto>
               className="worklist-orders-table"
               rowKey="orderId"
-              columns={orderColumns}
-              dataSource={groupedData}
+              columns={queueColumns}
+              dataSource={rows}
               loading={loading}
               showHeader
-              rowClassName={(record) => (expandedOrderIds.includes(record.orderId) ? 'worklist-order-row-expanded' : '')}
-              rowSelection={rowSelection}
-              expandable={{
-                expandedRowRender: (record) => renderExpandedTests(record),
-                expandRowByClick: true,
-                showExpandColumn: false,
-                expandedRowKeys: expandedOrderIds,
-                onExpand: (expanded, record) => {
-                  setExpandedOrderIds(expanded ? [record.orderId] : []);
-                },
-              }}
               pagination={{
                 current: page,
                 pageSize: size,
                 total,
                 showSizeChanger: false,
-                showTotal: (t) => `Total ${t} orders`,
-                onChange: (p) => setPage(p),
+                showTotal: (value) => `Total ${value} orders`,
+                onChange: (nextPage) => setPage(nextPage),
               }}
-              scroll={{ x: 820 }}
+              scroll={{ x: 1100 }}
               size="small"
             />
           </div>
         </Card>
       </div>
 
-      {/* Result Entry Modal */}
       <Modal
         title={
           <Space size={8}>
-            <span style={{ fontWeight: 600, fontSize: 15, lineHeight: 1.2 }}>Enter Result</span>
-            {editingItem && (
-              <Tag color="blue" style={{ margin: 0 }}>{editingItem.testName}</Tag>
+            <span style={{ fontWeight: 600, fontSize: 15, lineHeight: 1.2 }}>
+              Enter Result
+            </span>
+            {modalOrder && (
+              <Tag color="blue" style={{ margin: 0 }}>
+                {modalOrder.orderNumber}
+              </Tag>
             )}
           </Space>
         }
         open={resultModalOpen}
-        onCancel={handleCloseResultModal}
+        onCancel={() => {
+          setResultModalOpen(false);
+          setModalOrder(null);
+          resultForm.resetFields();
+        }}
         footer={null}
-        width={960}
+        width={980}
         className="panel-entry-modal"
         styles={{
-          header: { borderBottom: isDark ? '1px solid rgba(255,255,255,0.08)' : '1px solid #f0f0f0' },
+          header: {
+            borderBottom: isDark
+              ? '1px solid rgba(255,255,255,0.08)'
+              : '1px solid #f0f0f0',
+          },
         }}
       >
-        {editingItem && (
+        {modalLoading ? (
+          <div style={{ padding: 30, textAlign: 'center' }}>
+            <Text type="secondary">Loading order tests...</Text>
+          </div>
+        ) : modalOrder ? (
           <div>
             <div
-              className="panel-entry-summary"
               style={{
+                marginBottom: 8,
+                padding: '8px 10px',
+                borderRadius: 6,
                 backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : '#fafafa',
-                border: isDark ? '1px solid rgba(255,255,255,0.08)' : '1px solid #f0f0f0',
+                border: isDark
+                  ? '1px solid rgba(255,255,255,0.08)'
+                  : '1px solid #f0f0f0',
               }}
             >
               <Row gutter={[8, 2]}>
                 <Col xs={24} sm={12}>
-                  <Text type="secondary" style={{ fontSize: 12 }}>Patient</Text>
-                  <div style={{ marginTop: 2 }}><Text strong>{editingItem.patientName}</Text></div>
+                  <Text type="secondary" style={{ fontSize: 12 }}>
+                    Patient
+                  </Text>
+                  <div style={{ marginTop: 2 }}>
+                    <Text strong>{modalOrder.patientName}</Text>
+                  </div>
                 </Col>
                 <Col xs={24} sm={12}>
-                  <Text type="secondary" style={{ fontSize: 12 }}>Order</Text>
-                  <div style={{ marginTop: 2 }}><Text strong>{editingItem.orderNumber}</Text></div>
+                  <Text type="secondary" style={{ fontSize: 12 }}>
+                    Order
+                  </Text>
+                  <div style={{ marginTop: 2 }}>
+                    <Text strong>{modalOrder.orderNumber}</Text>
+                  </div>
                 </Col>
               </Row>
-              {(editingItem.normalMin !== null || editingItem.normalMax !== null || editingItem.normalText) && (
-                <div style={{ marginTop: 8, paddingTop: 8, borderTop: isDark ? '1px solid rgba(255,255,255,0.06)' : '1px solid #f0f0f0' }}>
-                  <Text type="secondary" style={{ fontSize: 12 }}>Normal range</Text>
-                  <div style={{ marginTop: 2 }}>
-                    <Text>
-                      {editingItem.normalText ||
-                        `${editingItem.normalMin ?? '-'} - ${editingItem.normalMax ?? '-'} ${editingItem.testUnit || ''}`}
-                    </Text>
-                  </div>
-                </div>
-              )}
             </div>
 
-            <Form
-              form={resultForm}
-              layout="vertical"
-              onFinish={handleSubmitResult}
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'flex-end',
+                gap: 8,
+                marginBottom: 8,
+              }}
             >
-              {(() => {
-                const targetItems = resolveResultModalTargets(editingItem);
-                const isPanel = editingItem.testType === 'PANEL';
+              <Button
+                onClick={() => {
+                  setResultModalOpen(false);
+                  setModalOrder(null);
+                  resultForm.resetFields();
+                }}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="primary"
+                loading={submitting}
+                onClick={() => {
+                  void resultForm.submit();
+                }}
+              >
+                Save
+              </Button>
+            </div>
+
+            <Form form={resultForm} layout="vertical" onFinish={handleSubmitResult}>
+              <div
+                style={{
+                  display: 'flex',
+                  backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : '#f5f5f5',
+                  borderRadius: '6px 6px 0 0',
+                  borderBottom: isDark
+                    ? '1px solid rgba(255,255,255,0.1)'
+                    : '1px solid #e8e8e8',
+                  fontWeight: 600,
+                  fontSize: 12,
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.5px',
+                  padding: '6px 8px',
+                }}
+              >
+                <div style={{ flex: '1 1 32%' }}>Test</div>
+                <div style={{ flex: '1 1 32%' }}>Result</div>
+                <div style={{ flex: '1 1 10%', textAlign: 'center' }}>Unit</div>
+                <div style={{ flex: '1 1 11%', textAlign: 'center' }}>Flag</div>
+                <div style={{ flex: '1 1 15%', textAlign: 'right' }}>Ref. Range</div>
+              </div>
+
+              {orderedModalItems.map((target, index) => {
+                const isPanelRoot =
+                  target.testType === 'PANEL' && !target.parentOrderTestId;
+                const isPanelChild = Boolean(target.parentOrderTestId);
+                const isReadOnly = target.status === 'VERIFIED' || isPanelRoot;
+                const parameterDefinitions = target.parameterDefinitions ?? [];
+                const hasParams = parameterDefinitions.length > 0;
 
                 return (
-                  <>
-                    {isPanel && (
+                  <div key={target.id}>
+                    {firstPanelIndex > 0 && index === firstPanelIndex && (
                       <div
-                        className="panel-entry-grid-head"
                         style={{
-                          display: 'flex',
-                          backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : '#f5f5f5',
-                          borderRadius: '6px 6px 0 0',
-                          borderBottom: isDark ? '1px solid rgba(255,255,255,0.1)' : '1px solid #e8e8e8',
-                          fontWeight: 600,
-                          fontSize: 12,
-                          textTransform: 'uppercase',
-                          letterSpacing: '0.5px'
+                          borderTop: '1px dashed #91caff',
+                          marginTop: 4,
+                          paddingTop: 8,
+                          marginBottom: 4,
                         }}
                       >
-                        <div style={{ flex: '1 1 24%' }}>Test</div>
-                        <div style={{ flex: '1 1 40%' }}>Result</div>
-                        <div style={{ flex: '1 1 14%', textAlign: 'center' }}>Unit</div>
-                        <div style={{ flex: '1 1 22%', textAlign: 'right' }}>Ref. Range</div>
+                        <Text strong style={{ fontSize: 11 }}>
+                          Panel Tests
+                        </Text>
                       </div>
                     )}
-
-                    {targetItems.map((target, idx) => {
-                      const parameterDefinitions = target.parameterDefinitions ?? [];
-                      const hasParams = parameterDefinitions.length > 0;
-                      const panelResultControlStyle = isPanel ? { width: '100%' } : undefined;
-
-                      if (isPanel && hasParams) {
-                        return parameterDefinitions.map((def, defIndex) => {
-                          const isLastRow =
-                            idx === targetItems.length - 1 && defIndex === parameterDefinitions.length - 1;
-                          return (
-                            <div
-                              key={`${target.id}-${def.code}`}
-                              className="panel-entry-grid-row"
-                              style={{
-                                marginBottom: 0,
-                                borderBottom: !isLastRow
-                                  ? (isDark ? '1px solid rgba(255,255,255,0.05)' : '1px solid #f0f0f0')
-                                  : 'none',
-                              }}
-                            >
-                              <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap' }}>
-                                <div style={{ flex: '1 1 24%' }}>
-                                  <Text style={{ fontSize: 11, lineHeight: '15px' }}>{def.label}</Text>
-                                </div>
-                                <div style={{ flex: '1 1 40%' }}>
-                                  <Form.Item name={[target.id, 'resultParameters', def.code]} noStyle>
-                                    {def.type === 'select' ? (
-                                      <Select
-                                        allowClear
-                                        showSearch
-                                        style={{ width: '100%' }}
-                                        size="small"
-                                        placeholder="Select"
-                                        options={[
-                                          ...(def.options ?? []).map((o) => ({ label: o, value: o })),
-                                          { label: 'Other...', value: '__other__' },
-                                        ]}
-                                      />
-                                    ) : (
-                                      <Input style={{ width: '100%' }} size="small" placeholder="Result" />
-                                    )}
-                                  </Form.Item>
-                                  {def.type === 'select' && (
-                                    <Form.Item noStyle shouldUpdate>
-                                      {() => resultForm.getFieldValue([target.id, 'resultParameters', def.code]) === '__other__' && (
-                                        <Form.Item
-                                          name={[target.id, 'resultParametersCustom', def.code]}
-                                          rules={[{ required: true, message: 'Enter custom value' }]}
-                                          style={{ marginTop: 4, marginBottom: 0 }}
-                                        >
-                                          <Input size="small" placeholder="Specify custom value..." />
-                                        </Form.Item>
-                                      )}
-                                    </Form.Item>
-                                  )}
-                                </div>
-                                <div style={{ flex: '1 1 14%', textAlign: 'center', fontSize: 11 }}>
-                                  -
-                                </div>
-                                <div style={{ flex: '1 1 22%', textAlign: 'right', fontSize: 11, color: 'rgba(128,128,128,0.8)' }}>
-                                  -
-                                </div>
-                              </div>
-                            </div>
-                          );
-                        });
-                      }
-
-                      return (
-                        <div key={target.id} className={isPanel ? 'panel-entry-grid-row' : undefined} style={{
-                          marginBottom: isPanel ? 0 : 10,
-                          padding: isPanel ? undefined : 0,
-                          borderBottom: isPanel && idx < targetItems.length - 1 ? (isDark ? '1px solid rgba(255,255,255,0.05)' : '1px solid #f0f0f0') : 'none'
-                        }}>
-                          <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap' }}>
-                            <div style={{ flex: isPanel ? '1 1 24%' : '1 1 100%', marginBottom: isPanel ? 0 : 8 }}>
-                              <Text strong={!isPanel} style={{ fontSize: isPanel ? 12 : 14 }}>{target.testName}</Text>
-                            </div>
-
-                            <div style={{ flex: isPanel ? '1 1 40%' : '1 1 100%' }}>
-                              {!hasParams ? (
-                                <Form.Item
-                                  name={[target.id, 'resultText']}
-                                  noStyle={isPanel}
-                                  rules={target.resultEntryType === 'QUALITATIVE' ? [{ required: true, message: 'Required' }] : []}
-                                >
-                                  {target.resultEntryType === 'NUMERIC' ? (
-                                    <div style={{ display: 'flex', gap: 8, alignItems: 'center', width: isPanel ? '100%' : undefined }}>
-                                      <Form.Item name={[target.id, 'resultValue']} noStyle>
-                                        <InputNumber
-                                          style={{ width: '100%' }}
-                                          placeholder="Value"
-                                          precision={2}
-                                          size={isPanel ? 'small' : 'large'}
-                                        />
-                                      </Form.Item>
-                                      {target.resultEntryType === 'NUMERIC' && !isPanel && target.testUnit && <Text type="secondary">{target.testUnit}</Text>}
-                                    </div>
-                                  ) : target.resultEntryType === 'QUALITATIVE' && (target.resultTextOptions?.length ?? 0) > 0 ? (
-                                    <Select
-                                      allowClear
-                                      showSearch
-                                      style={panelResultControlStyle}
-                                      size={isPanel ? 'small' : 'large'}
-                                      placeholder="Select"
-                                      options={[
-                                        ...(target.resultTextOptions ?? []).map((o) => ({ label: o.value, value: o.value })),
-                                        ...(target.allowCustomResultText ? [{ label: 'Other...', value: '__other__' }] : []),
-                                      ]}
-                                    />
-                                  ) : (
-                                    <Input style={panelResultControlStyle} size={isPanel ? 'small' : 'large'} placeholder="Result text" />
-                                  )}
-                                </Form.Item>
-                              ) : (
-                                <Text type="secondary" italic style={{ fontSize: 12 }}>See parameters below</Text>
-                              )}
-                            </div>
-
-                            {isPanel && (
-                              <>
-                                <div style={{ flex: '1 1 14%', textAlign: 'center', fontSize: 11 }}>
-                                  {target.testUnit || '-'}
-                                </div>
-                                <div style={{ flex: '1 1 22%', textAlign: 'right', fontSize: 11, color: 'rgba(128,128,128,0.8)' }}>
-                                  {target.normalText || `${target.normalMin ?? '-'} - ${target.normalMax ?? '-'}`}
-                                </div>
-                              </>
-                            )}
-                          </div>
-
-                          {/* Qualitative "Other" field */}
-                          {!hasParams && target.resultEntryType === 'QUALITATIVE' && target.allowCustomResultText && (
-                            <Form.Item noStyle shouldUpdate>
-                              {() => resultForm.getFieldValue([target.id, 'resultText']) === '__other__' && (
-                                <div style={{ marginTop: 8, paddingLeft: isPanel ? 0 : 0 }}>
-                                  <Form.Item
-                                    name={[target.id, 'customResultText']}
-                                    rules={[{ required: true, message: 'Enter custom text' }]}
-                                    label={isPanel ? null : "Custom text"}
-                                  >
-                                    <Input style={panelResultControlStyle} placeholder="Specify custom result..." size="small" />
-                                  </Form.Item>
-                                </div>
-                              )}
-                            </Form.Item>
-                          )}
-
-                          {/* Parameters */}
-                          {hasParams && !isPanel && (
-                            <div
-                              className="panel-entry-params"
-                              style={{
-                                marginTop: isPanel ? 12 : 16,
-                                padding: 16,
-                                backgroundColor: isDark ? 'rgba(255,255,255,0.02)' : '#fafafa',
-                                borderRadius: 8,
-                                border: isDark ? '1px solid rgba(255,255,255,0.05)' : '1px solid #f0f0f0'
-                              }}
-                            >
-                              <Row gutter={[16, 12]}>
-                                {target.parameterDefinitions!.map((def) => (
-                                  <Col key={def.code} xs={24} sm={12}>
-                                    <Form.Item
-                                      name={[target.id, 'resultParameters', def.code]}
-                                      label={<span style={{ fontSize: 12 }}>{def.label}</span>}
-                                      style={{ marginBottom: 0 }}
-                                    >
-                                      {def.type === 'select' ? (
-                                        <Select
-                                          allowClear
-                                          size={isPanel ? 'middle' : 'small'}
-                                          options={[
-                                            ...(def.options ?? []).map((o) => ({ label: o, value: o })),
-                                            { label: 'Other...', value: '__other__' },
-                                          ]}
-                                        />
-                                      ) : (
-                                        <Input size={isPanel ? 'middle' : 'small'} placeholder="Enter..." />
-                                      )}
-                                    </Form.Item>
-                                    {/* Parameter "Other" handling could be added here if needed, keeping it simple for now */}
-                                  </Col>
-                                ))}
-                              </Row>
-                            </div>
-                          )}
+                    <div
+                      style={{
+                        display: 'flex',
+                        alignItems: 'flex-start',
+                        padding: '6px 8px',
+                        borderBottom:
+                          index < orderedModalItems.length - 1
+                            ? isDark
+                              ? '1px solid rgba(255,255,255,0.05)'
+                              : '1px solid #f0f0f0'
+                            : 'none',
+                        backgroundColor: isPanelRoot
+                          ? isDark
+                            ? 'rgba(114,46,209,0.14)'
+                            : 'rgba(114,46,209,0.08)'
+                          : 'transparent',
+                      }}
+                    >
+                      <div style={{ flex: '1 1 32%', paddingRight: 8 }}>
+                        <Space size={6}>
+                          {isPanelRoot ? (
+                            <Tag color="purple" style={{ margin: 0, fontSize: 10 }}>
+                              Panel
+                            </Tag>
+                          ) : null}
+                          {target.status === 'REJECTED' ? (
+                            <Tag color="error" style={{ margin: 0, fontSize: 10 }}>
+                              Rejected
+                            </Tag>
+                          ) : null}
+                        </Space>
+                        <div style={{ marginTop: 2, paddingLeft: isPanelChild ? 10 : 0 }}>
+                          <Text
+                            strong={isPanelRoot}
+                            style={{ fontSize: 12, lineHeight: '15px' }}
+                          >
+                            {target.testName}
+                          </Text>
                         </div>
-                      );
-                    })}
-                  </>
+                        {target.rejectionReason?.trim() && (
+                          <Text type="danger" style={{ display: 'block', fontSize: 10 }}>
+                            {target.rejectionReason}
+                          </Text>
+                        )}
+                      </div>
+
+                      <div style={{ flex: '1 1 32%', paddingRight: 8 }}>
+                        {isPanelRoot ? (
+                          <Text type="secondary" style={{ fontSize: 11 }}>
+                            Panel header
+                          </Text>
+                        ) : hasParams ? (
+                          <Space direction="vertical" style={{ width: '100%' }} size={4}>
+                            {parameterDefinitions.map((definition: TestParameterDefinition) => (
+                              <Form.Item
+                                key={`${target.id}-${definition.code}`}
+                                name={[target.id, 'resultParameters', definition.code]}
+                                style={{ marginBottom: 0 }}
+                                label={
+                                  <span style={{ fontSize: 10 }}>{definition.label}</span>
+                                }
+                              >
+                                {definition.type === 'select' ? (
+                                  <Select
+                                    allowClear
+                                    size="small"
+                                    disabled={isReadOnly}
+                                    options={[
+                                      ...(definition.options ?? []).map((option) => ({
+                                        label: option,
+                                        value: option,
+                                      })),
+                                      { label: 'Other...', value: '__other__' },
+                                    ]}
+                                  />
+                                ) : (
+                                  <Input size="small" disabled={isReadOnly} />
+                                )}
+                              </Form.Item>
+                            ))}
+                          </Space>
+                        ) : (
+                          <Form.Item
+                            name={[target.id, target.resultEntryType === 'NUMERIC' ? 'resultValue' : 'resultText']}
+                            style={{ marginBottom: 0 }}
+                          >
+                            {target.resultEntryType === 'NUMERIC' ? (
+                              <InputNumber
+                                id={`result-input-${target.id}`}
+                                style={{ width: '100%' }}
+                                size="small"
+                                precision={2}
+                                disabled={isReadOnly}
+                                onKeyDown={(event) => {
+                                  if (event.key === 'ArrowDown') {
+                                    event.preventDefault();
+                                    focusNextEditableInput(target.id);
+                                  }
+                                }}
+                              />
+                            ) : target.resultEntryType === 'QUALITATIVE' &&
+                              (target.resultTextOptions?.length ?? 0) > 0 ? (
+                              <Select
+                                id={`result-input-${target.id}`}
+                                allowClear
+                                showSearch
+                                size="small"
+                                disabled={isReadOnly}
+                                options={[
+                                  ...(target.resultTextOptions ?? []).map((option) => ({
+                                    label: option.value,
+                                    value: option.value,
+                                  })),
+                                  ...(target.allowCustomResultText
+                                    ? [{ label: 'Other...', value: '__other__' }]
+                                    : []),
+                                ]}
+                                onKeyDown={(event) => {
+                                  if (event.key === 'ArrowDown') {
+                                    event.preventDefault();
+                                    focusNextEditableInput(target.id);
+                                  }
+                                }}
+                              />
+                            ) : (
+                              <Input
+                                id={`result-input-${target.id}`}
+                                size="small"
+                                disabled={isReadOnly}
+                                onKeyDown={(event) => {
+                                  if (event.key === 'ArrowDown') {
+                                    event.preventDefault();
+                                    focusNextEditableInput(target.id);
+                                  }
+                                }}
+                              />
+                            )}
+                          </Form.Item>
+                        )}
+                      </div>
+
+                      <div style={{ flex: '1 1 10%', textAlign: 'center', fontSize: 11 }}>
+                        {target.testUnit || '-'}
+                      </div>
+                      <div style={{ flex: '1 1 11%', textAlign: 'center' }}>
+                        {target.flag ? (
+                          <Tag
+                            color={FLAG_COLOR[target.flag] || 'default'}
+                            style={{ margin: 0, fontSize: 10 }}
+                          >
+                            {FLAG_LABEL[target.flag] || target.flag}
+                          </Tag>
+                        ) : (
+                          <Text type="secondary" style={{ fontSize: 11 }}>
+                            -
+                          </Text>
+                        )}
+                      </div>
+                      <div style={{ flex: '1 1 15%', textAlign: 'right', fontSize: 11 }}>
+                        {formatReferenceRange(target)}
+                      </div>
+                    </div>
+                  </div>
                 );
-              })()}
-              <Form.Item className="panel-entry-footer" style={{ marginBottom: 0, marginTop: 12 }}>
-                <Space style={{ width: '100%', justifyContent: 'flex-end' }} size="middle">
-                  <Button onClick={handleCloseResultModal}>Cancel</Button>
-                  <Button type="primary" htmlType="submit" loading={submitting}>
-                    Save Result
-                  </Button>
-                </Space>
-              </Form.Item>
+              })}
             </Form>
           </div>
-        )}
+        ) : null}
       </Modal>
 
-      {/* Reject Modal */}
-      <Modal
-        title="Reject Result"
-        open={rejectModalOpen}
-        onCancel={() => setRejectModalOpen(false)}
-        onOk={handleReject}
-        okText="Reject"
-        okButtonProps={{ danger: true, disabled: !rejectReason.trim() }}
-      >
-        <div style={{ marginBottom: 16 }}>
-          <Text>
-            Are you sure you want to reject the result for{' '}
-            <Text strong>{rejectingItem?.testCode} - {rejectingItem?.testName}</Text>?
-          </Text>
-        </div>
-        <Input.TextArea
-          placeholder="Enter rejection reason..."
-          value={rejectReason}
-          onChange={(e) => setRejectReason(e.target.value)}
-          rows={3}
-        />
-      </Modal>
     </div>
   );
 }

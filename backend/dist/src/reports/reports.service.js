@@ -25,6 +25,7 @@ const order_test_entity_1 = require("../entities/order-test.entity");
 const patient_entity_1 = require("../entities/patient.entity");
 const lab_entity_1 = require("../entities/lab.entity");
 const user_entity_1 = require("../entities/user.entity");
+const audit_log_entity_1 = require("../entities/audit-log.entity");
 const test_entity_1 = require("../entities/test.entity");
 const results_report_template_1 = require("./html/results-report.template");
 const normal_range_util_1 = require("../tests/normal-range.util");
@@ -154,12 +155,13 @@ function resolveReadablePath(candidates) {
     return null;
 }
 let ReportsService = ReportsService_1 = class ReportsService {
-    constructor(orderRepo, orderTestRepo, patientRepo, labRepo, userRepo) {
+    constructor(orderRepo, orderTestRepo, patientRepo, labRepo, userRepo, auditLogRepo) {
         this.orderRepo = orderRepo;
         this.orderTestRepo = orderTestRepo;
         this.patientRepo = patientRepo;
         this.labRepo = labRepo;
         this.userRepo = userRepo;
+        this.auditLogRepo = auditLogRepo;
         this.browserPromise = null;
     }
     onModuleInit() {
@@ -214,6 +216,104 @@ let ReportsService = ReportsService_1 = class ReportsService {
         finally {
             this.browserPromise = null;
         }
+    }
+    async ensureOrderBelongsToLab(orderId, labId) {
+        const exists = await this.orderRepo.exist({ where: { id: orderId, labId } });
+        if (!exists) {
+            throw new common_1.NotFoundException('Order not found');
+        }
+    }
+    async getOrderActionFlags(labId, orderIds) {
+        const uniqueOrderIds = Array.from(new Set(orderIds.filter(Boolean)));
+        if (uniqueOrderIds.length === 0) {
+            return {};
+        }
+        const orders = await this.orderRepo.find({
+            where: uniqueOrderIds.map((id) => ({ id, labId })),
+            select: ['id'],
+        });
+        const scopedOrderIds = orders.map((order) => order.id);
+        if (scopedOrderIds.length === 0) {
+            return {};
+        }
+        const result = Object.fromEntries(scopedOrderIds.map((orderId) => [
+            orderId,
+            {
+                pdf: false,
+                print: false,
+                whatsapp: false,
+                viber: false,
+                timestamps: {
+                    pdf: null,
+                    print: null,
+                    whatsapp: null,
+                    viber: null,
+                },
+            },
+        ]));
+        const logs = await this.auditLogRepo.find({
+            where: {
+                labId,
+                entityType: 'order',
+                entityId: (0, typeorm_2.In)(scopedOrderIds),
+                action: audit_log_entity_1.AuditAction.REPORT_PRINT,
+            },
+            order: { createdAt: 'ASC' },
+            select: ['entityId', 'newValues', 'createdAt'],
+        });
+        for (const log of logs) {
+            const orderId = log.entityId;
+            if (!orderId || !result[orderId]) {
+                continue;
+            }
+            const actionKind = this.resolveReportActionKindFromAudit(log.newValues);
+            if (!actionKind) {
+                continue;
+            }
+            const createdAtIso = log.createdAt?.toISOString?.() ?? null;
+            if (actionKind === 'PDF') {
+                result[orderId].pdf = true;
+                result[orderId].timestamps.pdf = createdAtIso;
+            }
+            else if (actionKind === 'PRINT') {
+                result[orderId].print = true;
+                result[orderId].timestamps.print = createdAtIso;
+            }
+            else if (actionKind === 'WHATSAPP') {
+                result[orderId].whatsapp = true;
+                result[orderId].timestamps.whatsapp = createdAtIso;
+            }
+            else if (actionKind === 'VIBER') {
+                result[orderId].viber = true;
+                result[orderId].timestamps.viber = createdAtIso;
+            }
+        }
+        return result;
+    }
+    resolveReportActionKindFromAudit(newValues) {
+        if (!newValues || typeof newValues !== 'object') {
+            return null;
+        }
+        const actionKindRaw = newValues.actionKind;
+        const actionKind = String(actionKindRaw ?? '')
+            .trim()
+            .toUpperCase();
+        if (actionKind === 'PDF')
+            return 'PDF';
+        if (actionKind === 'PRINT')
+            return 'PRINT';
+        if (actionKind === 'WHATSAPP')
+            return 'WHATSAPP';
+        if (actionKind === 'VIBER')
+            return 'VIBER';
+        const channel = String(newValues.channel ?? '')
+            .trim()
+            .toUpperCase();
+        if (channel === 'WHATSAPP')
+            return 'WHATSAPP';
+        if (channel === 'VIBER')
+            return 'VIBER';
+        return null;
     }
     decodeImageDataUrl(value) {
         if (typeof value !== 'string')
@@ -857,7 +957,9 @@ exports.ReportsService = ReportsService = ReportsService_1 = __decorate([
     __param(2, (0, typeorm_1.InjectRepository)(patient_entity_1.Patient)),
     __param(3, (0, typeorm_1.InjectRepository)(lab_entity_1.Lab)),
     __param(4, (0, typeorm_1.InjectRepository)(user_entity_1.User)),
+    __param(5, (0, typeorm_1.InjectRepository)(audit_log_entity_1.AuditLog)),
     __metadata("design:paramtypes", [typeorm_2.Repository,
+        typeorm_2.Repository,
         typeorm_2.Repository,
         typeorm_2.Repository,
         typeorm_2.Repository,

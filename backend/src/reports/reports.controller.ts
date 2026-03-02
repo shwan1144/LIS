@@ -4,6 +4,7 @@ import {
   Post,
   Param,
   Body,
+  Query,
   UseGuards,
   Req,
   Res,
@@ -11,7 +12,7 @@ import {
   HttpException,
 } from '@nestjs/common';
 import { Response } from 'express';
-import { ReportsService } from './reports.service';
+import { ReportActionKind, ReportsService } from './reports.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { AuditService } from '../audit/audit.service';
 import { AuditAction } from '../entities/audit-log.entity';
@@ -34,6 +35,49 @@ export class ReportsController {
     private readonly reportsService: ReportsService,
     private readonly auditService: AuditService,
   ) {}
+
+  @Get('orders/action-flags')
+  async getOrderActionFlags(
+    @Req() req: RequestWithUser,
+    @Query('orderIds') orderIdsRaw = '',
+    @Res() res: Response,
+  ) {
+    const labId = req.user?.labId;
+    if (!labId) {
+      return res.status(401).json({ message: 'Lab ID not found in token' });
+    }
+
+    const orderIds = (orderIdsRaw ?? '')
+      .split(',')
+      .map((value) => value.trim())
+      .filter((value) => value.length > 0);
+
+    const flags = await this.reportsService.getOrderActionFlags(labId, orderIds);
+    return res.status(200).json(flags);
+  }
+
+  @Post('orders/:id/action-log')
+  async logReportAction(
+    @Req() req: RequestWithUser & { ip?: string; headers?: Record<string, string | string[] | undefined> },
+    @Param('id', ParseUUIDPipe) orderId: string,
+    @Body() body: { action?: ReportActionKind },
+    @Res() res: Response,
+  ) {
+    const labId = req.user?.labId;
+    if (!labId) {
+      return res.status(401).json({ message: 'Lab ID not found in token' });
+    }
+
+    const action = String(body?.action ?? '')
+      .trim()
+      .toUpperCase() as ReportActionKind;
+    if (!['PDF', 'PRINT', 'WHATSAPP', 'VIBER'].includes(action)) {
+      return res.status(400).json({ message: 'action must be PDF, PRINT, WHATSAPP, or VIBER' });
+    }
+
+    await this.logReportActionInternal(req, orderId, action);
+    return res.status(201).json({ success: true });
+  }
 
   @Get('orders/:id/receipt')
   async getOrderReceiptPDF(
@@ -161,7 +205,6 @@ export class ReportsController {
     @Res() res: Response,
   ) {
     const labId = req.user?.labId;
-    const actor = buildLabActorContext(req.user);
     if (!labId) {
       return res.status(401).json({ message: 'Lab ID not found in token' });
     }
@@ -169,6 +212,23 @@ export class ReportsController {
     if (!body?.channel || !['WHATSAPP', 'VIBER'].includes(body.channel)) {
       return res.status(400).json({ message: 'channel must be WHATSAPP or VIBER' });
     }
+
+    await this.logReportActionInternal(req, orderId, body.channel);
+    return res.status(201).json({ success: true });
+  }
+
+  private async logReportActionInternal(
+    req: RequestWithUser & { ip?: string; headers?: Record<string, string | string[] | undefined> },
+    orderId: string,
+    actionKind: ReportActionKind,
+  ): Promise<void> {
+    const labId = req.user?.labId;
+    if (!labId) {
+      return;
+    }
+
+    await this.reportsService.ensureOrderBelongsToLab(orderId, labId);
+    const actor = buildLabActorContext(req.user);
 
     const impersonationAudit =
       actor.isImpersonation && actor.platformUserId
@@ -188,12 +248,10 @@ export class ReportsController {
       action: AuditAction.REPORT_PRINT,
       entityType: 'order',
       entityId: orderId,
-      description: `Shared report link via ${body.channel} for order ${orderId}`,
-      newValues: { channel: body.channel, ...impersonationAudit },
+      description: `Report action ${actionKind} for order ${orderId}`,
+      newValues: { actionKind, ...impersonationAudit },
       ipAddress: req.ip ?? null,
       userAgent: (req.headers?.['user-agent'] as string | undefined) ?? null,
     });
-
-    return res.status(201).json({ success: true });
   }
 }

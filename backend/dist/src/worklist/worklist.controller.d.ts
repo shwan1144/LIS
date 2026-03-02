@@ -1,4 +1,4 @@
-import { WorklistService, WorklistView } from './worklist.service';
+import { WorklistOrderMode, WorklistService, WorklistView } from './worklist.service';
 interface RequestWithUser {
     user: {
         userId?: string | null;
@@ -16,6 +16,14 @@ export declare class WorklistController {
         items: import("./worklist.service").WorklistItem[];
         total: number;
     }>;
+    getWorklistOrders(req: RequestWithUser, search?: string, date?: string, departmentId?: string, page?: string, size?: string, mode?: WorklistOrderMode): Promise<{
+        items: import("./worklist.service").WorklistOrderSummaryItem[];
+        total: number;
+        page: number;
+        size: number;
+        totalPages: number;
+    }>;
+    getWorklistOrderTests(req: RequestWithUser, orderId: string, departmentId?: string, mode?: WorklistOrderMode): Promise<import("./worklist.service").WorklistOrderTestsPayload>;
     getWorklistItemDetail(req: RequestWithUser, id: string): Promise<import("./worklist.service").WorklistItem>;
     getStats(req: RequestWithUser): Promise<{
         pending: number;

@@ -51,6 +51,35 @@ export declare enum WorklistView {
     FULL = "full",
     VERIFY = "verify"
 }
+export declare enum WorklistOrderMode {
+    ENTRY = "entry",
+    VERIFY = "verify"
+}
+export interface WorklistOrderSummaryItem {
+    orderId: string;
+    orderNumber: string;
+    registeredAt: Date;
+    patientName: string;
+    patientSex: string | null;
+    patientAge: number | null;
+    progressTotalRoot: number;
+    progressPending: number;
+    progressCompleted: number;
+    progressVerified: number;
+    progressRejected: number;
+    firstRejectedReason: string | null;
+    hasEnterable: boolean;
+    hasVerifiable: boolean;
+}
+export interface WorklistOrderTestsPayload {
+    orderId: string;
+    orderNumber: string;
+    registeredAt: Date;
+    patientName: string;
+    patientSex: string | null;
+    patientAge: number | null;
+    items: WorklistItem[];
+}
 export declare class WorklistService {
     private readonly orderTestRepo;
     private readonly orderRepo;
@@ -75,6 +104,24 @@ export declare class WorklistService {
         items: WorklistItem[];
         total: number;
     }>;
+    getWorklistOrders(labId: string, params: {
+        search?: string;
+        date?: string;
+        departmentId?: string;
+        page?: number;
+        size?: number;
+        mode?: WorklistOrderMode;
+    }, userId?: string): Promise<{
+        items: WorklistOrderSummaryItem[];
+        total: number;
+        page: number;
+        size: number;
+        totalPages: number;
+    }>;
+    getWorklistOrderTests(orderId: string, labId: string, params: {
+        mode?: WorklistOrderMode;
+        departmentId?: string;
+    }, userId?: string): Promise<WorklistOrderTestsPayload>;
     getWorklistItemDetail(orderTestId: string, labId: string, userId?: string): Promise<WorklistItem>;
     enterResult(orderTestId: string, labId: string, actor: LabActorContext, data: {
         resultValue?: number | null;
@@ -97,6 +144,8 @@ export declare class WorklistService {
         failed: number;
     }>;
     rejectResult(orderTestId: string, labId: string, actor: LabActorContext, reason: string): Promise<OrderTest>;
+    private getAllowedDepartmentIdsForUser;
+    private mapRawWorklistItem;
     private normalizeResultEntryType;
     private normalizeResultText;
     private normalizeResultTextOptions;

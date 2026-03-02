@@ -42,6 +42,32 @@ let WorklistController = class WorklistController {
             view: view ?? worklist_service_1.WorklistView.FULL,
         }, actor.userId ?? undefined);
     }
+    async getWorklistOrders(req, search, date, departmentId, page, size, mode) {
+        const labId = req.user?.labId;
+        const actor = (0, lab_actor_context_1.buildLabActorContext)(req.user);
+        if (!labId) {
+            throw new Error('Lab ID not found in token');
+        }
+        return this.worklistService.getWorklistOrders(labId, {
+            search,
+            date,
+            departmentId,
+            page: page ? parseInt(page, 10) : undefined,
+            size: size ? parseInt(size, 10) : undefined,
+            mode: mode ?? worklist_service_1.WorklistOrderMode.ENTRY,
+        }, actor.userId ?? undefined);
+    }
+    async getWorklistOrderTests(req, orderId, departmentId, mode) {
+        const labId = req.user?.labId;
+        const actor = (0, lab_actor_context_1.buildLabActorContext)(req.user);
+        if (!labId) {
+            throw new Error('Lab ID not found in token');
+        }
+        return this.worklistService.getWorklistOrderTests(orderId, labId, {
+            departmentId,
+            mode: mode ?? worklist_service_1.WorklistOrderMode.ENTRY,
+        }, actor.userId ?? undefined);
+    }
     async getWorklistItemDetail(req, id) {
         const labId = req.user?.labId;
         const actor = (0, lab_actor_context_1.buildLabActorContext)(req.user);
@@ -113,6 +139,29 @@ __decorate([
     __metadata("design:paramtypes", [Object, String, String, String, String, String, String, String]),
     __metadata("design:returntype", Promise)
 ], WorklistController.prototype, "getWorklist", null);
+__decorate([
+    (0, common_1.Get)('orders'),
+    __param(0, (0, common_1.Req)()),
+    __param(1, (0, common_1.Query)('search')),
+    __param(2, (0, common_1.Query)('date')),
+    __param(3, (0, common_1.Query)('departmentId')),
+    __param(4, (0, common_1.Query)('page')),
+    __param(5, (0, common_1.Query)('size')),
+    __param(6, (0, common_1.Query)('mode', new common_1.ParseEnumPipe(worklist_service_1.WorklistOrderMode, { optional: true }))),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, String, String, String, String, String, String]),
+    __metadata("design:returntype", Promise)
+], WorklistController.prototype, "getWorklistOrders", null);
+__decorate([
+    (0, common_1.Get)('orders/:orderId/tests'),
+    __param(0, (0, common_1.Req)()),
+    __param(1, (0, common_1.Param)('orderId', common_1.ParseUUIDPipe)),
+    __param(2, (0, common_1.Query)('departmentId')),
+    __param(3, (0, common_1.Query)('mode', new common_1.ParseEnumPipe(worklist_service_1.WorklistOrderMode, { optional: true }))),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, String, String, String]),
+    __metadata("design:returntype", Promise)
+], WorklistController.prototype, "getWorklistOrderTests", null);
 __decorate([
     (0, common_1.Get)(':id/detail'),
     __param(0, (0, common_1.Req)()),

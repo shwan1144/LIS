@@ -11,6 +11,7 @@ import { OrderTest } from '../entities/order-test.entity';
 import { Patient } from '../entities/patient.entity';
 import { Lab } from '../entities/lab.entity';
 import { User } from '../entities/user.entity';
+import { AuditAction, AuditLog } from '../entities/audit-log.entity';
 import { TestType, type Test } from '../entities/test.entity';
 import { buildResultsReportHtml } from './html/results-report.template';
 import type { Browser } from 'playwright';
@@ -49,6 +50,21 @@ export interface PublicResultStatus {
   verifiedAt: string | null;
   tests: PublicResultTestItem[];
 }
+
+export type ReportActionKind = 'PDF' | 'PRINT' | 'WHATSAPP' | 'VIBER';
+
+export type ReportActionFlags = {
+  pdf: boolean;
+  print: boolean;
+  whatsapp: boolean;
+  viber: boolean;
+  timestamps: {
+    pdf: string | null;
+    print: string | null;
+    whatsapp: string | null;
+    viber: string | null;
+  };
+};
 
 function formatDateTime(value: Date | string | null | undefined): string {
   if (!value) return '-';
@@ -216,6 +232,8 @@ export class ReportsService implements OnModuleInit, OnModuleDestroy {
     private readonly labRepo: Repository<Lab>,
     @InjectRepository(User)
     private readonly userRepo: Repository<User>,
+    @InjectRepository(AuditLog)
+    private readonly auditLogRepo: Repository<AuditLog>,
   ) { }
 
   onModuleInit(): void {
@@ -274,6 +292,114 @@ export class ReportsService implements OnModuleInit, OnModuleDestroy {
     } finally {
       this.browserPromise = null;
     }
+  }
+
+  async ensureOrderBelongsToLab(orderId: string, labId: string): Promise<void> {
+    const exists = await this.orderRepo.exist({ where: { id: orderId, labId } });
+    if (!exists) {
+      throw new NotFoundException('Order not found');
+    }
+  }
+
+  async getOrderActionFlags(
+    labId: string,
+    orderIds: string[],
+  ): Promise<Record<string, ReportActionFlags>> {
+    const uniqueOrderIds = Array.from(new Set(orderIds.filter(Boolean)));
+    if (uniqueOrderIds.length === 0) {
+      return {};
+    }
+
+    const orders = await this.orderRepo.find({
+      where: uniqueOrderIds.map((id) => ({ id, labId })),
+      select: ['id'],
+    });
+    const scopedOrderIds = orders.map((order) => order.id);
+    if (scopedOrderIds.length === 0) {
+      return {};
+    }
+
+    const result: Record<string, ReportActionFlags> = Object.fromEntries(
+      scopedOrderIds.map((orderId) => [
+        orderId,
+        {
+          pdf: false,
+          print: false,
+          whatsapp: false,
+          viber: false,
+          timestamps: {
+            pdf: null,
+            print: null,
+            whatsapp: null,
+            viber: null,
+          },
+        } satisfies ReportActionFlags,
+      ]),
+    );
+
+    const logs = await this.auditLogRepo.find({
+      where: {
+        labId,
+        entityType: 'order',
+        entityId: In(scopedOrderIds),
+        action: AuditAction.REPORT_PRINT,
+      },
+      order: { createdAt: 'ASC' },
+      select: ['entityId', 'newValues', 'createdAt'],
+    });
+
+    for (const log of logs) {
+      const orderId = log.entityId;
+      if (!orderId || !result[orderId]) {
+        continue;
+      }
+      const actionKind = this.resolveReportActionKindFromAudit(log.newValues);
+      if (!actionKind) {
+        continue;
+      }
+
+      const createdAtIso = log.createdAt?.toISOString?.() ?? null;
+      if (actionKind === 'PDF') {
+        result[orderId].pdf = true;
+        result[orderId].timestamps.pdf = createdAtIso;
+      } else if (actionKind === 'PRINT') {
+        result[orderId].print = true;
+        result[orderId].timestamps.print = createdAtIso;
+      } else if (actionKind === 'WHATSAPP') {
+        result[orderId].whatsapp = true;
+        result[orderId].timestamps.whatsapp = createdAtIso;
+      } else if (actionKind === 'VIBER') {
+        result[orderId].viber = true;
+        result[orderId].timestamps.viber = createdAtIso;
+      }
+    }
+
+    return result;
+  }
+
+  private resolveReportActionKindFromAudit(
+    newValues: Record<string, unknown> | null,
+  ): ReportActionKind | null {
+    if (!newValues || typeof newValues !== 'object') {
+      return null;
+    }
+
+    const actionKindRaw = newValues.actionKind;
+    const actionKind = String(actionKindRaw ?? '')
+      .trim()
+      .toUpperCase();
+    if (actionKind === 'PDF') return 'PDF';
+    if (actionKind === 'PRINT') return 'PRINT';
+    if (actionKind === 'WHATSAPP') return 'WHATSAPP';
+    if (actionKind === 'VIBER') return 'VIBER';
+
+    const channel = String((newValues as { channel?: unknown }).channel ?? '')
+      .trim()
+      .toUpperCase();
+    if (channel === 'WHATSAPP') return 'WHATSAPP';
+    if (channel === 'VIBER') return 'VIBER';
+
+    return null;
   }
 
   private decodeImageDataUrl(value: unknown): Buffer | null {

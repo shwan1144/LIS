@@ -17,12 +17,13 @@ const order_test_entity_1 = require("../entities/order-test.entity");
 const patient_entity_1 = require("../entities/patient.entity");
 const lab_entity_1 = require("../entities/lab.entity");
 const user_entity_1 = require("../entities/user.entity");
+const audit_log_entity_1 = require("../entities/audit-log.entity");
 let ReportsModule = class ReportsModule {
 };
 exports.ReportsModule = ReportsModule;
 exports.ReportsModule = ReportsModule = __decorate([
     (0, common_1.Module)({
-        imports: [typeorm_1.TypeOrmModule.forFeature([order_entity_1.Order, order_test_entity_1.OrderTest, patient_entity_1.Patient, lab_entity_1.Lab, user_entity_1.User])],
+        imports: [typeorm_1.TypeOrmModule.forFeature([order_entity_1.Order, order_test_entity_1.OrderTest, patient_entity_1.Patient, lab_entity_1.Lab, user_entity_1.User, audit_log_entity_1.AuditLog])],
         controllers: [reports_controller_1.ReportsController, public_reports_controller_1.PublicReportsController],
         providers: [reports_service_1.ReportsService],
         exports: [reports_service_1.ReportsService],

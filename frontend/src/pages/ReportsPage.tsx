@@ -23,14 +23,13 @@ import {
   message,
 } from 'antd';
 import {
-  DownloadOutlined,
+  CheckOutlined,
   EditOutlined,
   FilePdfOutlined,
   MessageOutlined,
   MoreOutlined,
   PrinterOutlined,
   SearchOutlined,
-  SendOutlined,
   UserOutlined,
   WhatsAppOutlined,
 } from '@ant-design/icons';
@@ -39,12 +38,15 @@ import {
   downloadOrderReceiptPDF,
   downloadTestResultsPDF,
   enterResult,
+  getReportActionFlags,
   getLabSettings,
   getOrder,
   getWorklistStats,
-  logReportDelivery,
+  logReportAction,
   searchOrdersHistory,
   updateOrderPayment,
+  type ReportActionFlagsDto,
+  type ReportActionKind,
   type OrderHistoryItemDto,
   type OrderResultStatus,
   type OrderDto,
@@ -65,9 +67,16 @@ const { RangePicker } = DatePicker;
 const { Title, Text } = Typography;
 const { useBreakpoint } = Grid;
 
-type DeliveryChannel = 'WHATSAPP' | 'VIBER';
 type EditResultMode = 'SINGLE' | 'PANEL';
 type ReportStatusFilter = 'ALL' | 'PENDING' | 'COMPLETED' | 'VERIFIED' | 'REJECTED';
+type ReportActionFlagField = 'pdf' | 'print' | 'whatsapp' | 'viber';
+
+const ACTION_FLAG_FIELD_MAP: Record<ReportActionKind, ReportActionFlagField> = {
+  PDF: 'pdf',
+  PRINT: 'print',
+  WHATSAPP: 'whatsapp',
+  VIBER: 'viber',
+};
 
 type EditResultContext = {
   editMode: EditResultMode;
@@ -322,7 +331,9 @@ export function ReportsPage() {
   const [orderDetailsLoadingIds, setOrderDetailsLoadingIds] = useState<string[]>([]);
   const [orderDetailsErrors, setOrderDetailsErrors] = useState<Record<string, string>>({});
   const [worklistStats, setWorklistStats] = useState<WorklistStats | null>(null);
-  const [selectedOrderIds, setSelectedOrderIds] = useState<string[]>([]);
+  const [actionFlagsByOrderId, setActionFlagsByOrderId] = useState<
+    Record<string, ReportActionFlagsDto>
+  >({});
   const [expandedOrderIds, setExpandedOrderIds] = useState<string[]>([]);
   const [dateRange, setDateRange] = useState<[dayjs.Dayjs, dayjs.Dayjs]>([
     dayjs().startOf('day'),
@@ -345,11 +356,6 @@ export function ReportsPage() {
   const [editResultForm] = Form.useForm<any>();
   const compactCellStyle = { paddingTop: 6, paddingBottom: 6, fontSize: 12 };
 
-  const selectedOrders = useMemo(
-    () => orders.filter((order) => selectedOrderIds.includes(order.id)),
-    [orders, selectedOrderIds],
-  );
-
   const currentUserRole = useMemo(() => {
     try {
       const raw = localStorage.getItem('user');
@@ -368,6 +374,50 @@ export function ReportsPage() {
     const availability = getResultAvailability(order);
     return availability.ready && order.paymentStatus === 'paid';
   };
+
+  const markActionFlag = useCallback((orderId: string, action: ReportActionKind) => {
+    const field = ACTION_FLAG_FIELD_MAP[action];
+    setActionFlagsByOrderId((prev) => {
+      const current = prev[orderId] ?? {
+        pdf: false,
+        print: false,
+        whatsapp: false,
+        viber: false,
+      };
+      return {
+        ...prev,
+        [orderId]: {
+          ...current,
+          [field]: true,
+        },
+      };
+    });
+  }, []);
+
+  const refreshActionFlags = useCallback(async (orderIds: string[]) => {
+    if (orderIds.length === 0) {
+      setActionFlagsByOrderId({});
+      return;
+    }
+    try {
+      const flags = await getReportActionFlags(orderIds);
+      setActionFlagsByOrderId(flags);
+    } catch {
+      setActionFlagsByOrderId({});
+    }
+  }, []);
+
+  const trackReportAction = useCallback(
+    async (orderId: string, action: ReportActionKind) => {
+      try {
+        await logReportAction(orderId, action);
+        markActionFlag(orderId, action);
+      } catch (error) {
+        console.error('Failed to log report action', error);
+      }
+    },
+    [markActionFlag],
+  );
 
   const getOrderSummaryById = useCallback(
     (orderId: string): OrderHistoryItemDto | null =>
@@ -441,18 +491,20 @@ export function ReportsPage() {
         getWorklistStats().catch(() => null),
       ]);
 
-      setOrders(ordersResult?.items || []);
+      const nextOrders = ordersResult?.items || [];
+      setOrders(nextOrders);
       setOrdersTotal(Number(ordersResult?.total ?? 0));
       setOrdersPage(Number(ordersResult?.page ?? targetPage));
       if (statsResult) {
         setWorklistStats(statsResult);
       }
-      setSelectedOrderIds([]);
+      await refreshActionFlags(nextOrders.map((order) => order.id));
     } catch (error) {
       console.error('Failed to load orders:', error);
       message.error('Failed to load orders');
       setOrders([]);
       setOrdersTotal(0);
+      setActionFlagsByOrderId({});
     } finally {
       setLoading(false);
     }
@@ -515,6 +567,7 @@ export function ReportsPage() {
       const blob = await downloadTestResultsPDF(orderId);
       triggerPdfDownload(blob, `results-${orderId.substring(0, 8)}.pdf`);
       message.success('Results report downloaded');
+      await trackReportAction(orderId, 'PDF');
     } catch (error: unknown) {
       const is403 =
         error &&
@@ -562,6 +615,7 @@ export function ReportsPage() {
                 printerName,
               });
               message.success(`Report sent to ${printerName}`);
+              await trackReportAction(orderId, 'PRINT');
               return;
             } catch (error) {
               message.warning(`${getDirectPrintErrorMessage(error)} Falling back to browser print.`);
@@ -594,6 +648,7 @@ export function ReportsPage() {
         }
       };
       document.body.appendChild(iframe);
+      await trackReportAction(orderId, 'PRINT');
     } catch (error: unknown) {
       const is403 =
         error &&
@@ -675,14 +730,6 @@ export function ReportsPage() {
     }
   };
 
-  const logDelivery = async (orderId: string, channel: DeliveryChannel) => {
-    try {
-      await logReportDelivery(orderId, channel);
-    } catch (error) {
-      console.error('Failed to log report delivery', error);
-    }
-  };
-
   const handleSendWhatsApp = async (order: OrderHistoryItemDto) => {
     if (!canReleaseResults(order)) {
       setPaymentModalOrder(order);
@@ -699,7 +746,7 @@ export function ReportsPage() {
 
     const cleanedPhone = cleanPhoneNumber(phone);
     const messageText = buildResultsMessage(order);
-    await logDelivery(order.id, 'WHATSAPP');
+    await trackReportAction(order.id, 'WHATSAPP');
 
     const url = `https://wa.me/${cleanedPhone}?text=${encodeURIComponent(messageText)}`;
     window.open(url, '_blank');
@@ -721,82 +768,10 @@ export function ReportsPage() {
 
     const cleanedPhone = cleanPhoneNumber(phone);
     const messageText = buildResultsMessage(order);
-    await logDelivery(order.id, 'VIBER');
+    await trackReportAction(order.id, 'VIBER');
 
     const url = `viber://chat?number=${encodeURIComponent(cleanedPhone)}&text=${encodeURIComponent(messageText)}`;
     window.open(url, '_blank');
-  };
-
-  const handleBulkDownload = async () => {
-    if (selectedOrders.length === 0) {
-      message.info('Select at least one order');
-      return;
-    }
-
-    const paidOrders = selectedOrders.filter((order) => order.paymentStatus === 'paid');
-    const unpaidCount = selectedOrders.length - paidOrders.length;
-
-    if (paidOrders.length === 0) {
-      message.warning('Selected orders are unpaid. Mark as paid to download results.');
-      return;
-    }
-
-    setDownloading('bulk-download');
-    let success = 0;
-    let failed = 0;
-
-    for (const order of paidOrders) {
-      try {
-        const blob = await downloadTestResultsPDF(order.id);
-        triggerPdfDownload(blob, `results-${(order.orderNumber || order.id).substring(0, 8)}.pdf`);
-        success += 1;
-      } catch {
-        failed += 1;
-      }
-    }
-
-    setDownloading(null);
-    message.success(
-      `Downloaded ${success} report(s)${failed ? `, failed ${failed}` : ''}${unpaidCount ? ` (${unpaidCount} unpaid skipped)` : ''}`,
-    );
-  };
-
-  const handleBulkSend = async (channel: DeliveryChannel) => {
-    if (selectedOrders.length === 0) {
-      message.info('Select at least one order');
-      return;
-    }
-
-    const paidWithPhone = selectedOrders.filter(
-      (order) => order.paymentStatus === 'paid' && !!order.patient?.phone,
-    );
-    const unpaidCount = selectedOrders.filter((order) => order.paymentStatus !== 'paid').length;
-
-    if (paidWithPhone.length === 0) {
-      message.warning(
-        unpaidCount
-          ? 'Selected orders are unpaid or have no phone. Mark as paid to send.'
-          : 'Selected orders have no phone number.',
-      );
-      return;
-    }
-
-    setDownloading(`bulk-${channel.toLowerCase()}`);
-    let sent = 0;
-
-    for (const order of paidWithPhone) {
-      if (channel === 'WHATSAPP') {
-        await handleSendWhatsApp(order);
-      } else {
-        await handleSendViber(order);
-      }
-      sent += 1;
-    }
-
-    setDownloading(null);
-    message.success(
-      `Prepared ${sent} ${channel} message(s)${unpaidCount ? ` (${unpaidCount} unpaid skipped)` : ''}`,
-    );
   };
 
   const openEditResultModal = (order: OrderDto, orderTest: OrderTestDto) => {
@@ -1222,32 +1197,44 @@ export function ReportsPage() {
     const paid = record.paymentStatus === 'paid';
     const notReadyTooltip = reportReady ? null : 'Not all tests verified';
     const paymentTooltip = !paid ? 'Payment required to release results' : null;
+    const flags = actionFlagsByOrderId[record.id];
+    const pdfDone = Boolean(flags?.pdf);
+    const printDone = Boolean(flags?.print);
+    const whatsappDone = Boolean(flags?.whatsapp);
+    const viberDone = Boolean(flags?.viber);
+
+    const withTick = (label: string, done: boolean, color?: string) => (
+      <Space size={4}>
+        <span>{label}</span>
+        {done ? <CheckOutlined style={{ color: color ?? '#52c41a', fontSize: 11 }} /> : null}
+      </Space>
+    );
 
     const menuItems = [
       {
         key: 'results',
-        label: 'Download Results',
+        label: withTick('PDF', pdfDone),
         icon: <FilePdfOutlined />,
         disabled: !reportReady,
         onClick: () => handleDownloadResults(record.id, record),
       },
       {
         key: 'print',
-        label: 'Print',
+        label: withTick('Print', printDone),
         icon: <PrinterOutlined />,
         disabled: !reportReady,
         onClick: () => handlePrintResults(record.id, record),
       },
       {
         key: 'wa',
-        label: 'WhatsApp',
+        label: withTick('WhatsApp', whatsappDone, '#25D366'),
         icon: <WhatsAppOutlined />,
         disabled: !hasPhone || !reportReady,
         onClick: () => handleSendWhatsApp(record),
       },
       {
         key: 'viber',
-        label: 'Viber',
+        label: withTick('Viber', viberDone, '#7360F2'),
         icon: <MessageOutlined />,
         disabled: !hasPhone || !reportReady,
         onClick: () => handleSendViber(record),
@@ -1280,7 +1267,7 @@ export function ReportsPage() {
             loading={downloading === `results-${record.id}`}
             onClick={() => handleDownloadResults(record.id, record)}
           >
-            Results
+            {withTick('PDF', pdfDone)}
           </Button>
         </Tooltip>
         <Tooltip title={!reportReady ? notReadyTooltip : paymentTooltip || 'Print results'}>
@@ -1292,7 +1279,7 @@ export function ReportsPage() {
             loading={downloading === `print-${record.id}`}
             onClick={() => handlePrintResults(record.id, record)}
           >
-            Print
+            {withTick('Print', printDone)}
           </Button>
         </Tooltip>
         <Tooltip
@@ -1306,7 +1293,7 @@ export function ReportsPage() {
             onClick={() => handleSendWhatsApp(record)}
             style={{ color: hasPhone ? '#25D366' : undefined }}
           >
-            WhatsApp
+            {withTick('WhatsApp', whatsappDone, '#25D366')}
           </Button>
         </Tooltip>
         <Tooltip
@@ -1320,7 +1307,7 @@ export function ReportsPage() {
             onClick={() => handleSendViber(record)}
             style={{ color: hasPhone ? '#7360F2' : undefined }}
           >
-            Viber
+            {withTick('Viber', viberDone, '#7360F2')}
           </Button>
         </Tooltip>
       </Space>
@@ -2005,33 +1992,6 @@ export function ReportsPage() {
             </Button>
           </Space>
 
-          <Space wrap>
-            <Button
-              icon={<DownloadOutlined />}
-              onClick={handleBulkDownload}
-              loading={downloading === 'bulk-download'}
-              disabled={selectedOrderIds.length === 0}
-            >
-              Download Selected
-            </Button>
-            <Button
-              icon={<SendOutlined />}
-              onClick={() => handleBulkSend('WHATSAPP')}
-              loading={downloading === 'bulk-whatsapp'}
-              disabled={selectedOrderIds.length === 0}
-            >
-              Send WhatsApp
-            </Button>
-            <Button
-              icon={<SendOutlined />}
-              onClick={() => handleBulkSend('VIBER')}
-              loading={downloading === 'bulk-viber'}
-              disabled={selectedOrderIds.length === 0}
-            >
-              Send Viber
-            </Button>
-          </Space>
-
           {loading ? (
             <div style={{ textAlign: 'center', padding: 40 }}>
               <Spin size="large" />
@@ -2046,10 +2006,6 @@ export function ReportsPage() {
               rowKey="id"
               showHeader
               rowClassName={(record) => (expandedOrderIds.includes(record.id) ? 'reports-order-row-expanded' : '')}
-              rowSelection={{
-                selectedRowKeys: selectedOrderIds,
-                onChange: (keys) => setSelectedOrderIds(keys as string[]),
-              }}
               expandable={{
                 expandedRowRender: (record) => renderExpandedOrder(record),
                 rowExpandable: (record) => Number(record.testsCount ?? 0) > 0,
