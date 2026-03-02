@@ -4,6 +4,8 @@
 
 - Dockploy backend Dockerfile switch for fast Reports PDF/Print:
   - `DOCKPLOY_BACKEND_DOCKERFILE_SWITCH.md`
+- Dockploy frontend Dockerfile path fix:
+  - `DOCKPLOY_FRONTEND_DOCKERFILE_FIX.md`
 
 ## Quick start (Windows)
 

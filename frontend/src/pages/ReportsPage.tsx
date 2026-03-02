@@ -66,11 +66,13 @@ import {
 const { RangePicker } = DatePicker;
 const { Title, Text } = Typography;
 const { useBreakpoint } = Grid;
-const REPORT_PDF_CACHE_TTL_MS = 2 * 60 * 1000;
+const REPORT_PDF_CACHE_TTL_MS = 30 * 60 * 1000;
+const REPORT_PDF_CACHE_MAX_ENTRIES = 40;
 
 type EditResultMode = 'SINGLE' | 'PANEL';
 type ReportStatusFilter = 'ALL' | 'PENDING' | 'COMPLETED' | 'VERIFIED' | 'REJECTED';
 type ReportActionFlagField = 'pdf' | 'print' | 'whatsapp' | 'viber';
+type ResultsPdfCacheEntry = { blob: Blob; cachedAt: number; lastAccessedAt: number };
 
 const ACTION_FLAG_FIELD_MAP: Record<ReportActionKind, ReportActionFlagField> = {
   PDF: 'pdf',
@@ -349,7 +351,8 @@ export function ReportsPage() {
   const [paymentModalOrder, setPaymentModalOrder] = useState<OrderHistoryItemDto | null>(null);
   const [paymentModalPendingAction, setPaymentModalPendingAction] = useState<(() => Promise<void> | void) | null>(null);
   const [markingPaid, setMarkingPaid] = useState(false);
-  const resultsPdfCacheRef = useRef<Record<string, { blob: Blob; cachedAt: number }>>({});
+  const resultsPdfCacheRef = useRef<Record<string, ResultsPdfCacheEntry>>({});
+  const resultsPdfInFlightRef = useRef<Record<string, Promise<Blob>>>({});
 
   const [editResultModalOpen, setEditResultModalOpen] = useState(false);
   const [editResultContext, setEditResultContext] = useState<EditResultContext | null>(null);
@@ -556,15 +559,45 @@ export function ReportsPage() {
   };
 
   const getResultsPdfBlob = useCallback(async (orderId: string): Promise<Blob> => {
-    const cached = resultsPdfCacheRef.current[orderId];
     const now = Date.now();
+    const cached = resultsPdfCacheRef.current[orderId];
     if (cached && now - cached.cachedAt <= REPORT_PDF_CACHE_TTL_MS) {
+      cached.lastAccessedAt = now;
       return cached.blob;
     }
 
-    const blob = await downloadTestResultsPDF(orderId);
-    resultsPdfCacheRef.current[orderId] = { blob, cachedAt: now };
-    return blob;
+    const inFlight = resultsPdfInFlightRef.current[orderId];
+    if (inFlight) {
+      return inFlight;
+    }
+
+    const fetchPromise = downloadTestResultsPDF(orderId)
+      .then((blob) => {
+        const cachedAt = Date.now();
+        resultsPdfCacheRef.current[orderId] = {
+          blob,
+          cachedAt,
+          lastAccessedAt: cachedAt,
+        };
+
+        const cacheEntries = Object.entries(resultsPdfCacheRef.current);
+        if (cacheEntries.length > REPORT_PDF_CACHE_MAX_ENTRIES) {
+          cacheEntries
+            .sort(([, a], [, b]) => a.lastAccessedAt - b.lastAccessedAt)
+            .slice(0, cacheEntries.length - REPORT_PDF_CACHE_MAX_ENTRIES)
+            .forEach(([staleOrderId]) => {
+              delete resultsPdfCacheRef.current[staleOrderId];
+            });
+        }
+
+        return blob;
+      })
+      .finally(() => {
+        delete resultsPdfInFlightRef.current[orderId];
+      });
+
+    resultsPdfInFlightRef.current[orderId] = fetchPromise;
+    return fetchPromise;
   }, []);
 
   const handleDownloadResults = async (
