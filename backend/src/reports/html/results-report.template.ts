@@ -174,6 +174,8 @@ export function buildResultsReportHtml(input: {
   const footerUrlAttr = footerSrc ? `src="${escapeHtml(footerSrc)}"` : '';
   const logoUrlAttr = logoSrc ? `src="${escapeHtml(logoSrc)}"` : '';
   const watermarkUrlAttr = watermarkSrc ? `src="${escapeHtml(watermarkSrc)}"` : '';
+  const hasHeaderBanner = hasCustomBanner && Boolean(bannerUrlAttr);
+  const hasHeaderLogoOnly = !hasHeaderBanner && hasCustomLogo && Boolean(logoUrlAttr);
   const kurdishFontFace = input.kurdishFontBase64
     ? `@font-face { font-family: 'KurdishReportFont'; src: url('${escapeHtml(input.kurdishFontBase64)}') format('truetype'); font-weight: 400; font-style: normal; }`
     : '';
@@ -287,11 +289,11 @@ export function buildResultsReportHtml(input: {
 
   // Reusable header + patient block for every page
   const pageHeaderHtml = `
-    ${hasCustomBanner && bannerUrlAttr
+    ${hasHeaderBanner
       ? `<div class="banner-wrap"><img class="banner-image" ${bannerUrlAttr} alt="Report Banner" /></div>`
-      : hasCustomLogo && logoUrlAttr
+      : hasHeaderLogoOnly
         ? `<div class="logo-only-wrap"><img class="logo" ${logoUrlAttr} alt="Report Logo" /></div>`
-        : ''
+        : `<div class="header-spacer" aria-hidden="true"></div>`
     }
     <div class="patient-info">
       <div class="info-item"><span class="label">Name :</span><span class="name-value ${patientNameIsRtl ? 'rtl-text' : ''}">${escapeHtml(patientName)}</span></div>
@@ -303,7 +305,7 @@ export function buildResultsReportHtml(input: {
   `;
   const pageFooterHtml = footerUrlAttr
     ? `<div class="report-footer"><img class="footer-image" ${footerUrlAttr} alt="Report Footer" /></div>`
-    : '';
+    : `<div class="report-footer report-footer-placeholder" aria-hidden="true"></div>`;
 
   // Panel classification:
   // - panelParents: only top-level PANEL tests
@@ -553,6 +555,12 @@ export function buildResultsReportHtml(input: {
     }
     .header { display: flex; align-items: center; justify-content: space-between; border-bottom: 2px solid #222; padding: 0 var(--content-x) 8px var(--content-x); }
     .logo-only-wrap { display: flex; justify-content: center; align-items: center; margin: 2px 0 8px; }
+    .header-spacer {
+      height: 90px;
+      margin: 0 var(--content-x) 8px var(--content-x);
+      border-bottom: 2px solid #222;
+      box-sizing: border-box;
+    }
     .header-col { flex: 1; font-size: 13px; font-weight: 700; line-height: 1.35; }
     .header-col.ltr { text-align: left; }
     .header-col.rtl {
@@ -608,6 +616,7 @@ export function buildResultsReportHtml(input: {
       bottom: 1mm;
       text-align: center;
     }
+    .report-footer-placeholder { min-height: var(--footer-height); }
     .footer-image { width: 100%; height: var(--footer-height); object-fit: fill; object-position: center; display: block; }
     * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   </style>
