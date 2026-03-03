@@ -37,6 +37,7 @@ import {
   type WorklistOrderSummaryDto,
   type WorklistStats,
 } from '../api/client';
+import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { WorklistStatusDashboard } from '../components/WorklistStatusDashboard';
 import { useFillToViewportBottom } from '../hooks/useFillToViewportBottom';
@@ -273,8 +274,11 @@ function buildInitialFormValues(items: WorklistItem[]): Record<string, unknown> 
 }
 
 export function WorklistPage() {
+  const { user } = useAuth();
   const isDark = useTheme().theme === 'dark';
   const { containerRef, filledMinHeightPx } = useFillToViewportBottom();
+  const canAdminEditVerified =
+    user?.role === 'LAB_ADMIN' || user?.role === 'SUPER_ADMIN';
 
   const [loading, setLoading] = useState(false);
   const [rows, setRows] = useState<WorklistOrderSummaryDto[]>([]);
@@ -294,6 +298,8 @@ export function WorklistPage() {
   const [resultModalOpen, setResultModalOpen] = useState(false);
   const [modalOrder, setModalOrder] = useState<WorklistOrderModalDto | null>(null);
   const [modalLoading, setModalLoading] = useState(false);
+  const [modalAppliedDepartmentId, setModalAppliedDepartmentId] = useState<string | null>(null);
+  const [loadingAllTests, setLoadingAllTests] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [liveFlags, setLiveFlags] = useState<Record<string, ResultFlag | null>>({});
   const [resultForm] = Form.useForm<any>();
@@ -301,9 +307,28 @@ export function WorklistPage() {
   const closeEntryModal = useCallback(() => {
     setResultModalOpen(false);
     setModalOrder(null);
+    setModalAppliedDepartmentId(null);
+    setLoadingAllTests(false);
     setLiveFlags({});
     resultForm.resetFields();
   }, [resultForm]);
+
+  const hydrateModalPayload = useCallback(
+    (payload: WorklistOrderModalDto, appliedDepartmentId: string | null) => {
+      setModalOrder(payload);
+      setModalAppliedDepartmentId(appliedDepartmentId);
+      const sortedItems = sortModalItems(payload.items);
+      resultForm.setFieldsValue(buildInitialFormValues(sortedItems));
+      const initialFlags: Record<string, ResultFlag | null> = {};
+      for (const item of sortedItems) {
+        if (item.testType !== 'PANEL') {
+          initialFlags[item.id] = item.flag ?? null;
+        }
+      }
+      setLiveFlags(initialFlags);
+    },
+    [resultForm],
+  );
 
   const loadRows = useCallback(async () => {
     setLoading(true);
@@ -355,12 +380,35 @@ export function WorklistPage() {
     [modalOrder],
   );
 
+  const isEditableTarget = useCallback(
+    (item: WorklistItem) => {
+      if (item.testType === 'PANEL') return false;
+      if (item.status === 'VERIFIED' && !canAdminEditVerified) return false;
+      return true;
+    },
+    [canAdminEditVerified],
+  );
+
   const editableTargetIds = useMemo(
     () =>
       orderedModalItems
-        .filter((item) => item.testType !== 'PANEL' && item.status !== 'VERIFIED')
+        .filter((item) => isEditableTarget(item))
         .map((item) => item.id),
-    [orderedModalItems],
+    [isEditableTarget, orderedModalItems],
+  );
+
+  const modalDepartment = useMemo(
+    () =>
+      modalAppliedDepartmentId
+        ? departments.find((department) => department.id === modalAppliedDepartmentId) ?? null
+        : null,
+    [departments, modalAppliedDepartmentId],
+  );
+
+  const showLoadAllTestsHint = Boolean(
+    modalAppliedDepartmentId &&
+      modalOrder &&
+      editableTargetIds.length === 0,
   );
 
   const firstPanelIndex = useMemo(
@@ -453,20 +501,12 @@ export function WorklistPage() {
       setEntryLoadingOrderId(order.orderId);
       setModalLoading(true);
       try {
+        const appliedDepartmentId = departmentId || null;
         const payload = await getWorklistOrderTests(order.orderId, {
           mode: 'entry',
-          departmentId: departmentId || undefined,
+          departmentId: appliedDepartmentId ?? undefined,
         });
-        setModalOrder(payload);
-        const initialValues = buildInitialFormValues(sortModalItems(payload.items));
-        resultForm.setFieldsValue(initialValues);
-        const initialFlags: Record<string, ResultFlag | null> = {};
-        for (const item of payload.items) {
-          if (item.testType !== 'PANEL') {
-            initialFlags[item.id] = item.flag ?? null;
-          }
-        }
-        setLiveFlags(initialFlags);
+        hydrateModalPayload(payload, appliedDepartmentId);
         setResultModalOpen(true);
       } catch {
         message.error('Failed to load order tests');
@@ -475,7 +515,7 @@ export function WorklistPage() {
         setEntryLoadingOrderId(null);
       }
     },
-    [departmentId, resultForm],
+    [departmentId, hydrateModalPayload],
   );
 
   const handleVerifyOrder = useCallback(
@@ -501,19 +541,12 @@ export function WorklistPage() {
         );
         await Promise.all([loadRows(), loadStats()]);
         if (modalOrder?.orderId === order.orderId) {
+          const appliedDepartmentId = modalAppliedDepartmentId;
           const refreshed = await getWorklistOrderTests(order.orderId, {
             mode: 'entry',
-            departmentId: departmentId || undefined,
+            departmentId: appliedDepartmentId ?? undefined,
           });
-          setModalOrder(refreshed);
-          resultForm.setFieldsValue(buildInitialFormValues(sortModalItems(refreshed.items)));
-          const refreshedFlags: Record<string, ResultFlag | null> = {};
-          for (const item of refreshed.items) {
-            if (item.testType !== 'PANEL') {
-              refreshedFlags[item.id] = item.flag ?? null;
-            }
-          }
-          setLiveFlags(refreshedFlags);
+          hydrateModalPayload(refreshed, appliedDepartmentId);
         }
       } catch {
         message.error('Failed to verify order tests');
@@ -521,8 +554,24 @@ export function WorklistPage() {
         setVerifyLoadingOrderId(null);
       }
     },
-    [departmentId, loadRows, loadStats, modalOrder?.orderId, resultForm],
+    [hydrateModalPayload, loadRows, loadStats, modalAppliedDepartmentId, modalOrder?.orderId],
   );
+
+  const handleLoadAllOrderTests = useCallback(async () => {
+    if (!modalOrder) return;
+    setLoadingAllTests(true);
+    try {
+      const payload = await getWorklistOrderTests(modalOrder.orderId, {
+        mode: 'entry',
+      });
+      hydrateModalPayload(payload, null);
+      message.success('Loaded all tests for this order');
+    } catch {
+      message.error('Failed to load all tests for this order');
+    } finally {
+      setLoadingAllTests(false);
+    }
+  }, [hydrateModalPayload, modalOrder]);
 
   const handleSearch = () => {
     setPage(1);
@@ -531,16 +580,54 @@ export function WorklistPage() {
 
   const handleSubmitResult = async (values: Record<string, any>) => {
     if (!modalOrder) return;
-    const targets = orderedModalItems.filter(
-      (item) => item.testType !== 'PANEL' && item.status !== 'VERIFIED',
-    );
+    const targets = orderedModalItems.filter((item) => isEditableTarget(item));
     if (targets.length === 0) {
-      message.info('No editable tests in this order');
+      const hasVerifiedTargets = orderedModalItems.some(
+        (item) => item.testType !== 'PANEL' && item.status === 'VERIFIED',
+      );
+      if (showLoadAllTestsHint) {
+        message.info(
+          'No editable tests in current department view. Use "Load all tests for this order".',
+        );
+      } else if (!canAdminEditVerified && hasVerifiedTargets) {
+        message.info('All tests are verified and read-only for your role.');
+      } else {
+        message.info('No editable tests in this order');
+      }
       return;
+    }
+
+    const verifiedOverrideCount = targets.filter(
+      (target) => canAdminEditVerified && target.status === 'VERIFIED',
+    ).length;
+
+    if (verifiedOverrideCount > 0) {
+      const proceed = await new Promise<boolean>((resolve) => {
+        Modal.confirm({
+          title: 'Edit verified results?',
+          content: 'You are editing verified result(s). Continue?',
+          okText: 'Continue',
+          cancelText: 'Cancel',
+          onOk: () => resolve(true),
+          onCancel: () => resolve(false),
+        });
+      });
+      if (!proceed) {
+        return;
+      }
     }
 
     setSubmitting(true);
     try {
+      if (import.meta.env.DEV) {
+        console.debug('[worklist.submit]', {
+          orderId: modalOrder.orderId,
+          totalTargets: targets.length,
+          verifiedOverrideCount,
+          departmentFilter: modalAppliedDepartmentId,
+        });
+      }
+
       const invalidNumericTargets = targets
         .filter((target) => target.resultEntryType === 'NUMERIC')
         .map((target) => ({
@@ -601,15 +688,23 @@ export function WorklistPage() {
             resultValue = null;
           }
 
+          const isVerifiedOverride =
+            canAdminEditVerified && target.status === 'VERIFIED';
+
           await enterResult(target.id, {
             resultValue,
             resultText,
             resultParameters: hasResultParameters ? resultParameters : null,
+            ...(isVerifiedOverride ? { forceEditVerified: true } : {}),
           });
         }),
       );
 
-      message.success('Results saved');
+      message.success(
+        verifiedOverrideCount > 0
+          ? 'Verified results updated by admin'
+          : 'Results saved',
+      );
       closeEntryModal();
       await Promise.all([loadRows(), loadStats()]);
     } catch {
@@ -869,6 +964,11 @@ export function WorklistPage() {
                 {modalOrder.orderNumber}
               </Tag>
             )}
+            {modalDepartment && (
+              <Tag color="geekblue" style={{ margin: 0 }}>
+                Dept: {modalDepartment.code}
+              </Tag>
+            )}
           </Space>
         }
         open={resultModalOpen}
@@ -922,6 +1022,33 @@ export function WorklistPage() {
                 </Col>
               </Row>
             </div>
+
+            {showLoadAllTestsHint && (
+              <div
+                style={{
+                  marginBottom: 6,
+                  padding: '6px 8px',
+                  borderRadius: 6,
+                  border: '1px solid #ffe58f',
+                  backgroundColor: '#fffbe6',
+                }}
+              >
+                <Space size={8} wrap>
+                  <Text style={{ fontSize: 12, color: '#ad6800' }}>
+                    No editable tests in this department view.
+                  </Text>
+                  <Button
+                    size="small"
+                    loading={loadingAllTests}
+                    onClick={() => {
+                      void handleLoadAllOrderTests();
+                    }}
+                  >
+                    Load all tests for this order
+                  </Button>
+                </Space>
+              </div>
+            )}
 
             <div
               style={{
@@ -983,7 +1110,9 @@ export function WorklistPage() {
                 const isPanelRoot =
                   target.testType === 'PANEL' && !target.parentOrderTestId;
                 const isPanelChild = Boolean(target.parentOrderTestId);
-                const isReadOnly = target.status === 'VERIFIED' || isPanelRoot;
+                const isReadOnly =
+                  isPanelRoot ||
+                  (target.status === 'VERIFIED' && !canAdminEditVerified);
                 const parameterDefinitions = target.parameterDefinitions ?? [];
                 const hasParams = parameterDefinitions.length > 0;
                 const displayFlag =
@@ -1035,6 +1164,11 @@ export function WorklistPage() {
                           {target.status === 'REJECTED' ? (
                             <Tag color="error" style={{ margin: 0, fontSize: 10 }}>
                               Rejected
+                            </Tag>
+                          ) : null}
+                          {target.status === 'VERIFIED' && canAdminEditVerified ? (
+                            <Tag color="gold" style={{ margin: 0, fontSize: 10 }}>
+                              Verified (admin edit)
                             </Tag>
                           ) : null}
                         </Space>
