@@ -158,6 +158,26 @@ function cleanPhoneNumber(phone: string): string {
   return phone.replace(/\D/g, '');
 }
 
+function sanitizeFilenamePart(value: string | null | undefined, fallback: string): string {
+  const cleaned = (value ?? '')
+    .replace(/[<>:"/\\|?*\u0000-\u001F]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/[. ]+$/g, '');
+  return cleaned || fallback;
+}
+
+function buildResultsPdfFilename(
+  order: Pick<OrderHistoryItemDto, 'orderNumber' | 'registeredAt' | 'patient'> | undefined,
+  orderId: string,
+): string {
+  const patientName = sanitizeFilenamePart(order?.patient?.fullName, 'Unknown Patient');
+  const orderDate = dayjs(order?.registeredAt);
+  const datePart = orderDate.isValid() ? orderDate.format('YYYY-MM-DD') : 'unknown-date';
+  const orderNumber = sanitizeFilenamePart(order?.orderNumber, orderId.substring(0, 8));
+  return `${patientName} - ${datePart} - ${orderNumber}.pdf`;
+}
+
 function formatDisplayDecimal(value: string | number | null | undefined): string {
   if (value === null || value === undefined) return '-';
   const raw = String(value).trim();
@@ -674,7 +694,7 @@ export function ReportsPage() {
     setDownloading(`results-${orderId}`);
     try {
       const blob = await getResultsPdfBlob(orderId);
-      triggerPdfDownload(blob, `results-${orderId.substring(0, 8)}.pdf`);
+      triggerPdfDownload(blob, buildResultsPdfFilename(summaryOrder, orderId));
       message.success('Results report downloaded');
       void trackReportAction(orderId, 'PDF');
     } catch (error: unknown) {

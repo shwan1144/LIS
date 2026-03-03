@@ -40,6 +40,9 @@ function createOrderTest(
     resultValue?: number | null;
     resultParameters?: Record<string, string> | null;
     parameterDefinitions?: Array<{ code: string; label: string; normalOptions?: string[] }>;
+    category?: string | null;
+    departmentName?: string | null;
+    sortOrder?: number;
   },
 ): OrderTest {
   return {
@@ -56,11 +59,12 @@ function createOrderTest(
       type: options.type ?? TestType.SINGLE,
       unit: options.unit ?? null,
       parameterDefinitions: options.parameterDefinitions ?? [],
+      category: options.category ?? null,
       normalText: null,
       normalMin: null,
       normalMax: null,
-      sortOrder: 0,
-      department: { name: 'Chemistry' },
+      sortOrder: options.sortOrder ?? 0,
+      department: { name: options.departmentName ?? 'Chemistry' },
     } as unknown as OrderTest['test'],
   } as unknown as OrderTest;
 }
@@ -182,7 +186,8 @@ describe('buildResultsReportHtml panel page isolation', () => {
 
     const firstPageIndex = html.indexOf('<div class="page">');
     const firstPanelIndex = html.indexOf('<div class="page panel-page"');
-    expect(firstPageIndex).toBe(firstPanelIndex);
+    expect(firstPageIndex).toBe(-1);
+    expect(firstPanelIndex).toBeGreaterThanOrEqual(0);
     expect(countMatches(html, 'class="page panel-page"')).toBe(1);
   });
 
@@ -217,6 +222,93 @@ describe('buildResultsReportHtml panel page isolation', () => {
     expect(countMatches(html, '<strong>Comments:</strong>')).toBe(1);
   });
 
+  it('renders regular results with one table header and department tbody blocks', () => {
+    const order = createOrder();
+    const hormoneTsh = createOrderTest('regular-tsh', {
+      name: 'TSH',
+      code: 'TSH',
+      abbreviation: 'TSH',
+      resultValue: 2.2,
+      unit: 'uIU/mL',
+      departmentName: 'Hormone',
+      category: 'Thyroid',
+      sortOrder: 1,
+    });
+    const hormoneT3 = createOrderTest('regular-t3', {
+      name: 'T3',
+      code: 'T3',
+      abbreviation: 'T3',
+      resultValue: 1.1,
+      unit: 'ng/mL',
+      departmentName: 'Hormone',
+      category: 'Thyroid',
+      sortOrder: 2,
+    });
+    const chemistryUrea = createOrderTest('regular-urea', {
+      name: 'Urea',
+      code: 'UREA',
+      abbreviation: 'UREA',
+      resultValue: 25,
+      unit: 'mg/dL',
+      departmentName: 'Chemistry',
+      category: 'Renal',
+      sortOrder: 3,
+    });
+
+    const html = buildResultsReportHtml({
+      order,
+      orderTests: [hormoneTsh, hormoneT3, chemistryUrea],
+      reportableCount: 3,
+      verifiedCount: 3,
+      verifiers: ['Verifier'],
+      latestVerifiedAt: new Date('2026-02-26T11:00:00.000Z'),
+      comments: [],
+    });
+
+    const regularHeaderRow =
+      '<thead><tr><th style="width:28%;">Test</th><th style="width:14%;">Result</th><th style="width:14%;">Unit</th><th style="width:14%;">Status</th><th style="width:30%;">Reference Value</th></tr></thead>';
+
+    expect(countMatches(html, 'class="regular-results-table"')).toBe(1);
+    expect(countMatches(html, regularHeaderRow)).toBe(1);
+    expect(countMatches(html, 'class="regular-dept-block"')).toBe(2);
+    expect(html).toContain('class="dept-row"');
+    expect(html).toContain('class="cat-row"');
+  });
+
+  it('does not duplicate the regular header row in the regular page markup chunk', () => {
+    const order = createOrder();
+    const regular = createOrderTest('regular-glu', {
+      name: 'Glucose',
+      code: 'GLU',
+      resultValue: 100,
+      unit: 'mg/dL',
+      departmentName: 'Chemistry',
+      category: 'Main',
+    });
+    const panelParent = createOrderTest('panel-1', {
+      name: 'CBC Panel',
+      code: 'CBC',
+      type: TestType.PANEL,
+    });
+
+    const html = buildResultsReportHtml({
+      order,
+      orderTests: [regular, panelParent],
+      reportableCount: 2,
+      verifiedCount: 2,
+      verifiers: ['Verifier'],
+      latestVerifiedAt: new Date('2026-02-26T11:00:00.000Z'),
+      comments: [],
+    });
+
+    const regularHeaderRow =
+      '<thead><tr><th style="width:28%;">Test</th><th style="width:14%;">Result</th><th style="width:14%;">Unit</th><th style="width:14%;">Status</th><th style="width:30%;">Reference Value</th></tr></thead>';
+    const firstPanelStart = html.indexOf('<div class="page panel-page"');
+    const regularChunk = firstPanelStart >= 0 ? html.slice(0, firstPanelStart) : html;
+
+    expect(countMatches(regularChunk, regularHeaderRow)).toBe(1);
+  });
+
   it('contains panel overflow-safe page-break CSS rules', () => {
     const html = buildResultsReportHtml({
       order: createOrder(),
@@ -230,5 +322,9 @@ describe('buildResultsReportHtml panel page isolation', () => {
 
     expect(html).toContain('.panel-page table { page-break-inside: auto; break-inside: auto; }');
     expect(html).toContain('.panel-page tr { page-break-inside: avoid; break-inside: avoid; }');
+    expect(html).toContain('.regular-results-table thead {');
+    expect(html).toContain('display: table-header-group;');
+    expect(html).toContain('.regular-results-table tbody.regular-dept-block {');
+    expect(html).toContain('page-break-inside: avoid;');
   });
 });
