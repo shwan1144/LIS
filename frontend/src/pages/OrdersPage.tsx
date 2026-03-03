@@ -1688,7 +1688,6 @@ export function OrdersPage() {
                             {orderTests.map((ot) => (
                               <Tag key={ot.testId} style={{ margin: 0 }}>
                                 {ot.testCode ?? '-'}
-                                {ot.price != null ? ` • ${ot.price.toLocaleString()} IQD` : ''}
                               </Tag>
                             ))}
                           </Space>
