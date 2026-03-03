@@ -79,6 +79,8 @@ export declare class ReportsService implements OnModuleInit, OnModuleDestroy {
     private applyFallbackPageBranding;
     private getReportableOrderTests;
     private classifyOrderTestsForReport;
+    private isOrderTestResultEntered;
+    private assertAllResultsEnteredForReport;
     private loadOrderResultsSnapshot;
     getPublicResultStatus(orderId: string): Promise<PublicResultStatus>;
     generatePublicTestResultsPDF(orderId: string): Promise<Buffer>;

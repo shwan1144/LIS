@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, ForbiddenException, Logger, type OnModuleDestroy, type OnModuleInit } from '@nestjs/common';
+import { Injectable, NotFoundException, ForbiddenException, BadRequestException, Logger, type OnModuleDestroy, type OnModuleInit } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In } from 'typeorm';
 import { readFileSync, existsSync } from 'fs';
@@ -102,6 +102,13 @@ function formatResultValue(ot: OrderTest): string {
   if (ot.resultText?.trim()) return ot.resultText.trim();
   if (ot.resultValue !== null && ot.resultValue !== undefined) return String(ot.resultValue);
   return 'Pending';
+}
+
+function hasNonEmptyResultParameters(params: Record<string, string> | null | undefined): boolean {
+  if (!params || typeof params !== 'object') {
+    return false;
+  }
+  return Object.values(params).some((value) => String(value ?? '').trim() !== '');
 }
 
 function formatResultParameters(params: Record<string, string> | null): string[] {
@@ -654,6 +661,66 @@ export class ReportsService implements OnModuleInit, OnModuleDestroy {
     return { regularTests, panelParents, panelChildrenByParent };
   }
 
+  private isOrderTestResultEntered(
+    orderTest: OrderTest,
+    childOrderTestParentIds: Set<string>,
+  ): boolean {
+    const test = orderTest.test as Test | undefined;
+    if (!test) return false;
+
+    const hasDirectResult =
+      (orderTest.resultText?.trim()?.length ?? 0) > 0 ||
+      (orderTest.resultValue !== null && orderTest.resultValue !== undefined);
+
+    // Panel parent rows with child tests represent a container; children carry actual results.
+    if (test.type === TestType.PANEL && !orderTest.parentOrderTestId) {
+      if (childOrderTestParentIds.has(orderTest.id)) {
+        return true;
+      }
+      // Parameter-only panels store answers in resultParameters.
+      if (hasNonEmptyResultParameters(orderTest.resultParameters as Record<string, string> | null)) {
+        return true;
+      }
+      return hasDirectResult;
+    }
+
+    return hasDirectResult;
+  }
+
+  private assertAllResultsEnteredForReport(orderTests: OrderTest[]): void {
+    if (orderTests.length === 0) {
+      throw new BadRequestException('No reportable tests found for this order.');
+    }
+
+    const childOrderTestParentIds = new Set(
+      orderTests
+        .filter((orderTest) => Boolean(orderTest.parentOrderTestId))
+        .map((orderTest) => orderTest.parentOrderTestId as string),
+    );
+
+    const pendingTests = orderTests.filter(
+      (orderTest) => !this.isOrderTestResultEntered(orderTest, childOrderTestParentIds),
+    );
+
+    if (pendingTests.length === 0) {
+      return;
+    }
+
+    const labels = pendingTests
+      .slice(0, 5)
+      .map((orderTest) => {
+        const test = orderTest.test as Test | undefined;
+        return test?.code || test?.name || orderTest.id;
+      })
+      .join(', ');
+    const extraCount = pendingTests.length - Math.min(pendingTests.length, 5);
+    const suffix = extraCount > 0 ? ` (+${extraCount} more)` : '';
+
+    throw new BadRequestException(
+      `Cannot print/download results while some tests are pending: ${labels}${suffix}. Enter all results first.`,
+    );
+  }
+
   private async loadOrderResultsSnapshot(
     orderId: string,
     labId?: string,
@@ -948,6 +1015,8 @@ export class ReportsService implements OnModuleInit, OnModuleDestroy {
       await this.loadOrderResultsSnapshot(orderId, labId);
     const snapshotMs = Date.now() - snapshotStartMs;
     const bypassPaymentCheck = !!options?.bypassPaymentCheck;
+
+    this.assertAllResultsEnteredForReport(reportableOrderTests);
 
     if (!bypassPaymentCheck && order.paymentStatus !== 'paid') {
       throw new ForbiddenException(

@@ -976,19 +976,22 @@ let OrdersService = OrdersService_1 = class OrdersService {
     async applyOrderQueryFilters(qb, labId, params) {
         if (params.status) {
             if (params.status === order_entity_1.OrderStatus.COMPLETED) {
-                qb.andWhere(`("order"."status" = :status OR EXISTS (
+                qb.andWhere(`(EXISTS (
             SELECT 1
             FROM samples s
             INNER JOIN order_tests ot ON ot."sampleId" = s.id
             WHERE s."orderId" = "order"."id"
-              AND ot.status IN (:...completedStatuses)
+              AND ot."parentOrderTestId" IS NULL
+          )
+          AND NOT EXISTS (
+            SELECT 1
+            FROM samples s
+            INNER JOIN order_tests ot ON ot."sampleId" = s.id
+            WHERE s."orderId" = "order"."id"
+              AND ot."parentOrderTestId" IS NULL
+              AND ot.status IN (:...pendingStatuses)
           ))`, {
-                    status: params.status,
-                    completedStatuses: [
-                        order_test_entity_1.OrderTestStatus.COMPLETED,
-                        order_test_entity_1.OrderTestStatus.VERIFIED,
-                        order_test_entity_1.OrderTestStatus.REJECTED,
-                    ],
+                    pendingStatuses: [order_test_entity_1.OrderTestStatus.PENDING, order_test_entity_1.OrderTestStatus.IN_PROGRESS],
                 });
             }
             else {
@@ -1098,23 +1101,6 @@ let OrdersService = OrdersService_1 = class OrdersService {
             return;
         }
         const orderIds = items.map((order) => order.id);
-        const progressed = await this.orderRepo.manager
-            .createQueryBuilder()
-            .select('s."orderId"', 'orderId')
-            .addSelect('COUNT(*)', 'cnt')
-            .from('order_tests', 'ot')
-            .innerJoin('samples', 's', 's.id = ot."sampleId"')
-            .where('s."orderId" IN (:...orderIds)', { orderIds })
-            .andWhere('ot.status IN (:...statuses)', {
-            statuses: [
-                order_test_entity_1.OrderTestStatus.COMPLETED,
-                order_test_entity_1.OrderTestStatus.VERIFIED,
-                order_test_entity_1.OrderTestStatus.REJECTED,
-            ],
-        })
-            .groupBy('s."orderId"')
-            .getRawMany();
-        const progressedSet = new Set(progressed.map((row) => row.orderId));
         const testCounts = await this.orderRepo.manager
             .createQueryBuilder()
             .select('s."orderId"', 'orderId')
@@ -1171,8 +1157,13 @@ let OrdersService = OrdersService_1 = class OrdersService {
                 verifiedTestsCount: counts.verifiedTests,
                 rejectedTestsCount: counts.rejectedTests,
             });
-            if (order.status !== order_entity_1.OrderStatus.CANCELLED && progressedSet.has(order.id)) {
+            if (order.status !== order_entity_1.OrderStatus.CANCELLED &&
+                counts.totalTests > 0 &&
+                counts.pendingTests === 0) {
                 order.status = order_entity_1.OrderStatus.COMPLETED;
+            }
+            else if (order.status === order_entity_1.OrderStatus.COMPLETED && counts.pendingTests > 0) {
+                order.status = order_entity_1.OrderStatus.IN_PROGRESS;
             }
         }
     }

@@ -67,6 +67,12 @@ function formatResultValue(ot) {
         return String(ot.resultValue);
     return 'Pending';
 }
+function hasNonEmptyResultParameters(params) {
+    if (!params || typeof params !== 'object') {
+        return false;
+    }
+    return Object.values(params).some((value) => String(value ?? '').trim() !== '');
+}
 function formatResultParameters(params) {
     if (!params)
         return [];
@@ -523,6 +529,45 @@ let ReportsService = ReportsService_1 = class ReportsService {
             .sort((a, b) => sortKey(a).localeCompare(sortKey(b)));
         return { regularTests, panelParents, panelChildrenByParent };
     }
+    isOrderTestResultEntered(orderTest, childOrderTestParentIds) {
+        const test = orderTest.test;
+        if (!test)
+            return false;
+        const hasDirectResult = (orderTest.resultText?.trim()?.length ?? 0) > 0 ||
+            (orderTest.resultValue !== null && orderTest.resultValue !== undefined);
+        if (test.type === test_entity_1.TestType.PANEL && !orderTest.parentOrderTestId) {
+            if (childOrderTestParentIds.has(orderTest.id)) {
+                return true;
+            }
+            if (hasNonEmptyResultParameters(orderTest.resultParameters)) {
+                return true;
+            }
+            return hasDirectResult;
+        }
+        return hasDirectResult;
+    }
+    assertAllResultsEnteredForReport(orderTests) {
+        if (orderTests.length === 0) {
+            throw new common_1.BadRequestException('No reportable tests found for this order.');
+        }
+        const childOrderTestParentIds = new Set(orderTests
+            .filter((orderTest) => Boolean(orderTest.parentOrderTestId))
+            .map((orderTest) => orderTest.parentOrderTestId));
+        const pendingTests = orderTests.filter((orderTest) => !this.isOrderTestResultEntered(orderTest, childOrderTestParentIds));
+        if (pendingTests.length === 0) {
+            return;
+        }
+        const labels = pendingTests
+            .slice(0, 5)
+            .map((orderTest) => {
+            const test = orderTest.test;
+            return test?.code || test?.name || orderTest.id;
+        })
+            .join(', ');
+        const extraCount = pendingTests.length - Math.min(pendingTests.length, 5);
+        const suffix = extraCount > 0 ? ` (+${extraCount} more)` : '';
+        throw new common_1.BadRequestException(`Cannot print/download results while some tests are pending: ${labels}${suffix}. Enter all results first.`);
+    }
     async loadOrderResultsSnapshot(orderId, labId) {
         const where = labId ? { id: orderId, labId } : { id: orderId };
         const order = await this.orderRepo.findOne({
@@ -749,6 +794,7 @@ let ReportsService = ReportsService_1 = class ReportsService {
         const { order, reportableOrderTests, verifiedTests, latestVerifiedAt } = await this.loadOrderResultsSnapshot(orderId, labId);
         const snapshotMs = Date.now() - snapshotStartMs;
         const bypassPaymentCheck = !!options?.bypassPaymentCheck;
+        this.assertAllResultsEnteredForReport(reportableOrderTests);
         if (!bypassPaymentCheck && order.paymentStatus !== 'paid') {
             throw new common_1.ForbiddenException('Order is unpaid or partially paid. Complete payment to download or print results.');
         }

@@ -299,13 +299,23 @@ function getResultAvailability(
   >,
 ): { ready: boolean; completed: number; total: number } {
   const total = Number(order.testsCount ?? 0) || 0;
-  const completed =
-    Number(order.verifiedTestsCount ?? order.readyTestsCount ?? 0) || 0;
+  const completed = Number(order.verifiedTestsCount ?? order.readyTestsCount ?? 0) || 0;
   const ready =
     order.resultStatus === 'VERIFIED' ||
-    Boolean(order.reportReady) ||
     (total > 0 && completed === total);
   return { ready, completed, total };
+}
+
+function extractApiErrorMessage(error: unknown): string | null {
+  if (!error || typeof error !== 'object' || !('response' in error)) {
+    return null;
+  }
+  const response = (error as { response?: { data?: { message?: string | string[] } } }).response;
+  const rawMessage = response?.data?.message;
+  if (Array.isArray(rawMessage)) {
+    return rawMessage.filter((entry) => typeof entry === 'string').join(', ') || null;
+  }
+  return typeof rawMessage === 'string' && rawMessage.trim().length > 0 ? rawMessage : null;
 }
 
 function getOrderTestRows(order: OrderDto): ExpandedOrderTestRow[] {
@@ -648,6 +658,7 @@ export function ReportsPage() {
         typeof error === 'object' &&
         'response' in error &&
         (error as { response?: { status?: number } }).response?.status === 403;
+      const backendMessage = extractApiErrorMessage(error);
 
       if (is403 && summaryOrder) {
         setPaymentModalOrder(summaryOrder);
@@ -656,7 +667,7 @@ export function ReportsPage() {
         );
         setPaymentModalOpen(true);
       } else {
-        message.error('Failed to download results report');
+        message.error(backendMessage || 'Failed to download results report');
       }
     } finally {
       setDownloading(null);
@@ -740,6 +751,7 @@ export function ReportsPage() {
         typeof error === 'object' &&
         'response' in error &&
         (error as { response?: { status?: number } }).response?.status === 403;
+      const backendMessage = extractApiErrorMessage(error);
 
       if (is403 && summaryOrder) {
         setPaymentModalOrder(summaryOrder);
@@ -748,7 +760,7 @@ export function ReportsPage() {
         );
         setPaymentModalOpen(true);
       } else {
-        message.error('Failed to load results for printing');
+        message.error(backendMessage || 'Failed to load results for printing');
       }
     } finally {
       setDownloading(null);
@@ -1292,7 +1304,7 @@ export function ReportsPage() {
     const availability = getResultAvailability(record);
     const reportReady = availability.ready;
     const paid = record.paymentStatus === 'paid';
-    const notReadyTooltip = reportReady ? null : 'Not all tests verified';
+    const notReadyTooltip = reportReady ? null : 'Not all test results are entered and verified';
     const paymentTooltip = !paid ? 'Payment required to release results' : null;
     const flags = actionFlagsByOrderId[record.id];
     const pdfDone = Boolean(flags?.pdf);

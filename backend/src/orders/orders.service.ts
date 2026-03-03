@@ -1390,20 +1390,23 @@ export class OrdersService {
     if (params.status) {
       if (params.status === OrderStatus.COMPLETED) {
         qb.andWhere(
-          `("order"."status" = :status OR EXISTS (
+          `(EXISTS (
             SELECT 1
             FROM samples s
             INNER JOIN order_tests ot ON ot."sampleId" = s.id
             WHERE s."orderId" = "order"."id"
-              AND ot.status IN (:...completedStatuses)
+              AND ot."parentOrderTestId" IS NULL
+          )
+          AND NOT EXISTS (
+            SELECT 1
+            FROM samples s
+            INNER JOIN order_tests ot ON ot."sampleId" = s.id
+            WHERE s."orderId" = "order"."id"
+              AND ot."parentOrderTestId" IS NULL
+              AND ot.status IN (:...pendingStatuses)
           ))`,
           {
-            status: params.status,
-            completedStatuses: [
-              OrderTestStatus.COMPLETED,
-              OrderTestStatus.VERIFIED,
-              OrderTestStatus.REJECTED,
-            ],
+            pendingStatuses: [OrderTestStatus.PENDING, OrderTestStatus.IN_PROGRESS],
           },
         );
       } else {
@@ -1528,25 +1531,6 @@ export class OrdersService {
     }
 
     const orderIds = items.map((order) => order.id);
-    const progressed = await this.orderRepo.manager
-      .createQueryBuilder()
-      .select('s."orderId"', 'orderId')
-      .addSelect('COUNT(*)', 'cnt')
-      .from('order_tests', 'ot')
-      .innerJoin('samples', 's', 's.id = ot."sampleId"')
-      .where('s."orderId" IN (:...orderIds)', { orderIds })
-      .andWhere('ot.status IN (:...statuses)', {
-        statuses: [
-          OrderTestStatus.COMPLETED,
-          OrderTestStatus.VERIFIED,
-          OrderTestStatus.REJECTED,
-        ],
-      })
-      .groupBy('s."orderId"')
-      .getRawMany<{ orderId: string; cnt: string }>();
-
-    const progressedSet = new Set(progressed.map((row) => row.orderId));
-
     const testCounts = await this.orderRepo.manager
       .createQueryBuilder()
       .select('s."orderId"', 'orderId')
@@ -1634,8 +1618,16 @@ export class OrdersService {
         rejectedTestsCount: counts.rejectedTests,
       });
 
-      if (order.status !== OrderStatus.CANCELLED && progressedSet.has(order.id)) {
+      // Mark completed only when every root test is data-entered/finalized
+      // (i.e. there are no root tests left in PENDING/IN_PROGRESS).
+      if (
+        order.status !== OrderStatus.CANCELLED &&
+        counts.totalTests > 0 &&
+        counts.pendingTests === 0
+      ) {
         order.status = OrderStatus.COMPLETED;
+      } else if (order.status === OrderStatus.COMPLETED && counts.pendingTests > 0) {
+        order.status = OrderStatus.IN_PROGRESS;
       }
     }
   }
