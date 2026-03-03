@@ -75,6 +75,7 @@ interface SelectedTest {
   testName: string;
   tubeType: string;
   displayLabel?: string;
+  sortCategoryKey?: string;
   price?: number | null;
   locked?: boolean;
 }
@@ -92,7 +93,7 @@ interface OrderListRow {
 const ORDER_PAGE_SIZE = 25;
 const CREATE_ORDER_TIMEOUT_MS = 15_000;
 const CREATE_ORDER_SLOW_FEEDBACK_MS = 1_200;
-const ORDER_TEST_GRID_COLUMNS = 5;
+const ORDER_TEST_TABLE_COLUMNS = 5;
 const VISIBLE_ORDER_TEST_ROWS = 5;
 const ORDER_TEST_ROW_HEIGHT = 40;
 const ORDER_STATUS_FILTERS: Array<{ label: string; value: 'ALL' | OrderStatus }> = [
@@ -544,6 +545,46 @@ export function OrdersPage() {
     setSelectedTests(selectedTests.filter((t) => t.testId !== testId));
   };
 
+  const normalizeSortToken = (value: string | null | undefined, fallback = '~'): string => {
+    const normalized = value?.trim().toLowerCase();
+    return normalized && normalized.length > 0 ? normalized : fallback;
+  };
+
+  const sortRootOrderTestsForReadonly = (tests: SelectedTest[]): SelectedTest[] =>
+    [...tests].sort((a, b) => {
+      const categoryCompare = normalizeSortToken(a.sortCategoryKey).localeCompare(
+        normalizeSortToken(b.sortCategoryKey),
+        undefined,
+        { sensitivity: 'base' },
+      );
+      if (categoryCompare !== 0) return categoryCompare;
+
+      const labelCompare = normalizeSortToken(a.displayLabel).localeCompare(
+        normalizeSortToken(b.displayLabel),
+        undefined,
+        { sensitivity: 'base' },
+      );
+      if (labelCompare !== 0) return labelCompare;
+
+      return normalizeSortToken(a.testCode).localeCompare(normalizeSortToken(b.testCode), undefined, {
+        sensitivity: 'base',
+      });
+    });
+
+  const chunkOrderTestsForReadonlyTable = (
+    tests: SelectedTest[],
+  ): Array<Array<SelectedTest | null>> => {
+    const rows: Array<Array<SelectedTest | null>> = [];
+    for (let i = 0; i < tests.length; i += ORDER_TEST_TABLE_COLUMNS) {
+      const row: Array<SelectedTest | null> = tests.slice(i, i + ORDER_TEST_TABLE_COLUMNS);
+      while (row.length < ORDER_TEST_TABLE_COLUMNS) {
+        row.push(null);
+      }
+      rows.push(row);
+    }
+    return rows;
+  };
+
   const getRootOrderTests = (order: OrderDto): SelectedTest[] => {
     const all = (order.samples ?? []).flatMap((sample) => sample.orderTests ?? []);
     const root = all.filter((orderTest) => !orderTest.parentOrderTestId);
@@ -562,6 +603,7 @@ export function OrdersPage() {
         testMeta?.code?.trim() ||
         testMeta?.name?.trim() ||
         '-';
+      const sortCategoryKey = normalizeSortToken(testMeta?.category, '~');
       const childTests = childrenByParent.get(orderTest.id) ?? [];
       const hasProcessedChild = childTests.some((child) => child.status !== 'PENDING');
       return {
@@ -571,6 +613,7 @@ export function OrdersPage() {
         testName: orderTest.test?.name ?? 'Unknown',
         tubeType: orderTest.test?.tubeType ?? 'OTHER',
         displayLabel,
+        sortCategoryKey,
         price: orderTest.price != null ? Number(orderTest.price) : null,
       };
     });
@@ -1682,10 +1725,11 @@ export function OrdersPage() {
                     {selectedOrderDetailsLoading ? (
                       <Spin tip="Loading order details..." />
                     ) : selectedCreatedOrder ? (() => {
-                      const orderTests = getRootOrderTests(selectedCreatedOrder);
+                      const orderTests = sortRootOrderTestsForReadonly(getRootOrderTests(selectedCreatedOrder));
                       if (orderTests.length === 0) {
                         return <Text type="secondary">No tests in this order.</Text>;
                       }
+                      const orderTestRows = chunkOrderTestsForReadonlyTable(orderTests);
                       return (
                         <div
                           className="order-tests-readonly-wrapper"
@@ -1698,21 +1742,36 @@ export function OrdersPage() {
                         >
                           <div className="order-tests-readonly-grid-header">Abbreviation</div>
                           <div
-                            className="order-tests-readonly-grid"
+                            className="order-tests-readonly-table-scroll"
                             style={{
                               maxHeight:
-                                orderTests.length > ORDER_TEST_GRID_COLUMNS * VISIBLE_ORDER_TEST_ROWS
+                                orderTestRows.length > VISIBLE_ORDER_TEST_ROWS
                                   ? VISIBLE_ORDER_TEST_ROWS * ORDER_TEST_ROW_HEIGHT
                                   : undefined,
                             }}
                           >
-                            {orderTests.map((orderTest) => (
-                              <div key={orderTest.testId} className="order-tests-readonly-grid-item">
-                                <Text strong title={orderTest.displayLabel || '-'}>
-                                  {orderTest.displayLabel || '-'}
-                                </Text>
-                              </div>
-                            ))}
+                            <table className="order-tests-readonly-table-layout">
+                              <tbody>
+                                {orderTestRows.map((row, rowIndex) => (
+                                  <tr key={`order-test-row-${rowIndex}`}>
+                                    {row.map((orderTest, columnIndex) => (
+                                      <td
+                                        key={orderTest ? orderTest.testId : `empty-${rowIndex}-${columnIndex}`}
+                                        className={!orderTest ? 'order-tests-readonly-cell-empty' : undefined}
+                                      >
+                                        {orderTest ? (
+                                          <Text strong title={orderTest.displayLabel || '-'}>
+                                            {orderTest.displayLabel || '-'}
+                                          </Text>
+                                        ) : (
+                                          <span>&nbsp;</span>
+                                        )}
+                                      </td>
+                                    ))}
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
                           </div>
                         </div>
                       );
