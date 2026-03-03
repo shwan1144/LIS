@@ -74,6 +74,7 @@ interface SelectedTest {
   testCode: string;
   testName: string;
   tubeType: string;
+  price?: number | null;
   locked?: boolean;
 }
 
@@ -559,6 +560,7 @@ export function OrdersPage() {
         testCode: orderTest.test?.code ?? '-',
         testName: orderTest.test?.name ?? 'Unknown',
         tubeType: orderTest.test?.tubeType ?? 'OTHER',
+        price: orderTest.price != null ? Number(orderTest.price) : null,
       };
     });
   };
@@ -1686,6 +1688,7 @@ export function OrdersPage() {
                             {orderTests.map((ot) => (
                               <Tag key={ot.testId} style={{ margin: 0 }}>
                                 {ot.testCode ?? '-'}
+                                {ot.price != null ? ` • ${ot.price.toLocaleString()} IQD` : ''}
                               </Tag>
                             ))}
                           </Space>
@@ -1975,6 +1978,9 @@ export function OrdersPage() {
                       <Text strong>{test.testCode}</Text>
                       <Text>{test.testName}</Text>
                       <Text type="secondary">({test.tubeType})</Text>
+                      <Text type="secondary">
+                        {test.price != null ? `${test.price.toLocaleString()} IQD` : 'Price from current pricing'}
+                      </Text>
                       {test.locked ? <Tag color="gold">Locked</Tag> : null}
                     </Space>
                     <Button

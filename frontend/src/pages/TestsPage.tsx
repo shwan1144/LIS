@@ -112,6 +112,30 @@ function toNumberOrNull(value: unknown): number | null {
   return parseFiniteNumber(value);
 }
 
+function normalizeTestDtoNumericFields(test: TestDto): TestDto {
+  return {
+    ...test,
+    normalMin: toNumberOrNull(test.normalMin),
+    normalMax: toNumberOrNull(test.normalMax),
+    normalMinMale: toNumberOrNull(test.normalMinMale),
+    normalMaxMale: toNumberOrNull(test.normalMaxMale),
+    normalMinFemale: toNumberOrNull(test.normalMinFemale),
+    normalMaxFemale: toNumberOrNull(test.normalMaxFemale),
+    numericAgeRanges: (test.numericAgeRanges ?? []).map((range) => ({
+      ...range,
+      minAgeYears: toNumberOrNull(range.minAgeYears),
+      maxAgeYears: toNumberOrNull(range.maxAgeYears),
+      normalMin: toNumberOrNull(range.normalMin),
+      normalMax: toNumberOrNull(range.normalMax),
+    })),
+  };
+}
+
+function formatRangeNumericValue(value: unknown): string {
+  const parsed = parseFiniteNumber(value);
+  return parsed === null ? '-' : String(parsed);
+}
+
 /** Sortable subtest list for panel editor — proper component so hooks work correctly */
 function SortableSubtestList({
   value,
@@ -245,10 +269,16 @@ export function TestsPage() {
         getTests(!showAll),
         getTests(false),
       ]);
-      setTests(data);
-      setAllTests(allData);
+      const normalizedData = data.map(normalizeTestDtoNumericFields);
+      const normalizedAllData = allData.map(normalizeTestDtoNumericFields);
+      setTests(normalizedData);
+      setAllTests(normalizedAllData);
       setCategories(
-        Array.from(new Set(allData.map((t) => t.category).filter((c): c is string => Boolean(c)))).sort(),
+        Array.from(
+          new Set(
+            normalizedAllData.map((t) => t.category).filter((c): c is string => Boolean(c)),
+          ),
+        ).sort(),
       );
     } catch {
       message.error('Failed to load tests');
@@ -292,11 +322,13 @@ export function TestsPage() {
     ]);
     setShifts(shiftList);
     setDepartments(deptList);
-    setAllTests(latestAllTests);
+    setAllTests(latestAllTests.map(normalizeTestDtoNumericFields));
     const initialPrices: Record<string, number> = { default: 0 };
     shiftList.forEach((s) => { initialPrices[s.id] = 0; });
     if (test) {
-      const fullTest = await getTest(test.id).catch(() => test);
+      const fullTest = normalizeTestDtoNumericFields(
+        await getTest(test.id).catch(() => test),
+      );
       setEditingTest(fullTest);
       form.setFieldsValue({
         ...fullTest,
@@ -638,8 +670,8 @@ export function TestsPage() {
     const ageRulesCount = test.numericAgeRanges?.length ?? 0;
     if (test.normalText) return test.normalText;
     if (test.normalMin !== null || test.normalMax !== null) {
-      const min = test.normalMin !== null ? test.normalMin : '-';
-      const max = test.normalMax !== null ? test.normalMax : '-';
+      const min = formatRangeNumericValue(test.normalMin);
+      const max = formatRangeNumericValue(test.normalMax);
       const base = `${min} - ${max}${test.unit ? ` ${test.unit}` : ''}`;
       return ageRulesCount > 0 ? `${base} (+${ageRulesCount} age rule${ageRulesCount > 1 ? 's' : ''})` : base;
     }
@@ -1422,7 +1454,6 @@ export function TestsPage() {
                 <InputNumber
                   style={{ width: '100%', marginTop: 4 }}
                   min={0}
-                  step={0.01}
                   value={pricesByShift.default}
                   onChange={(v) => setPricesByShift((prev) => ({ ...prev, default: Number(v) || 0 }))}
                   addonAfter="IQD"
@@ -1437,7 +1468,6 @@ export function TestsPage() {
                     <InputNumber
                       style={{ width: '100%', marginTop: 4 }}
                       min={0}
-                      step={0.01}
                       value={pricesByShift[shift.id]}
                       onChange={(v) => setPricesByShift((prev) => ({ ...prev, [shift.id]: Number(v) || 0 }))}
                       addonAfter="IQD"
@@ -1535,5 +1565,3 @@ export function TestsPage() {
     </div>
   );
 }
-
-
