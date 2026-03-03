@@ -57,6 +57,7 @@ function getMenuItems(role: string | undefined) {
         { key: '/settings/departments', label: 'Departments' },
         { key: '/settings/label', label: 'Label & sequence' },
         { key: '/settings/printing', label: 'Printing' },
+        { key: '/settings/referring-doctors', label: 'Referring doctors' },
         { key: '/settings/instruments', label: 'Instruments' },
         { key: '/settings/test-groups', label: 'Test Groups' },
         { key: '/settings/tests', label: 'Test management' },

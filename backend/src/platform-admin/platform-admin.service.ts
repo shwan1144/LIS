@@ -1450,6 +1450,7 @@ export class PlatformAdminService {
         logoDataUrl?: string | null;
         watermarkDataUrl?: string | null;
       };
+      referringDoctors?: string[] | null;
     },
   ) {
     return this.settingsService.updateLabSettings(labId, data);

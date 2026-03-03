@@ -20,6 +20,8 @@ const MAX_REPORT_IMAGE_DATA_URL_LENGTH = 4 * 1024 * 1024;
 const REPORT_IMAGE_DATA_URL_PATTERN = /^data:image\/(png|jpeg|jpg|webp);base64,[a-zA-Z0-9+/=]+$/;
 const MAX_ONLINE_WATERMARK_TEXT_LENGTH = 120;
 const MAX_PRINTER_NAME_LENGTH = 128;
+const MAX_REFERRING_DOCTOR_NAME_LENGTH = 80;
+const MAX_REFERRING_DOCTORS_COUNT = 500;
 
 type ReportBrandingUpdate = {
   bannerDataUrl?: string | null;
@@ -85,6 +87,7 @@ export class SettingsService {
         watermarkDataUrl: lab.reportWatermarkDataUrl ?? null,
       },
       uiTestGroups: lab.uiTestGroups ?? [],
+      referringDoctors: this.normalizeReferringDoctorsForRead(lab.referringDoctors),
     };
   }
 
@@ -99,6 +102,7 @@ export class SettingsService {
       printing?: LabPrintingUpdate;
       reportBranding?: ReportBrandingUpdate;
       uiTestGroups?: UiTestGroup[] | null;
+      referringDoctors?: string[] | null;
     },
   ) {
     const lab = await this.labRepo.findOne({ where: { id: labId } });
@@ -210,6 +214,9 @@ export class SettingsService {
       }
       lab.uiTestGroups = data.uiTestGroups;
     }
+    if (data.referringDoctors !== undefined) {
+      lab.referringDoctors = this.normalizeReferringDoctors(data.referringDoctors);
+    }
     await this.labRepo.save(lab);
     return this.getLabSettings(labId);
   }
@@ -274,6 +281,63 @@ export class SettingsService {
       );
     }
     return trimmed;
+  }
+
+  private normalizeReferringDoctors(value: string[] | null): string[] {
+    if (value === null) return [];
+    if (!Array.isArray(value)) {
+      throw new BadRequestException('referringDoctors must be an array or null');
+    }
+    if (value.length > MAX_REFERRING_DOCTORS_COUNT) {
+      throw new BadRequestException(
+        `referringDoctors must contain at most ${MAX_REFERRING_DOCTORS_COUNT} items`,
+      );
+    }
+
+    const normalized: string[] = [];
+    const seen = new Set<string>();
+    for (const raw of value) {
+      if (typeof raw !== 'string') {
+        throw new BadRequestException(
+          'referringDoctors elements must be strings',
+        );
+      }
+      const trimmed = raw.trim();
+      if (!trimmed) continue;
+      if (trimmed.length > MAX_REFERRING_DOCTOR_NAME_LENGTH) {
+        throw new BadRequestException(
+          `Each referring doctor name must be at most ${MAX_REFERRING_DOCTOR_NAME_LENGTH} characters`,
+        );
+      }
+      const dedupeKey = trimmed.toLocaleLowerCase();
+      if (seen.has(dedupeKey)) continue;
+      seen.add(dedupeKey);
+      normalized.push(trimmed);
+      if (normalized.length > MAX_REFERRING_DOCTORS_COUNT) {
+        throw new BadRequestException(
+          `referringDoctors must contain at most ${MAX_REFERRING_DOCTORS_COUNT} items`,
+        );
+      }
+    }
+    return normalized;
+  }
+
+  private normalizeReferringDoctorsForRead(value: unknown): string[] {
+    if (!Array.isArray(value)) return [];
+    const normalized: string[] = [];
+    const seen = new Set<string>();
+    for (const raw of value) {
+      if (typeof raw !== 'string') continue;
+      const trimmed = raw.trim();
+      if (!trimmed) continue;
+      if (trimmed.length > MAX_REFERRING_DOCTOR_NAME_LENGTH) continue;
+      const dedupeKey = trimmed.toLocaleLowerCase();
+      if (seen.has(dedupeKey)) continue;
+      seen.add(dedupeKey);
+      normalized.push(trimmed);
+      if (normalized.length >= MAX_REFERRING_DOCTORS_COUNT) break;
+    }
+    return normalized;
   }
 
   async getUsersForLab(labId: string): Promise<User[]> {

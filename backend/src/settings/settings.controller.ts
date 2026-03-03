@@ -64,6 +64,7 @@ export class SettingsController {
         watermarkDataUrl?: string | null;
       };
       uiTestGroups?: { id: string; name: string; testIds: string[] }[] | null;
+      referringDoctors?: string[] | null;
     },
   ) {
     const labId = req.user?.labId;
@@ -90,6 +91,7 @@ export class SettingsController {
       sequenceResetBy: body.sequenceResetBy,
       printing: body.printing,
       uiTestGroups: body.uiTestGroups,
+      referringDoctors: body.referringDoctors,
     });
   }
 

@@ -609,6 +609,7 @@ export async function updateAdminLabSettings(
     };
     reportBranding?: Partial<ReportBrandingDto>;
     uiTestGroups?: { id: string; name: string; testIds: string[] }[] | null;
+    referringDoctors?: string[] | null;
   },
 ): Promise<LabSettingsDto> {
   const res = await api.patch<LabSettingsDto>(`/admin/api/labs/${labId}/settings`, data);
@@ -1861,6 +1862,7 @@ export interface LabSettingsDto {
   };
   reportBranding: ReportBrandingDto;
   uiTestGroups?: { id: string; name: string; testIds: string[] }[];
+  referringDoctors?: string[];
 }
 
 export async function getLabSettings(): Promise<LabSettingsDto> {
@@ -1882,6 +1884,7 @@ export interface UpdateLabSettingsDto {
   };
   reportBranding?: Partial<ReportBrandingDto>;
   uiTestGroups?: { id: string; name: string; testIds: string[] }[] | null;
+  referringDoctors?: string[] | null;
 }
 
 export async function updateLabSettings(data: UpdateLabSettingsDto): Promise<LabSettingsDto> {

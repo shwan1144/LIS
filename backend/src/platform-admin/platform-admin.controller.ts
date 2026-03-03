@@ -187,6 +187,7 @@ export class PlatformAdminController {
         logoDataUrl?: string | null;
         watermarkDataUrl?: string | null;
       };
+      referringDoctors?: string[] | null;
     },
   ) {
     return this.platformAdminService.updateLabSettings(labId, body);

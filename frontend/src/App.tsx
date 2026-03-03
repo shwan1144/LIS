@@ -23,6 +23,7 @@ import { SettingsInstrumentsPage } from './pages/settings/SettingsInstrumentsPag
 import { SettingsLabelPage } from './pages/settings/SettingsLabelPage';
 import { SettingsPrintingPage } from './pages/settings/SettingsPrintingPage';
 import { SettingsTestGroupsPage } from './pages/settings/SettingsTestGroupsPage';
+import { SettingsReferringDoctorsPage } from './pages/settings/SettingsReferringDoctorsPage';
 import { AdminDashboardPage } from './pages/admin/AdminDashboardPage';
 import { AdminLabsPage } from './pages/admin/AdminLabsPage';
 import { AdminOrdersPage } from './pages/admin/AdminOrdersPage';
@@ -136,6 +137,7 @@ function AppContent() {
                   <Route path="departments" element={<SettingsDepartmentsPage />} />
                   <Route path="label" element={<SettingsLabelPage />} />
                   <Route path="printing" element={<SettingsPrintingPage />} />
+                  <Route path="referring-doctors" element={<SettingsReferringDoctorsPage />} />
                   <Route path="instruments" element={<SettingsInstrumentsPage />} />
                   <Route path="test-groups" element={<SettingsTestGroupsPage />} />
                   <Route path="tests" element={<TestsPage />} />

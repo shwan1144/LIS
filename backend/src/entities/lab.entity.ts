@@ -87,6 +87,10 @@ export class Lab {
   @Column({ type: 'jsonb', nullable: true })
   uiTestGroups: { id: string; name: string; testIds: string[] }[] | null;
 
+  /** Shared per-lab doctor names used for referral selection. */
+  @Column({ type: 'jsonb', default: () => "'[]'::jsonb" })
+  referringDoctors: string[];
+
   @CreateDateColumn()
   createdAt: Date;
 

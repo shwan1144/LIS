@@ -202,11 +202,23 @@ function formatReferenceRange(
 function buildResultsMessage(
   order: Pick<OrderHistoryItemDto, 'id' | 'orderNumber' | 'registeredAt' | 'patient'>,
 ): string {
-  const patientName = order.patient?.fullName?.trim() || 'Patient';
+  const patientName = order.patient?.fullName?.trim() || 'نەخۆش';
   const orderNum = order.orderNumber || order.id.substring(0, 8);
   const date = dayjs(order.registeredAt).format('YYYY-MM-DD');
 
-  return `Hello ${patientName},\n\nYour lab results for Order #${orderNum} (${date}) are ready.\n\nPlease visit our laboratory to collect your report or contact us for more information.\n\nThank you!`;
+  const baseUrl =
+    typeof window !== 'undefined' ? window.location.origin : 'https://example.com';
+  const resultUrl = `${baseUrl}/public/results/${order.id}`;
+
+  return [
+    `سڵاو ${patientName}،`,
+    ``,
+    `ئەنجامەکانت بۆ داواکردنی ژمارە ${orderNum} (${date}) لە لابراتواری ئێمە ئامادەکراوە.`,
+    `تکایە کرتە لەم لینکی خوارەوە بکە بۆ بینینی ڕاپۆرتەکە:`,
+    resultUrl,
+    ``,
+    `سوپاس بۆ هەڵبژاردنی لابراتواری ئێمە.`,
+  ].join('\n');
 }
 
 function formatOrderTestResultPreview(orderTest: OrderTestDto, allTests: OrderTestDto[] = []): string {
