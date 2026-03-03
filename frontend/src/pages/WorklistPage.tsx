@@ -6,7 +6,6 @@ import {
   DatePicker,
   Form,
   Input,
-  InputNumber,
   Modal,
   Row,
   Select,
@@ -109,6 +108,18 @@ function calculateNumericFlagFromRange(
   }
 
   return 'N';
+}
+
+function normalizeNumericResultInput(value: unknown): string | null {
+  if (value === null || value === undefined) return null;
+  const text = String(value).trim();
+  if (!text) return null;
+  const normalized = text.replace(',', '.');
+  const numericPattern = /^[-+]?(?:\d+\.?\d*|\.\d+)$/;
+  if (!numericPattern.test(normalized)) {
+    return null;
+  }
+  return normalized;
 }
 
 function formatReferenceRange(item: WorklistItem): string {
@@ -237,11 +248,20 @@ function buildInitialFormValues(items: WorklistItem[]): Record<string, unknown> 
       }
     }
 
+    const numericResultText = normalizeNumericResultInput(target.resultText);
+    const numericInitialValue =
+      target.resultEntryType === 'NUMERIC'
+        ? (numericResultText ??
+          (target.resultValue !== null && target.resultValue !== undefined
+            ? String(target.resultValue)
+            : undefined))
+        : undefined;
+
     values[target.id] = {
       resultValue:
         target.resultEntryType === 'QUALITATIVE' || target.resultEntryType === 'TEXT'
           ? undefined
-          : target.resultValue ?? undefined,
+          : numericInitialValue,
       resultText: initialResultText,
       customResultText,
       resultParameters: { ...defaults, ...resultParametersInitial },
@@ -407,11 +427,9 @@ export function WorklistPage() {
           continue;
         }
 
-        const rawNumeric = values.resultValue;
+        const normalizedNumericInput = normalizeNumericResultInput(values.resultValue);
         const numericValue =
-          rawNumeric === null || rawNumeric === undefined || rawNumeric === ''
-            ? null
-            : Number(rawNumeric);
+          normalizedNumericInput === null ? null : Number(normalizedNumericInput);
         const safeNumericValue =
           numericValue != null && Number.isFinite(numericValue)
             ? numericValue
@@ -523,6 +541,25 @@ export function WorklistPage() {
 
     setSubmitting(true);
     try {
+      const invalidNumericTargets = targets
+        .filter((target) => target.resultEntryType === 'NUMERIC')
+        .map((target) => ({
+          target,
+          normalized: normalizeNumericResultInput(values[target.id]?.resultValue),
+          raw:
+            values[target.id]?.resultValue !== null &&
+              values[target.id]?.resultValue !== undefined
+              ? String(values[target.id].resultValue).trim()
+              : '',
+        }))
+        .filter(({ raw, normalized }) => raw.length > 0 && normalized === null)
+        .map(({ target }) => target.testName);
+
+      if (invalidNumericTargets.length > 0) {
+        message.error(`Invalid numeric value for: ${invalidNumericTargets[0]}`);
+        return;
+      }
+
       await Promise.all(
         targets.map(async (target) => {
           const itemValues = values[target.id] || {};
@@ -548,10 +585,14 @@ export function WorklistPage() {
           const resultParameters = Object.fromEntries(resultParamsEntries);
           const hasResultParameters = Object.keys(resultParameters).length > 0;
           const resultEntryType = target.resultEntryType ?? 'NUMERIC';
+          const normalizedNumericInput = normalizeNumericResultInput(itemValues.resultValue);
           let resultValue = itemValues.resultValue ?? null;
           let resultText = itemValues.resultText?.trim() || null;
 
-          if (resultEntryType === 'QUALITATIVE') {
+          if (resultEntryType === 'NUMERIC') {
+            resultValue = normalizedNumericInput !== null ? Number(normalizedNumericInput) : null;
+            resultText = normalizedNumericInput;
+          } else if (resultEntryType === 'QUALITATIVE') {
             if (resultText === '__other__') {
               resultText = itemValues.customResultText?.trim() || null;
             }
@@ -1076,12 +1117,13 @@ export function WorklistPage() {
                             style={{ marginBottom: 0 }}
                           >
                             {target.resultEntryType === 'NUMERIC' ? (
-                              <InputNumber
+                              <Input
                                 id={`result-input-${target.id}`}
                                 data-entry-target-id={target.id}
                                 style={{ width: '100%' }}
                                 size="small"
                                 disabled={isReadOnly}
+                                inputMode="decimal"
                                 onKeyDown={(event) => {
                                   if (event.key === 'ArrowDown') {
                                     event.preventDefault();

@@ -99,8 +99,8 @@ function getNormalRange(
 }
 
 function formatResultValue(ot: OrderTest): string {
-  if (ot.resultValue !== null && ot.resultValue !== undefined) return String(ot.resultValue);
   if (ot.resultText?.trim()) return ot.resultText.trim();
+  if (ot.resultValue !== null && ot.resultValue !== undefined) return String(ot.resultValue);
   return 'Pending';
 }
 

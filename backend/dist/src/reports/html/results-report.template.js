@@ -40,10 +40,10 @@ function isAbnormalFlag(flag) {
     return flag === 'H' || flag === 'L' || flag === 'HH' || flag === 'LL';
 }
 function formatResultValue(ot) {
-    if (ot.resultValue !== null && ot.resultValue !== undefined)
-        return String(ot.resultValue);
     if (ot.resultText?.trim())
         return ot.resultText.trim();
+    if (ot.resultValue !== null && ot.resultValue !== undefined)
+        return String(ot.resultValue);
     return 'Pending';
 }
 function formatRange(ot, patientSex, patientAgeYears) {
