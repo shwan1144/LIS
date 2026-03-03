@@ -304,6 +304,7 @@ export class PlatformAdminService {
           },
           description: `Created lab ${created.name} (${created.code})`,
         },
+        manager,
       );
 
       return created;
@@ -406,6 +407,7 @@ export class PlatformAdminService {
           },
           description: `Updated lab ${updated.name} (${updated.code})`,
         },
+        manager,
       );
 
       return updated;
@@ -442,6 +444,7 @@ export class PlatformAdminService {
           newValues: { isActive: updated.isActive, reason },
           description: `${updated.isActive ? 'Enabled' : 'Disabled'} lab ${updated.name} (${updated.code})`,
         },
+        manager,
       );
 
       return updated;
@@ -823,7 +826,7 @@ export class PlatformAdminService {
             pendingResultsCount,
           },
         },
-      });
+      }, manager);
 
       return summary;
     });
@@ -954,7 +957,7 @@ export class PlatformAdminService {
             size,
             total,
           },
-        });
+        }, manager);
         return emptyResult;
       }
 
@@ -992,7 +995,7 @@ export class PlatformAdminService {
           size,
           total,
         },
-      });
+      }, manager);
       return result;
     });
   }
@@ -1081,7 +1084,7 @@ export class PlatformAdminService {
         entityType: 'order',
         entityId: order.id,
         description: `Viewed order detail ${order.orderNumber ?? order.id}`,
-      });
+      }, manager);
       return detail;
     });
   }
@@ -1193,7 +1196,7 @@ export class PlatformAdminService {
           },
           ipAddress: actor.ipAddress ?? null,
           userAgent: actor.userAgent ?? null,
-        });
+        }, manager);
       }
 
       return {
@@ -1882,6 +1885,7 @@ export class PlatformAdminService {
       description: string;
       metadata?: Record<string, unknown>;
     },
+    manager?: EntityManager,
   ): Promise<void> {
     if (!actor?.platformUserId) return;
 
@@ -1896,7 +1900,7 @@ export class PlatformAdminService {
       newValues: payload.metadata ?? null,
       ipAddress: actor.ipAddress ?? null,
       userAgent: actor.userAgent ?? null,
-    });
+    }, manager);
   }
 
   private async logLabAudit(
@@ -1908,6 +1912,7 @@ export class PlatformAdminService {
       newValues?: Record<string, unknown>;
       description: string;
     },
+    manager?: EntityManager,
   ): Promise<void> {
     if (!actor?.platformUserId) return;
 
@@ -1923,6 +1928,6 @@ export class PlatformAdminService {
       description: payload.description,
       ipAddress: actor.ipAddress ?? null,
       userAgent: actor.userAgent ?? null,
-    });
+    }, manager);
   }
 }

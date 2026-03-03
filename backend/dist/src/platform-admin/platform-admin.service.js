@@ -131,7 +131,7 @@ let PlatformAdminService = class PlatformAdminService {
                     isActive: created.isActive,
                 },
                 description: `Created lab ${created.name} (${created.code})`,
-            });
+            }, manager);
             return created;
         });
     }
@@ -206,7 +206,7 @@ let PlatformAdminService = class PlatformAdminService {
                     timezone: updated.timezone,
                 },
                 description: `Updated lab ${updated.name} (${updated.code})`,
-            });
+            }, manager);
             return updated;
         });
     }
@@ -228,7 +228,7 @@ let PlatformAdminService = class PlatformAdminService {
                 oldValues,
                 newValues: { isActive: updated.isActive, reason },
                 description: `${updated.isActive ? 'Enabled' : 'Disabled'} lab ${updated.name} (${updated.code})`,
-            });
+            }, manager);
             return updated;
         });
     }
@@ -523,7 +523,7 @@ let PlatformAdminService = class PlatformAdminService {
                         pendingResultsCount,
                     },
                 },
-            });
+            }, manager);
             return summary;
         });
     }
@@ -620,7 +620,7 @@ let PlatformAdminService = class PlatformAdminService {
                         size,
                         total,
                     },
-                });
+                }, manager);
                 return emptyResult;
             }
             const orders = await orderRepo.find({
@@ -655,7 +655,7 @@ let PlatformAdminService = class PlatformAdminService {
                     size,
                     total,
                 },
-            });
+            }, manager);
             return result;
         });
     }
@@ -715,7 +715,7 @@ let PlatformAdminService = class PlatformAdminService {
                 entityType: 'order',
                 entityId: order.id,
                 description: `Viewed order detail ${order.orderNumber ?? order.id}`,
-            });
+            }, manager);
             return detail;
         });
     }
@@ -805,7 +805,7 @@ let PlatformAdminService = class PlatformAdminService {
                     },
                     ipAddress: actor.ipAddress ?? null,
                     userAgent: actor.userAgent ?? null,
-                });
+                }, manager);
             }
             return {
                 csvBuffer: Buffer.from(csv, 'utf8'),
@@ -1300,7 +1300,7 @@ let PlatformAdminService = class PlatformAdminService {
             barcode: firstBarcode,
         };
     }
-    async logPlatformSensitiveRead(actor, payload) {
+    async logPlatformSensitiveRead(actor, payload, manager) {
         if (!actor?.platformUserId)
             return;
         await this.auditService.log({
@@ -1314,9 +1314,9 @@ let PlatformAdminService = class PlatformAdminService {
             newValues: payload.metadata ?? null,
             ipAddress: actor.ipAddress ?? null,
             userAgent: actor.userAgent ?? null,
-        });
+        }, manager);
     }
-    async logLabAudit(action, labId, actor, payload) {
+    async logLabAudit(action, labId, actor, payload, manager) {
         if (!actor?.platformUserId)
             return;
         await this.auditService.log({
@@ -1331,7 +1331,7 @@ let PlatformAdminService = class PlatformAdminService {
             description: payload.description,
             ipAddress: actor.ipAddress ?? null,
             userAgent: actor.userAgent ?? null,
-        });
+        }, manager);
     }
 };
 exports.PlatformAdminService = PlatformAdminService;

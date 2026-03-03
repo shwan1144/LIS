@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { EntityManager, Repository } from 'typeorm';
 import { AuditLog, AuditAction, AuditActorType } from '../entities/audit-log.entity';
 import { User } from '../entities/user.entity';
 import { Lab } from '../entities/lab.entity';
@@ -45,16 +45,23 @@ export class AuditService {
     private readonly labRepo: Repository<Lab>,
   ) {}
 
-  async log(dto: CreateAuditLogDto): Promise<AuditLog> {
+  async log(dto: CreateAuditLogDto, manager?: EntityManager): Promise<AuditLog> {
+    const auditLogRepo = manager
+      ? manager.getRepository(AuditLog)
+      : this.auditLogRepo;
+    const userRepo = manager
+      ? manager.getRepository(User)
+      : this.userRepo;
+
     let normalizedUserId = dto.userId ?? null;
     if (normalizedUserId) {
-      const userExists = await this.userRepo.exist({ where: { id: normalizedUserId } });
+      const userExists = await userRepo.exist({ where: { id: normalizedUserId } });
       if (!userExists) {
         normalizedUserId = null;
       }
     }
 
-    const auditLog = this.auditLogRepo.create({
+    const auditLog = auditLogRepo.create({
       actorType: dto.actorType ?? (normalizedUserId ? AuditActorType.LAB_USER : null),
       actorId: dto.actorId ?? normalizedUserId ?? null,
       labId: dto.labId ?? null,
@@ -70,12 +77,12 @@ export class AuditService {
     });
 
     try {
-      return await this.auditLogRepo.save(auditLog);
+      return await auditLogRepo.save(auditLog);
     } catch (error) {
       // If FK checks race with pending tx visibility (e.g., newly created lab),
       // keep business operation successful and store audit entry without lab/user FK.
       if (this.isForeignKeyViolation(error)) {
-        const fallback = this.auditLogRepo.create({
+        const fallback = auditLogRepo.create({
           actorType: dto.actorType ?? (normalizedUserId ? AuditActorType.LAB_USER : null),
           actorId: dto.actorId ?? normalizedUserId ?? null,
           labId: null,
@@ -89,7 +96,7 @@ export class AuditService {
           ipAddress: dto.ipAddress ?? null,
           userAgent: dto.userAgent ?? null,
         });
-        return this.auditLogRepo.save(fallback);
+        return auditLogRepo.save(fallback);
       }
       throw error;
     }

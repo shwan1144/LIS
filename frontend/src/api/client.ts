@@ -2,6 +2,7 @@ import axios from 'axios';
 import { getCurrentAuthScope, resolveApiBaseUrl, type AuthScope } from '../utils/tenant-scope';
 
 const API_BASE = resolveApiBaseUrl(import.meta.env.VITE_API_URL);
+const ADMIN_WRITE_TIMEOUT_MS = 15_000;
 
 export const api = axios.create({
   baseURL: API_BASE,
@@ -449,7 +450,9 @@ export async function getAdminSummary(params?: {
 }
 
 export async function createAdminLab(data: CreateAdminLabRequest): Promise<AdminLabDto> {
-  const res = await api.post<AdminLabDto>('/admin/api/labs', data);
+  const res = await api.post<AdminLabDto>('/admin/api/labs', data, {
+    timeout: ADMIN_WRITE_TIMEOUT_MS,
+  });
   return res.data;
 }
 
@@ -564,7 +567,9 @@ export async function createAdminImpersonationLabPortalToken(): Promise<AdminImp
 }
 
 export async function updateAdminLab(labId: string, data: UpdateAdminLabRequest): Promise<AdminLabDto> {
-  const res = await api.patch<AdminLabDto>(`/admin/api/labs/${labId}`, data);
+  const res = await api.patch<AdminLabDto>(`/admin/api/labs/${labId}`, data, {
+    timeout: ADMIN_WRITE_TIMEOUT_MS,
+  });
   return res.data;
 }
 
@@ -572,7 +577,9 @@ export async function setAdminLabStatus(
   labId: string,
   data: SetAdminLabStatusRequest,
 ): Promise<AdminLabDto> {
-  const res = await api.post<AdminLabDto>(`/admin/api/labs/${labId}/status`, data);
+  const res = await api.post<AdminLabDto>(`/admin/api/labs/${labId}/status`, data, {
+    timeout: ADMIN_WRITE_TIMEOUT_MS,
+  });
   return res.data;
 }
 
@@ -643,7 +650,9 @@ export async function createAdminLabUser(
     departmentIds?: string[];
   },
 ): Promise<SettingsUserDto> {
-  const res = await api.post<SettingsUserDto>(`/admin/api/labs/${labId}/users`, data);
+  const res = await api.post<SettingsUserDto>(`/admin/api/labs/${labId}/users`, data, {
+    timeout: ADMIN_WRITE_TIMEOUT_MS,
+  });
   return res.data;
 }
 
@@ -661,7 +670,9 @@ export async function updateAdminLabUser(
     password?: string;
   },
 ): Promise<SettingsUserDto> {
-  const res = await api.patch<SettingsUserDto>(`/admin/api/labs/${labId}/users/${userId}`, data);
+  const res = await api.patch<SettingsUserDto>(`/admin/api/labs/${labId}/users/${userId}`, data, {
+    timeout: ADMIN_WRITE_TIMEOUT_MS,
+  });
   return res.data;
 }
 
@@ -680,6 +691,9 @@ export async function resetAdminLabUserPassword(
   const res = await api.post<{ success: true }>(
     `/admin/api/labs/${labId}/users/${userId}/reset-password`,
     data,
+    {
+      timeout: ADMIN_WRITE_TIMEOUT_MS,
+    },
   );
   return res.data;
 }

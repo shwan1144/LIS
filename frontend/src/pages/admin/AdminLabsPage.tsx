@@ -515,10 +515,28 @@ function buildLabPortalUrl(subdomain: string): string | null {
 }
 
 function getErrorMessage(err: unknown): string | null {
-  if (!err || typeof err !== 'object' || !('response' in err)) {
+  if (!err || typeof err !== 'object') {
     return null;
   }
-  const data = (err as { response?: { data?: { message?: string | string[] } } }).response?.data;
+
+  const error = err as {
+    code?: string;
+    message?: string;
+    response?: { data?: { message?: string | string[] } };
+  };
+
+  if (error.code === 'ECONNABORTED' || /timeout/i.test(error.message ?? '')) {
+    return 'Request timed out. Please retry.';
+  }
+
+  if (!error.response) {
+    if (/network error/i.test(error.message ?? '')) {
+      return 'Network error. Please check your connection and retry.';
+    }
+    return null;
+  }
+
+  const data = error.response.data;
   const msg = data?.message;
   if (Array.isArray(msg)) {
     return msg[0] ?? null;

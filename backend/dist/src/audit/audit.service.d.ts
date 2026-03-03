@@ -1,4 +1,4 @@
-import { Repository } from 'typeorm';
+import { EntityManager, Repository } from 'typeorm';
 import { AuditLog, AuditAction, AuditActorType } from '../entities/audit-log.entity';
 import { User } from '../entities/user.entity';
 import { Lab } from '../entities/lab.entity';
@@ -33,7 +33,7 @@ export declare class AuditService {
     private readonly userRepo;
     private readonly labRepo;
     constructor(auditLogRepo: Repository<AuditLog>, userRepo: Repository<User>, labRepo: Repository<Lab>);
-    log(dto: CreateAuditLogDto): Promise<AuditLog>;
+    log(dto: CreateAuditLogDto, manager?: EntityManager): Promise<AuditLog>;
     private isForeignKeyViolation;
     findAll(labId: string, params: AuditLogParams): Promise<{
         items: AuditLog[];

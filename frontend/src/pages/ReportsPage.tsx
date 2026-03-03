@@ -158,6 +158,27 @@ function cleanPhoneNumber(phone: string): string {
   return phone.replace(/\D/g, '');
 }
 
+function formatDisplayDecimal(value: string | number | null | undefined): string {
+  if (value === null || value === undefined) return '-';
+  const raw = String(value).trim();
+  if (!raw) return '-';
+  if (!/^[-+]?\d+(\.\d+)?$/.test(raw)) return raw;
+  return raw.replace(/(\.\d*?[1-9])0+$/, '$1').replace(/\.0+$/, '').replace(/^\+/, '');
+}
+
+function formatReferenceRange(
+  normalText: string | null | undefined,
+  normalMin: string | number | null | undefined,
+  normalMax: string | number | null | undefined,
+  unit?: string | null,
+): string {
+  if (normalText?.trim()) return normalText.trim();
+  const min = formatDisplayDecimal(normalMin);
+  const max = formatDisplayDecimal(normalMax);
+  if (min === '-' && max === '-') return '-';
+  return `${min} - ${max}${unit ? ` ${unit}` : ''}`;
+}
+
 function buildResultsMessage(
   order: Pick<OrderHistoryItemDto, 'id' | 'orderNumber' | 'registeredAt' | 'patient'>,
 ): string {
@@ -186,8 +207,12 @@ function formatOrderTestResultPreview(orderTest: OrderTestDto, allTests: OrderTe
   }
 
   if (orderTest.resultValue !== null && orderTest.resultValue !== undefined) {
+    const formattedValue = formatDisplayDecimal(orderTest.resultValue);
+    if (formattedValue === '-') {
+      return '-';
+    }
     const unit = orderTest.test?.unit ? ` ${orderTest.test.unit}` : '';
-    return `${orderTest.resultValue}${unit}`;
+    return `${formattedValue}${unit}`;
   }
 
   if (orderTest.resultText?.trim()) {
@@ -1204,8 +1229,12 @@ export function ReportsPage() {
                 row.raw.test?.normalText) && (
                 <div style={{ fontSize: 10, color: 'rgba(128,128,128,0.7)', marginTop: 2 }}>
                   Range:{' '}
-                  {row.raw.test?.normalText ||
-                    `${row.raw.test?.normalMin ?? '-'} - ${row.raw.test?.normalMax ?? '-'} ${row.raw.test?.unit || ''}`}
+                  {formatReferenceRange(
+                    row.raw.test?.normalText,
+                    row.raw.test?.normalMin,
+                    row.raw.test?.normalMax,
+                    row.raw.test?.unit,
+                  )}
                 </div>
               )}
           </div>
@@ -1809,8 +1838,12 @@ export function ReportsPage() {
                   <Text type="secondary" style={{ fontSize: 12 }}>Normal range</Text>
                   <div style={{ marginTop: 2 }}>
                     <Text>
-                      {editResultContext.normalText ||
-                        `${editResultContext.normalMin ?? '-'} - ${editResultContext.normalMax ?? '-'} ${editResultContext.testUnit || ''}`}
+                      {formatReferenceRange(
+                        editResultContext.normalText,
+                        editResultContext.normalMin,
+                        editResultContext.normalMax,
+                        editResultContext.testUnit,
+                      )}
                     </Text>
                   </div>
                 </div>
@@ -1986,7 +2019,12 @@ export function ReportsPage() {
                                   {target.test?.unit || '-'}
                                 </div>
                                 <div style={{ flex: '1 1 22%', textAlign: 'right', fontSize: 11, color: 'rgba(128,128,128,0.8)' }}>
-                                  {target.test?.normalText || `${target.test?.normalMin ?? '-'} - ${target.test?.normalMax ?? '-'}`}
+                                  {formatReferenceRange(
+                                    target.test?.normalText,
+                                    target.test?.normalMin,
+                                    target.test?.normalMax,
+                                    target.test?.unit,
+                                  )}
                                 </div>
                               </>
                             )}

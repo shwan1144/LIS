@@ -26,15 +26,21 @@ let AuditService = class AuditService {
         this.userRepo = userRepo;
         this.labRepo = labRepo;
     }
-    async log(dto) {
+    async log(dto, manager) {
+        const auditLogRepo = manager
+            ? manager.getRepository(audit_log_entity_1.AuditLog)
+            : this.auditLogRepo;
+        const userRepo = manager
+            ? manager.getRepository(user_entity_1.User)
+            : this.userRepo;
         let normalizedUserId = dto.userId ?? null;
         if (normalizedUserId) {
-            const userExists = await this.userRepo.exist({ where: { id: normalizedUserId } });
+            const userExists = await userRepo.exist({ where: { id: normalizedUserId } });
             if (!userExists) {
                 normalizedUserId = null;
             }
         }
-        const auditLog = this.auditLogRepo.create({
+        const auditLog = auditLogRepo.create({
             actorType: dto.actorType ?? (normalizedUserId ? audit_log_entity_1.AuditActorType.LAB_USER : null),
             actorId: dto.actorId ?? normalizedUserId ?? null,
             labId: dto.labId ?? null,
@@ -49,11 +55,11 @@ let AuditService = class AuditService {
             userAgent: dto.userAgent ?? null,
         });
         try {
-            return await this.auditLogRepo.save(auditLog);
+            return await auditLogRepo.save(auditLog);
         }
         catch (error) {
             if (this.isForeignKeyViolation(error)) {
-                const fallback = this.auditLogRepo.create({
+                const fallback = auditLogRepo.create({
                     actorType: dto.actorType ?? (normalizedUserId ? audit_log_entity_1.AuditActorType.LAB_USER : null),
                     actorId: dto.actorId ?? normalizedUserId ?? null,
                     labId: null,
@@ -67,7 +73,7 @@ let AuditService = class AuditService {
                     ipAddress: dto.ipAddress ?? null,
                     userAgent: dto.userAgent ?? null,
                 });
-                return this.auditLogRepo.save(fallback);
+                return auditLogRepo.save(fallback);
             }
             throw error;
         }
