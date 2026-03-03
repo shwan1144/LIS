@@ -146,26 +146,32 @@ export class CreateTestDto {
 
   @IsNumber()
   @IsOptional()
+  @Type(() => Number)
   normalMin?: number;
 
   @IsNumber()
   @IsOptional()
+  @Type(() => Number)
   normalMax?: number;
 
   @IsNumber()
   @IsOptional()
+  @Type(() => Number)
   normalMinMale?: number;
 
   @IsNumber()
   @IsOptional()
+  @Type(() => Number)
   normalMaxMale?: number;
 
   @IsNumber()
   @IsOptional()
+  @Type(() => Number)
   normalMinFemale?: number;
 
   @IsNumber()
   @IsOptional()
+  @Type(() => Number)
   normalMaxFemale?: number;
 
   @IsString()
@@ -233,9 +239,11 @@ export class CreateTestDto {
 
   @IsNumber()
   @IsOptional()
+  @Type(() => Number)
   sortOrder?: number;
 
   @IsNumber()
   @IsOptional()
+  @Type(() => Number)
   expectedCompletionMinutes?: number | null;
 }

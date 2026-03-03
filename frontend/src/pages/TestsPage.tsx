@@ -94,6 +94,24 @@ const RESULT_FLAG_OPTIONS: { label: string; value: NonNullable<TestResultTextOpt
   { label: 'Abnormal (ABN)', value: 'ABN' },
 ];
 
+
+function parseFiniteNumber(value: unknown): number | null {
+  if (value === null || value === undefined || value === '') {
+    return null;
+  }
+  const parsed = typeof value === 'number' ? value : Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function toNumberOrUndefined(value: unknown): number | undefined {
+  const parsed = parseFiniteNumber(value);
+  return parsed === null ? undefined : parsed;
+}
+
+function toNumberOrNull(value: unknown): number | null {
+  return parseFiniteNumber(value);
+}
+
 /** Sortable subtest list for panel editor — proper component so hooks work correctly */
 function SortableSubtestList({
   value,
@@ -283,21 +301,22 @@ export function TestsPage() {
       form.setFieldsValue({
         ...fullTest,
         category: fullTest.category || undefined,
-        normalMin: fullTest.normalMin ?? undefined,
-        normalMax: fullTest.normalMax ?? undefined,
-        normalMinMale: fullTest.normalMinMale ?? undefined,
-        normalMaxMale: fullTest.normalMaxMale ?? undefined,
-        normalMinFemale: fullTest.normalMinFemale ?? undefined,
-        normalMaxFemale: fullTest.normalMaxFemale ?? undefined,
+        normalMin: toNumberOrUndefined(fullTest.normalMin),
+        normalMax: toNumberOrUndefined(fullTest.normalMax),
+        normalMinMale: toNumberOrUndefined(fullTest.normalMinMale),
+        normalMaxMale: toNumberOrUndefined(fullTest.normalMaxMale),
+        normalMinFemale: toNumberOrUndefined(fullTest.normalMinFemale),
+        normalMaxFemale: toNumberOrUndefined(fullTest.normalMaxFemale),
         numericAgeRanges: (fullTest.numericAgeRanges ?? []).map((range) => ({
           sex: range.sex ?? 'ANY',
-          minAgeYears: range.minAgeYears ?? undefined,
-          maxAgeYears: range.maxAgeYears ?? undefined,
-          normalMin: range.normalMin ?? undefined,
-          normalMax: range.normalMax ?? undefined,
+          minAgeYears: toNumberOrUndefined(range.minAgeYears),
+          maxAgeYears: toNumberOrUndefined(range.maxAgeYears),
+          normalMin: toNumberOrUndefined(range.normalMin),
+          normalMax: toNumberOrUndefined(range.normalMax),
         })),
         departmentId: fullTest.departmentId ?? undefined,
-        expectedCompletionMinutes: fullTest.expectedCompletionMinutes ?? undefined,
+        sortOrder: toNumberOrUndefined(fullTest.sortOrder),
+        expectedCompletionMinutes: toNumberOrUndefined(fullTest.expectedCompletionMinutes),
         resultEntryType: fullTest.resultEntryType ?? 'NUMERIC',
         allowCustomResultText: Boolean(fullTest.allowCustomResultText),
         resultTextOptions: (fullTest.resultTextOptions ?? []).map((option) => ({
@@ -454,22 +473,10 @@ export function TestsPage() {
       (values.numericAgeRanges ?? [])
         .map((range) => ({
           sex: (range.sex || 'ANY') as 'ANY' | 'M' | 'F',
-          minAgeYears:
-            range.minAgeYears === null || range.minAgeYears === undefined
-              ? null
-              : Number(range.minAgeYears),
-          maxAgeYears:
-            range.maxAgeYears === null || range.maxAgeYears === undefined
-              ? null
-              : Number(range.maxAgeYears),
-          normalMin:
-            range.normalMin === null || range.normalMin === undefined
-              ? null
-              : Number(range.normalMin),
-          normalMax:
-            range.normalMax === null || range.normalMax === undefined
-              ? null
-              : Number(range.normalMax),
+          minAgeYears: toNumberOrNull(range.minAgeYears),
+          maxAgeYears: toNumberOrNull(range.maxAgeYears),
+          normalMin: toNumberOrNull(range.normalMin),
+          normalMax: toNumberOrNull(range.normalMax),
         }))
         .filter((range) => range.normalMin !== null || range.normalMax !== null) ?? [];
     const normalizedResultTextOptions =
@@ -497,8 +504,24 @@ export function TestsPage() {
       return;
     }
 
+    const normalizedNormalMin = toNumberOrNull(values.normalMin);
+    const normalizedNormalMax = toNumberOrNull(values.normalMax);
+    const normalizedNormalMinMale = toNumberOrNull(values.normalMinMale);
+    const normalizedNormalMaxMale = toNumberOrNull(values.normalMaxMale);
+    const normalizedNormalMinFemale = toNumberOrNull(values.normalMinFemale);
+    const normalizedNormalMaxFemale = toNumberOrNull(values.normalMaxFemale);
+    const normalizedSortOrder = toNumberOrUndefined(values.sortOrder);
+    const normalizedExpectedCompletionMinutes = toNumberOrNull(values.expectedCompletionMinutes);
     const payload: CreateTestDto = {
       ...values,
+      normalMin: normalizedNormalMin,
+      normalMax: normalizedNormalMax,
+      normalMinMale: normalizedNormalMinMale,
+      normalMaxMale: normalizedNormalMaxMale,
+      normalMinFemale: normalizedNormalMinFemale,
+      normalMaxFemale: normalizedNormalMaxFemale,
+      sortOrder: normalizedSortOrder,
+      expectedCompletionMinutes: normalizedExpectedCompletionMinutes,
       category: categoryValue ? categoryValue.trim() || null : null,
       parameterDefinitions: paramDefs,
       numericAgeRanges: normalizedNumericAgeRanges.length
@@ -1512,4 +1535,5 @@ export function TestsPage() {
     </div>
   );
 }
+
 
