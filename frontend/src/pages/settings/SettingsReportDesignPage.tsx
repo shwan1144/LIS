@@ -6,6 +6,7 @@ import {
   type LabSettingsDto,
   type ReportBrandingDto,
 } from '../../api/client';
+import { optimizeImageFileToDataUrl } from '../../utils/reportImageUpload';
 
 const { Title, Text } = Typography;
 const REPORT_DESIGN_VERSION_STORAGE_KEY = 'lis_report_design_version';
@@ -18,6 +19,8 @@ type ImageSettingMeta = {
   recommendedSize: string;
   note: string;
   maxBytes: number;
+  maxWidth: number;
+  maxHeight: number;
 };
 
 const IMAGE_SETTINGS: ImageSettingMeta[] = [
@@ -27,6 +30,8 @@ const IMAGE_SETTINGS: ImageSettingMeta[] = [
     recommendedSize: '2480 x 220 px',
     note: 'Wide image for the top of every report page.',
     maxBytes: 2 * 1024 * 1024,
+    maxWidth: 2480,
+    maxHeight: 220,
   },
   {
     key: 'footerDataUrl',
@@ -34,6 +39,8 @@ const IMAGE_SETTINGS: ImageSettingMeta[] = [
     recommendedSize: '2480 x 220 px',
     note: 'Wide image for the bottom of every report page.',
     maxBytes: 2 * 1024 * 1024,
+    maxWidth: 2480,
+    maxHeight: 220,
   },
   {
     key: 'logoDataUrl',
@@ -41,6 +48,8 @@ const IMAGE_SETTINGS: ImageSettingMeta[] = [
     recommendedSize: '500 x 500 px',
     note: 'Square logo used in default report header.',
     maxBytes: 1 * 1024 * 1024,
+    maxWidth: 500,
+    maxHeight: 500,
   },
   {
     key: 'watermarkDataUrl',
@@ -48,10 +57,16 @@ const IMAGE_SETTINGS: ImageSettingMeta[] = [
     recommendedSize: '1200 x 1200 px',
     note: 'Use transparent PNG for best watermark quality.',
     maxBytes: 1 * 1024 * 1024,
+    maxWidth: 1200,
+    maxHeight: 1200,
   },
 ];
 
 const ALLOWED_MIME_TYPES = new Set(['image/png', 'image/jpeg', 'image/jpg', 'image/webp']);
+const MAX_UPLOAD_INPUT_BYTES = 12 * 1024 * 1024;
+const ONLINE_WATERMARK_MAX_BYTES = 2 * 1024 * 1024;
+const ONLINE_WATERMARK_MAX_WIDTH = 1200;
+const ONLINE_WATERMARK_MAX_HEIGHT = 1200;
 
 function emptyBranding(): ReportBrandingDto {
   return {
@@ -60,22 +75,6 @@ function emptyBranding(): ReportBrandingDto {
     logoDataUrl: null,
     watermarkDataUrl: null,
   };
-}
-
-async function readFileAsDataUrl(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      const value = typeof reader.result === 'string' ? reader.result : '';
-      if (!value) {
-        reject(new Error('Could not read image file'));
-        return;
-      }
-      resolve(value);
-    };
-    reader.onerror = () => reject(new Error('Could not read image file'));
-    reader.readAsDataURL(file);
-  });
 }
 
 export function SettingsReportDesignPage() {
@@ -140,19 +139,33 @@ export function SettingsReportDesignPage() {
       message.error('Only PNG, JPG/JPEG, and WebP images are allowed');
       return;
     }
-    if (file.size > maxBytes) {
-      const maxMb = (maxBytes / (1024 * 1024)).toFixed(0);
-      message.error(`Image is too large. Max size is ${maxMb} MB.`);
+    if (file.size > MAX_UPLOAD_INPUT_BYTES) {
+      message.error('Image is too large. Max input size is 12 MB.');
       return;
     }
 
     setUploadingKey(key);
     try {
-      const dataUrl = await readFileAsDataUrl(file);
-      setImage(key, dataUrl);
-      message.success('Image uploaded');
+      const setting = IMAGE_SETTINGS.find((item) => item.key === key);
+      if (!setting) {
+        message.error('Unknown image setting');
+        return;
+      }
+      const optimized = await optimizeImageFileToDataUrl(file, {
+        maxWidth: setting.maxWidth,
+        maxHeight: setting.maxHeight,
+        outputType: file.type,
+        quality: 0.88,
+      });
+      if (optimized.bytes > maxBytes) {
+        const maxMb = (maxBytes / (1024 * 1024)).toFixed(0);
+        message.error(`Optimized image is still too large. Max size is ${maxMb} MB.`);
+        return;
+      }
+      setImage(key, optimized.dataUrl);
+      message.success(`Image uploaded (${Math.round(optimized.bytes / 1024)} KB)`);
     } catch {
-      message.error('Failed to read image file');
+      message.error('Failed to process image file');
     } finally {
       setUploadingKey(null);
     }
@@ -166,23 +179,31 @@ export function SettingsReportDesignPage() {
     input.value = '';
     if (!file) return;
 
-    const maxBytes = 2 * 1024 * 1024;
     if (!ALLOWED_MIME_TYPES.has(file.type)) {
       message.error('Only PNG, JPG/JPEG, and WebP images are allowed');
       return;
     }
-    if (file.size > maxBytes) {
-      message.error('Image is too large. Max size is 2 MB.');
+    if (file.size > MAX_UPLOAD_INPUT_BYTES) {
+      message.error('Image is too large. Max input size is 12 MB.');
       return;
     }
 
     setUploadingOnlineWatermark(true);
     try {
-      const dataUrl = await readFileAsDataUrl(file);
-      setOnlineResultWatermarkDataUrl(dataUrl);
-      message.success('Online watermark image uploaded');
+      const optimized = await optimizeImageFileToDataUrl(file, {
+        maxWidth: ONLINE_WATERMARK_MAX_WIDTH,
+        maxHeight: ONLINE_WATERMARK_MAX_HEIGHT,
+        outputType: file.type,
+        quality: 0.88,
+      });
+      if (optimized.bytes > ONLINE_WATERMARK_MAX_BYTES) {
+        message.error('Optimized image is still too large. Max size is 2 MB.');
+        return;
+      }
+      setOnlineResultWatermarkDataUrl(optimized.dataUrl);
+      message.success(`Online watermark uploaded (${Math.round(optimized.bytes / 1024)} KB)`);
     } catch {
-      message.error('Failed to read image file');
+      message.error('Failed to process image file');
     } finally {
       setUploadingOnlineWatermark(false);
     }
