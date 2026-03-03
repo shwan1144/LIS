@@ -422,7 +422,7 @@ let OrdersService = OrdersService_1 = class OrdersService {
         if (uniqueTestIds.length === 0) {
             throw new common_1.BadRequestException('At least one test is required');
         }
-        return this.orderRepo.manager.transaction(async (manager) => {
+        const updatedOrderId = await this.orderRepo.manager.transaction(async (manager) => {
             const orderRepo = manager.getRepository(order_entity_1.Order);
             const sampleRepo = manager.getRepository(sample_entity_1.Sample);
             const orderTestRepo = manager.getRepository(order_test_entity_1.OrderTest);
@@ -571,11 +571,9 @@ let OrdersService = OrdersService_1 = class OrdersService {
                 finalAmount: order.finalAmount,
                 status: order.status,
             });
-            return (await orderRepo.findOne({
-                where: { id: order.id, labId },
-                relations: ['patient', 'lab', 'shift', 'samples', 'samples.orderTests', 'samples.orderTests.test'],
-            }));
+            return order.id;
         });
+        return this.findOne(updatedOrderId, labId);
     }
     splitSamplesForDepartmentLabels(samples, testMap) {
         const groupedSamples = new Map();

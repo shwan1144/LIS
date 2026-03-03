@@ -598,7 +598,7 @@ export class OrdersService {
       throw new BadRequestException('At least one test is required');
     }
 
-    return this.orderRepo.manager.transaction(async (manager) => {
+    const updatedOrderId = await this.orderRepo.manager.transaction(async (manager) => {
       const orderRepo = manager.getRepository(Order);
       const sampleRepo = manager.getRepository(Sample);
       const orderTestRepo = manager.getRepository(OrderTest);
@@ -816,11 +816,10 @@ export class OrdersService {
         },
       );
 
-      return (await orderRepo.findOne({
-        where: { id: order.id, labId },
-        relations: ['patient', 'lab', 'shift', 'samples', 'samples.orderTests', 'samples.orderTests.test'],
-      })) as Order;
+      return order.id;
     });
+
+    return this.findOne(updatedOrderId, labId);
   }
 
   private splitSamplesForDepartmentLabels(
