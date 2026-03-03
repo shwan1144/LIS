@@ -74,6 +74,7 @@ interface SelectedTest {
   testCode: string;
   testName: string;
   tubeType: string;
+  displayLabel?: string;
   price?: number | null;
   locked?: boolean;
 }
@@ -91,6 +92,8 @@ interface OrderListRow {
 const ORDER_PAGE_SIZE = 25;
 const CREATE_ORDER_TIMEOUT_MS = 15_000;
 const CREATE_ORDER_SLOW_FEEDBACK_MS = 1_200;
+const VISIBLE_ORDER_TEST_ROWS = 5;
+const ORDER_TEST_ROW_HEIGHT = 40;
 const ORDER_STATUS_FILTERS: Array<{ label: string; value: 'ALL' | OrderStatus }> = [
   { label: 'All statuses', value: 'ALL' },
   { label: 'Registered', value: 'REGISTERED' },
@@ -552,6 +555,12 @@ export function OrdersPage() {
     });
 
     return root.map((orderTest) => {
+      const testMeta = orderTest.test as (TestDto & { abbreviation?: string | null }) | undefined;
+      const displayLabel =
+        testMeta?.abbreviation?.trim() ||
+        testMeta?.code?.trim() ||
+        testMeta?.name?.trim() ||
+        '-';
       const childTests = childrenByParent.get(orderTest.id) ?? [];
       const hasProcessedChild = childTests.some((child) => child.status !== 'PENDING');
       return {
@@ -560,6 +569,7 @@ export function OrdersPage() {
         testCode: orderTest.test?.code ?? '-',
         testName: orderTest.test?.name ?? 'Unknown',
         tubeType: orderTest.test?.tubeType ?? 'OTHER',
+        displayLabel,
         price: orderTest.price != null ? Number(orderTest.price) : null,
       };
     });
@@ -1677,6 +1687,7 @@ export function OrdersPage() {
                       }
                       return (
                         <div
+                          className="order-tests-readonly-wrapper"
                           style={{
                             border: styles.border,
                             borderRadius: 8,
@@ -1684,13 +1695,26 @@ export function OrdersPage() {
                             backgroundColor: styles.bgSubtle,
                           }}
                         >
-                          <Space wrap size={[8, 8]}>
-                            {orderTests.map((ot) => (
-                              <Tag key={ot.testId} style={{ margin: 0 }}>
-                                {ot.testCode ?? '-'}
-                              </Tag>
-                            ))}
-                          </Space>
+                          <Table
+                            className="order-tests-readonly-table"
+                            dataSource={orderTests}
+                            rowKey="testId"
+                            pagination={false}
+                            size="small"
+                            scroll={
+                              orderTests.length > VISIBLE_ORDER_TEST_ROWS
+                                ? { y: VISIBLE_ORDER_TEST_ROWS * ORDER_TEST_ROW_HEIGHT }
+                                : undefined
+                            }
+                            columns={[
+                              {
+                                title: 'Abbreviation',
+                                dataIndex: 'displayLabel',
+                                key: 'displayLabel',
+                                render: (value: string) => <Text strong>{value || '-'}</Text>,
+                              },
+                            ]}
+                          />
                         </div>
                       );
                     })() : selectedOrderDetailsError ? (
