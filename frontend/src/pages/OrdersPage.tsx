@@ -92,6 +92,7 @@ interface OrderListRow {
 const ORDER_PAGE_SIZE = 25;
 const CREATE_ORDER_TIMEOUT_MS = 15_000;
 const CREATE_ORDER_SLOW_FEEDBACK_MS = 1_200;
+const ORDER_TEST_GRID_COLUMNS = 5;
 const VISIBLE_ORDER_TEST_ROWS = 5;
 const ORDER_TEST_ROW_HEIGHT = 40;
 const ORDER_STATUS_FILTERS: Array<{ label: string; value: 'ALL' | OrderStatus }> = [
@@ -1695,26 +1696,24 @@ export function OrdersPage() {
                             backgroundColor: styles.bgSubtle,
                           }}
                         >
-                          <Table
-                            className="order-tests-readonly-table"
-                            dataSource={orderTests}
-                            rowKey="testId"
-                            pagination={false}
-                            size="small"
-                            scroll={
-                              orderTests.length > VISIBLE_ORDER_TEST_ROWS
-                                ? { y: VISIBLE_ORDER_TEST_ROWS * ORDER_TEST_ROW_HEIGHT }
-                                : undefined
-                            }
-                            columns={[
-                              {
-                                title: 'Abbreviation',
-                                dataIndex: 'displayLabel',
-                                key: 'displayLabel',
-                                render: (value: string) => <Text strong>{value || '-'}</Text>,
-                              },
-                            ]}
-                          />
+                          <div className="order-tests-readonly-grid-header">Abbreviation</div>
+                          <div
+                            className="order-tests-readonly-grid"
+                            style={{
+                              maxHeight:
+                                orderTests.length > ORDER_TEST_GRID_COLUMNS * VISIBLE_ORDER_TEST_ROWS
+                                  ? VISIBLE_ORDER_TEST_ROWS * ORDER_TEST_ROW_HEIGHT
+                                  : undefined,
+                            }}
+                          >
+                            {orderTests.map((orderTest) => (
+                              <div key={orderTest.testId} className="order-tests-readonly-grid-item">
+                                <Text strong title={orderTest.displayLabel || '-'}>
+                                  {orderTest.displayLabel || '-'}
+                                </Text>
+                              </div>
+                            ))}
+                          </div>
                         </div>
                       );
                     })() : selectedOrderDetailsError ? (

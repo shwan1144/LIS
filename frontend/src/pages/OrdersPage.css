@@ -225,22 +225,41 @@
   overflow: hidden;
 }
 
-.order-tests-readonly-table .ant-table {
-  background: transparent;
-}
-
-.order-tests-readonly-table .ant-table-container {
-  border: 0 !important;
-}
-
-.order-tests-readonly-table .ant-table-thead > tr > th {
-  padding: 8px 12px;
+.order-tests-readonly-grid-header {
   font-size: 12px;
+  font-weight: 600;
+  color: rgba(0, 0, 0, 0.88);
+  margin-bottom: 8px;
 }
 
-.order-tests-readonly-table .ant-table-tbody > tr > td {
-  padding: 8px 12px;
-  word-break: break-word;
+.order-tests-readonly-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 8px;
+  overflow-y: auto;
+  padding-right: 2px;
+}
+
+.order-tests-readonly-grid-item {
+  min-height: 32px;
+  border: 1px solid rgba(0, 0, 0, 0.15);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.82);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px 8px;
+  text-align: center;
+}
+
+.order-tests-readonly-grid-item .ant-typography {
+  width: 100%;
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 @media (max-width: 992px) {
@@ -284,9 +303,18 @@
     padding-bottom: 230px;
   }
 
-  .order-tests-readonly-table .ant-table-thead > tr > th,
-  .order-tests-readonly-table .ant-table-tbody > tr > td {
-    padding: 8px 10px;
+  .order-tests-readonly-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 6px;
+  }
+
+  .order-tests-readonly-grid-item {
+    min-height: 30px;
+    padding: 4px 6px;
+  }
+
+  .order-tests-readonly-grid-item .ant-typography {
+    font-size: 12px;
   }
 
   .order-summary-grid {
