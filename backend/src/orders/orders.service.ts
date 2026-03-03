@@ -1042,50 +1042,54 @@ export class OrdersService {
     shiftId: string | null,
     patientType: PatientType,
   ): Promise<number> {
-    // Try to find most specific pricing first using QueryBuilder for better null handling
-    // Priority: lab + test + shift + patientType > lab + test + shift > lab + test + patientType > lab + test
-    const qb = this.pricingRepo.createQueryBuilder('pricing')
+    const baseQb = this.pricingRepo
+      .createQueryBuilder('pricing')
       .where('pricing.labId = :labId', { labId })
       .andWhere('pricing.testId = :testId', { testId })
       .andWhere('pricing.isActive = :isActive', { isActive: true });
 
-    // Try most specific first: with shift and patientType
+    // First, prefer generic prices managed in Test Management (patientType IS NULL).
+    const genericQb = baseQb.clone().andWhere('pricing.patientType IS NULL');
     if (shiftId) {
-      qb.andWhere(
-        '(pricing.shiftId = :shiftId AND pricing.patientType = :patientType) OR ' +
-        '(pricing.shiftId = :shiftId AND pricing.patientType IS NULL) OR ' +
-        '(pricing.shiftId IS NULL AND pricing.patientType = :patientType) OR ' +
-        '(pricing.shiftId IS NULL AND pricing.patientType IS NULL)',
-        { shiftId, patientType }
-      );
+      genericQb
+        .andWhere('(pricing.shiftId = :shiftId OR pricing.shiftId IS NULL)', { shiftId })
+        .orderBy('CASE WHEN pricing.shiftId = :shiftId THEN 0 ELSE 1 END', 'ASC')
+        .addOrderBy('pricing.createdAt', 'DESC');
     } else {
-      qb.andWhere(
-        '(pricing.shiftId IS NULL AND pricing.patientType = :patientType) OR ' +
-        '(pricing.shiftId IS NULL AND pricing.patientType IS NULL)',
-        { patientType }
-      );
+      genericQb
+        .andWhere('pricing.shiftId IS NULL')
+        .orderBy('pricing.createdAt', 'DESC');
+    }
+    genericQb.limit(1);
+    const genericPricing = await genericQb.getOne();
+    if (genericPricing) {
+      return parseFloat(genericPricing.price.toString());
     }
 
-    qb.orderBy('pricing.shiftId', 'ASC')
-      .addOrderBy('pricing.patientType', 'ASC')
-      .limit(1);
-
-    let pricing = await qb.getOne();
-
-    // Fallback: if no default/specific price, use any active price for this lab+test (e.g. per-shift only)
-    if (!pricing) {
-      const fallback = await this.pricingRepo.findOne({
-        where: { labId, testId, isActive: true },
-        order: { shiftId: 'ASC' }, // prefer default (shiftId null) if present
-      });
-      pricing = fallback ?? null;
+    // Backward-compatible fallback for legacy patient-type specific rows.
+    const specificQb = baseQb.clone().andWhere('pricing.patientType = :patientType', { patientType });
+    if (shiftId) {
+      specificQb
+        .andWhere('(pricing.shiftId = :shiftId OR pricing.shiftId IS NULL)', { shiftId })
+        .orderBy('CASE WHEN pricing.shiftId = :shiftId THEN 0 ELSE 1 END', 'ASC')
+        .addOrderBy('pricing.createdAt', 'DESC');
+    } else {
+      specificQb
+        .andWhere('pricing.shiftId IS NULL')
+        .orderBy('pricing.createdAt', 'DESC');
+    }
+    specificQb.limit(1);
+    const specificPricing = await specificQb.getOne();
+    if (specificPricing) {
+      return parseFloat(specificPricing.price.toString());
     }
 
-    if (!pricing) {
-      return 0;
-    }
-
-    return parseFloat(pricing.price.toString());
+    // Last resort: any active row for this test.
+    const fallback = await this.pricingRepo.findOne({
+      where: { labId, testId, isActive: true },
+      order: { createdAt: 'DESC' },
+    });
+    return fallback ? parseFloat(fallback.price.toString()) : 0;
   }
 
   /**

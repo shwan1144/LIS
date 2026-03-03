@@ -742,35 +742,50 @@ let OrdersService = OrdersService_1 = class OrdersService {
             orderTest.verifiedAt !== null);
     }
     async findPricing(labId, testId, shiftId, patientType) {
-        const qb = this.pricingRepo.createQueryBuilder('pricing')
+        const baseQb = this.pricingRepo
+            .createQueryBuilder('pricing')
             .where('pricing.labId = :labId', { labId })
             .andWhere('pricing.testId = :testId', { testId })
             .andWhere('pricing.isActive = :isActive', { isActive: true });
+        const genericQb = baseQb.clone().andWhere('pricing.patientType IS NULL');
         if (shiftId) {
-            qb.andWhere('(pricing.shiftId = :shiftId AND pricing.patientType = :patientType) OR ' +
-                '(pricing.shiftId = :shiftId AND pricing.patientType IS NULL) OR ' +
-                '(pricing.shiftId IS NULL AND pricing.patientType = :patientType) OR ' +
-                '(pricing.shiftId IS NULL AND pricing.patientType IS NULL)', { shiftId, patientType });
+            genericQb
+                .andWhere('(pricing.shiftId = :shiftId OR pricing.shiftId IS NULL)', { shiftId })
+                .orderBy('CASE WHEN pricing.shiftId = :shiftId THEN 0 ELSE 1 END', 'ASC')
+                .addOrderBy('pricing.createdAt', 'DESC');
         }
         else {
-            qb.andWhere('(pricing.shiftId IS NULL AND pricing.patientType = :patientType) OR ' +
-                '(pricing.shiftId IS NULL AND pricing.patientType IS NULL)', { patientType });
+            genericQb
+                .andWhere('pricing.shiftId IS NULL')
+                .orderBy('pricing.createdAt', 'DESC');
         }
-        qb.orderBy('pricing.shiftId', 'ASC')
-            .addOrderBy('pricing.patientType', 'ASC')
-            .limit(1);
-        let pricing = await qb.getOne();
-        if (!pricing) {
-            const fallback = await this.pricingRepo.findOne({
-                where: { labId, testId, isActive: true },
-                order: { shiftId: 'ASC' },
-            });
-            pricing = fallback ?? null;
+        genericQb.limit(1);
+        const genericPricing = await genericQb.getOne();
+        if (genericPricing) {
+            return parseFloat(genericPricing.price.toString());
         }
-        if (!pricing) {
-            return 0;
+        const specificQb = baseQb.clone().andWhere('pricing.patientType = :patientType', { patientType });
+        if (shiftId) {
+            specificQb
+                .andWhere('(pricing.shiftId = :shiftId OR pricing.shiftId IS NULL)', { shiftId })
+                .orderBy('CASE WHEN pricing.shiftId = :shiftId THEN 0 ELSE 1 END', 'ASC')
+                .addOrderBy('pricing.createdAt', 'DESC');
         }
-        return parseFloat(pricing.price.toString());
+        else {
+            specificQb
+                .andWhere('pricing.shiftId IS NULL')
+                .orderBy('pricing.createdAt', 'DESC');
+        }
+        specificQb.limit(1);
+        const specificPricing = await specificQb.getOne();
+        if (specificPricing) {
+            return parseFloat(specificPricing.price.toString());
+        }
+        const fallback = await this.pricingRepo.findOne({
+            where: { labId, testId, isActive: true },
+            order: { createdAt: 'DESC' },
+        });
+        return fallback ? parseFloat(fallback.price.toString()) : 0;
     }
     async getNextOrderNumber(labId, shiftId) {
         return this.computeNextOrderNumber(labId, shiftId);
