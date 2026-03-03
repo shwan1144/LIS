@@ -68,11 +68,17 @@ const { Title, Text } = Typography;
 const { useBreakpoint } = Grid;
 const REPORT_PDF_CACHE_TTL_MS = 30 * 60 * 1000;
 const REPORT_PDF_CACHE_MAX_ENTRIES = 40;
+const REPORT_DESIGN_VERSION_STORAGE_KEY = 'lis_report_design_version';
 
 type EditResultMode = 'SINGLE' | 'PANEL';
 type ReportStatusFilter = 'ALL' | 'PENDING' | 'COMPLETED' | 'VERIFIED' | 'REJECTED';
 type ReportActionFlagField = 'pdf' | 'print' | 'whatsapp' | 'viber';
-type ResultsPdfCacheEntry = { blob: Blob; cachedAt: number; lastAccessedAt: number };
+type ResultsPdfCacheEntry = {
+  blob: Blob;
+  cachedAt: number;
+  lastAccessedAt: number;
+  designVersion: string;
+};
 
 const ACTION_FLAG_FIELD_MAP: Record<ReportActionKind, ReportActionFlagField> = {
   PDF: 'pdf',
@@ -80,6 +86,14 @@ const ACTION_FLAG_FIELD_MAP: Record<ReportActionKind, ReportActionFlagField> = {
   WHATSAPP: 'whatsapp',
   VIBER: 'viber',
 };
+
+function getReportDesignVersion(): string {
+  try {
+    return window.localStorage.getItem(REPORT_DESIGN_VERSION_STORAGE_KEY) || '0';
+  } catch {
+    return '0';
+  }
+}
 
 type EditResultContext = {
   editMode: EditResultMode;
@@ -560,8 +574,13 @@ export function ReportsPage() {
 
   const getResultsPdfBlob = useCallback(async (orderId: string): Promise<Blob> => {
     const now = Date.now();
+    const designVersion = getReportDesignVersion();
     const cached = resultsPdfCacheRef.current[orderId];
-    if (cached && now - cached.cachedAt <= REPORT_PDF_CACHE_TTL_MS) {
+    if (
+      cached &&
+      cached.designVersion === designVersion &&
+      now - cached.cachedAt <= REPORT_PDF_CACHE_TTL_MS
+    ) {
       cached.lastAccessedAt = now;
       return cached.blob;
     }
@@ -578,6 +597,7 @@ export function ReportsPage() {
           blob,
           cachedAt,
           lastAccessedAt: cachedAt,
+          designVersion,
         };
 
         const cacheEntries = Object.entries(resultsPdfCacheRef.current);

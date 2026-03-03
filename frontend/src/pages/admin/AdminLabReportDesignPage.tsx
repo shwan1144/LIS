@@ -9,6 +9,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useAdminLabSelection } from './useAdminLabSelection';
 
 const { Title, Text } = Typography;
+const REPORT_DESIGN_VERSION_STORAGE_KEY = 'lis_report_design_version';
 
 type BrandingKey = keyof ReportBrandingDto;
 
@@ -225,6 +226,14 @@ export function AdminLabReportDesignPage() {
         onlineResultWatermarkDataUrl: nextWatermarkDataUrl,
         onlineResultWatermarkText: nextWatermarkText,
       });
+      try {
+        window.localStorage.setItem(
+          REPORT_DESIGN_VERSION_STORAGE_KEY,
+          `${selectedLabId}:${Date.now()}`,
+        );
+      } catch {
+        // Ignore local storage errors.
+      }
       message.success('Report design settings saved');
     } catch (error) {
       message.error(getErrorMessage(error) || 'Failed to save report design settings');

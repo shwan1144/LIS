@@ -8,6 +8,7 @@ import {
 } from '../../api/client';
 
 const { Title, Text } = Typography;
+const REPORT_DESIGN_VERSION_STORAGE_KEY = 'lis_report_design_version';
 
 type BrandingKey = keyof ReportBrandingDto;
 
@@ -199,6 +200,11 @@ export function SettingsReportDesignPage() {
       setBranding(updated.reportBranding || emptyBranding());
       setOnlineResultWatermarkDataUrl(updated.onlineResultWatermarkDataUrl || null);
       setOnlineResultWatermarkText(updated.onlineResultWatermarkText || '');
+      try {
+        window.localStorage.setItem(REPORT_DESIGN_VERSION_STORAGE_KEY, `lab:${Date.now()}`);
+      } catch {
+        // Ignore local storage errors.
+      }
       message.success('Report design settings saved');
     } catch (err: unknown) {
       const msg =
