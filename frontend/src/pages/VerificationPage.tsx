@@ -171,6 +171,14 @@ export function VerificationPage() {
   const [rejectReason, setRejectReason] = useState('');
   const [rejectTargetIds, setRejectTargetIds] = useState<string[]>([]);
 
+  const closeReviewModal = useCallback(() => {
+    setReviewModalOpen(false);
+    setReviewOrder(null);
+    setRejectModalOpen(false);
+    setRejectTargetIds([]);
+    setRejectReason('');
+  }, []);
+
   const loadRows = useCallback(async () => {
     setLoading(true);
     try {
@@ -238,15 +246,6 @@ export function VerificationPage() {
     await Promise.all([loadRows(), loadStats()]);
   }, [loadRows, loadStats]);
 
-  const refreshReviewOrder = useCallback(async () => {
-    if (!reviewOrder) return;
-    const refreshed = await getWorklistOrderTests(reviewOrder.orderId, {
-      mode: 'verify',
-      departmentId: departmentId || undefined,
-    });
-    setReviewOrder(refreshed);
-  }, [departmentId, reviewOrder]);
-
   const openReviewModal = useCallback(
     async (order: WorklistOrderSummaryDto) => {
       setOpeningOrderId(order.orderId);
@@ -283,14 +282,14 @@ export function VerificationPage() {
           }`,
         );
         await reloadAll();
-        await refreshReviewOrder();
+        closeReviewModal();
       } catch {
         message.error('Failed to verify results');
       } finally {
         setWorking(false);
       }
     },
-    [refreshReviewOrder, reloadAll],
+    [closeReviewModal, reloadAll],
   );
 
   const openRejectDialog = (ids: string[]) => {
@@ -315,11 +314,8 @@ export function VerificationPage() {
       const success = results.filter((result) => result.status === 'fulfilled').length;
       const failed = results.filter((result) => result.status === 'rejected').length;
       message.success(`Rejected ${success} result(s)${failed > 0 ? `, ${failed} failed` : ''}`);
-      setRejectModalOpen(false);
-      setRejectTargetIds([]);
-      setRejectReason('');
       await reloadAll();
-      await refreshReviewOrder();
+      closeReviewModal();
     } catch {
       message.error('Failed to reject results');
     } finally {
@@ -526,8 +522,7 @@ export function VerificationPage() {
         }
         open={reviewModalOpen}
         onCancel={() => {
-          setReviewModalOpen(false);
-          setReviewOrder(null);
+          closeReviewModal();
         }}
         footer={null}
         width={1050}

@@ -278,6 +278,13 @@ export function WorklistPage() {
   const [liveFlags, setLiveFlags] = useState<Record<string, ResultFlag | null>>({});
   const [resultForm] = Form.useForm<any>();
 
+  const closeEntryModal = useCallback(() => {
+    setResultModalOpen(false);
+    setModalOrder(null);
+    setLiveFlags({});
+    resultForm.resetFields();
+  }, [resultForm]);
+
   const loadRows = useCallback(async () => {
     setLoading(true);
     try {
@@ -562,19 +569,7 @@ export function WorklistPage() {
       );
 
       message.success('Results saved');
-      const refreshed = await getWorklistOrderTests(modalOrder.orderId, {
-        mode: 'entry',
-        departmentId: departmentId || undefined,
-      });
-      setModalOrder(refreshed);
-      resultForm.setFieldsValue(buildInitialFormValues(sortModalItems(refreshed.items)));
-      const refreshedFlags: Record<string, ResultFlag | null> = {};
-      for (const item of refreshed.items) {
-        if (item.testType !== 'PANEL') {
-          refreshedFlags[item.id] = item.flag ?? null;
-        }
-      }
-      setLiveFlags(refreshedFlags);
+      closeEntryModal();
       await Promise.all([loadRows(), loadStats()]);
     } catch {
       message.error('Failed to save results');
@@ -837,10 +832,7 @@ export function WorklistPage() {
         }
         open={resultModalOpen}
         onCancel={() => {
-          setResultModalOpen(false);
-          setModalOrder(null);
-          setLiveFlags({});
-          resultForm.resetFields();
+          closeEntryModal();
         }}
         footer={null}
         width={980}
@@ -900,10 +892,7 @@ export function WorklistPage() {
             >
               <Button
                 onClick={() => {
-                  setResultModalOpen(false);
-                  setModalOrder(null);
-                  setLiveFlags({});
-                  resultForm.resetFields();
+                  closeEntryModal();
                 }}
               >
                 Cancel
