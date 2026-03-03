@@ -61,7 +61,6 @@ export declare class ReportsService implements OnModuleInit, OnModuleDestroy {
     private readonly pdfCacheTtlMs;
     private readonly pdfCacheMaxEntries;
     private readonly pdfPerfLogThresholdMs;
-    private static cachedLogo;
     private static cachedFont;
     constructor(orderRepo: Repository<Order>, orderTestRepo: Repository<OrderTest>, patientRepo: Repository<Patient>, labRepo: Repository<Lab>, userRepo: Repository<User>, auditLogRepo: Repository<AuditLog>);
     private parseEnvInt;

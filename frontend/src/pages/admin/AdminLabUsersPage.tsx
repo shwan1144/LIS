@@ -95,7 +95,7 @@ export function AdminLabUsersPage() {
 
   const openCreate = () => {
     if (!canMutate) {
-      message.warning('Read-only mode: AUDITOR cannot add users');
+      message.warning('You do not have permission to add users.');
       return;
     }
     setEditingUser(null);
@@ -107,7 +107,7 @@ export function AdminLabUsersPage() {
   const openEdit = async (user: SettingsUserDto) => {
     if (!selectedLabId) return;
     if (!canMutate) {
-      message.warning('Read-only mode: AUDITOR cannot edit users');
+      message.warning('You do not have permission to edit users.');
       return;
     }
     setEditingUser(user);
@@ -130,7 +130,7 @@ export function AdminLabUsersPage() {
   const handleSubmit = async () => {
     if (!selectedLabId) return;
     if (!canMutate) {
-      message.warning('Read-only mode: AUDITOR cannot modify users');
+      message.warning('You do not have permission to modify users.');
       return;
     }
     const values = await form.validateFields().catch(() => null);
@@ -172,7 +172,7 @@ export function AdminLabUsersPage() {
   const handleDelete = async (user: SettingsUserDto) => {
     if (!selectedLabId) return;
     if (!canMutate) {
-      message.warning('Read-only mode: AUDITOR cannot delete users');
+      message.warning('You do not have permission to delete users.');
       return;
     }
     try {
@@ -186,7 +186,7 @@ export function AdminLabUsersPage() {
 
   const openResetPassword = (user: SettingsUserDto) => {
     if (!canMutate) {
-      message.warning('Read-only mode: AUDITOR cannot reset passwords');
+      message.warning('You do not have permission to reset passwords.');
       return;
     }
     setResetTargetUser(user);
@@ -197,7 +197,7 @@ export function AdminLabUsersPage() {
   const handleResetPassword = async () => {
     if (!selectedLabId || !resetTargetUser) return;
     if (!canMutate) {
-      message.warning('Read-only mode: AUDITOR cannot reset passwords');
+      message.warning('You do not have permission to reset passwords.');
       return;
     }
     const values = await resetForm.validateFields().catch(() => null);

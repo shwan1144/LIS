@@ -133,7 +133,7 @@ export function AdminLabsPage() {
 
   const handleSaveLab = async () => {
     if (!canMutate) {
-      message.warning('Read-only mode: AUDITOR cannot modify labs');
+      message.warning('You do not have permission to modify labs.');
       return;
     }
     const values = await form.validateFields().catch(() => null);
@@ -178,7 +178,7 @@ export function AdminLabsPage() {
 
   const handleStatusChange = async () => {
     if (!canMutate) {
-      message.warning('Read-only mode: AUDITOR cannot change lab status');
+      message.warning('You do not have permission to change lab status.');
       return;
     }
     if (!statusTarget) return;

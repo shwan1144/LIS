@@ -142,7 +142,7 @@ export function AdminLabReportDesignPage() {
 
   const handleFileSelect = async (key: BrandingKey, maxBytes: number, event: ChangeEvent<HTMLInputElement>) => {
     if (!canMutate) {
-      message.warning('Read-only mode: AUDITOR cannot upload report design');
+      message.warning('You do not have permission to upload report design.');
       event.currentTarget.value = '';
       return;
     }
@@ -173,7 +173,7 @@ export function AdminLabReportDesignPage() {
 
   const handleOnlineWatermarkFileSelect = async (event: ChangeEvent<HTMLInputElement>) => {
     if (!canMutate) {
-      message.warning('Read-only mode: AUDITOR cannot upload watermark');
+      message.warning('You do not have permission to upload watermark images.');
       event.currentTarget.value = '';
       return;
     }
@@ -205,7 +205,7 @@ export function AdminLabReportDesignPage() {
   const handleSave = async () => {
     if (!selectedLabId) return;
     if (!canMutate) {
-      message.warning('Read-only mode: AUDITOR cannot save report design');
+      message.warning('You do not have permission to save report design.');
       return;
     }
     setSaving(true);
@@ -280,7 +280,7 @@ export function AdminLabReportDesignPage() {
             description={
               canMutate
                 ? 'Use PNG for transparent logo/watermark. Keep banner/footer wide for A4 width.'
-                : 'Read-only mode: AUDITOR can view design but cannot change it.'
+                : 'Read-only mode: you can view design but cannot change it.'
             }
           />
 

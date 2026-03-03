@@ -230,7 +230,6 @@ export class ReportsService implements OnModuleInit, OnModuleDestroy {
   );
 
   // ── Static in-memory caches for files that never change at runtime ──
-  private static cachedLogo: { path: string; base64: string } | null = null;
   private static cachedFont: { path: string; base64: string } | null = null;
 
   constructor(
@@ -1031,27 +1030,9 @@ export class ReportsService implements OnModuleInit, OnModuleDestroy {
         ),
       ];
 
-      // Optimization: logo and font files are immutable at runtime - serve
-      // from in-memory cache after the first read to avoid repeated disk I/O.
+      // Optimization: font files are immutable at runtime - serve from
+      // in-memory cache after the first read to avoid repeated disk I/O.
       const assetsStartMs = Date.now();
-      let defaultLogoBase64: string | undefined;
-      const logoPath = resolveReadablePath([
-        join(__dirname, 'logo.png'),
-        join(process.cwd(), 'dist', 'src', 'reports', 'logo.png'),
-        join(process.cwd(), 'src', 'reports', 'logo.png'),
-      ]);
-      if (logoPath) {
-        try {
-          if (!ReportsService.cachedLogo || ReportsService.cachedLogo.path !== logoPath) {
-            const buf = readFileSync(logoPath);
-            ReportsService.cachedLogo = { path: logoPath, base64: `data:image/png;base64,${buf.toString('base64')}` };
-          }
-          defaultLogoBase64 = ReportsService.cachedLogo.base64;
-        } catch {
-          // ignore
-        }
-      }
-
       let kurdishFontBase64: string | undefined;
       const kurdishFontPath = resolveReadablePath([
         join(__dirname, 'fonts', 'NotoNaskhArabic-Regular.ttf'),
@@ -1080,7 +1061,6 @@ export class ReportsService implements OnModuleInit, OnModuleDestroy {
         verifiers: verifierNames,
         latestVerifiedAt: latestVerifiedAt ?? null,
         comments,
-        defaultLogoBase64,
         kurdishFontBase64,
       });
       htmlMs = Date.now() - htmlStartMs;
@@ -1153,8 +1133,7 @@ export class ReportsService implements OnModuleInit, OnModuleDestroy {
     const bannerImage = this.decodeImageDataUrl(labBranding?.reportBannerDataUrl);
     const footerImage = this.decodeImageDataUrl(labBranding?.reportFooterDataUrl);
     const logoImage = this.decodeImageDataUrl(labBranding?.reportLogoDataUrl);
-    const watermarkImage =
-      this.decodeImageDataUrl(labBranding?.reportWatermarkDataUrl) || logoImage;
+    const watermarkImage = this.decodeImageDataUrl(labBranding?.reportWatermarkDataUrl);
 
     return new Promise((resolve, reject) => {
       const doc = new PDFDocument({

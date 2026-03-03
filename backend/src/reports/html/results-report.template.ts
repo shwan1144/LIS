@@ -145,7 +145,6 @@ export function buildResultsReportHtml(input: {
   verifiers: string[];
   latestVerifiedAt: Date | null;
   comments: string[];
-  defaultLogoBase64?: string;
   kurdishFontBase64?: string;
 }): string {
   const { order, orderTests } = input;
@@ -161,17 +160,14 @@ export function buildResultsReportHtml(input: {
 
   const dir = getDirection(order, orderTests, input.comments);
 
-  // Logo: lab logo (base64 or URL) or fallback to default logo (e.g. backend/src/reports/logo.png)
+  // Branding: only use values explicitly configured for this lab.
   const labAny: any = order.lab as any;
   const bannerSrc: string = (labAny?.reportBannerDataUrl as string) || '';
   const footerSrc: string = (labAny?.reportFooterDataUrl as string) || '';
-  const logoSrc: string =
-    (labAny?.reportLogoDataUrl as string) ||
-    (labAny?.logoBase64 as string) ||
-    (labAny?.logoUrl as string) ||
-    (input.defaultLogoBase64 ?? '');
-  const watermarkSrc: string = (labAny?.reportWatermarkDataUrl as string) || logoSrc;
+  const logoSrc: string = (labAny?.reportLogoDataUrl as string) || '';
+  const watermarkSrc: string = (labAny?.reportWatermarkDataUrl as string) || '';
   const hasCustomBanner = Boolean(bannerSrc);
+  const hasCustomLogo = Boolean(logoSrc);
   const visitDate = formatDateTime(order.registeredAt);
   const ageSex = `${age != null ? `${age} Years` : '-'}/${sexLabel}`;
   const bannerUrlAttr = bannerSrc ? `src="${escapeHtml(bannerSrc)}"` : '';
@@ -293,21 +289,9 @@ export function buildResultsReportHtml(input: {
   const pageHeaderHtml = `
     ${hasCustomBanner && bannerUrlAttr
       ? `<div class="banner-wrap"><img class="banner-image" ${bannerUrlAttr} alt="Report Banner" /></div>`
-      : `<header class="header">
-      <div class="header-col ltr">
-        <div>Kurdistan Regional Government - Iraq</div>
-        <div>Ministry of Health</div>
-        <div>General Directorate of Health Garmian</div>
-      </div>
-      <div class="logo-wrap">
-        ${logoUrlAttr ? `<img class="logo" ${logoUrlAttr} alt="Logo" />` : '<div class="logo"></div>'}
-      </div>
-      <div class="header-col rtl">
-        <div>حکومەتی هەرێمی کوردستان - عێراق</div>
-        <div>وەزارەتی تەندروستی</div>
-        <div>بەڕێوەبەرایەتی گشتی تەندروستی گەرمیان</div>
-      </div>
-    </header>`
+      : hasCustomLogo && logoUrlAttr
+        ? `<div class="logo-only-wrap"><img class="logo" ${logoUrlAttr} alt="Report Logo" /></div>`
+        : ''
     }
     <div class="patient-info">
       <div class="info-item"><span class="label">Name :</span><span class="name-value ${patientNameIsRtl ? 'rtl-text' : ''}">${escapeHtml(patientName)}</span></div>
@@ -568,6 +552,7 @@ export function buildResultsReportHtml(input: {
       display: block;
     }
     .header { display: flex; align-items: center; justify-content: space-between; border-bottom: 2px solid #222; padding: 0 var(--content-x) 8px var(--content-x); }
+    .logo-only-wrap { display: flex; justify-content: center; align-items: center; margin: 2px 0 8px; }
     .header-col { flex: 1; font-size: 13px; font-weight: 700; line-height: 1.35; }
     .header-col.ltr { text-align: left; }
     .header-col.rtl {

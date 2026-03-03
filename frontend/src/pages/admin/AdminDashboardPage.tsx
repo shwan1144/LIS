@@ -139,7 +139,7 @@ export function AdminDashboardPage() {
 
   const handleCreateLab = async (): Promise<void> => {
     if (!canCreateLab) {
-      message.warning('Read-only mode: AUDITOR cannot create labs');
+      message.warning('You do not have permission to create labs.');
       return;
     }
     try {

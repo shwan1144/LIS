@@ -8,6 +8,5 @@ export declare function buildResultsReportHtml(input: {
     verifiers: string[];
     latestVerifiedAt: Date | null;
     comments: string[];
-    defaultLogoBase64?: string;
     kurdishFontBase64?: string;
 }): string;

@@ -35,7 +35,7 @@ export function AdminLabOnlineResultsPage() {
   const handleSave = async (values: { enableOnlineResults: boolean }) => {
     if (!selectedLabId) return;
     if (!canMutate) {
-      message.warning('Read-only mode: AUDITOR cannot update settings');
+      message.warning('You do not have permission to update these settings.');
       return;
     }
     setSaving(true);

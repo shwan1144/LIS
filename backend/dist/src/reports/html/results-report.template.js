@@ -132,12 +132,10 @@ function buildResultsReportHtml(input) {
     const labAny = order.lab;
     const bannerSrc = labAny?.reportBannerDataUrl || '';
     const footerSrc = labAny?.reportFooterDataUrl || '';
-    const logoSrc = labAny?.reportLogoDataUrl ||
-        labAny?.logoBase64 ||
-        labAny?.logoUrl ||
-        (input.defaultLogoBase64 ?? '');
-    const watermarkSrc = labAny?.reportWatermarkDataUrl || logoSrc;
+    const logoSrc = labAny?.reportLogoDataUrl || '';
+    const watermarkSrc = labAny?.reportWatermarkDataUrl || '';
     const hasCustomBanner = Boolean(bannerSrc);
+    const hasCustomLogo = Boolean(logoSrc);
     const visitDate = formatDateTime(order.registeredAt);
     const ageSex = `${age != null ? `${age} Years` : '-'}/${sexLabel}`;
     const bannerUrlAttr = bannerSrc ? `src="${escapeHtml(bannerSrc)}"` : '';
@@ -240,21 +238,9 @@ function buildResultsReportHtml(input) {
     const pageHeaderHtml = `
     ${hasCustomBanner && bannerUrlAttr
         ? `<div class="banner-wrap"><img class="banner-image" ${bannerUrlAttr} alt="Report Banner" /></div>`
-        : `<header class="header">
-      <div class="header-col ltr">
-        <div>Kurdistan Regional Government - Iraq</div>
-        <div>Ministry of Health</div>
-        <div>General Directorate of Health Garmian</div>
-      </div>
-      <div class="logo-wrap">
-        ${logoUrlAttr ? `<img class="logo" ${logoUrlAttr} alt="Logo" />` : '<div class="logo"></div>'}
-      </div>
-      <div class="header-col rtl">
-        <div>حکومەتی هەرێمی کوردستان - عێراق</div>
-        <div>وەزارەتی تەندروستی</div>
-        <div>بەڕێوەبەرایەتی گشتی تەندروستی گەرمیان</div>
-      </div>
-    </header>`}
+        : hasCustomLogo && logoUrlAttr
+            ? `<div class="logo-only-wrap"><img class="logo" ${logoUrlAttr} alt="Report Logo" /></div>`
+            : ''}
     <div class="patient-info">
       <div class="info-item"><span class="label">Name :</span><span class="name-value ${patientNameIsRtl ? 'rtl-text' : ''}">${escapeHtml(patientName)}</span></div>
       <div class="info-item"><span class="label">Visit Date:</span>${escapeHtml(visitDate)}</div>
@@ -494,6 +480,7 @@ function buildResultsReportHtml(input) {
       display: block;
     }
     .header { display: flex; align-items: center; justify-content: space-between; border-bottom: 2px solid #222; padding: 0 var(--content-x) 8px var(--content-x); }
+    .logo-only-wrap { display: flex; justify-content: center; align-items: center; margin: 2px 0 8px; }
     .header-col { flex: 1; font-size: 13px; font-weight: 700; line-height: 1.35; }
     .header-col.ltr { text-align: left; }
     .header-col.rtl {

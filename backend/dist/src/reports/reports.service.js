@@ -814,23 +814,6 @@ let ReportsService = ReportsService_1 = class ReportsService {
                     .filter((value) => Boolean(value))),
             ];
             const assetsStartMs = Date.now();
-            let defaultLogoBase64;
-            const logoPath = resolveReadablePath([
-                (0, path_1.join)(__dirname, 'logo.png'),
-                (0, path_1.join)(process.cwd(), 'dist', 'src', 'reports', 'logo.png'),
-                (0, path_1.join)(process.cwd(), 'src', 'reports', 'logo.png'),
-            ]);
-            if (logoPath) {
-                try {
-                    if (!ReportsService_1.cachedLogo || ReportsService_1.cachedLogo.path !== logoPath) {
-                        const buf = (0, fs_1.readFileSync)(logoPath);
-                        ReportsService_1.cachedLogo = { path: logoPath, base64: `data:image/png;base64,${buf.toString('base64')}` };
-                    }
-                    defaultLogoBase64 = ReportsService_1.cachedLogo.base64;
-                }
-                catch {
-                }
-            }
             let kurdishFontBase64;
             const kurdishFontPath = resolveReadablePath([
                 (0, path_1.join)(__dirname, 'fonts', 'NotoNaskhArabic-Regular.ttf'),
@@ -858,7 +841,6 @@ let ReportsService = ReportsService_1 = class ReportsService {
                 verifiers: verifierNames,
                 latestVerifiedAt: latestVerifiedAt ?? null,
                 comments,
-                defaultLogoBase64,
                 kurdishFontBase64,
             });
             htmlMs = Date.now() - htmlStartMs;
@@ -917,7 +899,7 @@ let ReportsService = ReportsService_1 = class ReportsService {
         const bannerImage = this.decodeImageDataUrl(labBranding?.reportBannerDataUrl);
         const footerImage = this.decodeImageDataUrl(labBranding?.reportFooterDataUrl);
         const logoImage = this.decodeImageDataUrl(labBranding?.reportLogoDataUrl);
-        const watermarkImage = this.decodeImageDataUrl(labBranding?.reportWatermarkDataUrl) || logoImage;
+        const watermarkImage = this.decodeImageDataUrl(labBranding?.reportWatermarkDataUrl);
         return new Promise((resolve, reject) => {
             const doc = new PDFDocument({
                 size: 'A4',
@@ -1119,7 +1101,6 @@ let ReportsService = ReportsService_1 = class ReportsService {
     }
 };
 exports.ReportsService = ReportsService;
-ReportsService.cachedLogo = null;
 ReportsService.cachedFont = null;
 exports.ReportsService = ReportsService = ReportsService_1 = __decorate([
     (0, common_1.Injectable)(),

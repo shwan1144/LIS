@@ -113,6 +113,21 @@ export function AdminOrdersPage() {
     void loadOrders();
   }, [labId, status, searchApplied, dateRange, page, size]);
 
+  useEffect(() => {
+    const syncDateRange = () => {
+      setDateRange(getInitialDateRange());
+      setPage(1);
+    };
+
+    window.addEventListener(ADMIN_DATE_RANGE_EVENT, syncDateRange as EventListener);
+    window.addEventListener('storage', syncDateRange);
+
+    return () => {
+      window.removeEventListener(ADMIN_DATE_RANGE_EVENT, syncDateRange as EventListener);
+      window.removeEventListener('storage', syncDateRange);
+    };
+  }, []);
+
   const activeFilterTags = useMemo(() => {
     const tags: string[] = [];
     const selectedLab = labs.find((item) => item.id === labId);

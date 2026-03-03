@@ -27,7 +27,7 @@ import {
   type AdminLabDto,
 } from '../../api/client';
 import { useAuth } from '../../contexts/AuthContext';
-import { ADMIN_DATE_RANGE_KEY, type StoredAdminDateRange } from '../../utils/admin-ui';
+import { ADMIN_DATE_RANGE_EVENT, ADMIN_DATE_RANGE_KEY, type StoredAdminDateRange } from '../../utils/admin-ui';
 
 const { RangePicker } = DatePicker;
 const { Title, Text } = Typography;
@@ -130,6 +130,21 @@ export function AdminAuditLogsPage() {
   useEffect(() => {
     void loadData();
   }, [action, actorType, dateRange, entityType, labId, page, searchApplied, size]);
+
+  useEffect(() => {
+    const syncDateRange = () => {
+      setDateRange(getInitialDateRange());
+      setPage(1);
+    };
+
+    window.addEventListener(ADMIN_DATE_RANGE_EVENT, syncDateRange as EventListener);
+    window.addEventListener('storage', syncDateRange);
+
+    return () => {
+      window.removeEventListener(ADMIN_DATE_RANGE_EVENT, syncDateRange as EventListener);
+      window.removeEventListener('storage', syncDateRange);
+    };
+  }, []);
 
   const activeFilters = useMemo(() => {
     const filters: string[] = [];
@@ -339,8 +354,16 @@ export function AdminAuditLogsPage() {
               value={dateRange}
               onChange={(value) => {
                 if (!value) return;
-                setDateRange(value as [Dayjs, Dayjs]);
+                const nextRange = value as [Dayjs, Dayjs];
+                setDateRange(nextRange);
                 setPage(1);
+                const payload: StoredAdminDateRange = {
+                  preset: 'custom',
+                  start: nextRange[0].toISOString(),
+                  end: nextRange[1].toISOString(),
+                };
+                localStorage.setItem(ADMIN_DATE_RANGE_KEY, JSON.stringify(payload));
+                window.dispatchEvent(new CustomEvent(ADMIN_DATE_RANGE_EVENT, { detail: payload }));
               }}
             />
             <Input.Search
