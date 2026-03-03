@@ -6,6 +6,8 @@
   - `DOCKPLOY_BACKEND_DOCKERFILE_SWITCH.md`
 - Dockploy frontend Dockerfile path fix:
   - `DOCKPLOY_FRONTEND_DOCKERFILE_FIX.md`
+- Dockploy new lab onboarding + subdomain activation (medilis.net):
+  - `DOCKPLOY_NEW_LAB_ONBOARDING.md`
 
 ## Quick start (Windows)
 

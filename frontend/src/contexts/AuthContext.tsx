@@ -4,12 +4,37 @@ import {
   useState,
   useCallback,
   useEffect,
+  useRef,
   type ReactNode,
 } from 'react';
 import type { UserDto, LabDto } from '../api/client';
 import { getCurrentAuthScope, type AuthScope } from '../utils/tenant-scope';
 
 const SHIFT_STORAGE_PREFIX = 'lis_shift_';
+
+function clearPersistedAuthStorage() {
+  localStorage.removeItem('accessToken');
+  localStorage.removeItem('user');
+  localStorage.removeItem('lab');
+  localStorage.removeItem('authScope');
+}
+
+function decodeJwtExpSeconds(token: string): number | null {
+  try {
+    const tokenParts = token.split('.');
+    if (tokenParts.length < 2) return null;
+    const base64 = tokenParts[1].replace(/-/g, '+').replace(/_/g, '/');
+    const padded = base64.padEnd(Math.ceil(base64.length / 4) * 4, '=');
+    const decoded = atob(padded);
+    const payload = JSON.parse(decoded) as { exp?: unknown };
+    if (typeof payload.exp !== 'number' || !Number.isFinite(payload.exp)) {
+      return null;
+    }
+    return payload.exp;
+  } catch {
+    return null;
+  }
+}
 
 interface AuthState {
   user: UserDto | null;
@@ -31,6 +56,7 @@ interface AuthContextValue extends AuthState {
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
+  const platformExpiryTimerRef = useRef<number | null>(null);
   const [state, setState] = useState<AuthState>({
     user: null,
     lab: null,
@@ -49,10 +75,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const scopeStr = (localStorage.getItem('authScope') as AuthScope | null) ?? 'LAB';
 
     if (scopeStr !== currentScope) {
-      localStorage.removeItem('accessToken');
-      localStorage.removeItem('user');
-      localStorage.removeItem('lab');
-      localStorage.removeItem('authScope');
+      clearPersistedAuthStorage();
       setState((s) => ({ ...s, isReady: true, scope: currentScope }));
       return;
     }
@@ -91,14 +114,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           currentShiftLabel,
         });
       } catch {
-        localStorage.removeItem('accessToken');
-        localStorage.removeItem('user');
-        localStorage.removeItem('lab');
-        localStorage.removeItem('authScope');
+        clearPersistedAuthStorage();
         setState((s) => ({ ...s, isReady: true, scope: currentScope }));
       }
     } else {
       setState((s) => ({ ...s, isReady: true, scope: currentScope }));
+    }
+  }, []);
+
+  const clearPlatformExpiryTimer = useCallback(() => {
+    if (typeof window === 'undefined') return;
+    if (platformExpiryTimerRef.current !== null) {
+      window.clearTimeout(platformExpiryTimerRef.current);
+      platformExpiryTimerRef.current = null;
     }
   }, []);
 
@@ -139,10 +167,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const logout = useCallback(() => {
-    localStorage.removeItem('accessToken');
-    localStorage.removeItem('user');
-    localStorage.removeItem('lab');
-    localStorage.removeItem('authScope');
+    clearPlatformExpiryTimer();
+    clearPersistedAuthStorage();
     setState((s) => ({
       ...s,
       user: null,
@@ -152,7 +178,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       currentShiftId: null,
       currentShiftLabel: null,
     }));
-  }, []);
+  }, [clearPlatformExpiryTimer]);
 
   const setCurrentShift = useCallback((shiftId: string | null, label: string | null) => {
     setState((s) => {
@@ -171,6 +197,49 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.setItem('accessToken', token);
     setState((s) => ({ ...s, token }));
   }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    clearPlatformExpiryTimer();
+
+    if (!state.isReady || state.scope !== 'PLATFORM' || !state.token) {
+      return;
+    }
+
+    const expSeconds = decodeJwtExpSeconds(state.token);
+    if (!expSeconds) return;
+
+    const expiresAtMs = expSeconds * 1000;
+    const delayMs = expiresAtMs - Date.now();
+
+    const expireSession = () => {
+      sessionStorage.setItem('sessionExpired', '1');
+      clearPersistedAuthStorage();
+      setState((s) => ({
+        ...s,
+        user: null,
+        lab: null,
+        scope: getCurrentAuthScope(),
+        token: null,
+        currentShiftId: null,
+        currentShiftLabel: null,
+      }));
+      if (window.location.pathname !== '/login') {
+        window.location.href = '/login';
+      }
+    };
+
+    if (delayMs <= 0) {
+      expireSession();
+      return;
+    }
+
+    platformExpiryTimerRef.current = window.setTimeout(expireSession, delayMs);
+
+    return () => {
+      clearPlatformExpiryTimer();
+    };
+  }, [clearPlatformExpiryTimer, state.isReady, state.scope, state.token]);
 
   const value: AuthContextValue = { ...state, login, logout, setCurrentShift, setAccessToken };
 
