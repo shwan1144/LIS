@@ -327,4 +327,23 @@ describe('buildResultsReportHtml panel page isolation', () => {
     expect(html).toContain('.regular-results-table tbody.regular-dept-block {');
     expect(html).toContain('page-break-inside: avoid;');
   });
+
+  it('prefers order notes for Referred By over patient address fallback', () => {
+    const order = createOrder();
+    (order as unknown as { notes?: string }).notes = 'Dr Ahmed Ali';
+    (order.patient as unknown as { address?: string }).address = 'Patient Address';
+
+    const html = buildResultsReportHtml({
+      order,
+      orderTests: [],
+      reportableCount: 0,
+      verifiedCount: 0,
+      verifiers: [],
+      latestVerifiedAt: null,
+      comments: [],
+    });
+
+    expect(html).toContain('<span class="label">Referred By:</span>Dr Ahmed Ali');
+    expect(html).not.toContain('<span class="label">Referred By:</span>Patient Address');
+  });
 });

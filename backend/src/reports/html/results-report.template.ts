@@ -156,7 +156,7 @@ export function buildResultsReportHtml(input: {
   const sex = order.patient?.sex || '-';
   const sexLabel = sex === 'M' ? 'Male' : sex === 'F' ? 'Female' : sex || '-';
   const patientId = order.patient?.patientNumber || order.patient?.externalId || order.patient?.nationalId || order.patient?.id || '-';
-  const referredBy = order.patient?.address || order.notes || 'Himself';
+  const referredBy = order.notes || order.patient?.address || 'Himself';
 
   const dir = getDirection(order, orderTests, input.comments);
 
@@ -170,6 +170,7 @@ export function buildResultsReportHtml(input: {
   const hasCustomLogo = Boolean(logoSrc);
   const visitDate = formatDateTime(order.registeredAt);
   const ageSex = `${age != null ? `${age} Years` : '-'}/${sexLabel}`;
+  const referredByDisplay = String(referredBy || '').trim() || 'Himself';
   const bannerUrlAttr = bannerSrc ? `src="${escapeHtml(bannerSrc)}"` : '';
   const footerUrlAttr = footerSrc ? `src="${escapeHtml(footerSrc)}"` : '';
   const logoUrlAttr = logoSrc ? `src="${escapeHtml(logoSrc)}"` : '';
@@ -239,10 +240,16 @@ export function buildResultsReportHtml(input: {
         : `<div class="header-spacer" aria-hidden="true"></div>`
     }
     <div class="patient-info">
-      <div class="info-item"><span class="label">Name :</span><span class="name-value ${patientNameIsRtl ? 'rtl-text' : ''}">${escapeHtml(patientName)}</span></div>
-      <div class="info-item"><span class="label">Visit Date:</span>${escapeHtml(visitDate)}</div>
-      <div class="info-item"><span class="label">Patient ID:</span>${escapeHtml(patientId)}</div>
-      <div class="info-item"><span class="label">Age/Sex:</span>${escapeHtml(ageSex)}</div>
+      <div class="patient-info-col">
+        <div class="info-item"><span class="label">Name :</span><span class="name-value ${patientNameIsRtl ? 'rtl-text' : ''}">${escapeHtml(patientName)}</span></div>
+        <div class="info-item"><span class="label">Age/Sex:</span>${escapeHtml(ageSex)}</div>
+        <div class="info-item"><span class="label">Referred By:</span>${escapeHtml(referredByDisplay)}</div>
+      </div>
+      <div class="patient-info-col">
+        <div class="info-item"><span class="label">Visit Date:</span>${escapeHtml(visitDate)}</div>
+        <div class="info-item"><span class="label">Order No:</span>${escapeHtml(orderNumber)}</div>
+        <div class="info-item"><span class="label">Patient ID:</span>${escapeHtml(patientId)}</div>
+      </div>
     </div>
     <div class="report-title">Laboratory Report</div>
   `;
@@ -531,7 +538,8 @@ export function buildResultsReportHtml(input: {
     .logo-wrap { flex: 0 0 120px; text-align: center; }
     .logo { width: 90px; height: auto; object-fit: contain; }
     .report-title { text-align: center; font-size: 20px; font-weight: 800; text-decoration: underline; margin: 12px 0 10px; }
-    .patient-info { margin-top: 8px; margin-bottom: 8px; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; border: 1px solid #ccc; border-radius: 6px; padding: 10px 12px; background: #fafafa; }
+    .patient-info { margin-top: 8px; margin-bottom: 8px; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; border: 1px solid #ccc; border-radius: 6px; padding: 10px 12px; background: #fafafa; }
+    .patient-info-col { display: flex; flex-direction: column; gap: 6px; }
     .info-item { font-size: 13px; }
     .info-item .label { font-weight: 700; margin-right: 4px; }
     .name-value { display: inline-block; }

@@ -54,6 +54,7 @@ import {
   type TestParameterDefinition,
   type WorklistStats,
 } from '../api/client';
+import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { WorklistStatusDashboard } from '../components/WorklistStatusDashboard';
 import {
@@ -201,22 +202,22 @@ function formatReferenceRange(
 
 function buildResultsMessage(
   order: Pick<OrderHistoryItemDto, 'id' | 'orderNumber' | 'registeredAt' | 'patient'>,
+  labName?: string | null,
 ): string {
-  const patientName = order.patient?.fullName?.trim() || 'نەخۆش';
-  const orderNum = order.orderNumber || order.id.substring(0, 8);
-  const date = dayjs(order.registeredAt).format('YYYY-MM-DD');
+  const patientName = order.patient?.fullName?.trim() || 'بەڕێز نەخۆش';
+  const orderDateTime = dayjs(order.registeredAt).format('YYYY-MM-DD HH:mm');
+  const displayLabName = (labName ?? '').trim() || 'تاقیگەی ئێمە';
 
   const apiBase = (import.meta.env.VITE_API_URL || window.location.origin).replace(/\/+$/, '');
   const resultUrl = `${apiBase}/public/results/${order.id}`;
 
   return [
-    `سڵاو ${patientName}،`,
-    ``,
-    `ئەنجامەکانت بۆ داواکردنی ژمارە ${orderNum} (${date}) لە لابراتواری ئێمە ئامادەکراوە.`,
-    `تکایە کرتە لەم لینکی خوارەوە بکە بۆ بینینی ڕاپۆرتەکە:`,
+    `سڵاو بەێز ${patientName}`,
+    `بۆ بینینی ئەنجامی پشكنینەكانت كە ئەنجامت داوە لە بەرواری (${orderDateTime}) دەتوانی لەم لینكەی خوارەوە ببینی.`,
+    '',
     resultUrl,
-    ``,
-    `سوپاس بۆ هەڵبژاردنی لابراتواری ئێمە.`,
+    '',
+    `سوپاس بۆ هەڵبژاردنی تاقیگەی (${displayLabName})`,
   ].join('\n');
 }
 
@@ -402,6 +403,7 @@ function getOrderTestRows(order: OrderDto): ExpandedOrderTestRow[] {
 }
 
 export function ReportsPage() {
+  const { lab } = useAuth();
   const screens = useBreakpoint();
   const isCompactActions = !screens.lg;
   const isDark = useTheme().theme === 'dark';
@@ -905,7 +907,7 @@ export function ReportsPage() {
     }
 
     const cleanedPhone = cleanPhoneNumber(phone);
-    const messageText = buildResultsMessage(order);
+    const messageText = buildResultsMessage(order, lab?.name);
     void trackReportAction(order.id, 'WHATSAPP');
 
     const url = `https://wa.me/${cleanedPhone}?text=${encodeURIComponent(messageText)}`;
@@ -932,7 +934,7 @@ export function ReportsPage() {
     }
 
     const cleanedPhone = cleanPhoneNumber(phone);
-    const messageText = buildResultsMessage(order);
+    const messageText = buildResultsMessage(order, lab?.name);
     void trackReportAction(order.id, 'VIBER');
 
     const url = `viber://chat?number=${encodeURIComponent(cleanedPhone)}&text=${encodeURIComponent(messageText)}`;

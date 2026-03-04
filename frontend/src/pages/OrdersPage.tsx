@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import axios from 'axios';
 import {
+  AutoComplete,
   Card,
   Button,
   Space,
@@ -124,6 +125,22 @@ const SHIFT_COLOR_PALETTE = [
   'purple',
 ] as const;
 
+function normalizeReferringDoctorList(values: string[] | null | undefined): string[] {
+  if (!Array.isArray(values)) return [];
+  const normalized: string[] = [];
+  const seen = new Set<string>();
+  for (const value of values) {
+    if (typeof value !== 'string') continue;
+    const trimmed = value.trim();
+    if (!trimmed) continue;
+    const key = trimmed.toLocaleLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    normalized.push(trimmed);
+  }
+  return normalized;
+}
+
 function getShiftLabel(order: { shift: { name: string | null; code: string | null } | null }): string {
   return order.shift?.name?.trim() || order.shift?.code?.trim() || 'No shift';
 }
@@ -221,6 +238,8 @@ export function OrdersPage() {
   const [testSearch, setTestSearch] = useState('');
   const [selectedTests, setSelectedTests] = useState<SelectedTest[]>([]);
   const [uiTestGroups, setUiTestGroups] = useState<{ id: string; name: string; testIds: string[] }[]>([]);
+  const [referringDoctorOptions, setReferringDoctorOptions] = useState<string[]>([]);
+  const [referredBy, setReferredBy] = useState('');
 
   const [subtotal, setSubtotal] = useState(0);
   const [loadingPrice, setLoadingPrice] = useState(false);
@@ -412,6 +431,7 @@ export function OrdersPage() {
         setDraftPatient(patient);
         setSelectedTests([]);
         setDiscountPercent(0);
+        setReferredBy('');
         setListPage(1);
       })
       .catch(() => {
@@ -452,6 +472,9 @@ export function OrdersPage() {
           testIds: g.testIds.filter(id => activeIds.has(id))
         })).filter(g => g.testIds.length > 0);
         setUiTestGroups(validGroups);
+        setReferringDoctorOptions(
+          normalizeReferringDoctorList(settings.referringDoctors),
+        );
       } catch {
         message.warning('Failed to load tests or departments');
       } finally {
@@ -840,6 +863,7 @@ export function OrdersPage() {
         patientId: selectedPatient.id,
         patientType: 'WALK_IN',
         discountPercent: discountPercent || undefined,
+        notes: referredBy.trim() || undefined,
         ...(currentShiftId ? { shiftId: currentShiftId } : {}),
         samples: Object.entries(testsByTube).map(([tubeType, tests]) => ({
           tubeType: tubeType as CreateOrderDto['samples'][0]['tubeType'],
@@ -888,6 +912,7 @@ export function OrdersPage() {
 
       setDraftPatient(null);
       setSelectedTests([]);
+      setReferredBy('');
       setListPage(1);
       void loadOrderHistory({
         focusOrderId: createdOrder.id,
@@ -929,6 +954,7 @@ export function OrdersPage() {
     });
     setSelectedTests([]);
     setDiscountPercent(0);
+    setReferredBy('');
   };
 
   const addNewOrderForPatient = (patient: PatientDto) => {
@@ -941,6 +967,7 @@ export function OrdersPage() {
     setSelectedRowId(draftRowId);
     setSelectedTests([]);
     setDiscountPercent(0);
+    setReferredBy('');
     setListPage(1);
   };
 
@@ -1714,6 +1741,10 @@ export function OrdersPage() {
                             {dayjs(selectedCreatedOrderSummary.registeredAt).format('YYYY-MM-DD HH:mm')}
                           </Text>
                         </div>
+                        <div>
+                          <Text type="secondary">Referred by: </Text>
+                          <Text strong>{selectedCreatedOrder?.notes?.trim() || '-'}</Text>
+                        </div>
                       </div>
                       <Tag color="success" icon={<LockOutlined />} style={{ marginInlineEnd: 0, width: 'fit-content' }}>
                         Locked for delete - test list can still be edited
@@ -1819,6 +1850,24 @@ export function OrdersPage() {
                     </Text>
                   </div>
                 )}
+                <div style={{ padding: '6px 0', borderBottom: styles.border }}>
+                  <Text strong style={{ display: 'block', marginBottom: 8 }}>
+                    Referred by
+                  </Text>
+                  <AutoComplete
+                    value={referredBy}
+                    onChange={setReferredBy}
+                    options={referringDoctorOptions.map((name) => ({ value: name }))}
+                    placeholder="Select from list or type doctor name"
+                    style={{ width: '100%' }}
+                    filterOption={(inputValue, option) =>
+                      String(option?.value ?? '')
+                        .toLowerCase()
+                        .includes(inputValue.toLowerCase())
+                    }
+                    allowClear
+                  />
+                </div>
 
                 <div>
                   <Row gutter={24} style={{ marginBottom: 4 }}>
