@@ -99,6 +99,10 @@ __decorate([
     __metadata("design:type", Object)
 ], Lab.prototype, "uiTestGroups", void 0);
 __decorate([
+    (0, typeorm_1.Column)({ type: 'jsonb', default: () => "'[]'::jsonb" }),
+    __metadata("design:type", Array)
+], Lab.prototype, "referringDoctors", void 0);
+__decorate([
     (0, typeorm_1.CreateDateColumn)(),
     __metadata("design:type", Date)
 ], Lab.prototype, "createdAt", void 0);

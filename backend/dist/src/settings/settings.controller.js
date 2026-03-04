@@ -49,6 +49,7 @@ let SettingsController = class SettingsController {
             sequenceResetBy: body.sequenceResetBy,
             printing: body.printing,
             uiTestGroups: body.uiTestGroups,
+            referringDoctors: body.referringDoctors,
         });
     }
     async getUsers(req) {

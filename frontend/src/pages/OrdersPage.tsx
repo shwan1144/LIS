@@ -241,7 +241,7 @@ export function OrdersPage() {
   const [referringDoctorOptions, setReferringDoctorOptions] = useState<string[]>([]);
   const [referredBy, setReferredBy] = useState('');
 
-  const [subtotal, setSubtotal] = useState(0);
+  const [subtotal, setSubtotal] = useState<number | null>(0);
   const [loadingPrice, setLoadingPrice] = useState(false);
   const [discountPercent, setDiscountPercent] = useState(0);
 
@@ -506,7 +506,7 @@ export function OrdersPage() {
         if (!cancelled) setSubtotal(res.subtotal);
       })
       .catch(() => {
-        if (!cancelled) setSubtotal(0);
+        if (!cancelled) setSubtotal(null);
       })
       .finally(() => {
         if (!cancelled) setLoadingPrice(false);
@@ -1160,7 +1160,8 @@ export function OrdersPage() {
   const summaryTestsCount = isSelectedLocked ? lockedOrderTestsCount : totalTests;
   const summarySubtotal = isSelectedLocked
     ? lockedOrderSubtotal
-    : subtotal;
+    : (subtotal ?? 0);
+  const draftSubtotalUnavailable = !isSelectedLocked && subtotal == null && !loadingPrice;
   const summaryTotalAmount = Math.round(summarySubtotal * (1 - discountPercent / 100) * 100) / 100;
   const createOrderDisabledReason = isSelectedLocked
     ? 'Create order is only available while preparing a new order.'
@@ -1184,19 +1185,28 @@ export function OrdersPage() {
     void loadOrderHistory({ mode: 'soft' });
   };
 
-  const orderSummaryBar = selectedPatient ? (
-    <Card
-      className={`order-summary-bar${isDark ? ' order-summary-bar-dark' : ''}`}
-      bodyStyle={{ padding: 10 }}
-    >
-      <div className="order-summary-grid">
+  const summarySubtotalLabel = loadingPrice && !isSelectedLocked
+    ? '...'
+    : draftSubtotalUnavailable
+      ? 'DB price unavailable'
+      : `${summarySubtotal.toFixed(0)} IQD`;
+  const summaryTotalLabel = loadingPrice && !isSelectedLocked
+    ? '...'
+    : draftSubtotalUnavailable
+      ? 'DB price unavailable'
+      : `${summaryTotalAmount.toFixed(0)} IQD`;
+
+  const currentPaymentStatus = selectedCreatedOrderSummary?.paymentStatus ?? 'unpaid';
+  const orderDockBar = selectedPatient ? (
+    <div className={`order-dock-bar${isDark ? ' order-dock-bar-dark' : ''}`}>
+      <div className="order-dock-summary-grid">
         <div className="order-summary-item">
           <Text type="secondary">Tests</Text>
           <Text strong>{summaryTestsCount}</Text>
         </div>
         <div className="order-summary-item">
           <Text type="secondary">Subtotal</Text>
-          <Text strong>{loadingPrice && !isSelectedLocked ? '...' : `${summarySubtotal.toFixed(0)} IQD`}</Text>
+          <Text strong>{summarySubtotalLabel}</Text>
         </div>
         <div className="order-summary-item order-summary-discount">
           <Text type="secondary">{updatingDiscount ? 'Discount (saving...)' : 'Discount'}</Text>
@@ -1215,166 +1225,188 @@ export function OrdersPage() {
         </div>
         <div className="order-summary-item order-summary-total">
           <Text type="secondary">Total</Text>
-          <Text strong>{loadingPrice && !isSelectedLocked ? '...' : `${summaryTotalAmount.toFixed(0)} IQD`}</Text>
+          <Text strong>{summaryTotalLabel}</Text>
         </div>
-        <div className="order-summary-action">
+      </div>
+
+      <div className="order-dock-action-row">
+        {isSelectedLocked ? (
+          <>
+            <Button
+              type="primary"
+              icon={<PlusOutlined />}
+              onClick={handleLockedStartNewOrder}
+              size="large"
+              disabled={lockedOrderBaseActionsDisabled}
+              title={lockedOrderBaseActionDisabledTitle}
+              className="locked-order-new-btn"
+            >
+              New order for this patient
+            </Button>
+            <Button
+              icon={<PlusOutlined />}
+              onClick={handleLockedEditTests}
+              size="large"
+              loading={savingEditedTests}
+              disabled={lockedOrderDetailActionsDisabled}
+              title={lockedOrderDetailActionDisabledTitle}
+            >
+              Edit tests
+            </Button>
+            <Button
+              type="primary"
+              icon={<PrinterOutlined />}
+              onClick={() => handleLockedPrint('receipt')}
+              size="large"
+              loading={printingAction === 'receipt'}
+              disabled={lockedOrderDetailActionsDisabled}
+              title={lockedOrderDetailActionDisabledTitle}
+            >
+              Receipt
+            </Button>
+            <Button
+              icon={<PrinterOutlined />}
+              onClick={() => handleLockedPrint('labels')}
+              size="large"
+              loading={printingAction === 'labels'}
+              disabled={lockedOrderDetailActionsDisabled}
+              title={lockedOrderDetailActionDisabledTitle}
+            >
+              Labels
+            </Button>
+            {currentPaymentStatus === 'unpaid' && (
+              <>
+                <Button
+                  type="primary"
+                  loading={updatingPayment}
+                  onClick={() => void handleLockedMarkPaid()}
+                  size="large"
+                  disabled={lockedOrderBaseActionsDisabled}
+                  title={lockedOrderBaseActionDisabledTitle}
+                >
+                  Mark as paid
+                </Button>
+                <Button
+                  loading={updatingPayment}
+                  onClick={handleLockedOpenPartialPayment}
+                  size="large"
+                  disabled={lockedOrderBaseActionsDisabled}
+                  title={lockedOrderBaseActionDisabledTitle}
+                >
+                  Partially paid
+                </Button>
+              </>
+            )}
+            {currentPaymentStatus === 'paid' && (
+              <Button
+                type="dashed"
+                size="large"
+                loading={updatingPayment}
+                style={{
+                  borderColor: '#52c41a',
+                  color: '#52c41a',
+                  backgroundColor: 'rgba(82, 196, 26, 0.1)',
+                }}
+                onClick={() => void handleLockedMarkUnpaid()}
+                disabled={lockedOrderBaseActionsDisabled}
+                title={lockedOrderBaseActionDisabledTitle}
+              >
+                Paid (Click to Unpay)
+              </Button>
+            )}
+            {currentPaymentStatus === 'partial' && (
+              <>
+                <Button
+                  type="primary"
+                  loading={updatingPayment}
+                  onClick={() => void handleLockedMarkPaid()}
+                  size="large"
+                  disabled={lockedOrderBaseActionsDisabled}
+                  title={lockedOrderBaseActionDisabledTitle}
+                >
+                  Mark as paid
+                </Button>
+                <Button
+                  type="dashed"
+                  size="large"
+                  loading={updatingPayment}
+                  style={{
+                    borderColor: '#faad14',
+                    color: '#faad14',
+                    backgroundColor: 'rgba(250, 173, 20, 0.1)',
+                  }}
+                  onClick={handleLockedOpenPartialPayment}
+                  disabled={lockedOrderBaseActionsDisabled}
+                  title={lockedOrderBaseActionDisabledTitle}
+                >
+                  Partially paid
+                  {selectedCreatedOrderSummary?.paidAmount != null &&
+                    ` (${selectedCreatedOrderSummary.paidAmount} / ${selectedCreatedOrderSummary.finalAmount})`}
+                </Button>
+              </>
+            )}
+          </>
+        ) : (
           <Button
             type="primary"
             size="large"
             icon={<ShoppingCartOutlined />}
             onClick={handleSubmit}
             loading={submitting}
-            disabled={isSelectedLocked || selectedTests.length === 0}
+            disabled={selectedTests.length === 0}
             title={createOrderDisabledReason}
+            className="order-dock-create-btn"
           >
             Create order
           </Button>
-        </div>
-      </div>
-    </Card>
-  ) : null;
-
-  const currentPaymentStatus = selectedCreatedOrderSummary?.paymentStatus ?? 'unpaid';
-  const lockedOrderActionBar = selectedPatient ? (
-    <div
-      className={`locked-order-action-bar${isDark ? ' locked-order-action-bar-dark' : ''}${lockedOrderContextActive ? '' : ' locked-order-action-bar-inactive'}`}
-    >
-      <div className="locked-order-action-row">
-        <Button
-          type="primary"
-          icon={<PlusOutlined />}
-          onClick={handleLockedStartNewOrder}
-          size="large"
-          disabled={lockedOrderBaseActionsDisabled}
-          title={lockedOrderBaseActionDisabledTitle}
-          className="locked-order-new-btn"
-        >
-          New order for this patient
-        </Button>
-        <Button
-          icon={<PlusOutlined />}
-          onClick={handleLockedEditTests}
-          size="large"
-          loading={savingEditedTests}
-          disabled={lockedOrderDetailActionsDisabled}
-          title={lockedOrderDetailActionDisabledTitle}
-        >
-          Edit tests
-        </Button>
-        <Button
-          type="primary"
-          icon={<PrinterOutlined />}
-          onClick={() => handleLockedPrint('receipt')}
-          size="large"
-          loading={printingAction === 'receipt'}
-          disabled={lockedOrderDetailActionsDisabled}
-          title={lockedOrderDetailActionDisabledTitle}
-        >
-          Receipt
-        </Button>
-        <Button
-          icon={<PrinterOutlined />}
-          onClick={() => handleLockedPrint('labels')}
-          size="large"
-          loading={printingAction === 'labels'}
-          disabled={lockedOrderDetailActionsDisabled}
-          title={lockedOrderDetailActionDisabledTitle}
-        >
-          Labels
-        </Button>
-        {currentPaymentStatus === 'unpaid' && (
-          <>
-            <Button
-              type="primary"
-              loading={updatingPayment}
-              onClick={() => void handleLockedMarkPaid()}
-              size="large"
-              disabled={lockedOrderBaseActionsDisabled}
-              title={lockedOrderBaseActionDisabledTitle}
-            >
-              Mark as paid
-            </Button>
-            <Button
-              loading={updatingPayment}
-              onClick={handleLockedOpenPartialPayment}
-              size="large"
-              disabled={lockedOrderBaseActionsDisabled}
-              title={lockedOrderBaseActionDisabledTitle}
-            >
-              Partially paid
-            </Button>
-          </>
-        )}
-        {currentPaymentStatus === 'paid' && (
-          <Button
-            type="dashed"
-            size="large"
-            loading={updatingPayment}
-            style={{
-              borderColor: '#52c41a',
-              color: '#52c41a',
-              backgroundColor: 'rgba(82, 196, 26, 0.1)',
-            }}
-            onClick={() => void handleLockedMarkUnpaid()}
-            disabled={lockedOrderBaseActionsDisabled}
-            title={lockedOrderBaseActionDisabledTitle}
-          >
-            Paid (Click to Unpay)
-          </Button>
-        )}
-        {currentPaymentStatus === 'partial' && (
-          <>
-            <Button
-              type="primary"
-              loading={updatingPayment}
-              onClick={() => void handleLockedMarkPaid()}
-              size="large"
-              disabled={lockedOrderBaseActionsDisabled}
-              title={lockedOrderBaseActionDisabledTitle}
-            >
-              Mark as paid
-            </Button>
-            <Button
-              type="dashed"
-              size="large"
-              loading={updatingPayment}
-              style={{
-                borderColor: '#faad14',
-                color: '#faad14',
-                backgroundColor: 'rgba(250, 173, 20, 0.1)',
-              }}
-              onClick={handleLockedOpenPartialPayment}
-              disabled={lockedOrderBaseActionsDisabled}
-              title={lockedOrderBaseActionDisabledTitle}
-            >
-              Partially paid
-              {selectedCreatedOrderSummary?.paidAmount != null &&
-                ` (${selectedCreatedOrderSummary.paidAmount} / ${selectedCreatedOrderSummary.finalAmount})`}
-            </Button>
-          </>
         )}
       </div>
     </div>
   ) : null;
   const orderBottomControls = selectedPatient ? (
     <div className="order-bottom-stack">
-      {orderSummaryBar}
-      {lockedOrderActionBar}
+      {orderDockBar}
     </div>
   ) : null;
 
   return (
-    <div>
-      <Title level={4} style={{ marginTop: 0, marginBottom: 12 }}>
-        Orders {listTotal > 0 && (
-          <Text type="secondary" style={{ fontWeight: 'normal', fontSize: 14 }}>({listTotal} total)</Text>
-        )}
-      </Title>
+    <div className="orders-page-shell">
+      <Card size="small" className="orders-page-header-card">
+        <div className="orders-page-header-row">
+          <div>
+            <Title level={4} style={{ marginTop: 0, marginBottom: 2 }}>
+              Orders {listTotal > 0 && (
+                <Text type="secondary" style={{ fontWeight: 'normal', fontSize: 14 }}>({listTotal} total)</Text>
+              )}
+            </Title>
+            <Text type="secondary">Create orders with fast summary response and background detail hydration.</Text>
+          </div>
+          <div className="orders-page-header-meta">
+            <Tag color={isSelectedLocked ? 'success' : selectedPatient ? 'processing' : 'default'} style={{ margin: 0 }}>
+              {isSelectedLocked ? 'Locked order' : selectedPatient ? 'Draft order' : 'No selection'}
+            </Tag>
+            {selectedPatient ? (
+              <Text strong className="orders-header-patient-name">
+                {getPatientName(selectedPatient)}
+              </Text>
+            ) : (
+              <Text type="secondary">Select a row to begin</Text>
+            )}
+            {selectedCreatedOrderSummary ? (
+              <Tag color="blue" style={{ margin: 0 }}>
+                Order #{selectedCreatedOrderSummary.orderNumber || selectedCreatedOrderSummary.id.substring(0, 8)}
+              </Tag>
+            ) : nextOrderNumber ? (
+              <Tag color="gold" style={{ margin: 0 }}>Next #{nextOrderNumber}</Tag>
+            ) : null}
+          </div>
+        </div>
+      </Card>
 
-      <Row gutter={16}>
-        {/* Left: Order history */}
+      <Row gutter={[16, 16]} className="orders-main-grid">
         <Col xs={24} md={12} lg={10}>
           <Card
+            className="orders-history-card"
             style={{ minWidth: 260 }}
             title="Order History"
             extra={
@@ -1401,20 +1433,12 @@ export function OrdersPage() {
             }
             bodyStyle={{
               padding: 12,
-              height: 'calc(100vh - 200px)',
+              height: 'calc(100vh - 252px)',
               display: 'flex',
               flexDirection: 'column',
             }}
           >
-            <div
-              style={{
-                display: 'flex',
-                flexDirection: 'column',
-                flex: 1,
-                minHeight: 0,
-                width: '100%',
-              }}
-            >
+            <div className="orders-history-content">
               <Space direction="vertical" style={{ width: '100%', flexShrink: 0 }} size={12}>
                 <Input
                   placeholder="Search order #, patient, phone"
@@ -1448,7 +1472,7 @@ export function OrdersPage() {
               </Space>
 
               {initialHistoryLoading ? (
-                <div style={{ marginTop: 10, flex: 1, minHeight: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <div className="orders-history-loading">
                   <Spin tip={patientBootstrapLoading ? 'Loading patient...' : 'Loading order history...'} />
                 </div>
               ) : patientList.length > 0 ? (
@@ -1652,7 +1676,7 @@ export function OrdersPage() {
                       }}
                     />
                   </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 8, flexShrink: 0 }}>
+                  <div className="orders-history-footer">
                     <Text type="secondary">
                       Page {listPage} of {totalPages}
                     </Text>
@@ -1673,7 +1697,7 @@ export function OrdersPage() {
                     description="No orders found"
                     style={{ padding: 24, marginTop: 10 }}
                   />
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 8 }}>
+                  <div className="orders-history-footer">
                     <Text type="secondary">
                       Page {listPage} of {totalPages}
                     </Text>
@@ -1692,9 +1716,17 @@ export function OrdersPage() {
           </Card>
         </Col>
 
-        {/* Right: Test selection or order success */}
         <Col xs={24} md={12} lg={14}>
-          <Card className="orders-right-card" bodyStyle={{ height: 'calc(100vh - 200px)', overflowY: 'auto' }}>
+          <Card
+            className="orders-right-card orders-workspace-card"
+            bodyStyle={{
+              height: 'calc(100vh - 252px)',
+              overflowY: 'auto',
+              paddingTop: 12,
+              paddingInline: 12,
+              paddingBottom: 0,
+            }}
+          >
             {!selectedPatient ? (
               <Empty
                 image={Empty.PRESENTED_IMAGE_SIMPLE}
@@ -1704,7 +1736,7 @@ export function OrdersPage() {
             ) : isSelectedLocked && selectedCreatedOrderSummary ? (
               <div className="locked-order-view">
                 <div className="locked-order-content">
-                  <Card size="small" className="locked-order-summary-card">
+                  <Card size="small" className="locked-order-summary-card orders-section-card">
                     <Space direction="vertical" size={8} style={{ width: '100%' }}>
                       <Space size={10} align="center">
                         <CheckCircleOutlined className="locked-order-summary-icon" />
@@ -1751,8 +1783,7 @@ export function OrdersPage() {
                       </Tag>
                     </Space>
                   </Card>
-                  {/* Read-only list of tests in this order */}
-                  <Card type="inner" title="Tests in this order" style={{ marginTop: 10 }}>
+                  <Card type="inner" className="orders-section-card" title="Tests in this order" style={{ marginTop: 10 }}>
                     <Text type="secondary" style={{ display: 'block', marginBottom: 8 }}>
                       You can update tests for this order without changing order number or existing label sequence numbers.
                     </Text>
@@ -1835,153 +1866,168 @@ export function OrdersPage() {
               </div>
             ) : (
               <div className="draft-order-view">
-                <Space direction="vertical" size={12} style={{ width: '100%' }} className="draft-order-content">
-                <div style={{ padding: '8px 0', borderBottom: styles.border }}>
-                  <Text type="secondary">Patient: </Text>
-                  <Text strong style={{ fontSize: 16 }}>
-                    {getPatientName(selectedPatient)}
-                  </Text>
-                </div>
-                {nextOrderNumber && (
-                  <div style={{ padding: '6px 0', borderBottom: styles.border }}>
-                    <Text type="secondary">Order number (after creation): </Text>
-                    <Text strong style={{ fontSize: 14 }}>
-                      {nextOrderNumber}
-                    </Text>
-                  </div>
-                )}
-                <div style={{ padding: '6px 0', borderBottom: styles.border }}>
-                  <Text strong style={{ display: 'block', marginBottom: 8 }}>
-                    Referred by
-                  </Text>
-                  <AutoComplete
-                    value={referredBy}
-                    onChange={setReferredBy}
-                    options={referringDoctorOptions.map((name) => ({ value: name }))}
-                    placeholder="Select from list or type doctor name"
-                    style={{ width: '100%' }}
-                    filterOption={(inputValue, option) =>
-                      String(option?.value ?? '')
-                        .toLowerCase()
-                        .includes(inputValue.toLowerCase())
-                    }
-                    allowClear
-                  />
-                </div>
-
-                <div>
-                  <Row gutter={24} style={{ marginBottom: 4 }}>
-                    {/* Left Pane: Search & Selected Tests */}
-                    <Col xs={24} md={12}>
+                <div className="draft-order-content">
+                  <Card size="small" className="orders-section-card order-composer-head-card">
+                    <div className="order-composer-head-grid">
+                      <div>
+                        <Text type="secondary">Patient</Text>
+                        <div className="order-composer-head-value">{getPatientName(selectedPatient)}</div>
+                      </div>
+                      <div>
+                        <Text type="secondary">Order number</Text>
+                        <div className="order-composer-head-value">{nextOrderNumber ?? '-'}</div>
+                      </div>
+                    </div>
+                    <div className="order-composer-referred-row">
                       <Text strong style={{ display: 'block', marginBottom: 8 }}>
-                        Select tests
+                        Referred by
                       </Text>
-                      <Select
-                        showSearch
-                        placeholder="Search tests by name or code..."
-                        style={{ width: '100%', marginBottom: 12 }}
-                        value={null}
-                        onChange={handleAddTest}
-                        filterOption={false}
-                        onSearch={setTestSearch}
-                        loading={loadingTests}
-                        notFoundContent={loadingTests ? <Spin size="small" /> : 'No tests found'}
-                        options={filteredTests.map((t) => ({
-                          value: t.id,
-                          label: (
-                            <Space>
-                              <Text strong>{t.code}</Text>
-                              <Text>{(t as any).abbreviation ? `${(t as any).abbreviation} - ${t.name}` : t.name}</Text>
-                              <Text type="secondary">({t.tubeType})</Text>
-                            </Space>
-                          ),
-                        }))}
+                      <AutoComplete
+                        value={referredBy}
+                        onChange={setReferredBy}
+                        options={referringDoctorOptions.map((name) => ({ value: name }))}
+                        placeholder="Select from list or type doctor name"
+                        style={{ width: '100%' }}
+                        filterOption={(inputValue, option) =>
+                          String(option?.value ?? '')
+                            .toLowerCase()
+                            .includes(inputValue.toLowerCase())
+                        }
+                        allowClear
                       />
+                    </div>
+                  </Card>
 
-                      {selectedTests.length === 0 ? (
-                        <Empty
-                          image={Empty.PRESENTED_IMAGE_SIMPLE}
-                          description="No tests selected. Use search above or test groups."
-                          style={{ padding: 24 }}
+                  <Row gutter={[12, 12]} className="order-composer-grid">
+                    <Col xs={24} xl={16}>
+                      <Card size="small" className="orders-section-card" title="Select tests">
+                        <Select
+                          showSearch
+                          placeholder="Search tests by name or code..."
+                          style={{ width: '100%', marginBottom: 12 }}
+                          value={null}
+                          onChange={handleAddTest}
+                          filterOption={false}
+                          onSearch={setTestSearch}
+                          loading={loadingTests}
+                          notFoundContent={loadingTests ? <Spin size="small" /> : 'No tests found'}
+                          options={filteredTests.map((t) => ({
+                            value: t.id,
+                            label: (
+                              <Space>
+                                <Text strong>{t.code}</Text>
+                                <Text>{(t as any).abbreviation ? `${(t as any).abbreviation} - ${t.name}` : t.name}</Text>
+                                <Text type="secondary">({t.tubeType})</Text>
+                              </Space>
+                            ),
+                          }))}
                         />
-                      ) : (
-                        <Table
-                          dataSource={selectedTests}
-                          rowKey="testId"
-                          pagination={false}
-                          size="small"
-                          scroll={{ y: 280 }}
-                          showHeader={false}
-                          columns={[
-                            {
-                              title: 'Test',
-                              dataIndex: 'testCode',
-                              key: 'testCode',
-                              render: (text: string) => <Text strong>{text}</Text>,
-                            },
-                            {
-                              title: 'Action',
-                              key: 'action',
-                              align: 'right',
-                              width: 50,
-                              render: (_, record) => (
-                                <Button
-                                  type="text"
-                                  danger
-                                  icon={<DeleteOutlined />}
-                                  onClick={() => handleRemoveTest(record.testId)}
-                                  size="small"
-                                />
-                              ),
-                            },
-                          ]}
-                          style={{ border: styles.borderDark, borderRadius: 8 }}
-                        />
-                      )}
+
+                        <div className="order-composer-toolbar">
+                          <Text strong>Selected tests</Text>
+                          <Text type="secondary">{selectedTests.length} selected</Text>
+                        </div>
+
+                        {selectedTests.length === 0 ? (
+                          <Empty
+                            image={Empty.PRESENTED_IMAGE_SIMPLE}
+                            description="No tests selected. Use search above or test groups."
+                            style={{ padding: 24 }}
+                          />
+                        ) : (
+                          <Table
+                            dataSource={selectedTests}
+                            rowKey="testId"
+                            pagination={false}
+                            size="small"
+                            scroll={{ y: 280 }}
+                            className="order-selected-tests-table"
+                            tableLayout="fixed"
+                            columns={[
+                              {
+                                title: 'Test',
+                                dataIndex: 'testCode',
+                                key: 'testCode',
+                                className: 'order-selected-col-test',
+                                ellipsis: true,
+                                render: (_, record) => (
+                                  <Text className="order-selected-test-name" title={record.testName}>
+                                    {record.testName}
+                                  </Text>
+                                ),
+                              },
+                              {
+                                title: 'Sample',
+                                dataIndex: 'tubeType',
+                                key: 'tubeType',
+                                className: 'order-selected-col-tube',
+                                render: (tubeType: string) => (
+                                  <Text type="secondary" className="order-selected-test-tube">
+                                    {tubeType || '-'}
+                                  </Text>
+                                ),
+                              },
+                              {
+                                title: '',
+                                key: 'action',
+                                align: 'right',
+                                className: 'order-selected-col-action',
+                                width: 38,
+                                render: (_, record) => (
+                                  <Button
+                                    type="text"
+                                    danger
+                                    icon={<DeleteOutlined />}
+                                    onClick={() => handleRemoveTest(record.testId)}
+                                    size="small"
+                                  />
+                                ),
+                              },
+                            ]}
+                            style={{ border: styles.borderDark, borderRadius: 8 }}
+                          />
+                        )}
+                      </Card>
                     </Col>
 
-                    {/* Right Pane: Test Groups */}
-                    <Col xs={24} md={12}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                        <Text strong>Quick Select Groups</Text>
-                      </div>
+                    <Col xs={24} xl={8}>
+                      <Card size="small" className="orders-section-card" title="Quick groups">
+                        {uiTestGroups.length === 0 ? (
+                          <Empty
+                            image={Empty.PRESENTED_IMAGE_SIMPLE}
+                            description="No test groups saved"
+                            style={{ padding: 24, marginTop: 8 }}
+                          />
+                        ) : (
+                          <>
+                            <div className="order-composer-groups">
+                              {uiTestGroups.map((group) => (
+                                <Button
+                                  key={group.id}
+                                  onClick={() => handleAddGroupTests(group.testIds)}
+                                >
+                                  {group.name}
+                                </Button>
+                              ))}
+                            </div>
+                            <Text type="secondary" style={{ fontSize: 12 }}>
+                              Group selection uses dynamic lab settings and avoids duplicate tests.
+                            </Text>
+                          </>
+                        )}
+                      </Card>
 
-                      {uiTestGroups.length === 0 ? (
-                        <Empty
-                          image={Empty.PRESENTED_IMAGE_SIMPLE}
-                          description="No test groups saved. Select tests and create one!"
-                          style={{ padding: 24, marginTop: 24 }}
-                        />
-                      ) : (
-                        <div
-                          style={{
-                            border: styles.border,
-                            borderRadius: 8,
-                            padding: 12,
-                            backgroundColor: styles.bgSubtle,
-                            minHeight: 120
-                          }}
-                        >
-                          <Space wrap size={[8, 8]}>
-                            {uiTestGroups.map((group) => (
-                              <Button
-                                key={group.id}
-                                onClick={() => handleAddGroupTests(group.testIds)}
-                              >
-                                {group.name}
-                              </Button>
-                            ))}
-                          </Space>
-                        </div>
-                      )}
+                      <Button
+                        type="link"
+                        icon={<PlusOutlined />}
+                        className="order-composer-new-patient-btn"
+                        onClick={openNewPatientInPatientsTab}
+                      >
+                        New patient
+                      </Button>
                     </Col>
                   </Row>
                 </div>
-
-                <Button type="link" icon={<PlusOutlined />} onClick={openNewPatientInPatientsTab}>
-                  New patient
-                </Button>
-                </Space>
                 {orderBottomControls}
               </div>
             )}

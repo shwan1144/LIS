@@ -59,6 +59,7 @@ export declare class SettingsService {
             name: string;
             testIds: string[];
         }[];
+        referringDoctors: string[];
     }>;
     updateLabSettings(labId: string, data: {
         labelSequenceBy?: string;
@@ -69,6 +70,7 @@ export declare class SettingsService {
         printing?: LabPrintingUpdate;
         reportBranding?: ReportBrandingUpdate;
         uiTestGroups?: UiTestGroup[] | null;
+        referringDoctors?: string[] | null;
     }): Promise<{
         id: string;
         code: string;
@@ -95,11 +97,14 @@ export declare class SettingsService {
             name: string;
             testIds: string[];
         }[];
+        referringDoctors: string[];
     }>;
     private normalizeReportImageDataUrl;
     private normalizeOnlineResultWatermarkText;
     private normalizePrintMethod;
     private normalizePrinterName;
+    private normalizeReferringDoctors;
+    private normalizeReferringDoctorsForRead;
     getUsersForLab(labId: string): Promise<User[]>;
     getShiftsForLab(labId: string): Promise<Shift[]>;
     getDepartmentsForLab(labId: string): Promise<Department[]>;

@@ -127,7 +127,7 @@ function buildResultsReportHtml(input) {
     const sex = order.patient?.sex || '-';
     const sexLabel = sex === 'M' ? 'Male' : sex === 'F' ? 'Female' : sex || '-';
     const patientId = order.patient?.patientNumber || order.patient?.externalId || order.patient?.nationalId || order.patient?.id || '-';
-    const referredBy = order.patient?.address || order.notes || 'Himself';
+    const referredBy = order.notes || order.patient?.address || 'Himself';
     const dir = getDirection(order, orderTests, input.comments);
     const labAny = order.lab;
     const bannerSrc = labAny?.reportBannerDataUrl || '';
@@ -138,6 +138,8 @@ function buildResultsReportHtml(input) {
     const hasCustomLogo = Boolean(logoSrc);
     const visitDate = formatDateTime(order.registeredAt);
     const ageSex = `${age != null ? `${age} Years` : '-'}/${sexLabel}`;
+    const referredByDisplay = String(referredBy || '').trim() || 'Himself';
+    const referredByIsRtl = containsArabicScript(referredByDisplay);
     const bannerUrlAttr = bannerSrc ? `src="${escapeHtml(bannerSrc)}"` : '';
     const footerUrlAttr = footerSrc ? `src="${escapeHtml(footerSrc)}"` : '';
     const logoUrlAttr = logoSrc ? `src="${escapeHtml(logoSrc)}"` : '';
@@ -191,52 +193,6 @@ function buildResultsReportHtml(input) {
     const preliminary = input.reportableCount > 0 && !reportReady;
     const commentsText = input.comments.length ? input.comments.join(' أ¢â‚¬آ¢ ') : '';
     const verifierText = input.verifiers.join(', ') || (input.verifiedCount > 0 ? 'Verifier' : 'Pending');
-    let lastDept = '';
-    let lastCat = '';
-    const rowsHtml = flattenedTests
-        .map((ot) => {
-        const t = ot.test;
-        const dept = getDeptName(t) || 'General Department';
-        const cat = getCategoryName(t) || '';
-        const flag = normalizeFlag(ot.flag);
-        const statusText = flagToStatus(flag);
-        const abnormal = isAbnormalFlag(flag);
-        const params = formatParams(ot.resultParameters);
-        const extra = params.length
-            ? `<div class="extra-params">${params
-                .slice(0, 4)
-                .map((p) => escapeHtml(p))
-                .join(' آ· ')}${params.length > 4 ? ' â€¦' : ''}</div>`
-            : '';
-        const deptRow = dept !== lastDept
-            ? (() => {
-                lastDept = dept;
-                lastCat = '';
-                return `<tr class="dept-row"><td colspan="5">${escapeHtml(dept)}</td></tr>`;
-            })()
-            : '';
-        const catRow = cat && cat !== lastCat
-            ? (() => {
-                lastCat = cat;
-                return `<tr class="cat-row"><td colspan="5">${escapeHtml(cat)}</td></tr><tr class="header-row"><th>Test </th><th>Result</th><th>Unit</th><th>Status</th><th>Reference Value</th></tr>`;
-            })()
-            : '';
-        const headerFallback = !cat && deptRow
-            ? `<tr class="header-row"><th>Test </th><th>Result</th><th>Unit</th><th>Status</th><th>Reference Value</th></tr>`
-            : '';
-        const row = `
-        <tr class="result-row ${abnormal ? 'abnormal' : ''}">
-          <td class="c-test">${escapeHtml(t?.abbreviation || t?.name || '-')}${t?.code ? ` (${escapeHtml(t.code)})` : ''}</td>
-          <td class="c-result">${escapeHtml(formatResultValue(ot))}${extra}</td>
-          <td class="c-unit">${escapeHtml(t?.unit || '-')}</td>
-          <td class="c-status">${escapeHtml(statusText)}</td>
-          <td class="c-range">${escapeHtml(formatRange(ot, order.patient?.sex ?? null, age))}</td>
-        </tr>
-        <tr class="dotted-row"><td colspan="5"></td></tr>
-      `;
-        return deptRow + (catRow || headerFallback) + row;
-    })
-        .join('');
     const pageHeaderHtml = `
     ${hasHeaderBanner
         ? `<div class="banner-wrap"><img class="banner-image" ${bannerUrlAttr} alt="Report Banner" /></div>`
@@ -244,10 +200,16 @@ function buildResultsReportHtml(input) {
             ? `<div class="logo-only-wrap"><img class="logo" ${logoUrlAttr} alt="Report Logo" /></div>`
             : `<div class="header-spacer" aria-hidden="true"></div>`}
     <div class="patient-info">
-      <div class="info-item"><span class="label">Name :</span><span class="name-value ${patientNameIsRtl ? 'rtl-text' : ''}">${escapeHtml(patientName)}</span></div>
-      <div class="info-item"><span class="label">Visit Date:</span>${escapeHtml(visitDate)}</div>
-      <div class="info-item"><span class="label">Patient ID:</span>${escapeHtml(patientId)}</div>
-      <div class="info-item"><span class="label">Age/Sex:</span>${escapeHtml(ageSex)}</div>
+      <div class="patient-info-col">
+        <div class="info-item"><span class="label">Name :</span><span class="name-value ${patientNameIsRtl ? 'rtl-text' : ''}">${escapeHtml(patientName)}</span></div>
+        <div class="info-item"><span class="label">Age/Sex:</span>${escapeHtml(ageSex)}</div>
+        <div class="info-item"><span class="label">Referred By:</span><span class="name-value ${referredByIsRtl ? 'rtl-text' : ''}">${escapeHtml(referredByDisplay)}</span></div>
+      </div>
+      <div class="patient-info-col">
+        <div class="info-item"><span class="label">Visit Date:</span>${escapeHtml(visitDate)}</div>
+        <div class="info-item"><span class="label">Order No:</span>${escapeHtml(orderNumber)}</div>
+        <div class="info-item"><span class="label">Patient ID:</span>${escapeHtml(patientId)}</div>
+      </div>
     </div>
     <div class="report-title">Laboratory Report</div>
   `;
@@ -384,36 +346,40 @@ function buildResultsReportHtml(input) {
             catMap.set(cat, []);
         catMap.get(cat).push(ot);
     }
-    let sectionsHtml = '';
-    for (const [dept, catMap] of deptCatMap) {
-        sectionsHtml += `<div class="dept-title ltr">${escapeHtml(dept)}</div>`;
-        for (const [cat, tests] of catMap) {
-            if (cat)
-                sectionsHtml += `<div class="test-group-title ltr">${escapeHtml(cat)}</div>`;
-            const tableRows = tests
-                .map((ot) => {
-                const t = ot.test;
-                const flag = normalizeFlag(ot.flag);
-                const statusText = flagToStatus(flag);
-                const abnormal = isAbnormalFlag(flag);
-                const statusClass = abnormal ? (flag.startsWith('H') ? 'status-high' : 'status-low') : 'status-normal';
-                return `<tr class="${abnormal ? 'abnormal' : ''}">
-          <td style="width:28%;">${escapeHtml(t?.abbreviation || t?.name || '-')}</td>
-          <td style="width:14%;" class="nowrap">${escapeHtml(formatResultValue(ot))}</td>
-          <td style="width:14%;" class="nowrap">${escapeHtml(t?.unit || '-')}</td>
-          <td style="width:14%;" class="${statusClass}">${escapeHtml(statusText)}</td>
-          <td style="width:30%;" class="nowrap">${escapeHtml(formatRange(ot, order.patient?.sex ?? null, age))}</td>
-        </tr>`;
-            })
-                .join('');
-            sectionsHtml += `<table>
-      <thead><tr><th style="width:28%;">Test</th><th style="width:14%;">Result</th><th style="width:14%;">Unit</th><th style="width:14%;">Status</th><th style="width:30%;">Reference Value</th></tr></thead>
-      <tbody>${tableRows}</tbody>
-    </table>`;
+    let regularContentHtml = '';
+    if (regularTests.length > 0) {
+        let deptBodiesHtml = '';
+        for (const [dept, catMap] of deptCatMap) {
+            let deptRowsHtml = `<tr class="dept-row"><td colspan="5">${escapeHtml(dept)}</td></tr>`;
+            for (const [cat, tests] of catMap) {
+                if (cat) {
+                    deptRowsHtml += `<tr class="cat-row"><td colspan="5">${escapeHtml(cat)}</td></tr>`;
+                }
+                deptRowsHtml += tests
+                    .map((ot) => {
+                    const t = ot.test;
+                    const flag = normalizeFlag(ot.flag);
+                    const statusText = flagToStatus(flag);
+                    const abnormal = isAbnormalFlag(flag);
+                    const statusClass = abnormal
+                        ? (flag.startsWith('H') ? 'status-high' : 'status-low')
+                        : 'status-normal';
+                    return `<tr class="${abnormal ? 'abnormal' : ''}">
+            <td style="width:28%;">${escapeHtml(t?.abbreviation || t?.name || '-')}</td>
+            <td style="width:14%;" class="nowrap">${escapeHtml(formatResultValue(ot))}</td>
+            <td style="width:14%;" class="nowrap">${escapeHtml(t?.unit || '-')}</td>
+            <td style="width:14%;" class="${statusClass}">${escapeHtml(statusText)}</td>
+            <td style="width:30%;" class="nowrap">${escapeHtml(formatRange(ot, order.patient?.sex ?? null, age))}</td>
+          </tr>`;
+                })
+                    .join('');
+            }
+            deptBodiesHtml += `<tbody class="regular-dept-block">${deptRowsHtml}</tbody>`;
         }
-    }
-    if (!sectionsHtml && regularTests.length === 0 && panelParents.length === 0) {
-        sectionsHtml = '<div class="dept-title ltr">No tests</div>';
+        regularContentHtml = `<table class="regular-results-table">
+      <thead><tr><th style="width:28%;">Test</th><th style="width:14%;">Result</th><th style="width:14%;">Unit</th><th style="width:14%;">Status</th><th style="width:30%;">Reference Value</th></tr></thead>
+      ${deptBodiesHtml}
+    </table>`;
     }
     let pagesHtml = '';
     if (regularTests.length > 0) {
@@ -421,7 +387,7 @@ function buildResultsReportHtml(input) {
     <div class="page">
       ${pageHeaderHtml}
       <div class="content">
-        ${sectionsHtml}
+        ${regularContentHtml}
         ${commentsText && panelParents.length === 0 ? `<div class="comments" style="margin-top:8px;font-size:11px;font-weight:700;"><strong>Comments:</strong> ${escapeHtml(commentsText)}</div>` : ''}
       </div>
       ${pageFooterHtml}
@@ -435,7 +401,7 @@ function buildResultsReportHtml(input) {
     <div class="page">
       ${pageHeaderHtml}
       <div class="content">
-        ${sectionsHtml}
+        <div class="regular-empty-state ltr">No tests</div>
       </div>
       ${pageFooterHtml}
     </div>`;
@@ -506,7 +472,8 @@ function buildResultsReportHtml(input) {
     .logo-wrap { flex: 0 0 120px; text-align: center; }
     .logo { width: 90px; height: auto; object-fit: contain; }
     .report-title { text-align: center; font-size: 20px; font-weight: 800; text-decoration: underline; margin: 12px 0 10px; }
-    .patient-info { margin-top: 8px; margin-bottom: 8px; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; border: 1px solid #ccc; border-radius: 6px; padding: 10px 12px; background: #fafafa; }
+    .patient-info { margin-top: 8px; margin-bottom: 8px; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; border: 1px solid #ccc; border-radius: 6px; padding: 10px 12px; background: #fafafa; }
+    .patient-info-col { display: flex; flex-direction: column; gap: 6px; }
     .info-item { font-size: 13px; }
     .info-item .label { font-weight: 700; margin-right: 4px; }
     .name-value { display: inline-block; }
@@ -519,11 +486,48 @@ function buildResultsReportHtml(input) {
       font-feature-settings: "liga" 1, "calt" 1, "kern" 1;
     }
     .content { padding: 0; }
-    .dept-title { background: #222; color: #fff; padding: 8px 12px; font-weight: 800; margin-top: 18px; }
-    .test-group-title { background: #f2f2f2; color: #555; padding: 6px 12px; font-weight: 700; border: 1px solid #ddd; border-top: 0; }
     table { width: 100%; border-collapse: collapse; margin-bottom: 8px; }
     th, td { border: 1px solid #eee; padding: 6px 8px; text-align: left; font-size: 12px; }
     th { background: #f2f2f2; font-weight: 700; }
+    .regular-results-table {
+      page-break-inside: auto;
+      break-inside: auto;
+    }
+    .regular-results-table thead {
+      display: table-header-group;
+    }
+    .regular-results-table tbody {
+      display: table-row-group;
+    }
+    .regular-results-table tbody.regular-dept-block {
+      page-break-inside: avoid;
+      break-inside: avoid;
+    }
+    .regular-results-table tr {
+      page-break-inside: avoid;
+      break-inside: avoid;
+    }
+    .regular-results-table .dept-row td {
+      background: #222;
+      color: #fff;
+      border-color: #222;
+      padding: 8px 12px;
+      font-weight: 800;
+    }
+    .regular-results-table .cat-row td {
+      background: #f2f2f2;
+      color: #555;
+      padding: 6px 12px;
+      font-weight: 700;
+      border: 1px solid #ddd;
+    }
+    .regular-empty-state {
+      background: #222;
+      color: #fff;
+      padding: 8px 12px;
+      font-weight: 800;
+      margin-top: 12px;
+    }
     .status-low { color: #0066cc; font-weight: 700; }
     .status-high { color: #d00000; font-weight: 700; }
     .status-normal { color: #0f8a1f; }

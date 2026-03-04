@@ -35,6 +35,7 @@ import { AdminSettingsPage } from './pages/admin/AdminSettingsPage';
 import { AdminLabDetailsPage } from './pages/admin/AdminLabDetailsPage';
 import { Outlet } from 'react-router-dom';
 import { getCurrentAuthScope } from './utils/tenant-scope';
+import { InstallAppButton } from './components/InstallAppButton';
 import './App.css';
 
 function SettingsLayout() {
@@ -90,6 +91,7 @@ function AppContent() {
       <AuthProvider>
         <AppTitleUpdater />
         <BrowserRouter>
+          <InstallAppButton />
           <Routes>
             <Route path="/login" element={<LoginPage />} />
 

@@ -63,6 +63,14 @@ export class LabResolverMiddleware implements NestMiddleware {
     }
 
     const lab = await this.labRepo.findOne({
+      select: {
+        id: true,
+        code: true,
+        subdomain: true,
+        name: true,
+        timezone: true,
+        isActive: true,
+      },
       where: [{ subdomain }, { code: subdomain.toUpperCase() }],
     });
     if (!lab) {

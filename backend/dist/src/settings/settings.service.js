@@ -29,6 +29,8 @@ const MAX_REPORT_IMAGE_DATA_URL_LENGTH = 4 * 1024 * 1024;
 const REPORT_IMAGE_DATA_URL_PATTERN = /^data:image\/(png|jpeg|jpg|webp);base64,[a-zA-Z0-9+/=]+$/;
 const MAX_ONLINE_WATERMARK_TEXT_LENGTH = 120;
 const MAX_PRINTER_NAME_LENGTH = 128;
+const MAX_REFERRING_DOCTOR_NAME_LENGTH = 80;
+const MAX_REFERRING_DOCTORS_COUNT = 500;
 let SettingsService = class SettingsService {
     constructor(userRepo, labAssignmentRepo, shiftAssignmentRepo, userDeptRepo, departmentRepo, labRepo, shiftRepo) {
         this.userRepo = userRepo;
@@ -68,6 +70,7 @@ let SettingsService = class SettingsService {
                 watermarkDataUrl: lab.reportWatermarkDataUrl ?? null,
             },
             uiTestGroups: lab.uiTestGroups ?? [],
+            referringDoctors: this.normalizeReferringDoctorsForRead(lab.referringDoctors),
         };
     }
     async updateLabSettings(labId, data) {
@@ -154,6 +157,9 @@ let SettingsService = class SettingsService {
             }
             lab.uiTestGroups = data.uiTestGroups;
         }
+        if (data.referringDoctors !== undefined) {
+            lab.referringDoctors = this.normalizeReferringDoctors(data.referringDoctors);
+        }
         await this.labRepo.save(lab);
         return this.getLabSettings(labId);
     }
@@ -209,6 +215,61 @@ let SettingsService = class SettingsService {
             throw new common_1.BadRequestException(`${fieldName} must be at most ${MAX_PRINTER_NAME_LENGTH} characters`);
         }
         return trimmed;
+    }
+    normalizeReferringDoctors(value) {
+        if (value === null)
+            return [];
+        if (!Array.isArray(value)) {
+            throw new common_1.BadRequestException('referringDoctors must be an array or null');
+        }
+        if (value.length > MAX_REFERRING_DOCTORS_COUNT) {
+            throw new common_1.BadRequestException(`referringDoctors must contain at most ${MAX_REFERRING_DOCTORS_COUNT} items`);
+        }
+        const normalized = [];
+        const seen = new Set();
+        for (const raw of value) {
+            if (typeof raw !== 'string') {
+                throw new common_1.BadRequestException('referringDoctors elements must be strings');
+            }
+            const trimmed = raw.trim();
+            if (!trimmed)
+                continue;
+            if (trimmed.length > MAX_REFERRING_DOCTOR_NAME_LENGTH) {
+                throw new common_1.BadRequestException(`Each referring doctor name must be at most ${MAX_REFERRING_DOCTOR_NAME_LENGTH} characters`);
+            }
+            const dedupeKey = trimmed.toLocaleLowerCase();
+            if (seen.has(dedupeKey))
+                continue;
+            seen.add(dedupeKey);
+            normalized.push(trimmed);
+            if (normalized.length > MAX_REFERRING_DOCTORS_COUNT) {
+                throw new common_1.BadRequestException(`referringDoctors must contain at most ${MAX_REFERRING_DOCTORS_COUNT} items`);
+            }
+        }
+        return normalized;
+    }
+    normalizeReferringDoctorsForRead(value) {
+        if (!Array.isArray(value))
+            return [];
+        const normalized = [];
+        const seen = new Set();
+        for (const raw of value) {
+            if (typeof raw !== 'string')
+                continue;
+            const trimmed = raw.trim();
+            if (!trimmed)
+                continue;
+            if (trimmed.length > MAX_REFERRING_DOCTOR_NAME_LENGTH)
+                continue;
+            const dedupeKey = trimmed.toLocaleLowerCase();
+            if (seen.has(dedupeKey))
+                continue;
+            seen.add(dedupeKey);
+            normalized.push(trimmed);
+            if (normalized.length >= MAX_REFERRING_DOCTORS_COUNT)
+                break;
+        }
+        return normalized;
     }
     async getUsersForLab(labId) {
         const assignments = await this.labAssignmentRepo.find({
