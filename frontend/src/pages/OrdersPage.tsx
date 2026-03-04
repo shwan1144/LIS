@@ -1407,7 +1407,7 @@ export function OrdersPage() {
         <Col xs={24} md={12} lg={10}>
           <Card
             className="orders-history-card"
-            style={{ minWidth: 260 }}
+            style={{ minWidth: 260, height: 'calc(100vh - 252px)', display: 'flex', flexDirection: 'column' }}
             title="Order History"
             extra={
               <Space>
@@ -1433,9 +1433,10 @@ export function OrdersPage() {
             }
             bodyStyle={{
               padding: 12,
-              height: 'calc(100vh - 252px)',
               display: 'flex',
               flexDirection: 'column',
+              flex: 1,
+              minHeight: 0,
             }}
           >
             <div className="orders-history-content">
@@ -1719,12 +1720,14 @@ export function OrdersPage() {
         <Col xs={24} md={12} lg={14}>
           <Card
             className="orders-right-card orders-workspace-card"
+            style={{ height: 'calc(100vh - 252px)', display: 'flex', flexDirection: 'column' }}
             bodyStyle={{
-              height: 'calc(100vh - 252px)',
               overflowY: 'auto',
               paddingTop: 12,
               paddingInline: 12,
               paddingBottom: 0,
+              flex: 1,
+              minHeight: 0,
             }}
           >
             {!selectedPatient ? (
