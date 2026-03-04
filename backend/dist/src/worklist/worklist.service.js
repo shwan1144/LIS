@@ -13,7 +13,7 @@ var __param = (this && this.__param) || function (paramIndex, decorator) {
 };
 var WorklistService_1;
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.WorklistService = exports.WorklistOrderMode = exports.WorklistView = void 0;
+exports.WorklistService = exports.WorklistVerificationStatus = exports.WorklistEntryStatus = exports.WorklistOrderMode = exports.WorklistView = void 0;
 const common_1 = require("@nestjs/common");
 const typeorm_1 = require("@nestjs/typeorm");
 const typeorm_2 = require("typeorm");
@@ -39,6 +39,16 @@ var WorklistOrderMode;
     WorklistOrderMode["ENTRY"] = "entry";
     WorklistOrderMode["VERIFY"] = "verify";
 })(WorklistOrderMode || (exports.WorklistOrderMode = WorklistOrderMode = {}));
+var WorklistEntryStatus;
+(function (WorklistEntryStatus) {
+    WorklistEntryStatus["PENDING"] = "pending";
+    WorklistEntryStatus["COMPLETED"] = "completed";
+})(WorklistEntryStatus || (exports.WorklistEntryStatus = WorklistEntryStatus = {}));
+var WorklistVerificationStatus;
+(function (WorklistVerificationStatus) {
+    WorklistVerificationStatus["UNVERIFIED"] = "unverified";
+    WorklistVerificationStatus["VERIFIED"] = "verified";
+})(WorklistVerificationStatus || (exports.WorklistVerificationStatus = WorklistVerificationStatus = {}));
 function parseJsonField(val) {
     if (val == null)
         return null;
@@ -358,11 +368,35 @@ let WorklistService = WorklistService_1 = class WorklistService {
                 .setParameter('completedStatus', order_test_entity_1.OrderTestStatus.COMPLETED)
                 .setParameter('verifiedStatus', order_test_entity_1.OrderTestStatus.VERIFIED)
                 .setParameter('rejectedStatus', order_test_entity_1.OrderTestStatus.REJECTED);
+            const pendingRootCountSql = `SUM(CASE WHEN ot.status IN (:...pendingStatuses) THEN 1 ELSE 0 END)`;
+            const verifiedRootCountSql = `SUM(CASE WHEN ot.status = :verifiedStatus THEN 1 ELSE 0 END)`;
+            const rejectedRootCountSql = `SUM(CASE WHEN ot.status = :rejectedStatus THEN 1 ELSE 0 END)`;
+            const totalRootCountSql = 'COUNT(ot.id)';
             if (mode === WorklistOrderMode.VERIFY) {
-                summaryQb.having(`SUM(CASE WHEN ot.status = :completedStatus THEN 1 ELSE 0 END) > 0`);
+                if (params.verificationStatus === WorklistVerificationStatus.UNVERIFIED) {
+                    summaryQb
+                        .having(`${pendingRootCountSql} = 0`)
+                        .andHaving(`${verifiedRootCountSql} < ${totalRootCountSql}`);
+                }
+                else if (params.verificationStatus === WorklistVerificationStatus.VERIFIED) {
+                    summaryQb
+                        .having(`${totalRootCountSql} > 0`)
+                        .andHaving(`${verifiedRootCountSql} = ${totalRootCountSql}`);
+                }
+                else {
+                    summaryQb.having(`SUM(CASE WHEN ot.status = :completedStatus THEN 1 ELSE 0 END) > 0`);
+                }
             }
             else {
                 summaryQb.having(`SUM(CASE WHEN ot.status <> :verifiedStatus THEN 1 ELSE 0 END) > 0`);
+                if (params.entryStatus === WorklistEntryStatus.PENDING) {
+                    summaryQb.andHaving(`(${pendingRootCountSql} > 0 OR ${rejectedRootCountSql} > 0)`);
+                }
+                else if (params.entryStatus === WorklistEntryStatus.COMPLETED) {
+                    summaryQb
+                        .andHaving(`${pendingRootCountSql} = 0`)
+                        .andHaving(`${rejectedRootCountSql} = 0`);
+                }
             }
             summaryQb
                 .orderBy(`SUM(CASE WHEN ot.status = :rejectedStatus THEN 1 ELSE 0 END)`, 'DESC')
@@ -427,6 +461,10 @@ let WorklistService = WorklistService_1 = class WorklistService {
                         hasSearch: Boolean(params.search?.trim()),
                         date: params.date ?? null,
                         departmentId: params.departmentId ?? null,
+                        entryStatus: mode === WorklistOrderMode.ENTRY ? params.entryStatus ?? null : null,
+                        verificationStatus: mode === WorklistOrderMode.VERIFY
+                            ? params.verificationStatus ?? null
+                            : null,
                     },
                 }));
             }
@@ -773,7 +811,7 @@ let WorklistService = WorklistService_1 = class WorklistService {
         const orderTestsMap = new Map(orderTests.map((ot) => [ot.id, ot]));
         const toSave = [];
         const updatedOrderIds = new Set();
-        const updatedParentIds = new Set();
+        const updatedPanelRootIds = new Set();
         const auditLogs = [];
         for (const data of updates) {
             const orderTest = orderTestsMap.get(data.orderTestId);
@@ -843,7 +881,12 @@ let WorklistService = WorklistService_1 = class WorklistService {
             }
             toSave.push(orderTest);
             updatedOrderIds.add(orderTest.sample.orderId);
-            updatedParentIds.add(orderTest.parentOrderTestId || orderTest.id);
+            if (orderTest.parentOrderTestId) {
+                updatedPanelRootIds.add(orderTest.parentOrderTestId);
+            }
+            else if (orderTest.test.type === 'PANEL') {
+                updatedPanelRootIds.add(orderTest.id);
+            }
             const impersonationAudit = actor.isImpersonation && actor.platformUserId
                 ? {
                     impersonation: {
@@ -874,8 +917,8 @@ let WorklistService = WorklistService_1 = class WorklistService {
         }
         if (toSave.length > 0) {
             await this.orderTestRepo.save(toSave);
-            for (const pid of updatedParentIds) {
-                await this.panelStatusService.recomputeAfterChildUpdate(pid);
+            for (const panelRootId of updatedPanelRootIds) {
+                await this.panelStatusService.recomputePanelStatus(panelRootId);
             }
             for (const oid of updatedOrderIds) {
                 await this.syncOrderStatus(oid);
@@ -945,7 +988,7 @@ let WorklistService = WorklistService_1 = class WorklistService {
         });
         const toSave = [];
         const updatedOrderIds = new Set();
-        const updatedParentIds = new Set();
+        const updatedPanelRootIds = new Set();
         const auditLogs = [];
         let failed = 0;
         for (const ot of orderTests) {
@@ -958,7 +1001,12 @@ let WorklistService = WorklistService_1 = class WorklistService {
             ot.verifiedBy = actor.userId;
             toSave.push(ot);
             updatedOrderIds.add(ot.sample.orderId);
-            updatedParentIds.add(ot.parentOrderTestId || ot.id);
+            if (ot.parentOrderTestId) {
+                updatedPanelRootIds.add(ot.parentOrderTestId);
+            }
+            else if (ot.test.type === 'PANEL') {
+                updatedPanelRootIds.add(ot.id);
+            }
             const impersonationAudit = actor.isImpersonation && actor.platformUserId ? {
                 impersonation: { active: true, platformUserId: actor.platformUserId },
             } : {};
@@ -982,8 +1030,8 @@ let WorklistService = WorklistService_1 = class WorklistService {
         }
         if (toSave.length > 0) {
             await this.orderTestRepo.save(toSave);
-            for (const pid of updatedParentIds) {
-                await this.panelStatusService.recomputeAfterChildUpdate(pid);
+            for (const panelRootId of updatedPanelRootIds) {
+                await this.panelStatusService.recomputePanelStatus(panelRootId);
             }
             for (const oid of updatedOrderIds) {
                 await this.syncOrderStatus(oid);

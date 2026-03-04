@@ -485,7 +485,7 @@ export function buildResultsReportHtml(input: {
     @page { size: A4; margin: 3mm 3mm 3mm 3mm; }
     body {
       --content-x: 3mm;
-      --footer-height: 14mm;
+      --footer-height: 18mm;
       margin: 0;
       font-family: 'Segoe UI', Tahoma, Arial, sans-serif;
       font-size: 12px;
@@ -613,10 +613,20 @@ export function buildResultsReportHtml(input: {
       left: var(--content-x);
       right: var(--content-x);
       bottom: 1mm;
+      height: var(--footer-height);
+      display: flex;
+      align-items: flex-end;
+      justify-content: center;
       text-align: center;
     }
     .report-footer-placeholder { min-height: var(--footer-height); }
-    .footer-image { width: 100%; height: var(--footer-height); object-fit: fill; object-position: center; display: block; }
+    .footer-image {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      object-position: center bottom;
+      display: block;
+    }
     * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   </style>
 </head>

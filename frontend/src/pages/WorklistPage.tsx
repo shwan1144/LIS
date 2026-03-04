@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState, type Key } from 'react';
 import {
   Button,
   Card,
@@ -16,7 +16,6 @@ import {
   message,
 } from 'antd';
 import {
-  CheckCircleOutlined,
   ReloadOutlined,
   SearchOutlined,
 } from '@ant-design/icons';
@@ -28,10 +27,10 @@ import {
   getWorklistOrderTests,
   getWorklistOrders,
   getWorklistStats,
-  verifyMultipleResults,
   type DepartmentDto,
   type ResultFlag,
   type TestParameterDefinition,
+  type WorklistEntryStatusFilter,
   type WorklistItem,
   type WorklistOrderModalDto,
   type WorklistOrderSummaryDto,
@@ -41,6 +40,10 @@ import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { WorklistStatusDashboard } from '../components/WorklistStatusDashboard';
 import { useFillToViewportBottom } from '../hooks/useFillToViewportBottom';
+import {
+  buildWorklistOrderGroups,
+  type WorklistOrderGroupSummary,
+} from './worklistGrouping';
 import './QueuePages.css';
 
 const { Title, Text } = Typography;
@@ -66,6 +69,12 @@ const FLAG_LABEL: Record<ResultFlag, string> = {
   NEG: 'Negative',
   ABN: 'Abnormal',
 };
+
+interface GroupedOrderCache {
+  order: WorklistOrderModalDto;
+  groups: WorklistOrderGroupSummary[];
+  appliedDepartmentId: string | null;
+}
 
 function normalizeResultFlag(flag: string | null | undefined): ResultFlag | null {
   const normalized = String(flag ?? '').trim().toUpperCase();
@@ -273,6 +282,27 @@ function buildInitialFormValues(items: WorklistItem[]): Record<string, unknown> 
   return values;
 }
 
+function resolveGroupByIdentity(
+  groups: WorklistOrderGroupSummary[],
+  currentGroup: WorklistOrderGroupSummary | null,
+): WorklistOrderGroupSummary | null {
+  if (groups.length === 0) return null;
+  if (!currentGroup) return groups[0] ?? null;
+  if (currentGroup.groupKind === 'single') {
+    return groups.find((group) => group.groupKind === 'single') ?? null;
+  }
+  if (currentGroup.panelRootId) {
+    return (
+      groups.find(
+        (group) =>
+          group.groupKind === 'panel' &&
+          group.panelRootId === currentGroup.panelRootId,
+      ) ?? null
+    );
+  }
+  return groups.find((group) => group.groupId === currentGroup.groupId) ?? null;
+}
+
 export function WorklistPage() {
   const { user } = useAuth();
   const isDark = useTheme().theme === 'dark';
@@ -287,16 +317,27 @@ export function WorklistPage() {
 
   const [search, setSearch] = useState('');
   const [dateFilter, setDateFilter] = useState<dayjs.Dayjs | null>(dayjs());
+  const [entryStatusFilter, setEntryStatusFilter] =
+    useState<WorklistEntryStatusFilter>('pending');
   const [departmentId, setDepartmentId] = useState<string | ''>('');
   const [departments, setDepartments] = useState<DepartmentDto[]>([]);
   const [page, setPage] = useState(1);
   const [size] = useState(25);
 
-  const [verifyLoadingOrderId, setVerifyLoadingOrderId] = useState<string | null>(null);
-  const [entryLoadingOrderId, setEntryLoadingOrderId] = useState<string | null>(null);
+  const [expandedOrderKeys, setExpandedOrderKeys] = useState<Key[]>([]);
+  const [groupsByOrderKey, setGroupsByOrderKey] = useState<
+    Record<string, GroupedOrderCache>
+  >({});
+  const [expandingOrderId, setExpandingOrderId] = useState<string | null>(null);
+  const [entryLoadingGroupKey, setEntryLoadingGroupKey] = useState<string | null>(
+    null,
+  );
 
   const [resultModalOpen, setResultModalOpen] = useState(false);
   const [modalOrder, setModalOrder] = useState<WorklistOrderModalDto | null>(null);
+  const [modalGroup, setModalGroup] = useState<WorklistOrderGroupSummary | null>(
+    null,
+  );
   const [modalLoading, setModalLoading] = useState(false);
   const [modalAppliedDepartmentId, setModalAppliedDepartmentId] = useState<string | null>(null);
   const [loadingAllTests, setLoadingAllTests] = useState(false);
@@ -304,9 +345,16 @@ export function WorklistPage() {
   const [liveFlags, setLiveFlags] = useState<Record<string, ResultFlag | null>>({});
   const [resultForm] = Form.useForm<any>();
 
+  const orderCacheKey = useCallback(
+    (orderId: string, appliedDepartmentId?: string | null) =>
+      `${orderId}::${appliedDepartmentId ?? (departmentId || 'all')}`,
+    [departmentId],
+  );
+
   const closeEntryModal = useCallback(() => {
     setResultModalOpen(false);
     setModalOrder(null);
+    setModalGroup(null);
     setModalAppliedDepartmentId(null);
     setLoadingAllTests(false);
     setLiveFlags({});
@@ -314,10 +362,15 @@ export function WorklistPage() {
   }, [resultForm]);
 
   const hydrateModalPayload = useCallback(
-    (payload: WorklistOrderModalDto, appliedDepartmentId: string | null) => {
+    (
+      payload: WorklistOrderModalDto,
+      group: WorklistOrderGroupSummary,
+      appliedDepartmentId: string | null,
+    ) => {
       setModalOrder(payload);
+      setModalGroup(group);
       setModalAppliedDepartmentId(appliedDepartmentId);
-      const sortedItems = sortModalItems(payload.items);
+      const sortedItems = sortModalItems(group.items);
       resultForm.setFieldsValue(buildInitialFormValues(sortedItems));
       const initialFlags: Record<string, ResultFlag | null> = {};
       for (const item of sortedItems) {
@@ -337,6 +390,7 @@ export function WorklistPage() {
         mode: 'entry',
         search: search.trim() || undefined,
         date: dateFilter?.format('YYYY-MM-DD'),
+        entryStatus: entryStatusFilter,
         departmentId: departmentId || undefined,
         page,
         size,
@@ -350,7 +404,7 @@ export function WorklistPage() {
     } finally {
       setLoading(false);
     }
-  }, [dateFilter, departmentId, page, search, size]);
+  }, [dateFilter, departmentId, entryStatusFilter, page, search, size]);
 
   const loadStats = useCallback(async () => {
     try {
@@ -375,9 +429,56 @@ export function WorklistPage() {
     void loadStats();
   }, [loadStats]);
 
+  useEffect(() => {
+    setExpandedOrderKeys([]);
+  }, [departmentId, entryStatusFilter, page]);
+
+  const loadOrderGroups = useCallback(
+    async (
+      orderId: string,
+      options?: { force?: boolean; departmentOverride?: string | null },
+    ): Promise<GroupedOrderCache | null> => {
+      const appliedDepartmentId =
+        options?.departmentOverride !== undefined
+          ? options.departmentOverride
+          : (departmentId || null);
+      const key = orderCacheKey(orderId, appliedDepartmentId);
+      const cached = groupsByOrderKey[key];
+      if (!options?.force && cached) {
+        return cached;
+      }
+
+      setExpandingOrderId(orderId);
+      try {
+        const payload = await getWorklistOrderTests(orderId, {
+          mode: 'entry',
+          departmentId: appliedDepartmentId ?? undefined,
+        });
+        const nextCache: GroupedOrderCache = {
+          order: payload,
+          groups: buildWorklistOrderGroups(payload.items),
+          appliedDepartmentId,
+        };
+        setGroupsByOrderKey((previous) => ({ ...previous, [key]: nextCache }));
+        return nextCache;
+      } catch {
+        message.error('Failed to load order tests');
+        return null;
+      } finally {
+        setExpandingOrderId((current) => (current === orderId ? null : current));
+      }
+    },
+    [departmentId, groupsByOrderKey, orderCacheKey],
+  );
+
+  const getCachedGroupsForOrder = useCallback(
+    (orderId: string) => groupsByOrderKey[orderCacheKey(orderId)] ?? null,
+    [groupsByOrderKey, orderCacheKey],
+  );
+
   const orderedModalItems = useMemo(
-    () => sortModalItems(modalOrder?.items ?? []),
-    [modalOrder],
+    () => sortModalItems(modalGroup?.items ?? []),
+    [modalGroup],
   );
 
   const isEditableTarget = useCallback(
@@ -496,65 +597,58 @@ export function WorklistPage() {
     [orderedModalItems],
   );
 
-  const openEntryModal = useCallback(
-    async (order: WorklistOrderSummaryDto) => {
-      setEntryLoadingOrderId(order.orderId);
+  const openEntryModalForGroup = useCallback(
+    async (orderId: string, group: WorklistOrderGroupSummary) => {
+      setEntryLoadingGroupKey(`${orderId}:${group.groupId}`);
       setModalLoading(true);
       try {
-        const appliedDepartmentId = departmentId || null;
-        const payload = await getWorklistOrderTests(order.orderId, {
-          mode: 'entry',
-          departmentId: appliedDepartmentId ?? undefined,
-        });
-        hydrateModalPayload(payload, appliedDepartmentId);
-        setResultModalOpen(true);
-      } catch {
-        message.error('Failed to load order tests');
-      } finally {
-        setModalLoading(false);
-        setEntryLoadingOrderId(null);
-      }
-    },
-    [departmentId, hydrateModalPayload],
-  );
-
-  const handleVerifyOrder = useCallback(
-    async (order: WorklistOrderSummaryDto) => {
-      setVerifyLoadingOrderId(order.orderId);
-      try {
-        const payload = await getWorklistOrderTests(order.orderId, {
-          mode: 'entry',
-          departmentId: departmentId || undefined,
-        });
-        const completedIds = payload.items
-          .filter((item) => item.status === 'COMPLETED')
-          .map((item) => item.id);
-        if (completedIds.length === 0) {
-          message.warning('No completed tests to verify in this order');
+        const cached = await loadOrderGroups(orderId);
+        if (!cached) return;
+        let nextPayload = cached.order;
+        let nextAppliedDepartmentId = cached.appliedDepartmentId;
+        let nextGroup = resolveGroupByIdentity(cached.groups, group);
+        if (!nextGroup) {
+          message.warning('This test group is no longer available in current filter');
           return;
         }
-        const result = await verifyMultipleResults(completedIds);
-        message.success(
-          `Verified ${result.verified} result(s)${
-            result.failed > 0 ? `, ${result.failed} failed` : ''
-          }`,
-        );
-        await Promise.all([loadRows(), loadStats()]);
-        if (modalOrder?.orderId === order.orderId) {
-          const appliedDepartmentId = modalAppliedDepartmentId;
-          const refreshed = await getWorklistOrderTests(order.orderId, {
-            mode: 'entry',
-            departmentId: appliedDepartmentId ?? undefined,
-          });
-          hydrateModalPayload(refreshed, appliedDepartmentId);
+        if (nextGroup.groupKind === 'panel' && nextGroup.testsCount === 0) {
+          if (cached.appliedDepartmentId) {
+            const fullPayload = await getWorklistOrderTests(orderId, {
+              mode: 'entry',
+            });
+            const fullGroups = buildWorklistOrderGroups(fullPayload.items);
+            const resolvedFullGroup = resolveGroupByIdentity(fullGroups, nextGroup);
+            if (resolvedFullGroup && resolvedFullGroup.testsCount > 0) {
+              const fullKey = orderCacheKey(orderId, null);
+              setGroupsByOrderKey((previous) => ({
+                ...previous,
+                [fullKey]: {
+                  order: fullPayload,
+                  groups: fullGroups,
+                  appliedDepartmentId: null,
+                },
+              }));
+              nextPayload = fullPayload;
+              nextAppliedDepartmentId = null;
+              nextGroup = resolvedFullGroup;
+              message.info(
+                'Loaded this panel from all departments because current filter has no panel children.',
+              );
+            } else {
+              message.warning('This panel has no child tests in this order.');
+            }
+          } else {
+            message.warning('This panel has no child tests in this order.');
+          }
         }
-      } catch {
-        message.error('Failed to verify order tests');
+        hydrateModalPayload(nextPayload, nextGroup, nextAppliedDepartmentId);
+        setResultModalOpen(true);
       } finally {
-        setVerifyLoadingOrderId(null);
+        setModalLoading(false);
+        setEntryLoadingGroupKey(null);
       }
     },
-    [hydrateModalPayload, loadRows, loadStats, modalAppliedDepartmentId, modalOrder?.orderId],
+    [hydrateModalPayload, loadOrderGroups, orderCacheKey],
   );
 
   const handleLoadAllOrderTests = useCallback(async () => {
@@ -564,14 +658,29 @@ export function WorklistPage() {
       const payload = await getWorklistOrderTests(modalOrder.orderId, {
         mode: 'entry',
       });
-      hydrateModalPayload(payload, null);
+      const groups = buildWorklistOrderGroups(payload.items);
+      const nextGroup = resolveGroupByIdentity(groups, modalGroup);
+      if (!nextGroup) {
+        message.warning('No groups available in this order');
+        return;
+      }
+      const key = orderCacheKey(modalOrder.orderId, null);
+      setGroupsByOrderKey((previous) => ({
+        ...previous,
+        [key]: {
+          order: payload,
+          groups,
+          appliedDepartmentId: null,
+        },
+      }));
+      hydrateModalPayload(payload, nextGroup, null);
       message.success('Loaded all tests for this order');
     } catch {
       message.error('Failed to load all tests for this order');
     } finally {
       setLoadingAllTests(false);
     }
-  }, [hydrateModalPayload, modalOrder]);
+  }, [hydrateModalPayload, modalGroup, modalOrder, orderCacheKey]);
 
   const handleSearch = () => {
     setPage(1);
@@ -592,7 +701,7 @@ export function WorklistPage() {
       } else if (!canAdminEditVerified && hasVerifiedTargets) {
         message.info('All tests are verified and read-only for your role.');
       } else {
-        message.info('No editable tests in this order');
+        message.info('No editable tests in this group');
       }
       return;
     }
@@ -622,6 +731,7 @@ export function WorklistPage() {
       if (import.meta.env.DEV) {
         console.debug('[worklist.submit]', {
           orderId: modalOrder.orderId,
+          groupId: modalGroup?.groupId,
           totalTargets: targets.length,
           verifiedOverrideCount,
           departmentFilter: modalAppliedDepartmentId,
@@ -705,14 +815,36 @@ export function WorklistPage() {
           ? 'Verified results updated by admin'
           : 'Results saved',
       );
+      const submittedOrderId = modalOrder.orderId;
+      const submittedDepartment = modalAppliedDepartmentId;
       closeEntryModal();
       await Promise.all([loadRows(), loadStats()]);
+      await loadOrderGroups(submittedOrderId, {
+        force: true,
+        departmentOverride: submittedDepartment,
+      });
     } catch {
       message.error('Failed to save results');
     } finally {
       setSubmitting(false);
     }
   };
+
+  const handleExpandRow = useCallback(
+    (expanded: boolean, record: WorklistOrderSummaryDto) => {
+      setExpandedOrderKeys((previous) => {
+        if (expanded) {
+          if (previous.includes(record.orderId)) return previous;
+          return [...previous, record.orderId];
+        }
+        return previous.filter((key) => key !== record.orderId);
+      });
+      if (expanded) {
+        void loadOrderGroups(record.orderId);
+      }
+    },
+    [loadOrderGroups],
+  );
 
   const queueColumns: ColumnsType<WorklistOrderSummaryDto> = [
     {
@@ -791,36 +923,133 @@ export function WorklistPage() {
     {
       title: 'Action',
       key: 'action',
-      width: 220,
-      render: (_: unknown, record) => (
-        <Space size={6}>
+      width: 130,
+      render: (_: unknown, record) => {
+        const expanded = expandedOrderKeys.includes(record.orderId);
+        return (
           <Button
-            type="primary"
             size="small"
-            ghost
-            loading={entryLoadingOrderId === record.orderId}
-            onClick={() => {
-              void openEntryModal(record);
+            loading={expandingOrderId === record.orderId}
+            onClick={(event) => {
+              event.stopPropagation();
+              handleExpandRow(!expanded, record);
             }}
           >
-            Enter
+            {expanded ? 'Hide groups' : 'Groups'}
           </Button>
-          <Button
-            type="primary"
-            size="small"
-            icon={<CheckCircleOutlined />}
-            loading={verifyLoadingOrderId === record.orderId}
-            disabled={!record.hasVerifiable}
-            onClick={() => {
-              void handleVerifyOrder(record);
-            }}
-          >
-            Verify
-          </Button>
-        </Space>
-      ),
+        );
+      },
     },
   ];
+
+  const renderExpandedRow = (record: WorklistOrderSummaryDto) => {
+    const cached = getCachedGroupsForOrder(record.orderId);
+    if (!cached) {
+      return (
+        <div style={{ padding: '6px 8px' }}>
+          {expandingOrderId === record.orderId ? (
+            <Text type="secondary">Loading groups...</Text>
+          ) : (
+            <Button
+              size="small"
+              onClick={() => {
+                void loadOrderGroups(record.orderId);
+              }}
+            >
+              Load groups
+            </Button>
+          )}
+        </div>
+      );
+    }
+
+    if (cached.groups.length === 0) {
+      return (
+        <div style={{ padding: '6px 8px' }}>
+          <Text type="secondary">No available groups in this department</Text>
+        </div>
+      );
+    }
+
+    return (
+      <div className="worklist-group-shell">
+        <div className="worklist-group-shell-title">Grouped test entries</div>
+        <div className="worklist-group-list">
+          {cached.groups.map((group) => {
+            const isEmptyPanel = group.groupKind === 'panel' && group.testsCount === 0;
+            const openGroup = () => {
+              if (isEmptyPanel) {
+                message.warning(
+                  'This panel has no configured child tests. Configure panel components in Test Management.',
+                );
+                return;
+              }
+              void openEntryModalForGroup(record.orderId, group);
+            };
+
+            return (
+              <div
+                key={group.groupId}
+                className={`worklist-group-item ${
+                  group.groupKind === 'panel'
+                    ? 'worklist-group-item-panel'
+                    : 'worklist-group-item-single'
+                }`}
+                onClick={openGroup}
+              >
+              <div className="worklist-group-main">
+                <div className="worklist-group-title-row">
+                  <Text strong style={{ fontSize: 12 }}>
+                    {group.label}
+                  </Text>
+                  {group.testsCount === 0 && (
+                    <Tag color="warning" style={{ margin: 0 }}>
+                      No child tests in this filter
+                    </Tag>
+                  )}
+                </div>
+                <Space size={[4, 4]} wrap>
+                  <Tag style={{ margin: 0 }}>{group.testsCount} tests</Tag>
+                  {group.pending > 0 && (
+                    <Tag style={{ margin: 0 }}>Pending {group.pending}</Tag>
+                  )}
+                  {group.completed > 0 && (
+                    <Tag color="processing" style={{ margin: 0 }}>
+                      Completed {group.completed}
+                    </Tag>
+                  )}
+                  {group.verified > 0 && (
+                    <Tag color="success" style={{ margin: 0 }}>
+                      Verified {group.verified}
+                    </Tag>
+                  )}
+                  {group.rejected > 0 && (
+                    <Tag color="error" style={{ margin: 0 }}>
+                      Rejected {group.rejected}
+                    </Tag>
+                  )}
+                </Space>
+              </div>
+              <Button
+                type="primary"
+                ghost
+                size="small"
+                disabled={isEmptyPanel}
+                loading={entryLoadingGroupKey === `${record.orderId}:${group.groupId}`}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  openGroup();
+                }}
+              >
+                Edit
+              </Button>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
 
   return (
     <div>
@@ -837,6 +1066,61 @@ export function WorklistPage() {
         .worklist-orders-table .ant-table-tbody > tr > td {
           padding-top: 4px !important;
           padding-bottom: 4px !important;
+        }
+        .worklist-orders-table .ant-table-expanded-row > td {
+          background: ${isDark ? 'rgba(16,24,39,0.55)' : '#f8fbff'} !important;
+          border-top: none !important;
+          padding: 8px 10px !important;
+        }
+        .worklist-group-list {
+          margin-top: 6px;
+          margin-left: 22px;
+          border-left: 2px dashed ${isDark ? 'rgba(148,163,184,0.35)' : '#c7d9ff'};
+          padding-left: 10px;
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
+        }
+        .worklist-group-shell {
+          border: 1px solid ${isDark ? 'rgba(148,163,184,0.22)' : '#dbe8ff'};
+          border-radius: 10px;
+          background: ${isDark ? 'rgba(2,6,23,0.36)' : '#f3f8ff'};
+          padding: 8px;
+        }
+        .worklist-group-shell-title {
+          font-size: 11px;
+          font-weight: 700;
+          letter-spacing: 0.2px;
+          color: ${isDark ? 'rgba(191,219,254,0.95)' : '#1d4ed8'};
+          text-transform: uppercase;
+        }
+        .worklist-group-item {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 10px;
+          border-radius: 8px;
+          border: 1px solid ${isDark ? 'rgba(148,163,184,0.2)' : '#d9e8ff'};
+          padding: 8px 10px;
+          cursor: pointer;
+        }
+        .worklist-group-item-single {
+          background: ${isDark ? 'rgba(30,58,138,0.16)' : '#eef5ff'};
+        }
+        .worklist-group-item-panel {
+          background: ${isDark ? 'rgba(88,28,135,0.16)' : '#f5efff'};
+        }
+        .worklist-group-main {
+          min-width: 0;
+          display: flex;
+          flex-direction: column;
+          gap: 4px;
+        }
+        .worklist-group-title-row {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          flex-wrap: wrap;
         }
         .panel-entry-modal .ant-modal {
           max-width: calc(100vw - 32px) !important;
@@ -900,6 +1184,19 @@ export function WorklistPage() {
                 allowClear
               />
               <Select
+                value={entryStatusFilter}
+                onChange={(value) => {
+                  setEntryStatusFilter(value as WorklistEntryStatusFilter);
+                  setPage(1);
+                }}
+                style={{ width: 150 }}
+                allowClear={false}
+                options={[
+                  { value: 'pending', label: 'Pending' },
+                  { value: 'completed', label: 'Completed' },
+                ]}
+              />
+              <Select
                 placeholder="Department"
                 value={departmentId || undefined}
                 onChange={(value) => setDepartmentId(value ?? '')}
@@ -938,6 +1235,12 @@ export function WorklistPage() {
               dataSource={rows}
               loading={loading}
               showHeader
+              expandable={{
+                expandedRowRender: renderExpandedRow,
+                expandedRowKeys: expandedOrderKeys,
+                expandRowByClick: false,
+                onExpand: handleExpandRow,
+              }}
               pagination={{
                 current: page,
                 pageSize: size,
@@ -962,6 +1265,11 @@ export function WorklistPage() {
             {modalOrder && (
               <Tag color="blue" style={{ margin: 0 }}>
                 {modalOrder.orderNumber}
+              </Tag>
+            )}
+            {modalGroup && (
+              <Tag color="purple" style={{ margin: 0 }}>
+                {modalGroup.label}
               </Tag>
             )}
             {modalDepartment && (
@@ -990,7 +1298,7 @@ export function WorklistPage() {
           <div style={{ padding: 30, textAlign: 'center' }}>
             <Text type="secondary">Loading order tests...</Text>
           </div>
-        ) : modalOrder ? (
+        ) : modalOrder && modalGroup ? (
           <div>
             <div
               style={{

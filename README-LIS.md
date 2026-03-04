@@ -9,6 +9,43 @@
 - Dockploy new lab onboarding + subdomain activation (medilis.net):
   - `DOCKPLOY_NEW_LAB_ONBOARDING.md`
 
+## CBC/GUE Panel Reseed (Future Orders Only)
+
+Use this when `CBC` / `GUE` panel child tests are missing for a lab and panel modals look empty for newly created orders.
+
+Policy of this runbook:
+- Restores canonical `CBC` + `GUE` panel definitions.
+- Does **not** backfill historical `order_tests` children.
+- Applies to future orders only.
+
+From `backend` folder:
+
+```powershell
+npm run seed:panel-cbc-gue
+```
+
+Optional targeting:
+
+```powershell
+npm run seed:panel-cbc-gue -- --lab-code=LAB01
+npm run seed:panel-cbc-gue -- --lab-name="Main Lab"
+```
+
+Quick SQL validation (PostgreSQL):
+
+```sql
+SELECT
+  t.code AS panel_code,
+  COUNT(tc."childTestId")::int AS component_count
+FROM tests t
+LEFT JOIN test_components tc ON tc."panelTestId" = t.id
+WHERE t."labId" = '<LAB_ID>'
+  AND t.type = 'PANEL'
+  AND t.code IN ('CBC','GUE')
+GROUP BY t.code
+ORDER BY t.code;
+```
+
 ## Quick start (Windows)
 
 1. **Use PowerShell**, not Command Prompt (cmd). In Cursor: Terminal → New Terminal (or set default profile to PowerShell). Do **not** paste long error text into the terminal — each line will run as a command.

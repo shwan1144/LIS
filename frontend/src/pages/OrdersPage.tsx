@@ -196,6 +196,27 @@ function toOrderHistoryItemFromSummary(order: OrderCreateSummaryDto): OrderHisto
   };
 }
 
+const getTubeColor = (type: string) => {
+  const norm = (type || '').toUpperCase();
+  if (norm.includes('YELLOW') || norm === 'SERUM') return '#FBBF24'; // Yellow
+  if (norm.includes('GREEN') || norm === 'PLASMA') return '#22c55e'; // Green
+  if (norm.includes('LAVENDER') || norm.includes('PURPLE') || norm === 'WHOLE_BLOOD') return '#a855f7'; // Purple
+  if (norm.includes('RED')) return '#EF4444'; // Red
+  if (norm.includes('BLUE') || norm === 'SWAB') return '#3b82f6'; // Blue
+  if (norm.includes('GRAY') || norm.includes('GREY')) return '#94a3b8'; // Gray
+  if (norm === 'URINE') return '#fef08a'; // Light Yellow
+  if (norm === 'STOOL') return '#8b5cf6'; // Violet / Brown
+  return '#cbd5e1'; // Default Gray
+};
+
+const TubeIcon = ({ color }: { color: string }) => (
+  <svg width="12" height="24" viewBox="0 0 12 24" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ display: 'block' }}>
+    <rect x="2" y="7" width="8" height="15" rx="3" fill="#ffffff" stroke="#cbd5e1" strokeWidth="1" />
+    <rect x="1" y="2" width="10" height="5" rx="1.5" fill={color} stroke="rgba(0,0,0,0.1)" strokeWidth="1" />
+    <rect x="2" y="0.5" width="8" height="2.5" rx="1" fill={color} />
+  </svg>
+);
+
 export function OrdersPage() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -541,6 +562,32 @@ export function OrdersPage() {
       },
     );
   }, [testOptions, testSearch]);
+  const tubesRequired = useMemo(() => {
+    if (selectedTests.length === 0) return [];
+    const groups = new Set<string>();
+    const typeByGroup = new Map<string, string>();
+    selectedTests.forEach((t) => {
+      const type = t.tubeType || 'OTHER';
+      let groupKey = type;
+      if (printLabelSequenceBy === 'department') {
+        const fullTest = testOptions.find((opt) => opt.id === t.testId);
+        const deptId = fullTest?.departmentId || 'OTHER';
+        groupKey = `${deptId}-${type}`;
+      }
+      groups.add(groupKey);
+      typeByGroup.set(groupKey, type);
+    });
+    const counts = new Map<string, number>();
+    groups.forEach((groupKey) => {
+      const type = typeByGroup.get(groupKey)!;
+      counts.set(type, (counts.get(type) || 0) + 1);
+    });
+    return Array.from(counts.entries()).map(([type, count]) => ({
+      tubeType: type,
+      color: getTubeColor(type),
+      count,
+    }));
+  }, [selectedTests, printLabelSequenceBy, testOptions]);
 
   const handleAddTest = (testId: string) => {
     const test = testOptions.find((t) => t.id === testId);
@@ -1774,36 +1821,93 @@ export function OrdersPage() {
                       <Spin tip="Loading order details..." />
                     ) : selectedCreatedOrder ? (() => {
                       const orderTests = sortRootOrderTestsForReadonly(getRootOrderTests(selectedCreatedOrder));
-                      if (orderTests.length === 0) {
-                        return <Text type="secondary">No tests in this order.</Text>;
+
+                      let lockedTubesRequired: { tubeType: string; color: string; count: number }[] = [];
+                      if (orderTests.length > 0) {
+                        const groups = new Set<string>();
+                        const typeByGroup = new Map<string, string>();
+                        orderTests.forEach((t) => {
+                          const type = t.tubeType || 'OTHER';
+                          let groupKey = type;
+                          if (printLabelSequenceBy === 'department') {
+                            const fullTest = testOptions.find((opt) => opt.id === t.testId);
+                            const deptId = fullTest?.departmentId || 'OTHER';
+                            groupKey = `${deptId}-${type}`;
+                          }
+                          groups.add(groupKey);
+                          typeByGroup.set(groupKey, type);
+                        });
+                        const counts = new Map<string, number>();
+                        groups.forEach((groupKey) => {
+                          const type = typeByGroup.get(groupKey)!;
+                          counts.set(type, (counts.get(type) || 0) + 1);
+                        });
+                        lockedTubesRequired = Array.from(counts.entries()).map(([type, count]) => ({
+                          tubeType: type,
+                          color: getTubeColor(type),
+                          count,
+                        }));
                       }
+
                       return (
-                        <div
-                          className="order-tests-readonly-wrapper"
-                          style={{
-                            border: styles.border,
-                            borderRadius: 8,
-                            padding: 12,
-                            backgroundColor: styles.bgSubtle,
-                          }}
-                        >
-                          <div className="order-tests-readonly-grid-header">
-                            <span>Abbreviations</span>
-                            <Text type="secondary">{orderTests.length} tests</Text>
-                          </div>
-                          <div className="order-tests-readonly-pills">
-                            {orderTests.map((orderTest) => (
-                              <Tag
-                                key={orderTest.testId}
-                                className="order-tests-readonly-pill"
-                                title={`${orderTest.testName} (${orderTest.testCode})`}
-                                style={{ marginInlineEnd: 0 }}
+                        <Row gutter={[12, 12]}>
+                          <Col span={18}>
+                            {orderTests.length === 0 ? (
+                              <Text type="secondary">No tests in this order.</Text>
+                            ) : (
+                              <div
+                                className="order-tests-readonly-wrapper"
+                                style={{
+                                  border: styles.border,
+                                  borderRadius: 8,
+                                  padding: 12,
+                                  backgroundColor: styles.bgSubtle,
+                                }}
                               >
-                                {orderTest.displayLabel || '-'}
-                              </Tag>
-                            ))}
-                          </div>
-                        </div>
+                                <div className="order-tests-readonly-grid-header">
+                                  <span>Abbreviations</span>
+                                  <Text type="secondary">{orderTests.length} tests</Text>
+                                </div>
+                                <div className="order-tests-readonly-pills">
+                                  {orderTests.map((orderTest) => (
+                                    <Tag
+                                      key={orderTest.testId}
+                                      className="order-tests-readonly-pill"
+                                      title={`${orderTest.testName} (${orderTest.testCode})`}
+                                      style={{ marginInlineEnd: 0 }}
+                                    >
+                                      {orderTest.displayLabel || '-'}
+                                    </Tag>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                          </Col>
+                          <Col span={6}>
+                            <div className="order-composer-tubes-summary" style={{ padding: '8px 12px', backgroundColor: styles.bgSubtle, borderRadius: 8, border: styles.border, height: '100%' }}>
+                              <Space direction="vertical" size={6} style={{ width: '100%' }}>
+                                <Text strong style={{ fontSize: 13 }}>Tubes required:</Text>
+                                {lockedTubesRequired.length === 0 ? (
+                                  <Text type="secondary" style={{ fontSize: 13 }}>0 tubes</Text>
+                                ) : (
+                                  <Space size={14} wrap>
+                                    {lockedTubesRequired.map((tr) => (
+                                      <Space key={tr.tubeType} size={6} align="center">
+                                        <TubeIcon color={tr.color} />
+                                        <Space size={2} direction="vertical" align="start" style={{ lineHeight: 1.2 }}>
+                                          <Text strong style={{ fontSize: 14 }}>{tr.count}</Text>
+                                          <Text type="secondary" style={{ fontSize: 10, lineHeight: 1 }}>
+                                            {tr.tubeType?.replace(/_/g, ' ').toLowerCase() || 'tube'}
+                                          </Text>
+                                        </Space>
+                                      </Space>
+                                    ))}
+                                  </Space>
+                                )}
+                              </Space>
+                            </div>
+                          </Col>
+                        </Row>
                       );
                     })() : selectedOrderDetailsError ? (
                       <Result
@@ -1979,14 +2083,31 @@ export function OrdersPage() {
                         )}
                       </Card>
 
-                      <Button
-                        type="link"
-                        icon={<PlusOutlined />}
-                        className="order-composer-new-patient-btn"
-                        onClick={openNewPatientInPatientsTab}
-                      >
-                        New patient
-                      </Button>
+                      <div className="order-composer-tubes-summary" style={{ marginTop: 12, padding: '8px 12px', backgroundColor: styles.bgSubtle, borderRadius: 8, border: styles.border }}>
+                        <Space direction="vertical" size={6} style={{ width: '100%' }}>
+                          <Text strong style={{ fontSize: 13 }}>Tubes required by type:</Text>
+                          {tubesRequired.length === 0 ? (
+                            <Text type="secondary" style={{ fontSize: 13 }}>0 tubes</Text>
+                          ) : (
+                            <Space size={14} wrap>
+                              {tubesRequired.map((tr) => (
+                                <Space key={tr.tubeType} size={6} align="center">
+                                  <TubeIcon color={tr.color} />
+                                  <Space size={2} direction="vertical" align="start" style={{ lineHeight: 1.2 }}>
+                                    <Text strong style={{ fontSize: 14 }}>{tr.count}</Text>
+                                    <Text type="secondary" style={{ fontSize: 10, lineHeight: 1 }}>
+                                      {tr.tubeType?.replace(/_/g, ' ').toLowerCase() || 'tube'}
+                                    </Text>
+                                  </Space>
+                                </Space>
+                              ))}
+                            </Space>
+                          )}
+                          <Text type="secondary" style={{ fontSize: 11, marginTop: 4 }}>
+                            Grouped by {printLabelSequenceBy === 'department' ? 'department' : 'tube type'}
+                          </Text>
+                        </Space>
+                      </div>
                     </Col>
                   </Row>
                 </div>

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState, type Key } from 'react';
 import {
   Button,
   Card,
@@ -29,6 +29,7 @@ import {
   verifyMultipleResults,
   type DepartmentDto,
   type ResultFlag,
+  type VerificationRowStatusFilter,
   type WorklistItem,
   type WorklistOrderModalDto,
   type WorklistOrderSummaryDto,
@@ -36,6 +37,10 @@ import {
 } from '../api/client';
 import { WorklistStatusDashboard } from '../components/WorklistStatusDashboard';
 import { useFillToViewportBottom } from '../hooks/useFillToViewportBottom';
+import {
+  buildWorklistOrderGroups,
+  type WorklistOrderGroupSummary,
+} from './worklistGrouping';
 import './QueuePages.css';
 
 const { Title, Text } = Typography;
@@ -69,6 +74,12 @@ const STATUS_COLOR: Record<WorklistItem['status'], string> = {
   VERIFIED: 'success',
   REJECTED: 'error',
 };
+
+interface GroupedOrderCache {
+  order: WorklistOrderModalDto;
+  groups: WorklistOrderGroupSummary[];
+  appliedDepartmentId: string | null;
+}
 
 function formatResult(item: WorklistItem): string {
   if (item.resultValue !== null && item.resultValue !== undefined) {
@@ -134,17 +145,31 @@ function sortModalItems(items: WorklistItem[]): WorklistItem[] {
   return ordered;
 }
 
-function getPanelTargets(items: WorklistItem[], panelRootId: string): WorklistItem[] {
-  const children = items.filter((item) => item.parentOrderTestId === panelRootId);
-  if (children.length > 0) return children;
-  const panelRoot = items.find((item) => item.id === panelRootId);
-  return panelRoot ? [panelRoot] : [];
-}
-
 function collectCompletedIds(items: WorklistItem[]): string[] {
   return items
     .filter((item) => item.testType !== 'PANEL' && item.status === 'COMPLETED')
     .map((item) => item.id);
+}
+
+function resolveGroupByIdentity(
+  groups: WorklistOrderGroupSummary[],
+  currentGroup: WorklistOrderGroupSummary | null,
+): WorklistOrderGroupSummary | null {
+  if (groups.length === 0) return null;
+  if (!currentGroup) return groups[0] ?? null;
+  if (currentGroup.groupKind === 'single') {
+    return groups.find((group) => group.groupKind === 'single') ?? null;
+  }
+  if (currentGroup.panelRootId) {
+    return (
+      groups.find(
+        (group) =>
+          group.groupKind === 'panel' &&
+          group.panelRootId === currentGroup.panelRootId,
+      ) ?? null
+    );
+  }
+  return groups.find((group) => group.groupId === currentGroup.groupId) ?? null;
 }
 
 export function VerificationPage() {
@@ -160,22 +185,45 @@ export function VerificationPage() {
   const [departments, setDepartments] = useState<DepartmentDto[]>([]);
   const [page, setPage] = useState(1);
   const [size] = useState(25);
+  const [verificationStatusFilter, setVerificationStatusFilter] =
+    useState<VerificationRowStatusFilter>('unverified');
+
+  const [expandedOrderKeys, setExpandedOrderKeys] = useState<Key[]>([]);
+  const [groupsByOrderKey, setGroupsByOrderKey] = useState<
+    Record<string, GroupedOrderCache>
+  >({});
+  const [expandingOrderId, setExpandingOrderId] = useState<string | null>(null);
+  const [openingGroupKey, setOpeningGroupKey] = useState<string | null>(null);
 
   const [reviewModalOpen, setReviewModalOpen] = useState(false);
   const [reviewLoading, setReviewLoading] = useState(false);
   const [reviewOrder, setReviewOrder] = useState<WorklistOrderModalDto | null>(null);
+  const [reviewGroup, setReviewGroup] = useState<WorklistOrderGroupSummary | null>(
+    null,
+  );
+  const [reviewAppliedDepartmentId, setReviewAppliedDepartmentId] = useState<
+    string | null
+  >(null);
   const [working, setWorking] = useState(false);
-  const [openingOrderId, setOpeningOrderId] = useState<string | null>(null);
 
-  const [rejectModalOpen, setRejectModalOpen] = useState(false);
   const [rejectReason, setRejectReason] = useState('');
-  const [rejectTargetIds, setRejectTargetIds] = useState<string[]>([]);
+  const [rejectContext, setRejectContext] = useState<{
+    ids: string[];
+    closeOnSuccess: boolean;
+  } | null>(null);
+
+  const orderCacheKey = useCallback(
+    (orderId: string, appliedDepartmentId?: string | null) =>
+      `${orderId}::${appliedDepartmentId ?? (departmentId || 'all')}`,
+    [departmentId],
+  );
 
   const closeReviewModal = useCallback(() => {
     setReviewModalOpen(false);
     setReviewOrder(null);
-    setRejectModalOpen(false);
-    setRejectTargetIds([]);
+    setReviewGroup(null);
+    setReviewAppliedDepartmentId(null);
+    setRejectContext(null);
     setRejectReason('');
   }, []);
 
@@ -189,6 +237,7 @@ export function VerificationPage() {
         departmentId: departmentId || undefined,
         page,
         size,
+        verificationStatus: verificationStatusFilter,
       });
       setRows(result.items ?? []);
       setTotal(Number(result.total ?? 0));
@@ -199,7 +248,7 @@ export function VerificationPage() {
     } finally {
       setLoading(false);
     }
-  }, [dateFilter, departmentId, page, search, size]);
+  }, [dateFilter, departmentId, page, search, size, verificationStatusFilter]);
 
   const loadStats = useCallback(async () => {
     try {
@@ -224,9 +273,73 @@ export function VerificationPage() {
     void loadStats();
   }, [loadStats]);
 
+  useEffect(() => {
+    setExpandedOrderKeys([]);
+  }, [departmentId, page, verificationStatusFilter]);
+
+  const loadOrderGroups = useCallback(
+    async (
+      orderId: string,
+      options?: { force?: boolean; departmentOverride?: string | null },
+    ): Promise<GroupedOrderCache | null> => {
+      const appliedDepartmentId =
+        options?.departmentOverride !== undefined
+          ? options.departmentOverride
+          : (departmentId || null);
+      const key = orderCacheKey(orderId, appliedDepartmentId);
+      const cached = groupsByOrderKey[key];
+      if (!options?.force && cached) {
+        return cached;
+      }
+
+      setExpandingOrderId(orderId);
+      try {
+        const payload = await getWorklistOrderTests(orderId, {
+          mode: 'verify',
+          departmentId: appliedDepartmentId ?? undefined,
+        });
+        const nextCache: GroupedOrderCache = {
+          order: payload,
+          groups: buildWorklistOrderGroups(payload.items),
+          appliedDepartmentId,
+        };
+        setGroupsByOrderKey((previous) => ({ ...previous, [key]: nextCache }));
+        return nextCache;
+      } catch {
+        message.error('Failed to load order review');
+        return null;
+      } finally {
+        setExpandingOrderId((current) => (current === orderId ? null : current));
+      }
+    },
+    [departmentId, groupsByOrderKey, orderCacheKey],
+  );
+
+  const getCachedGroupsForOrder = useCallback(
+    (orderId: string) => groupsByOrderKey[orderCacheKey(orderId)] ?? null,
+    [groupsByOrderKey, orderCacheKey],
+  );
+
+  const reloadAll = useCallback(async () => {
+    await Promise.all([loadRows(), loadStats()]);
+  }, [loadRows, loadStats]);
+
+  const hydrateReviewModal = useCallback(
+    (
+      payload: WorklistOrderModalDto,
+      group: WorklistOrderGroupSummary,
+      appliedDepartmentId: string | null,
+    ) => {
+      setReviewOrder(payload);
+      setReviewGroup(group);
+      setReviewAppliedDepartmentId(appliedDepartmentId);
+    },
+    [],
+  );
+
   const orderedReviewItems = useMemo(
-    () => sortModalItems(reviewOrder?.items ?? []),
-    [reviewOrder],
+    () => sortModalItems(reviewGroup?.items ?? []),
+    [reviewGroup],
   );
 
   const firstPanelIndex = useMemo(
@@ -242,33 +355,100 @@ export function VerificationPage() {
     [orderedReviewItems],
   );
 
-  const reloadAll = useCallback(async () => {
-    await Promise.all([loadRows(), loadStats()]);
-  }, [loadRows, loadStats]);
-
-  const openReviewModal = useCallback(
-    async (order: WorklistOrderSummaryDto) => {
-      setOpeningOrderId(order.orderId);
+  const openReviewModalForGroup = useCallback(
+    async (orderId: string, group: WorklistOrderGroupSummary) => {
+      setOpeningGroupKey(`${orderId}:${group.groupId}`);
       setReviewLoading(true);
       try {
-        const payload = await getWorklistOrderTests(order.orderId, {
-          mode: 'verify',
-          departmentId: departmentId || undefined,
-        });
-        setReviewOrder(payload);
+        const cached = await loadOrderGroups(orderId);
+        if (!cached) return;
+        let nextPayload = cached.order;
+        let nextAppliedDepartmentId = cached.appliedDepartmentId;
+        let nextGroup = resolveGroupByIdentity(cached.groups, group);
+        if (!nextGroup) {
+          message.warning('This group is no longer available in current filter');
+          return;
+        }
+        if (nextGroup.groupKind === 'panel' && nextGroup.testsCount === 0) {
+          if (cached.appliedDepartmentId) {
+            const fullPayload = await getWorklistOrderTests(orderId, {
+              mode: 'verify',
+            });
+            const fullGroups = buildWorklistOrderGroups(fullPayload.items);
+            const resolvedFullGroup = resolveGroupByIdentity(fullGroups, nextGroup);
+            if (resolvedFullGroup && resolvedFullGroup.testsCount > 0) {
+              const fullKey = orderCacheKey(orderId, null);
+              setGroupsByOrderKey((previous) => ({
+                ...previous,
+                [fullKey]: {
+                  order: fullPayload,
+                  groups: fullGroups,
+                  appliedDepartmentId: null,
+                },
+              }));
+              nextPayload = fullPayload;
+              nextAppliedDepartmentId = null;
+              nextGroup = resolvedFullGroup;
+              message.info(
+                'Loaded this panel from all departments because current filter has no panel children.',
+              );
+            } else {
+              message.warning('This panel has no child tests in this order.');
+            }
+          } else {
+            message.warning('This panel has no child tests in this order.');
+          }
+        }
+        hydrateReviewModal(nextPayload, nextGroup, nextAppliedDepartmentId);
         setReviewModalOpen(true);
-      } catch {
-        message.error('Failed to load order review');
       } finally {
         setReviewLoading(false);
-        setOpeningOrderId(null);
+        setOpeningGroupKey(null);
       }
     },
-    [departmentId],
+    [hydrateReviewModal, loadOrderGroups, orderCacheKey],
+  );
+
+  const refreshReviewAfterMutation = useCallback(
+    async (closeOnSuccess: boolean) => {
+      await reloadAll();
+      if (!reviewOrder) return;
+      const refreshed = await loadOrderGroups(reviewOrder.orderId, {
+        force: true,
+        departmentOverride: reviewAppliedDepartmentId,
+      });
+      if (!refreshed) {
+        if (closeOnSuccess) closeReviewModal();
+        return;
+      }
+      if (closeOnSuccess) {
+        closeReviewModal();
+        return;
+      }
+      const nextGroup = resolveGroupByIdentity(refreshed.groups, reviewGroup);
+      if (!nextGroup) {
+        closeReviewModal();
+        return;
+      }
+      hydrateReviewModal(
+        refreshed.order,
+        nextGroup,
+        refreshed.appliedDepartmentId,
+      );
+    },
+    [
+      closeReviewModal,
+      hydrateReviewModal,
+      loadOrderGroups,
+      reloadAll,
+      reviewAppliedDepartmentId,
+      reviewGroup,
+      reviewOrder,
+    ],
   );
 
   const verifyIds = useCallback(
-    async (ids: string[], emptyMessage: string) => {
+    async (ids: string[], emptyMessage: string, closeOnSuccess: boolean) => {
       if (ids.length === 0) {
         message.warning(emptyMessage);
         return;
@@ -281,41 +461,43 @@ export function VerificationPage() {
             result.failed > 0 ? `, ${result.failed} failed` : ''
           }`,
         );
-        await reloadAll();
-        closeReviewModal();
+        await refreshReviewAfterMutation(closeOnSuccess);
       } catch {
         message.error('Failed to verify results');
       } finally {
         setWorking(false);
       }
     },
-    [closeReviewModal, reloadAll],
+    [refreshReviewAfterMutation],
   );
 
-  const openRejectDialog = (ids: string[]) => {
+  const openRejectDialog = (ids: string[], closeOnSuccess: boolean) => {
     const uniqueIds = Array.from(new Set(ids));
     if (uniqueIds.length === 0) {
       message.warning('No completed results to reject');
       return;
     }
-    setRejectTargetIds(uniqueIds);
+    setRejectContext({
+      ids: uniqueIds,
+      closeOnSuccess,
+    });
     setRejectReason('');
-    setRejectModalOpen(true);
   };
 
   const runReject = async () => {
-    if (rejectTargetIds.length === 0 || !rejectReason.trim()) return;
+    if (!rejectContext || rejectContext.ids.length === 0 || !rejectReason.trim()) return;
     setWorking(true);
     try {
       const reason = rejectReason.trim();
       const results = await Promise.allSettled(
-        rejectTargetIds.map((id) => rejectResult(id, reason)),
+        rejectContext.ids.map((id) => rejectResult(id, reason)),
       );
       const success = results.filter((result) => result.status === 'fulfilled').length;
       const failed = results.filter((result) => result.status === 'rejected').length;
       message.success(`Rejected ${success} result(s)${failed > 0 ? `, ${failed} failed` : ''}`);
-      await reloadAll();
-      closeReviewModal();
+      setRejectContext(null);
+      setRejectReason('');
+      await refreshReviewAfterMutation(rejectContext.closeOnSuccess);
     } catch {
       message.error('Failed to reject results');
     } finally {
@@ -327,6 +509,22 @@ export function VerificationPage() {
     setPage(1);
     void loadRows();
   };
+
+  const handleExpandRow = useCallback(
+    (expanded: boolean, record: WorklistOrderSummaryDto) => {
+      setExpandedOrderKeys((previous) => {
+        if (expanded) {
+          if (previous.includes(record.orderId)) return previous;
+          return [...previous, record.orderId];
+        }
+        return previous.filter((key) => key !== record.orderId);
+      });
+      if (expanded) {
+        void loadOrderGroups(record.orderId);
+      }
+    },
+    [loadOrderGroups],
+  );
 
   const orderColumns: ColumnsType<WorklistOrderSummaryDto> = [
     {
@@ -393,21 +591,132 @@ export function VerificationPage() {
     {
       title: 'Action',
       key: 'action',
-      width: 150,
-      render: (_: unknown, record) => (
-        <Button
-          type="primary"
-          size="small"
-          loading={openingOrderId === record.orderId}
-          onClick={() => {
-            void openReviewModal(record);
-          }}
-        >
-          Review
-        </Button>
-      ),
+      width: 130,
+      render: (_: unknown, record) => {
+        const expanded = expandedOrderKeys.includes(record.orderId);
+        return (
+          <Button
+            size="small"
+            loading={expandingOrderId === record.orderId}
+            onClick={(event) => {
+              event.stopPropagation();
+              handleExpandRow(!expanded, record);
+            }}
+          >
+            {expanded ? 'Hide groups' : 'Groups'}
+          </Button>
+        );
+      },
     },
   ];
+
+  const renderExpandedRow = (record: WorklistOrderSummaryDto) => {
+    const cached = getCachedGroupsForOrder(record.orderId);
+    if (!cached) {
+      return (
+        <div style={{ padding: '6px 8px' }}>
+          {expandingOrderId === record.orderId ? (
+            <Text type="secondary">Loading groups...</Text>
+          ) : (
+            <Button
+              size="small"
+              onClick={() => {
+                void loadOrderGroups(record.orderId);
+              }}
+            >
+              Load groups
+            </Button>
+          )}
+        </div>
+      );
+    }
+
+    const visibleGroups = cached.groups.filter((group) => group.isFullyEntered);
+    if (visibleGroups.length === 0) {
+      return (
+        <div style={{ padding: '6px 8px' }}>
+          <Text type="secondary">
+            No fully entered groups available for verification
+          </Text>
+        </div>
+      );
+    }
+
+    return (
+      <div className="verification-group-shell">
+        <div className="verification-group-shell-title">Review groups</div>
+        <div className="verification-group-list">
+          {visibleGroups.map((group) => {
+            const isEmptyPanel = group.groupKind === 'panel' && group.testsCount === 0;
+            const openGroup = () => {
+              if (isEmptyPanel) {
+                message.warning(
+                  'This panel has no configured child tests. Configure panel components in Test Management.',
+                );
+                return;
+              }
+              void openReviewModalForGroup(record.orderId, group);
+            };
+
+            return (
+              <div
+                key={group.groupId}
+                className={`verification-group-item ${
+                  group.groupKind === 'panel'
+                    ? 'verification-group-item-panel'
+                    : 'verification-group-item-single'
+                }`}
+                onClick={openGroup}
+              >
+              <div className="verification-group-main">
+                <div className="verification-group-title-row">
+                  <Text strong style={{ fontSize: 12 }}>
+                    {group.label}
+                  </Text>
+                  {group.testsCount === 0 && (
+                    <Tag color="warning" style={{ margin: 0 }}>
+                      No child tests in this filter
+                    </Tag>
+                  )}
+                </div>
+                <Space size={[4, 4]} wrap>
+                  <Tag style={{ margin: 0 }}>{group.testsCount} tests</Tag>
+                  {group.completed > 0 && (
+                    <Tag color="processing" style={{ margin: 0 }}>
+                      Completed {group.completed}
+                    </Tag>
+                  )}
+                  {group.verified > 0 && (
+                    <Tag color="success" style={{ margin: 0 }}>
+                      Verified {group.verified}
+                    </Tag>
+                  )}
+                  {group.rejected > 0 && (
+                    <Tag color="error" style={{ margin: 0 }}>
+                      Rejected {group.rejected}
+                    </Tag>
+                  )}
+                </Space>
+              </div>
+              <Button
+                type="primary"
+                size="small"
+                disabled={isEmptyPanel}
+                loading={openingGroupKey === `${record.orderId}:${group.groupId}`}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  openGroup();
+                }}
+              >
+                Review
+              </Button>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
 
   return (
     <div>
@@ -421,6 +730,61 @@ export function VerificationPage() {
         .verification-orders-table .ant-table-tbody > tr > td {
           padding-top: 4px !important;
           padding-bottom: 4px !important;
+        }
+        .verification-orders-table .ant-table-expanded-row > td {
+          background: #f8fbff !important;
+          border-top: none !important;
+          padding: 8px 10px !important;
+        }
+        .verification-group-list {
+          margin-top: 6px;
+          margin-left: 22px;
+          border-left: 2px dashed #c7d9ff;
+          padding-left: 10px;
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
+        }
+        .verification-group-shell {
+          border: 1px solid #dbe8ff;
+          border-radius: 10px;
+          background: #f3f8ff;
+          padding: 8px;
+        }
+        .verification-group-shell-title {
+          font-size: 11px;
+          font-weight: 700;
+          letter-spacing: 0.2px;
+          color: #1d4ed8;
+          text-transform: uppercase;
+        }
+        .verification-group-item {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 10px;
+          border-radius: 8px;
+          border: 1px solid #d9e8ff;
+          padding: 8px 10px;
+          cursor: pointer;
+        }
+        .verification-group-item-single {
+          background: #eef5ff;
+        }
+        .verification-group-item-panel {
+          background: #f5efff;
+        }
+        .verification-group-main {
+          min-width: 0;
+          display: flex;
+          flex-direction: column;
+          gap: 4px;
+        }
+        .verification-group-title-row {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          flex-wrap: wrap;
         }
         .verification-review-modal .ant-modal-header {
           padding: 5px 8px !important;
@@ -464,6 +828,18 @@ export function VerificationPage() {
                   value: department.id,
                 }))}
               />
+              <Select
+                value={verificationStatusFilter}
+                style={{ width: 160 }}
+                options={[
+                  { label: 'Unverified', value: 'unverified' },
+                  { label: 'Verified', value: 'verified' },
+                ]}
+                onChange={(value) => {
+                  setVerificationStatusFilter(value as VerificationRowStatusFilter);
+                  setPage(1);
+                }}
+              />
               <DatePicker
                 value={dateFilter}
                 onChange={setDateFilter}
@@ -492,6 +868,12 @@ export function VerificationPage() {
               dataSource={rows}
               loading={loading}
               showHeader
+              expandable={{
+                expandedRowRender: renderExpandedRow,
+                expandedRowKeys: expandedOrderKeys,
+                expandRowByClick: false,
+                onExpand: handleExpandRow,
+              }}
               pagination={{
                 current: page,
                 pageSize: size,
@@ -518,6 +900,11 @@ export function VerificationPage() {
                 {reviewOrder.orderNumber}
               </Tag>
             )}
+            {reviewGroup && (
+              <Tag color="purple" style={{ margin: 0 }}>
+                {reviewGroup.label}
+              </Tag>
+            )}
           </Space>
         }
         open={reviewModalOpen}
@@ -532,7 +919,7 @@ export function VerificationPage() {
           <div style={{ padding: 28, textAlign: 'center' }}>
             <Text type="secondary">Loading order tests...</Text>
           </div>
-        ) : reviewOrder ? (
+        ) : reviewOrder && reviewGroup ? (
           <div>
             <div
               style={{
@@ -555,8 +942,13 @@ export function VerificationPage() {
               <Button
                 icon={<CheckCircleOutlined />}
                 loading={working}
+                disabled={completedIdsInModal.length === 0}
                 onClick={() => {
-                  void verifyIds(completedIdsInModal, 'No completed results to verify');
+                  void verifyIds(
+                    completedIdsInModal,
+                    'No completed results to verify',
+                    true,
+                  );
                 }}
               >
                 Verify All
@@ -565,11 +957,18 @@ export function VerificationPage() {
                 danger
                 icon={<CloseCircleOutlined />}
                 loading={working}
-                onClick={() => openRejectDialog(completedIdsInModal)}
+                disabled={completedIdsInModal.length === 0}
+                onClick={() => openRejectDialog(completedIdsInModal, true)}
               >
                 Reject All
               </Button>
             </div>
+
+            {reviewGroup.groupKind === 'single' && (
+              <Text type="secondary" style={{ fontSize: 11, display: 'block', marginBottom: 6 }}>
+                Per-test Verify/Reject is available for single tests and keeps this modal open.
+              </Text>
+            )}
 
             <div
               style={{
@@ -590,21 +989,18 @@ export function VerificationPage() {
               <div style={{ flex: '1 1 9%', textAlign: 'center' }}>Flag</div>
               <div style={{ flex: '1 1 8%', textAlign: 'center' }}>Status</div>
               <div style={{ flex: '1 1 9%', textAlign: 'right' }}>Ref. Range</div>
-              <div style={{ flex: '1 1 16%', textAlign: 'right' }}>Action</div>
+              {reviewGroup.groupKind === 'single' ? (
+                <div style={{ flex: '1 1 16%', textAlign: 'right' }}>Action</div>
+              ) : null}
             </div>
 
             {orderedReviewItems.map((item, index) => {
               const isPanelRoot = item.testType === 'PANEL' && !item.parentOrderTestId;
               const isPanelChild = Boolean(item.parentOrderTestId);
-              const singleCompleted = item.testType !== 'PANEL' && item.status === 'COMPLETED';
-              const panelCompletedIds = isPanelRoot
-                ? getPanelTargets(orderedReviewItems, item.id)
-                  .filter((target) => target.testType !== 'PANEL' && target.status === 'COMPLETED')
-                  .map((target) => target.id)
-                : [];
-              const rowHasVerifyAction = isPanelRoot
-                ? panelCompletedIds.length > 0
-                : singleCompleted;
+              const perRowActionEnabled =
+                reviewGroup.groupKind === 'single' &&
+                item.testType !== 'PANEL' &&
+                item.status === 'COMPLETED';
 
               return (
                 <div key={item.id}>
@@ -698,41 +1094,39 @@ export function VerificationPage() {
                       {formatReferenceRange(item)}
                     </div>
 
-                    <div style={{ flex: '1 1 16%', textAlign: 'right' }}>
-                      <Space size={6} style={{ justifyContent: 'flex-end' }}>
-                        <Button
-                          type="link"
-                          size="small"
-                          icon={<CheckCircleOutlined />}
-                          disabled={!rowHasVerifyAction || working}
-                          onClick={() => {
-                            if (isPanelRoot) {
-                              void verifyIds(panelCompletedIds, 'No completed panel tests to verify');
-                            } else {
-                              void verifyIds([item.id], 'Only completed results can be verified');
-                            }
-                          }}
-                        >
-                          Verify
-                        </Button>
-                        <Button
-                          type="link"
-                          danger
-                          size="small"
-                          icon={<CloseCircleOutlined />}
-                          disabled={!rowHasVerifyAction || working}
-                          onClick={() => {
-                            if (isPanelRoot) {
-                              openRejectDialog(panelCompletedIds);
-                            } else {
-                              openRejectDialog([item.id]);
-                            }
-                          }}
-                        >
-                          Reject
-                        </Button>
-                      </Space>
-                    </div>
+                    {reviewGroup.groupKind === 'single' ? (
+                      <div style={{ flex: '1 1 16%', textAlign: 'right' }}>
+                        <Space size={6} style={{ justifyContent: 'flex-end' }}>
+                          <Button
+                            type="link"
+                            size="small"
+                            icon={<CheckCircleOutlined />}
+                            disabled={!perRowActionEnabled || working}
+                            onClick={() => {
+                              void verifyIds(
+                                [item.id],
+                                'Only completed results can be verified',
+                                false,
+                              );
+                            }}
+                          >
+                            Verify
+                          </Button>
+                          <Button
+                            type="link"
+                            danger
+                            size="small"
+                            icon={<CloseCircleOutlined />}
+                            disabled={!perRowActionEnabled || working}
+                            onClick={() => {
+                              openRejectDialog([item.id], false);
+                            }}
+                          >
+                            Reject
+                          </Button>
+                        </Space>
+                      </div>
+                    ) : null}
                   </div>
                 </div>
               );
@@ -743,10 +1137,9 @@ export function VerificationPage() {
 
       <Modal
         title="Reject reason"
-        open={rejectModalOpen}
+        open={Boolean(rejectContext)}
         onCancel={() => {
-          setRejectModalOpen(false);
-          setRejectTargetIds([]);
+          setRejectContext(null);
           setRejectReason('');
         }}
         onOk={() => {

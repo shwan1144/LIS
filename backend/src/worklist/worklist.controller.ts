@@ -12,8 +12,10 @@ import {
   ParseEnumPipe,
 } from '@nestjs/common';
 import {
+  WorklistEntryStatus,
   WorklistOrderMode,
   WorklistService,
+  WorklistVerificationStatus,
   WorklistView,
 } from './worklist.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -87,6 +89,13 @@ export class WorklistController {
     @Query('size') size?: string,
     @Query('mode', new ParseEnumPipe(WorklistOrderMode, { optional: true }))
     mode?: WorklistOrderMode,
+    @Query('entryStatus', new ParseEnumPipe(WorklistEntryStatus, { optional: true }))
+    entryStatus?: WorklistEntryStatus,
+    @Query(
+      'verificationStatus',
+      new ParseEnumPipe(WorklistVerificationStatus, { optional: true }),
+    )
+    verificationStatus?: WorklistVerificationStatus,
   ) {
     const labId = req.user?.labId;
     const actor = buildLabActorContext(req.user);
@@ -103,6 +112,8 @@ export class WorklistController {
         page: page ? parseInt(page, 10) : undefined,
         size: size ? parseInt(size, 10) : undefined,
         mode: mode ?? WorklistOrderMode.ENTRY,
+        entryStatus,
+        verificationStatus,
       },
       actor.userId ?? undefined,
     );

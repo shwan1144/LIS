@@ -231,7 +231,7 @@ export function TestsPage() {
   const [tests, setTests] = useState<TestDto[]>([]);
   const [allTests, setAllTests] = useState<TestDto[]>([]);
   const [loading, setLoading] = useState(false);
-  const [showAll, setShowAll] = useState(false);
+  const [showAll, setShowAll] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
   const [editingTest, setEditingTest] = useState<TestDto | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -265,10 +265,8 @@ export function TestsPage() {
   const loadTests = async () => {
     setLoading(true);
     try {
-      const [data, allData] = await Promise.all([
-        getTests(!showAll),
-        getTests(false),
-      ]);
+      const allData = await getTests(false);
+      const data = showAll ? allData : allData.filter((test) => test.isActive);
       const normalizedData = data.map(normalizeTestDtoNumericFields);
       const normalizedAllData = allData.map(normalizeTestDtoNumericFields);
       setTests(normalizedData);
@@ -953,6 +951,9 @@ export function TestsPage() {
             checkedChildren="All"
             unCheckedChildren="Active"
           />
+          <Text type="secondary" style={{ fontSize: 12 }}>
+            Panel child tests are usually inactive, so keep `All` to manage them.
+          </Text>
           <Button
             icon={<DatabaseOutlined />}
             onClick={handleSeedTests}

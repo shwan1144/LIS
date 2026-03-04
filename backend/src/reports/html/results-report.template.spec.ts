@@ -328,6 +328,23 @@ describe('buildResultsReportHtml panel page isolation', () => {
     expect(html).toContain('page-break-inside: avoid;');
   });
 
+  it('uses contain footer rendering and updated footer height CSS', () => {
+    const html = buildResultsReportHtml({
+      order: createOrder(),
+      orderTests: [],
+      reportableCount: 0,
+      verifiedCount: 0,
+      verifiers: [],
+      latestVerifiedAt: null,
+      comments: [],
+    });
+
+    expect(html).toContain('--footer-height: 18mm;');
+    expect(html).toContain('.footer-image {');
+    expect(html).toContain('object-fit: contain;');
+    expect(html).not.toContain('object-fit: fill;');
+  });
+
   it('prefers order notes for Referred By over patient address fallback', () => {
     const order = createOrder();
     (order as unknown as { notes?: string }).notes = 'Dr Ahmed Ali';

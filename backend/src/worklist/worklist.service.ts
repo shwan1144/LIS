@@ -79,6 +79,16 @@ export enum WorklistOrderMode {
   VERIFY = 'verify',
 }
 
+export enum WorklistEntryStatus {
+  PENDING = 'pending',
+  COMPLETED = 'completed',
+}
+
+export enum WorklistVerificationStatus {
+  UNVERIFIED = 'unverified',
+  VERIFIED = 'verified',
+}
+
 export interface WorklistOrderSummaryItem {
   orderId: string;
   orderNumber: string;
@@ -424,6 +434,8 @@ export class WorklistService {
       page?: number;
       size?: number;
       mode?: WorklistOrderMode;
+      entryStatus?: WorklistEntryStatus;
+      verificationStatus?: WorklistVerificationStatus;
     },
     userId?: string,
   ): Promise<{
@@ -536,14 +548,37 @@ export class WorklistService {
         .setParameter('verifiedStatus', OrderTestStatus.VERIFIED)
         .setParameter('rejectedStatus', OrderTestStatus.REJECTED);
 
+      const pendingRootCountSql = `SUM(CASE WHEN ot.status IN (:...pendingStatuses) THEN 1 ELSE 0 END)`;
+      const verifiedRootCountSql = `SUM(CASE WHEN ot.status = :verifiedStatus THEN 1 ELSE 0 END)`;
+      const rejectedRootCountSql = `SUM(CASE WHEN ot.status = :rejectedStatus THEN 1 ELSE 0 END)`;
+      const totalRootCountSql = 'COUNT(ot.id)';
       if (mode === WorklistOrderMode.VERIFY) {
-        summaryQb.having(
-          `SUM(CASE WHEN ot.status = :completedStatus THEN 1 ELSE 0 END) > 0`,
-        );
+        if (params.verificationStatus === WorklistVerificationStatus.UNVERIFIED) {
+          summaryQb
+            .having(`${pendingRootCountSql} = 0`)
+            .andHaving(`${verifiedRootCountSql} < ${totalRootCountSql}`);
+        } else if (params.verificationStatus === WorklistVerificationStatus.VERIFIED) {
+          summaryQb
+            .having(`${totalRootCountSql} > 0`)
+            .andHaving(`${verifiedRootCountSql} = ${totalRootCountSql}`);
+        } else {
+          summaryQb.having(
+            `SUM(CASE WHEN ot.status = :completedStatus THEN 1 ELSE 0 END) > 0`,
+          );
+        }
       } else {
         summaryQb.having(
           `SUM(CASE WHEN ot.status <> :verifiedStatus THEN 1 ELSE 0 END) > 0`,
         );
+        if (params.entryStatus === WorklistEntryStatus.PENDING) {
+          summaryQb.andHaving(
+            `(${pendingRootCountSql} > 0 OR ${rejectedRootCountSql} > 0)`,
+          );
+        } else if (params.entryStatus === WorklistEntryStatus.COMPLETED) {
+          summaryQb
+            .andHaving(`${pendingRootCountSql} = 0`)
+            .andHaving(`${rejectedRootCountSql} = 0`);
+        }
       }
 
       summaryQb
@@ -627,6 +662,12 @@ export class WorklistService {
               hasSearch: Boolean(params.search?.trim()),
               date: params.date ?? null,
               departmentId: params.departmentId ?? null,
+              entryStatus:
+                mode === WorklistOrderMode.ENTRY ? params.entryStatus ?? null : null,
+              verificationStatus:
+                mode === WorklistOrderMode.VERIFY
+                  ? params.verificationStatus ?? null
+                  : null,
             },
           }),
         );
@@ -1082,7 +1123,7 @@ export class WorklistService {
     const orderTestsMap = new Map(orderTests.map((ot) => [ot.id, ot]));
     const toSave: OrderTest[] = [];
     const updatedOrderIds = new Set<string>();
-    const updatedParentIds = new Set<string>();
+    const updatedPanelRootIds = new Set<string>();
     const auditLogs: any[] = [];
 
     for (const data of updates) {
@@ -1169,7 +1210,11 @@ export class WorklistService {
 
       toSave.push(orderTest);
       updatedOrderIds.add(orderTest.sample.orderId);
-      updatedParentIds.add(orderTest.parentOrderTestId || orderTest.id);
+      if (orderTest.parentOrderTestId) {
+        updatedPanelRootIds.add(orderTest.parentOrderTestId);
+      } else if (orderTest.test.type === 'PANEL') {
+        updatedPanelRootIds.add(orderTest.id);
+      }
 
       const impersonationAudit =
         actor.isImpersonation && actor.platformUserId
@@ -1205,8 +1250,8 @@ export class WorklistService {
     if (toSave.length > 0) {
       await this.orderTestRepo.save(toSave);
 
-      for (const pid of updatedParentIds) {
-        await this.panelStatusService.recomputeAfterChildUpdate(pid);
+      for (const panelRootId of updatedPanelRootIds) {
+        await this.panelStatusService.recomputePanelStatus(panelRootId);
       }
       for (const oid of updatedOrderIds) {
         await this.syncOrderStatus(oid);
@@ -1299,7 +1344,7 @@ export class WorklistService {
 
     const toSave: OrderTest[] = [];
     const updatedOrderIds = new Set<string>();
-    const updatedParentIds = new Set<string>();
+    const updatedPanelRootIds = new Set<string>();
     const auditLogs: any[] = [];
     let failed = 0;
 
@@ -1315,7 +1360,11 @@ export class WorklistService {
 
       toSave.push(ot);
       updatedOrderIds.add(ot.sample.orderId);
-      updatedParentIds.add(ot.parentOrderTestId || ot.id);
+      if (ot.parentOrderTestId) {
+        updatedPanelRootIds.add(ot.parentOrderTestId);
+      } else if (ot.test.type === 'PANEL') {
+        updatedPanelRootIds.add(ot.id);
+      }
 
       const impersonationAudit = actor.isImpersonation && actor.platformUserId ? {
         impersonation: { active: true, platformUserId: actor.platformUserId },
@@ -1343,8 +1392,8 @@ export class WorklistService {
     if (toSave.length > 0) {
       await this.orderTestRepo.save(toSave);
 
-      for (const pid of updatedParentIds) {
-        await this.panelStatusService.recomputeAfterChildUpdate(pid);
+      for (const panelRootId of updatedPanelRootIds) {
+        await this.panelStatusService.recomputePanelStatus(panelRootId);
       }
       for (const oid of updatedOrderIds) {
         await this.syncOrderStatus(oid);

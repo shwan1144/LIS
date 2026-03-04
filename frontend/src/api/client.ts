@@ -1600,6 +1600,8 @@ export interface WorklistResult {
 }
 
 export type WorklistOrderMode = 'entry' | 'verify';
+export type WorklistEntryStatusFilter = 'pending' | 'completed';
+export type VerificationRowStatusFilter = 'unverified' | 'verified';
 
 export interface WorklistOrderSummaryDto {
   orderId: string;
@@ -1669,6 +1671,8 @@ export async function getWorklistOrders(params: {
   page?: number;
   size?: number;
   mode?: WorklistOrderMode;
+  entryStatus?: WorklistEntryStatusFilter;
+  verificationStatus?: VerificationRowStatusFilter;
 }): Promise<WorklistOrderSummaryResult> {
   const queryParams: Record<string, string> = {};
   if (params.search) queryParams.search = params.search;
@@ -1677,6 +1681,8 @@ export async function getWorklistOrders(params: {
   if (params.page) queryParams.page = params.page.toString();
   if (params.size) queryParams.size = params.size.toString();
   if (params.mode) queryParams.mode = params.mode;
+  if (params.entryStatus) queryParams.entryStatus = params.entryStatus;
+  if (params.verificationStatus) queryParams.verificationStatus = params.verificationStatus;
 
   const res = await api.get<WorklistOrderSummaryResult>('/worklist/orders', {
     params: queryParams,

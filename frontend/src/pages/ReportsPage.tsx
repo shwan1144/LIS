@@ -72,13 +72,20 @@ const REPORT_PDF_CACHE_MAX_ENTRIES = 40;
 const REPORT_DESIGN_VERSION_STORAGE_KEY = 'lis_report_design_version';
 
 type EditResultMode = 'SINGLE' | 'PANEL';
-type ReportStatusFilter = 'ALL' | 'PENDING' | 'COMPLETED' | 'VERIFIED' | 'REJECTED';
+type ReportStatusFilter = 'COMPLETED' | 'UNVERIFIED' | 'PENDING' | 'REJECTED';
 type ReportActionFlagField = 'pdf' | 'print' | 'whatsapp' | 'viber';
 type ResultsPdfCacheEntry = {
   blob: Blob;
   cachedAt: number;
   lastAccessedAt: number;
   designVersion: string;
+};
+
+const REPORT_STATUS_TO_RESULT_STATUS: Record<ReportStatusFilter, OrderResultStatus> = {
+  COMPLETED: 'VERIFIED',
+  UNVERIFIED: 'COMPLETED',
+  PENDING: 'PENDING',
+  REJECTED: 'REJECTED',
 };
 
 const ACTION_FLAG_FIELD_MAP: Record<ReportActionKind, ReportActionFlagField> = {
@@ -217,7 +224,7 @@ function buildResultsMessage(
     '',
     resultUrl,
     '',
-    `سوپاس بۆ هەڵبژاردنی تاقیگەی (${displayLabName})`,
+    `سوپاس بۆ هەڵبژاردنی تاقیگەی ${displayLabName}`,
   ].join('\n');
 }
 
@@ -425,7 +432,7 @@ export function ReportsPage() {
     dayjs().endOf('day'),
   ]);
   const [searchText, setSearchText] = useState('');
-  const [statusFilter, setStatusFilter] = useState<ReportStatusFilter>('ALL');
+  const [statusFilter, setStatusFilter] = useState<ReportStatusFilter>('COMPLETED');
   const [downloading, setDownloading] = useState<string | null>(null);
   const ordersPageSize = 25;
 
@@ -557,9 +564,13 @@ export function ReportsPage() {
     [orderDetailsCache, orderDetailsLoadingIds],
   );
 
-  const loadOrders = async (pageOverride?: number) => {
+  const loadOrders = async (
+    pageOverride?: number,
+    statusFilterOverride?: ReportStatusFilter,
+  ) => {
     if (!dateRange[0] || !dateRange[1]) return;
     const targetPage = pageOverride ?? ordersPage;
+    const effectiveStatusFilter = statusFilterOverride ?? statusFilter;
 
     setLoading(true);
     try {
@@ -570,10 +581,7 @@ export function ReportsPage() {
           startDate: dateRange[0].format('YYYY-MM-DD'),
           endDate: dateRange[1].format('YYYY-MM-DD'),
           search: searchText.trim() || undefined,
-          resultStatus:
-            statusFilter === 'ALL'
-              ? undefined
-              : (statusFilter as OrderResultStatus),
+          resultStatus: REPORT_STATUS_TO_RESULT_STATUS[effectiveStatusFilter],
         }),
         getWorklistStats().catch(() => null),
       ]);
@@ -2159,15 +2167,18 @@ export function ReportsPage() {
 
             <Select
               value={statusFilter}
-              onChange={(value) => setStatusFilter(value as ReportStatusFilter)}
+              onChange={(value) => {
+                const nextStatusFilter = value as ReportStatusFilter;
+                setStatusFilter(nextStatusFilter);
+                void loadOrders(1, nextStatusFilter);
+              }}
               placeholder="Status"
               allowClear={false}
               style={{ width: 180 }}
               options={[
-                { value: 'ALL', label: 'All statuses' },
-                { value: 'PENDING', label: 'Pending' },
                 { value: 'COMPLETED', label: 'Completed' },
-                { value: 'VERIFIED', label: 'Verified' },
+                { value: 'UNVERIFIED', label: 'Unverified' },
+                { value: 'PENDING', label: 'Pending' },
                 { value: 'REJECTED', label: 'Rejected' },
               ]}
             />

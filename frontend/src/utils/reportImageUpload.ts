@@ -3,6 +3,9 @@ export type OptimizeImageOptions = {
   maxHeight: number;
   outputType?: string;
   quality?: number;
+  minQuality?: number;
+  maxBytes?: number;
+  preferOriginalIfWithinBounds?: boolean;
 };
 
 export type OptimizedImageData = {
@@ -11,6 +14,8 @@ export type OptimizedImageData = {
   height: number;
   bytes: number;
 };
+
+const JPEG_WEBP_OUTPUT_PATTERN = /^image\/(jpeg|webp)$/i;
 
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
@@ -70,6 +75,43 @@ function canvasToBlob(
   });
 }
 
+async function encodeCanvasWithOptionalByteLimit(
+  canvas: HTMLCanvasElement,
+  outputType: string,
+  maxQuality: number,
+  minQuality: number,
+  maxBytes?: number,
+): Promise<Blob> {
+  let blob = await canvasToBlob(canvas, outputType, maxQuality);
+  if (
+    !maxBytes ||
+    blob.size <= maxBytes ||
+    !JPEG_WEBP_OUTPUT_PATTERN.test(outputType)
+  ) {
+    return blob;
+  }
+
+  let currentQuality = maxQuality;
+  while (currentQuality > minQuality) {
+    const nextQuality = Math.max(
+      minQuality,
+      Number((currentQuality - 0.04).toFixed(2)),
+    );
+    if (nextQuality === currentQuality) {
+      break;
+    }
+
+    currentQuality = nextQuality;
+    const candidate = await canvasToBlob(canvas, outputType, currentQuality);
+    blob = candidate;
+    if (candidate.size <= maxBytes) {
+      break;
+    }
+  }
+
+  return blob;
+}
+
 export async function optimizeImageFileToDataUrl(
   file: File,
   options: OptimizeImageOptions,
@@ -90,6 +132,25 @@ export async function optimizeImageFileToDataUrl(
     );
     const width = Math.max(1, Math.round(sourceWidth * ratio));
     const height = Math.max(1, Math.round(sourceHeight * ratio));
+    const maxBytes =
+      typeof options.maxBytes === 'number' && Number.isFinite(options.maxBytes) && options.maxBytes > 0
+        ? Math.floor(options.maxBytes)
+        : undefined;
+    const canKeepOriginal =
+      options.preferOriginalIfWithinBounds === true &&
+      ratio >= 1 &&
+      (!maxBytes || file.size <= maxBytes);
+
+    if (canKeepOriginal) {
+      const dataUrl = await readFileAsDataUrl(file);
+      return {
+        dataUrl,
+        width: sourceWidth,
+        height: sourceHeight,
+        bytes: dataUrlBytes(dataUrl),
+      };
+    }
+
     const canvas = document.createElement('canvas');
     canvas.width = width;
     canvas.height = height;
@@ -98,6 +159,8 @@ export async function optimizeImageFileToDataUrl(
       throw new Error('Canvas is not available');
     }
 
+    context.imageSmoothingEnabled = true;
+    context.imageSmoothingQuality = 'high';
     context.clearRect(0, 0, width, height);
     context.drawImage(image, 0, 0, width, height);
 
@@ -105,9 +168,15 @@ export async function optimizeImageFileToDataUrl(
     const outputType = /^image\/(png|jpeg|jpg|webp)$/i.test(requestedType)
       ? requestedType.toLowerCase().replace('image/jpg', 'image/jpeg')
       : 'image/png';
-    const quality = clamp(options.quality ?? 0.9, 0.1, 1);
-
-    const blob = await canvasToBlob(canvas, outputType, quality);
+    const maxQuality = clamp(options.quality ?? 1, 0.1, 1);
+    const minQuality = clamp(options.minQuality ?? 0.88, 0.1, maxQuality);
+    const blob = await encodeCanvasWithOptionalByteLimit(
+      canvas,
+      outputType,
+      maxQuality,
+      minQuality,
+      maxBytes,
+    );
     const dataUrl = await readFileAsDataUrl(blob);
 
     return {

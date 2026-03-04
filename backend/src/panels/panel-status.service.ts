@@ -2,16 +2,15 @@ import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { OrderTest, OrderTestStatus } from '../entities/order-test.entity';
-import { TestComponent } from '../entities/test-component.entity';
 
 /**
- * Service to recompute parent panel OrderTest status based on child OrderTests
- * 
- * Rules:
- * - IN_PROGRESS: Some required children missing results
- * - COMPLETED: All required children have results
- * - VERIFIED: All required children verified
- * - REJECTED: Any required child rejected
+ * Service to recompute parent panel OrderTest status based on this order's child rows.
+ *
+ * Rules (order-local, drift-safe for historical data):
+ * - REJECTED: Any child rejected
+ * - VERIFIED: All children verified
+ * - COMPLETED: All children finalized (not PENDING/IN_PROGRESS) but not all verified
+ * - IN_PROGRESS: Otherwise
  */
 @Injectable()
 export class PanelStatusService {
@@ -20,8 +19,6 @@ export class PanelStatusService {
   constructor(
     @InjectRepository(OrderTest)
     private readonly orderTestRepo: Repository<OrderTest>,
-    @InjectRepository(TestComponent)
-    private readonly testComponentRepo: Repository<TestComponent>,
   ) {}
 
   /**
@@ -30,83 +27,50 @@ export class PanelStatusService {
   async recomputePanelStatus(parentOrderTestId: string): Promise<OrderTestStatus | null> {
     const parent = await this.orderTestRepo.findOne({
       where: { id: parentOrderTestId },
-      relations: ['test', 'childOrderTests', 'childOrderTests.test'],
+      relations: ['test'],
     });
 
     if (!parent || !parent.test || parent.test.type !== 'PANEL') {
       return null; // Not a panel
     }
 
-    // Get required child components
-    const components = await this.testComponentRepo.find({
-      where: {
-        panelTestId: parent.testId,
-        required: true,
-        // TODO: Add effectiveFrom/effectiveTo filtering if needed
-      },
-      relations: ['childTest'],
-      order: { sortOrder: 'ASC' },
-    });
-
-    if (components.length === 0) {
-      this.logger.warn(`Panel ${parent.test.code} has no required components`);
-      return parent.status; // Keep current status
-    }
-
-    // Get child OrderTests for this parent
+    // Use actual child rows on this order (historical-safe, avoids test definition drift).
     const children = await this.orderTestRepo.find({
       where: { parentOrderTestId: parent.id },
-      relations: ['test'],
+      select: ['id', 'status'],
     });
 
-    const childMap = new Map(children.map(c => [c.testId, c]));
-
-    // Check each required component
-    let hasRejected = false;
-    let hasIncomplete = false;
-    let allVerified = true;
-    let allCompleted = true;
-
-    for (const component of components) {
-      const child = childMap.get(component.childTestId);
-      
-      if (!child) {
-        hasIncomplete = true;
-        allCompleted = false;
-        allVerified = false;
-        continue;
+    if (children.length === 0) {
+      // Historical safety: orphan panel roots must not block Worklist/Verification forever.
+      // If no child rows exist, treat as finalized unless explicitly rejected.
+      const orphanStatus =
+        parent.status === OrderTestStatus.REJECTED
+          ? OrderTestStatus.REJECTED
+          : OrderTestStatus.VERIFIED;
+      if (parent.status !== orphanStatus) {
+        parent.status = orphanStatus;
+        await this.orderTestRepo.save(parent);
       }
-
-      if (child.status === OrderTestStatus.REJECTED) {
-        hasRejected = true;
-        allVerified = false;
-        allCompleted = false;
-        break; // One rejection fails the panel
-      }
-
-      if (child.status !== OrderTestStatus.VERIFIED) {
-        allVerified = false;
-      }
-
-      // Check if child has a result
-      if (!child.resultValue && !child.resultText) {
-        hasIncomplete = true;
-        allCompleted = false;
-        allVerified = false;
-      } else if (child.status === OrderTestStatus.PENDING || child.status === OrderTestStatus.IN_PROGRESS) {
-        hasIncomplete = true;
-        allCompleted = false;
-        allVerified = false;
-      }
+      this.logger.warn(
+        `Panel ${parent.test.code} has no child rows in this order; normalized to ${orphanStatus}`,
+      );
+      return orphanStatus;
     }
 
-    // Determine new status
+    const childStatuses = children.map((child) => child.status);
+    const hasRejected = childStatuses.some((status) => status === OrderTestStatus.REJECTED);
+    const allVerified = childStatuses.every((status) => status === OrderTestStatus.VERIFIED);
+    const allFinalized = childStatuses.every(
+      (status) =>
+        status !== OrderTestStatus.PENDING && status !== OrderTestStatus.IN_PROGRESS,
+    );
+
     let newStatus: OrderTestStatus;
     if (hasRejected) {
       newStatus = OrderTestStatus.REJECTED;
     } else if (allVerified) {
       newStatus = OrderTestStatus.VERIFIED;
-    } else if (allCompleted && !hasIncomplete) {
+    } else if (allFinalized) {
       newStatus = OrderTestStatus.COMPLETED;
     } else {
       newStatus = OrderTestStatus.IN_PROGRESS;
@@ -146,11 +110,17 @@ export class PanelStatusService {
   async recomputeAfterChildUpdate(childOrderTestId: string): Promise<void> {
     const child = await this.orderTestRepo.findOne({
       where: { id: childOrderTestId },
-      relations: ['parentOrderTest'],
+      relations: ['parentOrderTest', 'test'],
     });
 
     if (child?.parentOrderTestId) {
       await this.recomputePanelStatus(child.parentOrderTestId);
+      return;
+    }
+
+    // Defensive fallback: if caller passes a panel root ID by mistake, recompute it directly.
+    if (child?.test?.type === 'PANEL') {
+      await this.recomputePanelStatus(child.id);
     }
   }
 }

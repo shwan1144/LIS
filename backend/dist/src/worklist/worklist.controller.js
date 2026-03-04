@@ -42,7 +42,7 @@ let WorklistController = class WorklistController {
             view: view ?? worklist_service_1.WorklistView.FULL,
         }, actor.userId ?? undefined);
     }
-    async getWorklistOrders(req, search, date, departmentId, page, size, mode) {
+    async getWorklistOrders(req, search, date, departmentId, page, size, mode, entryStatus, verificationStatus) {
         const labId = req.user?.labId;
         const actor = (0, lab_actor_context_1.buildLabActorContext)(req.user);
         if (!labId) {
@@ -55,6 +55,8 @@ let WorklistController = class WorklistController {
             page: page ? parseInt(page, 10) : undefined,
             size: size ? parseInt(size, 10) : undefined,
             mode: mode ?? worklist_service_1.WorklistOrderMode.ENTRY,
+            entryStatus,
+            verificationStatus,
         }, actor.userId ?? undefined);
     }
     async getWorklistOrderTests(req, orderId, departmentId, mode) {
@@ -148,8 +150,10 @@ __decorate([
     __param(4, (0, common_1.Query)('page')),
     __param(5, (0, common_1.Query)('size')),
     __param(6, (0, common_1.Query)('mode', new common_1.ParseEnumPipe(worklist_service_1.WorklistOrderMode, { optional: true }))),
+    __param(7, (0, common_1.Query)('entryStatus', new common_1.ParseEnumPipe(worklist_service_1.WorklistEntryStatus, { optional: true }))),
+    __param(8, (0, common_1.Query)('verificationStatus', new common_1.ParseEnumPipe(worklist_service_1.WorklistVerificationStatus, { optional: true }))),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [Object, String, String, String, String, String, String]),
+    __metadata("design:paramtypes", [Object, String, String, String, String, String, String, String, String]),
     __metadata("design:returntype", Promise)
 ], WorklistController.prototype, "getWorklistOrders", null);
 __decorate([

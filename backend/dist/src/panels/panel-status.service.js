@@ -18,70 +18,38 @@ const common_1 = require("@nestjs/common");
 const typeorm_1 = require("@nestjs/typeorm");
 const typeorm_2 = require("typeorm");
 const order_test_entity_1 = require("../entities/order-test.entity");
-const test_component_entity_1 = require("../entities/test-component.entity");
 let PanelStatusService = PanelStatusService_1 = class PanelStatusService {
-    constructor(orderTestRepo, testComponentRepo) {
+    constructor(orderTestRepo) {
         this.orderTestRepo = orderTestRepo;
-        this.testComponentRepo = testComponentRepo;
         this.logger = new common_1.Logger(PanelStatusService_1.name);
     }
     async recomputePanelStatus(parentOrderTestId) {
         const parent = await this.orderTestRepo.findOne({
             where: { id: parentOrderTestId },
-            relations: ['test', 'childOrderTests', 'childOrderTests.test'],
+            relations: ['test'],
         });
         if (!parent || !parent.test || parent.test.type !== 'PANEL') {
             return null;
         }
-        const components = await this.testComponentRepo.find({
-            where: {
-                panelTestId: parent.testId,
-                required: true,
-            },
-            relations: ['childTest'],
-            order: { sortOrder: 'ASC' },
-        });
-        if (components.length === 0) {
-            this.logger.warn(`Panel ${parent.test.code} has no required components`);
-            return parent.status;
-        }
         const children = await this.orderTestRepo.find({
             where: { parentOrderTestId: parent.id },
-            relations: ['test'],
+            select: ['id', 'status'],
         });
-        const childMap = new Map(children.map(c => [c.testId, c]));
-        let hasRejected = false;
-        let hasIncomplete = false;
-        let allVerified = true;
-        let allCompleted = true;
-        for (const component of components) {
-            const child = childMap.get(component.childTestId);
-            if (!child) {
-                hasIncomplete = true;
-                allCompleted = false;
-                allVerified = false;
-                continue;
+        if (children.length === 0) {
+            const orphanStatus = parent.status === order_test_entity_1.OrderTestStatus.REJECTED
+                ? order_test_entity_1.OrderTestStatus.REJECTED
+                : order_test_entity_1.OrderTestStatus.VERIFIED;
+            if (parent.status !== orphanStatus) {
+                parent.status = orphanStatus;
+                await this.orderTestRepo.save(parent);
             }
-            if (child.status === order_test_entity_1.OrderTestStatus.REJECTED) {
-                hasRejected = true;
-                allVerified = false;
-                allCompleted = false;
-                break;
-            }
-            if (child.status !== order_test_entity_1.OrderTestStatus.VERIFIED) {
-                allVerified = false;
-            }
-            if (!child.resultValue && !child.resultText) {
-                hasIncomplete = true;
-                allCompleted = false;
-                allVerified = false;
-            }
-            else if (child.status === order_test_entity_1.OrderTestStatus.PENDING || child.status === order_test_entity_1.OrderTestStatus.IN_PROGRESS) {
-                hasIncomplete = true;
-                allCompleted = false;
-                allVerified = false;
-            }
+            this.logger.warn(`Panel ${parent.test.code} has no child rows in this order; normalized to ${orphanStatus}`);
+            return orphanStatus;
         }
+        const childStatuses = children.map((child) => child.status);
+        const hasRejected = childStatuses.some((status) => status === order_test_entity_1.OrderTestStatus.REJECTED);
+        const allVerified = childStatuses.every((status) => status === order_test_entity_1.OrderTestStatus.VERIFIED);
+        const allFinalized = childStatuses.every((status) => status !== order_test_entity_1.OrderTestStatus.PENDING && status !== order_test_entity_1.OrderTestStatus.IN_PROGRESS);
         let newStatus;
         if (hasRejected) {
             newStatus = order_test_entity_1.OrderTestStatus.REJECTED;
@@ -89,7 +57,7 @@ let PanelStatusService = PanelStatusService_1 = class PanelStatusService {
         else if (allVerified) {
             newStatus = order_test_entity_1.OrderTestStatus.VERIFIED;
         }
-        else if (allCompleted && !hasIncomplete) {
+        else if (allFinalized) {
             newStatus = order_test_entity_1.OrderTestStatus.COMPLETED;
         }
         else {
@@ -115,10 +83,14 @@ let PanelStatusService = PanelStatusService_1 = class PanelStatusService {
     async recomputeAfterChildUpdate(childOrderTestId) {
         const child = await this.orderTestRepo.findOne({
             where: { id: childOrderTestId },
-            relations: ['parentOrderTest'],
+            relations: ['parentOrderTest', 'test'],
         });
         if (child?.parentOrderTestId) {
             await this.recomputePanelStatus(child.parentOrderTestId);
+            return;
+        }
+        if (child?.test?.type === 'PANEL') {
+            await this.recomputePanelStatus(child.id);
         }
     }
 };
@@ -126,8 +98,6 @@ exports.PanelStatusService = PanelStatusService;
 exports.PanelStatusService = PanelStatusService = PanelStatusService_1 = __decorate([
     (0, common_1.Injectable)(),
     __param(0, (0, typeorm_1.InjectRepository)(order_test_entity_1.OrderTest)),
-    __param(1, (0, typeorm_1.InjectRepository)(test_component_entity_1.TestComponent)),
-    __metadata("design:paramtypes", [typeorm_2.Repository,
-        typeorm_2.Repository])
+    __metadata("design:paramtypes", [typeorm_2.Repository])
 ], PanelStatusService);
 //# sourceMappingURL=panel-status.service.js.map

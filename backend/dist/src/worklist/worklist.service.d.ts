@@ -55,6 +55,14 @@ export declare enum WorklistOrderMode {
     ENTRY = "entry",
     VERIFY = "verify"
 }
+export declare enum WorklistEntryStatus {
+    PENDING = "pending",
+    COMPLETED = "completed"
+}
+export declare enum WorklistVerificationStatus {
+    UNVERIFIED = "unverified",
+    VERIFIED = "verified"
+}
 export interface WorklistOrderSummaryItem {
     orderId: string;
     orderNumber: string;
@@ -111,6 +119,8 @@ export declare class WorklistService {
         page?: number;
         size?: number;
         mode?: WorklistOrderMode;
+        entryStatus?: WorklistEntryStatus;
+        verificationStatus?: WorklistVerificationStatus;
     }, userId?: string): Promise<{
         items: WorklistOrderSummaryItem[];
         total: number;

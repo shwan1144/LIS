@@ -215,6 +215,7 @@ let ReportsService = ReportsService_1 = class ReportsService {
         const browser = await this.getBrowser();
         const page = await browser.newPage({
             viewport: { width: 1240, height: 1754 },
+            deviceScaleFactor: 2,
         });
         try {
             await page.setContent(html, { waitUntil: 'domcontentloaded' });
