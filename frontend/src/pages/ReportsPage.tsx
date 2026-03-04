@@ -206,9 +206,8 @@ function buildResultsMessage(
   const orderNum = order.orderNumber || order.id.substring(0, 8);
   const date = dayjs(order.registeredAt).format('YYYY-MM-DD');
 
-  const baseUrl =
-    typeof window !== 'undefined' ? window.location.origin : 'https://example.com';
-  const resultUrl = `${baseUrl}/public/results/${order.id}`;
+  const apiBase = (import.meta.env.VITE_API_URL || window.location.origin).replace(/\/+$/, '');
+  const resultUrl = `${apiBase}/public/results/${order.id}`;
 
   return [
     `سڵاو ${patientName}،`,
@@ -692,7 +691,7 @@ export function ReportsPage() {
     order?: OrderHistoryItemDto,
     options?: { skipPaymentCheck?: boolean },
   ) => {
-    const summaryOrder = order ?? getOrderSummaryById(orderId);
+    const summaryOrder = order ?? getOrderSummaryById(orderId) ?? undefined;
     const skipPaymentCheck = options?.skipPaymentCheck === true;
     if (!skipPaymentCheck && summaryOrder && !canReleaseResults(summaryOrder)) {
       setPaymentModalOrder(summaryOrder);
