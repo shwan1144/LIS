@@ -343,7 +343,11 @@ describe('buildResultsReportHtml panel page isolation', () => {
       comments: [],
     });
 
-    expect(html).toContain('<span class="label">Referred By:</span>Dr Ahmed Ali');
-    expect(html).not.toContain('<span class="label">Referred By:</span>Patient Address');
+    expect(html).toContain(
+      '<span class="label">Referred By:</span><span class="name-value ">Dr Ahmed Ali</span>',
+    );
+    expect(html).not.toContain(
+      '<span class="label">Referred By:</span><span class="name-value ">Patient Address</span>',
+    );
   });
 });

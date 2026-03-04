@@ -171,6 +171,7 @@ export function buildResultsReportHtml(input: {
   const visitDate = formatDateTime(order.registeredAt);
   const ageSex = `${age != null ? `${age} Years` : '-'}/${sexLabel}`;
   const referredByDisplay = String(referredBy || '').trim() || 'Himself';
+  const referredByIsRtl = containsArabicScript(referredByDisplay);
   const bannerUrlAttr = bannerSrc ? `src="${escapeHtml(bannerSrc)}"` : '';
   const footerUrlAttr = footerSrc ? `src="${escapeHtml(footerSrc)}"` : '';
   const logoUrlAttr = logoSrc ? `src="${escapeHtml(logoSrc)}"` : '';
@@ -243,7 +244,7 @@ export function buildResultsReportHtml(input: {
       <div class="patient-info-col">
         <div class="info-item"><span class="label">Name :</span><span class="name-value ${patientNameIsRtl ? 'rtl-text' : ''}">${escapeHtml(patientName)}</span></div>
         <div class="info-item"><span class="label">Age/Sex:</span>${escapeHtml(ageSex)}</div>
-        <div class="info-item"><span class="label">Referred By:</span>${escapeHtml(referredByDisplay)}</div>
+        <div class="info-item"><span class="label">Referred By:</span><span class="name-value ${referredByIsRtl ? 'rtl-text' : ''}">${escapeHtml(referredByDisplay)}</span></div>
       </div>
       <div class="patient-info-col">
         <div class="info-item"><span class="label">Visit Date:</span>${escapeHtml(visitDate)}</div>
