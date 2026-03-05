@@ -47,6 +47,13 @@ exports.DEFAULT_REPORT_STYLE_V1 = {
         panelTableBreak: 'auto',
         panelRowBreak: 'avoid',
     },
+    pageLayout: {
+        pageMarginTopMm: 3,
+        pageMarginRightMm: 3,
+        pageMarginBottomMm: 3,
+        pageMarginLeftMm: 3,
+        contentMarginXMm: 3,
+    },
 };
 const HEX_COLOR_REGEX = /^#(?:[0-9A-Fa-f]{6}|[0-9A-Fa-f]{8})$/;
 const TEXT_ALIGN_SET = new Set(['left', 'center', 'right']);
@@ -93,6 +100,13 @@ const RESULTS_TABLE_KEYS = [
     'panelTableBreak',
     'panelRowBreak',
 ];
+const PAGE_LAYOUT_KEYS = [
+    'pageMarginTopMm',
+    'pageMarginRightMm',
+    'pageMarginBottomMm',
+    'pageMarginLeftMm',
+    'contentMarginXMm',
+];
 function assertObject(value, fieldName) {
     if (!value || typeof value !== 'object' || Array.isArray(value)) {
         throw new Error(`${fieldName} must be an object`);
@@ -138,7 +152,7 @@ function assertBoolean(value, fieldName) {
 }
 function validateAndNormalizeReportStyleConfig(value, fieldName = 'reportStyle') {
     const styleObj = assertObject(value, fieldName);
-    assertExactKeys(styleObj, ['version', 'patientInfo', 'resultsTable'], fieldName);
+    assertExactKeys(styleObj, ['version', 'patientInfo', 'resultsTable', 'pageLayout'], fieldName);
     const version = styleObj.version;
     if (version !== 1) {
         throw new Error(`${fieldName}.version must be 1`);
@@ -195,10 +209,20 @@ function validateAndNormalizeReportStyleConfig(value, fieldName = 'reportStyle')
         panelTableBreak: assertFromSet(resultsObj.panelTableBreak, BREAK_BEHAVIOR_SET, `${fieldName}.resultsTable.panelTableBreak`),
         panelRowBreak: assertFromSet(resultsObj.panelRowBreak, BREAK_BEHAVIOR_SET, `${fieldName}.resultsTable.panelRowBreak`),
     };
+    const pageLayoutObj = assertObject(styleObj.pageLayout, `${fieldName}.pageLayout`);
+    assertExactKeys(pageLayoutObj, PAGE_LAYOUT_KEYS, `${fieldName}.pageLayout`);
+    const pageLayout = {
+        pageMarginTopMm: assertIntRange(pageLayoutObj.pageMarginTopMm, 0, 20, `${fieldName}.pageLayout.pageMarginTopMm`),
+        pageMarginRightMm: assertIntRange(pageLayoutObj.pageMarginRightMm, 0, 20, `${fieldName}.pageLayout.pageMarginRightMm`),
+        pageMarginBottomMm: assertIntRange(pageLayoutObj.pageMarginBottomMm, 0, 20, `${fieldName}.pageLayout.pageMarginBottomMm`),
+        pageMarginLeftMm: assertIntRange(pageLayoutObj.pageMarginLeftMm, 0, 20, `${fieldName}.pageLayout.pageMarginLeftMm`),
+        contentMarginXMm: assertIntRange(pageLayoutObj.contentMarginXMm, 0, 20, `${fieldName}.pageLayout.contentMarginXMm`),
+    };
     return {
         version: 1,
         patientInfo,
         resultsTable,
+        pageLayout,
     };
 }
 function resolveReportStyleConfig(value) {
@@ -228,6 +252,9 @@ function resolveReportStyleConfig(value) {
         const rawResultsTable = raw.resultsTable && typeof raw.resultsTable === 'object' && !Array.isArray(raw.resultsTable)
             ? raw.resultsTable
             : {};
+        const rawPageLayout = raw.pageLayout && typeof raw.pageLayout === 'object' && !Array.isArray(raw.pageLayout)
+            ? raw.pageLayout
+            : {};
         const upgradedPatientInfo = {
             ...exports.DEFAULT_REPORT_STYLE_V1.patientInfo,
         };
@@ -244,11 +271,20 @@ function resolveReportStyleConfig(value) {
                 upgradedResultsTable[key] = rawResultsTable[key];
             }
         }
+        const upgradedPageLayout = {
+            ...exports.DEFAULT_REPORT_STYLE_V1.pageLayout,
+        };
+        for (const key of PAGE_LAYOUT_KEYS) {
+            if (key in rawPageLayout) {
+                upgradedPageLayout[key] = rawPageLayout[key];
+            }
+        }
         try {
             return validateAndNormalizeReportStyleConfig({
                 version: 1,
                 patientInfo: upgradedPatientInfo,
                 resultsTable: upgradedResultsTable,
+                pageLayout: upgradedPageLayout,
             });
         }
         catch {

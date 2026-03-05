@@ -44,10 +44,19 @@ export interface ReportResultsTableStyle {
   panelRowBreak: 'auto' | 'avoid';
 }
 
+export interface ReportPageLayoutStyle {
+  pageMarginTopMm: number;
+  pageMarginRightMm: number;
+  pageMarginBottomMm: number;
+  pageMarginLeftMm: number;
+  contentMarginXMm: number;
+}
+
 export interface ReportStyleConfig {
   version: 1;
   patientInfo: ReportPatientInfoStyle;
   resultsTable: ReportResultsTableStyle;
+  pageLayout: ReportPageLayoutStyle;
 }
 
 export const DEFAULT_REPORT_STYLE_V1: ReportStyleConfig = {
@@ -93,6 +102,13 @@ export const DEFAULT_REPORT_STYLE_V1: ReportStyleConfig = {
     regularRowBreak: 'avoid',
     panelTableBreak: 'auto',
     panelRowBreak: 'avoid',
+  },
+  pageLayout: {
+    pageMarginTopMm: 3,
+    pageMarginRightMm: 3,
+    pageMarginBottomMm: 3,
+    pageMarginLeftMm: 3,
+    contentMarginXMm: 3,
   },
 };
 
@@ -140,6 +156,13 @@ const RESULTS_TABLE_KEYS: Array<keyof ReportResultsTableStyle> = [
   'regularRowBreak',
   'panelTableBreak',
   'panelRowBreak',
+];
+const PAGE_LAYOUT_KEYS: Array<keyof ReportPageLayoutStyle> = [
+  'pageMarginTopMm',
+  'pageMarginRightMm',
+  'pageMarginBottomMm',
+  'pageMarginLeftMm',
+  'contentMarginXMm',
 ];
 
 function assertObject(value: unknown, fieldName: string): Record<string, unknown> {
@@ -200,7 +223,7 @@ export function validateAndNormalizeReportStyleConfig(
   fieldName = 'reportStyle',
 ): ReportStyleConfig {
   const styleObj = assertObject(value, fieldName);
-  assertExactKeys(styleObj, ['version', 'patientInfo', 'resultsTable'], fieldName);
+  assertExactKeys(styleObj, ['version', 'patientInfo', 'resultsTable', 'pageLayout'], fieldName);
 
   const version = styleObj.version;
   if (version !== 1) {
@@ -348,10 +371,46 @@ export function validateAndNormalizeReportStyleConfig(
     ),
   };
 
+  const pageLayoutObj = assertObject(styleObj.pageLayout, `${fieldName}.pageLayout`);
+  assertExactKeys(pageLayoutObj, PAGE_LAYOUT_KEYS, `${fieldName}.pageLayout`);
+  const pageLayout: ReportPageLayoutStyle = {
+    pageMarginTopMm: assertIntRange(
+      pageLayoutObj.pageMarginTopMm,
+      0,
+      20,
+      `${fieldName}.pageLayout.pageMarginTopMm`,
+    ),
+    pageMarginRightMm: assertIntRange(
+      pageLayoutObj.pageMarginRightMm,
+      0,
+      20,
+      `${fieldName}.pageLayout.pageMarginRightMm`,
+    ),
+    pageMarginBottomMm: assertIntRange(
+      pageLayoutObj.pageMarginBottomMm,
+      0,
+      20,
+      `${fieldName}.pageLayout.pageMarginBottomMm`,
+    ),
+    pageMarginLeftMm: assertIntRange(
+      pageLayoutObj.pageMarginLeftMm,
+      0,
+      20,
+      `${fieldName}.pageLayout.pageMarginLeftMm`,
+    ),
+    contentMarginXMm: assertIntRange(
+      pageLayoutObj.contentMarginXMm,
+      0,
+      20,
+      `${fieldName}.pageLayout.contentMarginXMm`,
+    ),
+  };
+
   return {
     version: 1,
     patientInfo,
     resultsTable,
+    pageLayout,
   };
 }
 
@@ -382,6 +441,10 @@ export function resolveReportStyleConfig(value: unknown): ReportStyleConfig {
       raw.resultsTable && typeof raw.resultsTable === 'object' && !Array.isArray(raw.resultsTable)
         ? (raw.resultsTable as Record<string, unknown>)
         : {};
+    const rawPageLayout =
+      raw.pageLayout && typeof raw.pageLayout === 'object' && !Array.isArray(raw.pageLayout)
+        ? (raw.pageLayout as Record<string, unknown>)
+        : {};
 
     const upgradedPatientInfo: Record<string, unknown> = {
       ...DEFAULT_REPORT_STYLE_V1.patientInfo,
@@ -401,11 +464,21 @@ export function resolveReportStyleConfig(value: unknown): ReportStyleConfig {
       }
     }
 
+    const upgradedPageLayout: Record<string, unknown> = {
+      ...DEFAULT_REPORT_STYLE_V1.pageLayout,
+    };
+    for (const key of PAGE_LAYOUT_KEYS) {
+      if (key in rawPageLayout) {
+        upgradedPageLayout[key] = rawPageLayout[key];
+      }
+    }
+
     try {
       return validateAndNormalizeReportStyleConfig({
         version: 1,
         patientInfo: upgradedPatientInfo,
         resultsTable: upgradedResultsTable,
+        pageLayout: upgradedPageLayout,
       });
     } catch {
       return DEFAULT_REPORT_STYLE_V1;

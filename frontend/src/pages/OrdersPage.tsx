@@ -1565,9 +1565,15 @@ export function OrdersPage() {
                         <Text type="secondary">Time:</Text>
                         <Text strong>{dayjs(selectedCreatedOrderSummary.registeredAt).format('YYYY-MM-DD HH:mm')}</Text>
                       </span>
-                      <span className="orders-header-context-item">
+                      <span className="orders-header-context-item orders-header-referred-item">
                         <Text type="secondary">Referred by:</Text>
-                        <Text strong>{selectedCreatedOrder?.notes?.trim() || '-'}</Text>
+                        <Text
+                          strong
+                          className="orders-header-referred-value"
+                          title={selectedCreatedOrder?.notes?.trim() || '-'}
+                        >
+                          {selectedCreatedOrder?.notes?.trim() || '-'}
+                        </Text>
                       </span>
                       <Tag
                         color="success"
@@ -1959,7 +1965,9 @@ export function OrdersPage() {
                                 )}
                               </Space>
                             </div>
-                            <div className="order-delivery-preferences">
+                            <div
+                              className={`order-delivery-preferences${isDark ? ' order-delivery-preferences-dark' : ''}`}
+                            >
                               <Text strong style={{ fontSize: 13 }}>Preferred delivery:</Text>
                               <div className="order-delivery-buttons">
                                 {DELIVERY_METHODS.map((method) => (
@@ -2174,7 +2182,9 @@ export function OrdersPage() {
                         </Space>
                       </div>
 
-                      <div className="order-delivery-preferences">
+                      <div
+                        className={`order-delivery-preferences${isDark ? ' order-delivery-preferences-dark' : ''}`}
+                      >
                         <Text strong style={{ fontSize: 13 }}>Preferred delivery:</Text>
                         <div className="order-delivery-buttons">
                           {DELIVERY_METHODS.map((method) => (

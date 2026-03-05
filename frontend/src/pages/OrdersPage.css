@@ -44,6 +44,7 @@
   align-items: center;
   justify-content: flex-end;
   gap: 8px;
+  row-gap: 6px;
   width: 100%;
   min-width: 0;
   flex-wrap: wrap;
@@ -58,6 +59,9 @@
 }
 
 .orders-header-patient-name {
+  display: inline-block;
+  flex: 0 1 260px;
+  min-width: 0;
   max-width: 260px;
   font-size: 15px;
   line-height: 1.2;
@@ -71,11 +75,29 @@
   align-items: center;
   gap: 4px;
   line-height: 1.2;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .orders-header-lock-tag.ant-tag {
   line-height: 18px;
   padding-inline: 8px;
+  max-width: 100%;
+  white-space: normal;
+  word-break: break-word;
+}
+
+.orders-header-referred-item {
+  flex: 0 1 300px;
+}
+
+.orders-header-referred-value {
+  display: inline-block;
+  min-width: 0;
+  max-width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .orders-history-content {
@@ -216,6 +238,36 @@
   display: flex;
   flex-direction: column;
   gap: 8px;
+}
+
+.order-delivery-preferences-dark {
+  border-color: rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.order-delivery-preferences-dark .ant-btn-default {
+  background: rgba(15, 23, 42, 0.55);
+  border-color: rgba(148, 163, 184, 0.35);
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.order-delivery-preferences-dark .ant-btn-default:hover,
+.order-delivery-preferences-dark .ant-btn-default:focus {
+  background: rgba(30, 41, 59, 0.78);
+  border-color: rgba(148, 163, 184, 0.55);
+  color: #fff;
+}
+
+.order-delivery-preferences-dark .ant-btn-default.ant-btn-disabled,
+.order-delivery-preferences-dark .ant-btn.ant-btn-disabled {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.16);
+  color: rgba(255, 255, 255, 0.45);
+}
+
+html[data-theme='dark'] .order-delivery-preferences {
+  border-color: rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.04);
 }
 
 .order-delivery-buttons {

@@ -41,10 +41,18 @@ export interface ReportResultsTableStyle {
     panelTableBreak: 'auto' | 'avoid';
     panelRowBreak: 'auto' | 'avoid';
 }
+export interface ReportPageLayoutStyle {
+    pageMarginTopMm: number;
+    pageMarginRightMm: number;
+    pageMarginBottomMm: number;
+    pageMarginLeftMm: number;
+    contentMarginXMm: number;
+}
 export interface ReportStyleConfig {
     version: 1;
     patientInfo: ReportPatientInfoStyle;
     resultsTable: ReportResultsTableStyle;
+    pageLayout: ReportPageLayoutStyle;
 }
 export declare const DEFAULT_REPORT_STYLE_V1: ReportStyleConfig;
 export declare function validateAndNormalizeReportStyleConfig(value: unknown, fieldName?: string): ReportStyleConfig;

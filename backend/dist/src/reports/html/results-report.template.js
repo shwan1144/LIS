@@ -133,6 +133,11 @@ function buildResultsReportHtml(input) {
     const dir = getDirection(order, orderTests, input.comments);
     const labAny = order.lab;
     const reportStyle = (0, report_style_config_1.resolveReportStyleConfig)(labAny?.reportStyle);
+    const pageMarginTopMm = reportStyle.pageLayout.pageMarginTopMm;
+    const pageMarginRightMm = reportStyle.pageLayout.pageMarginRightMm;
+    const pageMarginBottomMm = reportStyle.pageLayout.pageMarginBottomMm;
+    const pageMarginLeftMm = reportStyle.pageLayout.pageMarginLeftMm;
+    const contentMarginXMm = reportStyle.pageLayout.contentMarginXMm;
     const bannerSrc = labAny?.reportBannerDataUrl || '';
     const footerSrc = labAny?.reportFooterDataUrl || '';
     const logoSrc = labAny?.reportLogoDataUrl || '';
@@ -424,9 +429,11 @@ function buildResultsReportHtml(input) {
   <title>Laboratory Report</title>
   <style>
     ${kurdishFontFace}
-    @page { size: A4; margin: 3mm 3mm 3mm 3mm; }
+    @page { size: A4; margin: ${pageMarginTopMm}mm ${pageMarginRightMm}mm ${pageMarginBottomMm}mm ${pageMarginLeftMm}mm; }
     body {
-      --content-x: 3mm;
+      --page-margin-top: ${pageMarginTopMm}mm;
+      --page-margin-bottom: ${pageMarginBottomMm}mm;
+      --content-x: ${contentMarginXMm}mm;
       --footer-height: 18mm;
       --patient-info-bg: ${reportStyle.patientInfo.backgroundColor};
       --patient-info-border-color: ${reportStyle.patientInfo.borderColor};
@@ -480,7 +487,7 @@ function buildResultsReportHtml(input) {
     .ltr { direction: ltr; unicode-bidi: isolate; }
     .nowrap { white-space: nowrap; }
     .watermark { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%) rotate(-30deg); opacity: 0.08; width: min(68vw, 170mm); z-index: 0; pointer-events: none; }
-    .page { position: relative; z-index: 1; padding: 0 0 calc(var(--footer-height) + 4mm) 0; page-break-inside: auto; break-inside: auto; min-height: calc(297mm - 6mm); box-sizing: border-box; }
+    .page { position: relative; z-index: 1; padding: 0 0 calc(var(--footer-height) + 4mm) 0; page-break-inside: auto; break-inside: auto; min-height: calc(297mm - var(--page-margin-top) - var(--page-margin-bottom)); box-sizing: border-box; }
     .patient-info,
     .content { margin-left: var(--content-x); margin-right: var(--content-x); }
     .banner-wrap {

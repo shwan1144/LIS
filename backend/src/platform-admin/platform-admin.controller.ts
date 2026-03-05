@@ -347,6 +347,47 @@ export class PlatformAdminController {
     }
   }
 
+  @Post('labs/:labId/report-preview')
+  @Roles('SUPER_ADMIN')
+  async previewLabReportPdf(
+    @Param('labId', ParseUUIDPipe) labId: string,
+    @Body()
+    body: {
+      orderId: string;
+      reportBranding: {
+        bannerDataUrl?: string | null;
+        footerDataUrl?: string | null;
+        logoDataUrl?: string | null;
+        watermarkDataUrl?: string | null;
+      };
+      reportStyle: ReportStyleConfig;
+    },
+    @Res() res: Response,
+  ) {
+    try {
+      const { pdfBuffer, fileName } = await this.platformAdminService.generateLabReportPreviewPdf(
+        labId,
+        body,
+      );
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `inline; filename="${fileName}"`);
+      res.send(pdfBuffer);
+    } catch (error) {
+      if (error instanceof HttpException) {
+        const response = error.getResponse();
+        const message =
+          typeof response === 'string'
+            ? response
+            : ((response as { message?: string | string[] }).message ?? error.message);
+        return res.status(error.getStatus()).json({ message });
+      }
+      if (error instanceof Error && error.message.includes('not found')) {
+        return res.status(404).json({ message: error.message });
+      }
+      return res.status(500).json({ message: 'Failed to generate report preview PDF' });
+    }
+  }
+
   @Get('audit-logs')
   async listAuditLogs(
     @Query('labId') labId?: string,

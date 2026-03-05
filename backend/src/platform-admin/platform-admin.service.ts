@@ -14,10 +14,16 @@ import { AuditAction, AuditActorType } from '../entities/audit-log.entity';
 import { OrderTest, OrderTestStatus } from '../entities/order-test.entity';
 import { Patient } from '../entities/patient.entity';
 import { ReportsService } from '../reports/reports.service';
-import type { ReportStyleConfig } from '../reports/report-style.config';
+import type { ReportBrandingOverride } from '../reports/reports.service';
+import { type ReportStyleConfig, validateAndNormalizeReportStyleConfig } from '../reports/report-style.config';
 import { EntityManager, In, SelectQueryBuilder } from 'typeorm';
 import { AdminAuthService } from '../admin-auth/admin-auth.service';
 import { AuthService } from '../auth/auth.service';
+
+const MAX_REPORT_IMAGE_DATA_URL_LENGTH = 4 * 1024 * 1024;
+const REPORT_IMAGE_DATA_URL_PATTERN = /^data:image\/(png|jpeg|jpg|webp);base64,[a-zA-Z0-9+/=]+$/;
+const UUID_V4_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 export interface PlatformActorContext {
   platformUserId: string;
@@ -1121,6 +1127,31 @@ export class PlatformAdminService {
     };
   }
 
+  async generateLabReportPreviewPdf(
+    labId: string,
+    payload: {
+      orderId: string;
+      reportBranding: unknown;
+      reportStyle: unknown;
+    },
+  ): Promise<{ pdfBuffer: Buffer; fileName: string }> {
+    const orderId = this.normalizeUuidV4(payload.orderId, 'orderId');
+    const reportBranding = this.normalizePreviewReportBranding(payload.reportBranding);
+    const reportStyle = this.normalizePreviewReportStyle(payload.reportStyle);
+
+    const pdfBuffer = await this.reportsService.generateDraftTestResultsPreviewPDF({
+      orderId,
+      labId,
+      reportBranding,
+      reportStyle,
+    });
+
+    return {
+      pdfBuffer,
+      fileName: `report-preview-${orderId.substring(0, 8)}.pdf`,
+    };
+  }
+
   async listAuditLogs(
     params: AdminAuditLogFilters & {
       page?: number;
@@ -1888,6 +1919,81 @@ export class PlatformAdminService {
       hasCriticalFlag,
       barcode: firstBarcode,
     };
+  }
+
+  private normalizeUuidV4(value: unknown, fieldName: string): string {
+    if (typeof value !== 'string' || !UUID_V4_PATTERN.test(value.trim())) {
+      throw new BadRequestException(`${fieldName} must be a valid UUID`);
+    }
+    return value.trim();
+  }
+
+  private normalizeReportImageDataUrl(
+    value: unknown,
+    fieldName: string,
+  ): string | null {
+    if (value === null || value === undefined) return null;
+    if (typeof value !== 'string') {
+      throw new BadRequestException(`${fieldName} must be a string or null`);
+    }
+
+    const trimmed = value.trim();
+    if (!trimmed) return null;
+    if (trimmed.length > MAX_REPORT_IMAGE_DATA_URL_LENGTH) {
+      throw new BadRequestException(`${fieldName} is too large`);
+    }
+    if (!REPORT_IMAGE_DATA_URL_PATTERN.test(trimmed)) {
+      throw new BadRequestException(
+        `${fieldName} must be a valid image data URL (png, jpg/jpeg, or webp)`,
+      );
+    }
+    return trimmed;
+  }
+
+  private normalizePreviewReportBranding(value: unknown): ReportBrandingOverride {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+      throw new BadRequestException('reportBranding must be an object');
+    }
+
+    const branding = value as Record<string, unknown>;
+    const allowedKeys = ['bannerDataUrl', 'footerDataUrl', 'logoDataUrl', 'watermarkDataUrl'];
+    const unknownKeys = Object.keys(branding).filter((key) => !allowedKeys.includes(key));
+    if (unknownKeys.length > 0) {
+      throw new BadRequestException(
+        `reportBranding contains unknown keys: ${unknownKeys.join(', ')}`,
+      );
+    }
+
+    return {
+      bannerDataUrl: this.normalizeReportImageDataUrl(
+        branding.bannerDataUrl,
+        'reportBranding.bannerDataUrl',
+      ),
+      footerDataUrl: this.normalizeReportImageDataUrl(
+        branding.footerDataUrl,
+        'reportBranding.footerDataUrl',
+      ),
+      logoDataUrl: this.normalizeReportImageDataUrl(
+        branding.logoDataUrl,
+        'reportBranding.logoDataUrl',
+      ),
+      watermarkDataUrl: this.normalizeReportImageDataUrl(
+        branding.watermarkDataUrl,
+        'reportBranding.watermarkDataUrl',
+      ),
+    };
+  }
+
+  private normalizePreviewReportStyle(value: unknown): ReportStyleConfig {
+    if (value === null || value === undefined) {
+      throw new BadRequestException('reportStyle is required');
+    }
+    try {
+      return validateAndNormalizeReportStyleConfig(value, 'reportStyle');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Invalid reportStyle';
+      throw new BadRequestException(message);
+    }
   }
 
   private async logPlatformSensitiveRead(

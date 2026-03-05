@@ -123,10 +123,19 @@ export interface ReportResultsTableStyleDto {
   panelRowBreak: 'auto' | 'avoid';
 }
 
+export interface ReportPageLayoutStyleDto {
+  pageMarginTopMm: number;
+  pageMarginRightMm: number;
+  pageMarginBottomMm: number;
+  pageMarginLeftMm: number;
+  contentMarginXMm: number;
+}
+
 export interface ReportStyleDto {
   version: 1;
   patientInfo: ReportPatientInfoStyleDto;
   resultsTable: ReportResultsTableStyleDto;
+  pageLayout: ReportPageLayoutStyleDto;
 }
 
 export interface UserDto {
@@ -529,6 +538,22 @@ export async function getAdminOrder(orderId: string): Promise<AdminOrderDetail> 
 
 export async function getAdminOrderResultsPdf(orderId: string): Promise<Blob> {
   const res = await api.get<Blob>(`/admin/api/orders/${orderId}/results`, {
+    responseType: 'blob',
+  });
+  return res.data;
+}
+
+export interface AdminReportPreviewRequest {
+  orderId: string;
+  reportBranding: ReportBrandingDto;
+  reportStyle: ReportStyleDto;
+}
+
+export async function previewAdminLabReportPdf(
+  labId: string,
+  data: AdminReportPreviewRequest,
+): Promise<Blob> {
+  const res = await api.post<Blob>(`/admin/api/labs/${labId}/report-preview`, data, {
     responseType: 'blob',
   });
   return res.data;

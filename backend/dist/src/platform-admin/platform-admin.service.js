@@ -23,9 +23,13 @@ const audit_log_entity_2 = require("../entities/audit-log.entity");
 const order_test_entity_1 = require("../entities/order-test.entity");
 const patient_entity_1 = require("../entities/patient.entity");
 const reports_service_1 = require("../reports/reports.service");
+const report_style_config_1 = require("../reports/report-style.config");
 const typeorm_1 = require("typeorm");
 const admin_auth_service_1 = require("../admin-auth/admin-auth.service");
 const auth_service_1 = require("../auth/auth.service");
+const MAX_REPORT_IMAGE_DATA_URL_LENGTH = 4 * 1024 * 1024;
+const REPORT_IMAGE_DATA_URL_PATTERN = /^data:image\/(png|jpeg|jpg|webp);base64,[a-zA-Z0-9+/=]+$/;
+const UUID_V4_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 let PlatformAdminService = PlatformAdminService_1 = class PlatformAdminService {
     constructor(rlsSessionService, settingsService, auditService, reportsService, adminAuthService, authService) {
         this.rlsSessionService = rlsSessionService;
@@ -744,6 +748,21 @@ let PlatformAdminService = PlatformAdminService_1 = class PlatformAdminService {
             fileName: `results-${orderId.substring(0, 8)}.pdf`,
         };
     }
+    async generateLabReportPreviewPdf(labId, payload) {
+        const orderId = this.normalizeUuidV4(payload.orderId, 'orderId');
+        const reportBranding = this.normalizePreviewReportBranding(payload.reportBranding);
+        const reportStyle = this.normalizePreviewReportStyle(payload.reportStyle);
+        const pdfBuffer = await this.reportsService.generateDraftTestResultsPreviewPDF({
+            orderId,
+            labId,
+            reportBranding,
+            reportStyle,
+        });
+        return {
+            pdfBuffer,
+            fileName: `report-preview-${orderId.substring(0, 8)}.pdf`,
+        };
+    }
     async listAuditLogs(params) {
         const page = Math.max(1, params.page ?? 1);
         const size = Math.min(200, Math.max(1, params.size ?? 50));
@@ -1307,6 +1326,58 @@ let PlatformAdminService = PlatformAdminService_1 = class PlatformAdminService {
             hasCriticalFlag,
             barcode: firstBarcode,
         };
+    }
+    normalizeUuidV4(value, fieldName) {
+        if (typeof value !== 'string' || !UUID_V4_PATTERN.test(value.trim())) {
+            throw new common_1.BadRequestException(`${fieldName} must be a valid UUID`);
+        }
+        return value.trim();
+    }
+    normalizeReportImageDataUrl(value, fieldName) {
+        if (value === null || value === undefined)
+            return null;
+        if (typeof value !== 'string') {
+            throw new common_1.BadRequestException(`${fieldName} must be a string or null`);
+        }
+        const trimmed = value.trim();
+        if (!trimmed)
+            return null;
+        if (trimmed.length > MAX_REPORT_IMAGE_DATA_URL_LENGTH) {
+            throw new common_1.BadRequestException(`${fieldName} is too large`);
+        }
+        if (!REPORT_IMAGE_DATA_URL_PATTERN.test(trimmed)) {
+            throw new common_1.BadRequestException(`${fieldName} must be a valid image data URL (png, jpg/jpeg, or webp)`);
+        }
+        return trimmed;
+    }
+    normalizePreviewReportBranding(value) {
+        if (!value || typeof value !== 'object' || Array.isArray(value)) {
+            throw new common_1.BadRequestException('reportBranding must be an object');
+        }
+        const branding = value;
+        const allowedKeys = ['bannerDataUrl', 'footerDataUrl', 'logoDataUrl', 'watermarkDataUrl'];
+        const unknownKeys = Object.keys(branding).filter((key) => !allowedKeys.includes(key));
+        if (unknownKeys.length > 0) {
+            throw new common_1.BadRequestException(`reportBranding contains unknown keys: ${unknownKeys.join(', ')}`);
+        }
+        return {
+            bannerDataUrl: this.normalizeReportImageDataUrl(branding.bannerDataUrl, 'reportBranding.bannerDataUrl'),
+            footerDataUrl: this.normalizeReportImageDataUrl(branding.footerDataUrl, 'reportBranding.footerDataUrl'),
+            logoDataUrl: this.normalizeReportImageDataUrl(branding.logoDataUrl, 'reportBranding.logoDataUrl'),
+            watermarkDataUrl: this.normalizeReportImageDataUrl(branding.watermarkDataUrl, 'reportBranding.watermarkDataUrl'),
+        };
+    }
+    normalizePreviewReportStyle(value) {
+        if (value === null || value === undefined) {
+            throw new common_1.BadRequestException('reportStyle is required');
+        }
+        try {
+            return (0, report_style_config_1.validateAndNormalizeReportStyleConfig)(value, 'reportStyle');
+        }
+        catch (error) {
+            const message = error instanceof Error ? error.message : 'Invalid reportStyle';
+            throw new common_1.BadRequestException(message);
+        }
     }
     async logPlatformSensitiveRead(actor, payload, manager) {
         if (!actor?.platformUserId)

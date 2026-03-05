@@ -200,6 +200,16 @@ export declare class PlatformAdminController {
         lastVerifiedAt: Date | null;
     }>;
     getOrderResultsPdf(req: RequestWithPlatformUser, orderId: string, res: Response): Promise<Response<any, Record<string, any>> | undefined>;
+    previewLabReportPdf(labId: string, body: {
+        orderId: string;
+        reportBranding: {
+            bannerDataUrl?: string | null;
+            footerDataUrl?: string | null;
+            logoDataUrl?: string | null;
+            watermarkDataUrl?: string | null;
+        };
+        reportStyle: ReportStyleConfig;
+    }, res: Response): Promise<Response<any, Record<string, any>> | undefined>;
     listAuditLogs(labId?: string, actorType?: string, action?: string, entityType?: string, search?: string, dateFrom?: string, dateTo?: string, page?: string, size?: string): Promise<{
         items: import("../entities/audit-log.entity").AuditLog[];
         total: number;

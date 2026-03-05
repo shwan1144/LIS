@@ -144,6 +144,27 @@ let PlatformAdminController = class PlatformAdminController {
             return res.status(500).json({ message: 'Failed to generate results PDF' });
         }
     }
+    async previewLabReportPdf(labId, body, res) {
+        try {
+            const { pdfBuffer, fileName } = await this.platformAdminService.generateLabReportPreviewPdf(labId, body);
+            res.setHeader('Content-Type', 'application/pdf');
+            res.setHeader('Content-Disposition', `inline; filename="${fileName}"`);
+            res.send(pdfBuffer);
+        }
+        catch (error) {
+            if (error instanceof common_1.HttpException) {
+                const response = error.getResponse();
+                const message = typeof response === 'string'
+                    ? response
+                    : (response.message ?? error.message);
+                return res.status(error.getStatus()).json({ message });
+            }
+            if (error instanceof Error && error.message.includes('not found')) {
+                return res.status(404).json({ message: error.message });
+            }
+            return res.status(500).json({ message: 'Failed to generate report preview PDF' });
+        }
+    }
     async listAuditLogs(labId, actorType, action, entityType, search, dateFrom, dateTo, page, size) {
         return this.platformAdminService.listAuditLogs({
             labId,
@@ -430,6 +451,16 @@ __decorate([
     __metadata("design:paramtypes", [Object, String, Object]),
     __metadata("design:returntype", Promise)
 ], PlatformAdminController.prototype, "getOrderResultsPdf", null);
+__decorate([
+    (0, common_1.Post)('labs/:labId/report-preview'),
+    (0, roles_decorator_1.Roles)('SUPER_ADMIN'),
+    __param(0, (0, common_1.Param)('labId', common_1.ParseUUIDPipe)),
+    __param(1, (0, common_1.Body)()),
+    __param(2, (0, common_1.Res)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, Object, Object]),
+    __metadata("design:returntype", Promise)
+], PlatformAdminController.prototype, "previewLabReportPdf", null);
 __decorate([
     (0, common_1.Get)('audit-logs'),
     __param(0, (0, common_1.Query)('labId')),

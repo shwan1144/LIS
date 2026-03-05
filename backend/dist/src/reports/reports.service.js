@@ -452,6 +452,36 @@ let ReportsService = ReportsService_1 = class ReportsService {
             return null;
         }
     }
+    applyReportDesignOverride(order, override) {
+        if (!override) {
+            return order;
+        }
+        const currentLab = (order.lab ?? {});
+        const nextLab = {
+            ...currentLab,
+        };
+        if (override.reportBranding) {
+            if ('bannerDataUrl' in override.reportBranding) {
+                nextLab.reportBannerDataUrl = override.reportBranding.bannerDataUrl ?? null;
+            }
+            if ('footerDataUrl' in override.reportBranding) {
+                nextLab.reportFooterDataUrl = override.reportBranding.footerDataUrl ?? null;
+            }
+            if ('logoDataUrl' in override.reportBranding) {
+                nextLab.reportLogoDataUrl = override.reportBranding.logoDataUrl ?? null;
+            }
+            if ('watermarkDataUrl' in override.reportBranding) {
+                nextLab.reportWatermarkDataUrl = override.reportBranding.watermarkDataUrl ?? null;
+            }
+        }
+        if (override.reportStyle !== undefined) {
+            nextLab.reportStyle = override.reportStyle;
+        }
+        return {
+            ...order,
+            lab: nextLab,
+        };
+    }
     applyFallbackPageBranding(doc, opts) {
         const pageWidth = doc.page.width;
         const pageHeight = doc.page.height;
@@ -692,6 +722,17 @@ let ReportsService = ReportsService_1 = class ReportsService {
         }
         return this.generateTestResultsPDF(orderId, order.labId);
     }
+    async generateDraftTestResultsPreviewPDF(input) {
+        return this.generateTestResultsPDF(input.orderId, input.labId, {
+            bypassPaymentCheck: true,
+            bypassResultCompletionCheck: true,
+            disableCache: true,
+            reportDesignOverride: {
+                reportBranding: input.reportBranding,
+                reportStyle: input.reportStyle,
+            },
+        });
+    }
     async generateOrderReceiptPDF(orderId, labId) {
         const order = await this.orderRepo.findOne({
             where: { id: orderId, labId },
@@ -812,48 +853,28 @@ let ReportsService = ReportsService_1 = class ReportsService {
         const { order, reportableOrderTests, verifiedTests, latestVerifiedAt } = await this.loadOrderResultsSnapshot(orderId, labId);
         const snapshotMs = Date.now() - snapshotStartMs;
         const bypassPaymentCheck = !!options?.bypassPaymentCheck;
-        this.assertAllResultsEnteredForReport(reportableOrderTests);
+        const bypassResultCompletionCheck = !!options?.bypassResultCompletionCheck;
+        const disableCache = !!options?.disableCache;
+        const orderForRender = this.applyReportDesignOverride(order, options?.reportDesignOverride);
+        if (!bypassResultCompletionCheck) {
+            this.assertAllResultsEnteredForReport(reportableOrderTests);
+        }
         if (!bypassPaymentCheck && order.paymentStatus !== 'paid') {
             throw new common_1.ForbiddenException('Order is unpaid or partially paid. Complete payment to download or print results.');
         }
         const cacheKey = this.buildReportPdfCacheKey({
             labId,
-            order,
+            order: orderForRender,
             reportableOrderTests,
             latestVerifiedAt,
             bypassPaymentCheck,
         });
-        const cachedPdf = this.getCachedPdf(cacheKey);
-        if (cachedPdf) {
-            this.logResultsPdfPerformance({
-                orderId,
-                labId,
-                totalMs: Date.now() - startMs,
-                snapshotMs,
-                cacheHit: true,
-                inFlightJoin: false,
-            });
-            return cachedPdf;
-        }
-        const existingInFlight = this.pdfInFlight.get(cacheKey);
-        if (existingInFlight) {
-            const pdf = await existingInFlight;
-            this.logResultsPdfPerformance({
-                orderId,
-                labId,
-                totalMs: Date.now() - startMs,
-                snapshotMs,
-                cacheHit: false,
-                inFlightJoin: true,
-            });
-            return Buffer.from(pdf);
-        }
         let verifierLookupMs = 0;
         let assetsMs = 0;
         let htmlMs = 0;
         let renderMs = 0;
         let fallbackMs = 0;
-        const generatePromise = (async () => {
+        const generatePdf = async () => {
             const verifierLookupStartMs = Date.now();
             const verifierIds = [
                 ...new Set(reportableOrderTests
@@ -898,7 +919,7 @@ let ReportsService = ReportsService_1 = class ReportsService {
             assetsMs = Date.now() - assetsStartMs;
             const htmlStartMs = Date.now();
             const html = (0, results_report_template_1.buildResultsReportHtml)({
-                order,
+                order: orderForRender,
                 orderTests: reportableOrderTests,
                 verifiedCount: verifiedTests.length,
                 reportableCount: reportableOrderTests.length,
@@ -919,10 +940,10 @@ let ReportsService = ReportsService_1 = class ReportsService {
                 if (!allowFallback) {
                     throw error;
                 }
-                this.logger.warn(`Playwright PDF rendering failed; using fallback renderer for order ${order.id}.`);
+                this.logger.warn(`Playwright PDF rendering failed; using fallback renderer for order ${orderForRender.id}.`);
                 const fallbackStartMs = Date.now();
                 const fallbackPdf = await this.renderTestResultsFallbackPDF({
-                    order,
+                    order: orderForRender,
                     orderTests: reportableOrderTests,
                     verifiers: verifierNames,
                     latestVerifiedAt: latestVerifiedAt ?? null,
@@ -931,7 +952,50 @@ let ReportsService = ReportsService_1 = class ReportsService {
                 fallbackMs = Date.now() - fallbackStartMs;
                 return fallbackPdf;
             }
-        })();
+        };
+        if (disableCache) {
+            const pdf = await generatePdf();
+            this.logResultsPdfPerformance({
+                orderId,
+                labId,
+                totalMs: Date.now() - startMs,
+                snapshotMs,
+                verifierLookupMs,
+                assetsMs,
+                htmlMs,
+                renderMs,
+                fallbackMs,
+                cacheHit: false,
+                inFlightJoin: false,
+            });
+            return Buffer.from(pdf);
+        }
+        const cachedPdf = this.getCachedPdf(cacheKey);
+        if (cachedPdf) {
+            this.logResultsPdfPerformance({
+                orderId,
+                labId,
+                totalMs: Date.now() - startMs,
+                snapshotMs,
+                cacheHit: true,
+                inFlightJoin: false,
+            });
+            return cachedPdf;
+        }
+        const existingInFlight = this.pdfInFlight.get(cacheKey);
+        if (existingInFlight) {
+            const pdf = await existingInFlight;
+            this.logResultsPdfPerformance({
+                orderId,
+                labId,
+                totalMs: Date.now() - startMs,
+                snapshotMs,
+                cacheHit: false,
+                inFlightJoin: true,
+            });
+            return Buffer.from(pdf);
+        }
+        const generatePromise = generatePdf();
         this.pdfInFlight.set(cacheKey, generatePromise);
         try {
             const pdf = await generatePromise;

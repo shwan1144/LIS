@@ -20,8 +20,11 @@ import {
 } from 'antd';
 import { EyeOutlined } from '@ant-design/icons';
 import {
+  getAdminOrders,
   getAdminLabSettings,
+  previewAdminLabReportPdf,
   updateAdminLabSettings,
+  type AdminOrderListItem,
   type ReportStyleDto,
   type ReportBrandingDto,
 } from '../../api/client';
@@ -165,6 +168,13 @@ function defaultReportStyle(): ReportStyleDto {
       panelTableBreak: 'auto',
       panelRowBreak: 'avoid',
     },
+    pageLayout: {
+      pageMarginTopMm: 3,
+      pageMarginRightMm: 3,
+      pageMarginBottomMm: 3,
+      pageMarginLeftMm: 3,
+      contentMarginXMm: 3,
+    },
   };
 }
 
@@ -184,6 +194,13 @@ function formatMegabytes(bytes: number): string {
   const mb = bytes / (1024 * 1024);
   if (Number.isInteger(mb)) return String(mb);
   return mb.toFixed(2).replace(/\.?0+$/, '');
+}
+
+function formatOrderPreviewLabel(order: AdminOrderListItem): string {
+  const orderNo = order.orderNumber || order.id.slice(0, 8);
+  const patientName = order.patientName || 'Unknown patient';
+  const when = new Date(order.registeredAt).toLocaleString();
+  return `${orderNo} - ${patientName} - ${when}`;
 }
 
 function readFileAsDataUrl(file: Blob): Promise<string> {
@@ -265,6 +282,14 @@ export function AdminLabReportDesignPage() {
     onlineResultWatermarkDataUrl: string | null;
     onlineResultWatermarkText: string;
   } | null>(null);
+  const [previewOrderQuery, setPreviewOrderQuery] = useState('');
+  const [previewOrderOptions, setPreviewOrderOptions] = useState<AdminOrderListItem[]>([]);
+  const [selectedPreviewOrderId, setSelectedPreviewOrderId] = useState<string | null>(null);
+  const [loadingPreviewOrders, setLoadingPreviewOrders] = useState(false);
+  const [refreshingFullPreview, setRefreshingFullPreview] = useState(false);
+  const [fullPreviewPdfUrl, setFullPreviewPdfUrl] = useState<string | null>(null);
+  const [fullPreviewError, setFullPreviewError] = useState<string | null>(null);
+  const orderSearchTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
     if (!selectedLabId) return;
@@ -294,6 +319,76 @@ export function AdminLabReportDesignPage() {
     };
     void load();
   }, [selectedLabId]);
+
+  useEffect(() => {
+    if (!selectedLabId || activeTabKey !== 'report-style') {
+      setPreviewOrderOptions([]);
+      return;
+    }
+
+    if (orderSearchTimerRef.current) {
+      window.clearTimeout(orderSearchTimerRef.current);
+      orderSearchTimerRef.current = null;
+    }
+
+    let cancelled = false;
+    const timerId = window.setTimeout(() => {
+      void (async () => {
+        setLoadingPreviewOrders(true);
+        try {
+          const result = await getAdminOrders({
+            labId: selectedLabId,
+            q: previewOrderQuery.trim() || undefined,
+            page: 1,
+            size: 20,
+          });
+          if (cancelled) return;
+          setPreviewOrderOptions(result.items);
+        } catch {
+          if (cancelled) return;
+          setPreviewOrderOptions([]);
+          message.error('Failed to load orders for full preview');
+        } finally {
+          if (!cancelled) {
+            setLoadingPreviewOrders(false);
+          }
+        }
+      })();
+    }, 250);
+
+    orderSearchTimerRef.current = timerId;
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timerId);
+      if (orderSearchTimerRef.current === timerId) {
+        orderSearchTimerRef.current = null;
+      }
+    };
+  }, [activeTabKey, previewOrderQuery, selectedLabId]);
+
+  useEffect(() => {
+    setPreviewOrderQuery('');
+    setPreviewOrderOptions([]);
+    setSelectedPreviewOrderId(null);
+    setFullPreviewError(null);
+    setRefreshingFullPreview(false);
+    setFullPreviewPdfUrl((previousUrl) => {
+      if (previousUrl) {
+        URL.revokeObjectURL(previousUrl);
+      }
+      return null;
+    });
+  }, [selectedLabId]);
+
+  useEffect(() => () => {
+    if (orderSearchTimerRef.current) {
+      window.clearTimeout(orderSearchTimerRef.current);
+      orderSearchTimerRef.current = null;
+    }
+    if (fullPreviewPdfUrl) {
+      URL.revokeObjectURL(fullPreviewPdfUrl);
+    }
+  }, [fullPreviewPdfUrl]);
 
   const hasChanges = useMemo(() => {
     if (!savedSnapshot) return false;
@@ -336,6 +431,56 @@ export function AdminLabReportDesignPage() {
         [key]: value,
       },
     }));
+  };
+
+  const updatePageLayoutStyle = <K extends keyof ReportStyleDto['pageLayout']>(
+    key: K,
+    value: ReportStyleDto['pageLayout'][K],
+  ) => {
+    setReportStyle((prev) => ({
+      ...prev,
+      pageLayout: {
+        ...prev.pageLayout,
+        [key]: value,
+      },
+    }));
+  };
+
+  const handleRefreshFullPreview = async () => {
+    if (!selectedLabId) return;
+    if (!selectedPreviewOrderId) {
+      setFullPreviewError('Select an order before refreshing full preview.');
+      return;
+    }
+
+    setRefreshingFullPreview(true);
+    setFullPreviewError(null);
+    try {
+      const blob = await previewAdminLabReportPdf(selectedLabId, {
+        orderId: selectedPreviewOrderId,
+        reportBranding: {
+          bannerDataUrl: branding.bannerDataUrl ?? null,
+          footerDataUrl: branding.footerDataUrl ?? null,
+          logoDataUrl: branding.logoDataUrl ?? null,
+          watermarkDataUrl: branding.watermarkDataUrl ?? null,
+        },
+        reportStyle: cloneReportStyle(reportStyle),
+      });
+
+      const nextObjectUrl = URL.createObjectURL(blob);
+      setFullPreviewPdfUrl((previousUrl) => {
+        if (previousUrl) {
+          URL.revokeObjectURL(previousUrl);
+        }
+        return nextObjectUrl;
+      });
+    } catch (error) {
+      setFullPreviewError(
+        getErrorMessage(error) || 'Failed to generate full report preview',
+      );
+    } finally {
+      setRefreshingFullPreview(false);
+    }
   };
 
   const handleFileSelect = async (key: BrandingKey, maxBytes: number, event: ChangeEvent<HTMLInputElement>) => {
@@ -779,6 +924,73 @@ export function AdminLabReportDesignPage() {
                           </Col>
 
                           <Col xs={24}>
+                            <Card size="small" title="Page Layout (mm)">
+                              <Space direction="vertical" style={{ width: '100%' }} size={12}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                  <Text>Page Margin Top</Text>
+                                  <InputNumber
+                                    min={0}
+                                    max={20}
+                                    value={reportStyle.pageLayout.pageMarginTopMm}
+                                    onChange={(value) =>
+                                      updatePageLayoutStyle('pageMarginTopMm', Number(value ?? 3))
+                                    }
+                                    disabled={!canMutate}
+                                  />
+                                </div>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                  <Text>Page Margin Right</Text>
+                                  <InputNumber
+                                    min={0}
+                                    max={20}
+                                    value={reportStyle.pageLayout.pageMarginRightMm}
+                                    onChange={(value) =>
+                                      updatePageLayoutStyle('pageMarginRightMm', Number(value ?? 3))
+                                    }
+                                    disabled={!canMutate}
+                                  />
+                                </div>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                  <Text>Page Margin Bottom</Text>
+                                  <InputNumber
+                                    min={0}
+                                    max={20}
+                                    value={reportStyle.pageLayout.pageMarginBottomMm}
+                                    onChange={(value) =>
+                                      updatePageLayoutStyle('pageMarginBottomMm', Number(value ?? 3))
+                                    }
+                                    disabled={!canMutate}
+                                  />
+                                </div>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                  <Text>Page Margin Left</Text>
+                                  <InputNumber
+                                    min={0}
+                                    max={20}
+                                    value={reportStyle.pageLayout.pageMarginLeftMm}
+                                    onChange={(value) =>
+                                      updatePageLayoutStyle('pageMarginLeftMm', Number(value ?? 3))
+                                    }
+                                    disabled={!canMutate}
+                                  />
+                                </div>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                  <Text>Content Margin X</Text>
+                                  <InputNumber
+                                    min={0}
+                                    max={20}
+                                    value={reportStyle.pageLayout.contentMarginXMm}
+                                    onChange={(value) =>
+                                      updatePageLayoutStyle('contentMarginXMm', Number(value ?? 3))
+                                    }
+                                    disabled={!canMutate}
+                                  />
+                                </div>
+                              </Space>
+                            </Card>
+                          </Col>
+
+                          <Col xs={24}>
                             <Card size="small" title="Results Table">
                               <Space direction="vertical" style={{ width: '100%' }} size={12}>
                                 <StyleColorControl
@@ -1186,6 +1398,69 @@ export function AdminLabReportDesignPage() {
                             </div>
                           </Card>
                         </div>
+                        <Card title="Full Report Preview" style={{ marginTop: 12 }} loading={loading}>
+                          <Text type="secondary" style={{ display: 'block', marginBottom: 8 }}>
+                            Select a real order from this lab, then refresh to render a full PDF with unsaved draft design.
+                          </Text>
+                          <Select
+                            showSearch
+                            allowClear
+                            style={{ width: '100%' }}
+                            placeholder="Search orders by number/patient"
+                            value={selectedPreviewOrderId ?? undefined}
+                            onChange={(value) => {
+                              setSelectedPreviewOrderId(value ?? null);
+                              setFullPreviewError(null);
+                            }}
+                            onSearch={(value) => setPreviewOrderQuery(value)}
+                            filterOption={false}
+                            loading={loadingPreviewOrders}
+                            options={previewOrderOptions.map((order) => ({
+                              value: order.id,
+                              label: formatOrderPreviewLabel(order),
+                            }))}
+                          />
+                          <Space style={{ marginTop: 12 }}>
+                            <Button
+                              type="primary"
+                              onClick={() => void handleRefreshFullPreview()}
+                              loading={refreshingFullPreview}
+                              disabled={!canMutate}
+                            >
+                              Refresh full preview
+                            </Button>
+                            {!canMutate ? <Tag color="orange">Read-only mode</Tag> : null}
+                          </Space>
+                          {!selectedPreviewOrderId ? (
+                            <Alert
+                              style={{ marginTop: 12 }}
+                              type="info"
+                              showIcon
+                              message="Select an order to generate full preview"
+                            />
+                          ) : null}
+                          {fullPreviewError ? (
+                            <Alert
+                              style={{ marginTop: 12 }}
+                              type="error"
+                              showIcon
+                              message={fullPreviewError}
+                            />
+                          ) : null}
+                          {fullPreviewPdfUrl ? (
+                            <iframe
+                              title="Full report PDF preview"
+                              src={fullPreviewPdfUrl}
+                              style={{
+                                marginTop: 12,
+                                width: '100%',
+                                minHeight: 720,
+                                border: '1px solid #d9d9d9',
+                                borderRadius: 8,
+                              }}
+                            />
+                          ) : null}
+                        </Card>
                       </div>
                     </Col>
                   </Row>

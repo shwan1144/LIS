@@ -6,6 +6,7 @@ import { Patient } from '../entities/patient.entity';
 import { Lab } from '../entities/lab.entity';
 import { User } from '../entities/user.entity';
 import { AuditLog } from '../entities/audit-log.entity';
+import type { ReportStyleConfig } from './report-style.config';
 export interface PublicResultTestItem {
     orderTestId: string;
     testCode: string;
@@ -47,6 +48,12 @@ export type ReportActionFlags = {
         viber: string | null;
     };
 };
+export type ReportBrandingOverride = {
+    bannerDataUrl?: string | null;
+    footerDataUrl?: string | null;
+    logoDataUrl?: string | null;
+    watermarkDataUrl?: string | null;
+};
 export declare class ReportsService implements OnModuleInit, OnModuleDestroy {
     private readonly orderRepo;
     private readonly orderTestRepo;
@@ -76,6 +83,7 @@ export declare class ReportsService implements OnModuleInit, OnModuleDestroy {
     getOrderActionFlags(labId: string, orderIds: string[]): Promise<Record<string, ReportActionFlags>>;
     private resolveReportActionKindFromAudit;
     private decodeImageDataUrl;
+    private applyReportDesignOverride;
     private applyFallbackPageBranding;
     private getReportableOrderTests;
     private classifyOrderTestsForReport;
@@ -84,9 +92,21 @@ export declare class ReportsService implements OnModuleInit, OnModuleDestroy {
     private loadOrderResultsSnapshot;
     getPublicResultStatus(orderId: string): Promise<PublicResultStatus>;
     generatePublicTestResultsPDF(orderId: string): Promise<Buffer>;
+    generateDraftTestResultsPreviewPDF(input: {
+        orderId: string;
+        labId: string;
+        reportBranding: ReportBrandingOverride;
+        reportStyle: ReportStyleConfig;
+    }): Promise<Buffer>;
     generateOrderReceiptPDF(orderId: string, labId: string): Promise<Buffer>;
     generateTestResultsPDF(orderId: string, labId: string, options?: {
         bypassPaymentCheck?: boolean;
+        bypassResultCompletionCheck?: boolean;
+        disableCache?: boolean;
+        reportDesignOverride?: {
+            reportBranding?: ReportBrandingOverride;
+            reportStyle?: ReportStyleConfig | null;
+        };
     }): Promise<Buffer>;
     private renderTestResultsFallbackPDF;
 }

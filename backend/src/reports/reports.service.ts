@@ -16,6 +16,7 @@ import { AuditAction, AuditLog } from '../entities/audit-log.entity';
 import { TestType, type Test } from '../entities/test.entity';
 import { buildResultsReportHtml } from './html/results-report.template';
 import { buildReportDesignFingerprint } from './report-design-fingerprint.util';
+import type { ReportStyleConfig } from './report-style.config';
 import type { Browser } from 'playwright';
 import { resolveNormalText, resolveNumericRange } from '../tests/normal-range.util';
 
@@ -66,6 +67,13 @@ export type ReportActionFlags = {
     whatsapp: string | null;
     viber: string | null;
   };
+};
+
+export type ReportBrandingOverride = {
+  bannerDataUrl?: string | null;
+  footerDataUrl?: string | null;
+  logoDataUrl?: string | null;
+  watermarkDataUrl?: string | null;
 };
 
 function formatDateTime(value: Date | string | null | undefined): string {
@@ -568,6 +576,54 @@ export class ReportsService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
+  private applyReportDesignOverride(
+    order: Order,
+    override?: {
+      reportBranding?: ReportBrandingOverride;
+      reportStyle?: ReportStyleConfig | null;
+    },
+  ): Order {
+    if (!override) {
+      return order;
+    }
+
+    const currentLab = (order.lab ?? {}) as Lab & {
+      reportBannerDataUrl?: string | null;
+      reportFooterDataUrl?: string | null;
+      reportLogoDataUrl?: string | null;
+      reportWatermarkDataUrl?: string | null;
+      reportStyle?: ReportStyleConfig | null;
+    };
+
+    const nextLab = {
+      ...currentLab,
+    };
+
+    if (override.reportBranding) {
+      if ('bannerDataUrl' in override.reportBranding) {
+        nextLab.reportBannerDataUrl = override.reportBranding.bannerDataUrl ?? null;
+      }
+      if ('footerDataUrl' in override.reportBranding) {
+        nextLab.reportFooterDataUrl = override.reportBranding.footerDataUrl ?? null;
+      }
+      if ('logoDataUrl' in override.reportBranding) {
+        nextLab.reportLogoDataUrl = override.reportBranding.logoDataUrl ?? null;
+      }
+      if ('watermarkDataUrl' in override.reportBranding) {
+        nextLab.reportWatermarkDataUrl = override.reportBranding.watermarkDataUrl ?? null;
+      }
+    }
+
+    if (override.reportStyle !== undefined) {
+      nextLab.reportStyle = override.reportStyle;
+    }
+
+    return {
+      ...order,
+      lab: nextLab as unknown as Lab,
+    };
+  }
+
   private applyFallbackPageBranding(
     doc: PdfKitDocument,
     opts: { watermarkImage: Buffer | null; footerImage: Buffer | null },
@@ -882,6 +938,23 @@ export class ReportsService implements OnModuleInit, OnModuleDestroy {
     return this.generateTestResultsPDF(orderId, order.labId);
   }
 
+  async generateDraftTestResultsPreviewPDF(input: {
+    orderId: string;
+    labId: string;
+    reportBranding: ReportBrandingOverride;
+    reportStyle: ReportStyleConfig;
+  }): Promise<Buffer> {
+    return this.generateTestResultsPDF(input.orderId, input.labId, {
+      bypassPaymentCheck: true,
+      bypassResultCompletionCheck: true,
+      disableCache: true,
+      reportDesignOverride: {
+        reportBranding: input.reportBranding,
+        reportStyle: input.reportStyle,
+      },
+    });
+  }
+
   async generateOrderReceiptPDF(orderId: string, labId: string): Promise<Buffer> {
     const order = await this.orderRepo.findOne({
       where: { id: orderId, labId },
@@ -1035,7 +1108,15 @@ export class ReportsService implements OnModuleInit, OnModuleDestroy {
   async generateTestResultsPDF(
     orderId: string,
     labId: string,
-    options?: { bypassPaymentCheck?: boolean },
+    options?: {
+      bypassPaymentCheck?: boolean;
+      bypassResultCompletionCheck?: boolean;
+      disableCache?: boolean;
+      reportDesignOverride?: {
+        reportBranding?: ReportBrandingOverride;
+        reportStyle?: ReportStyleConfig | null;
+      };
+    },
   ): Promise<Buffer> {
     const startMs = Date.now();
     const snapshotStartMs = Date.now();
@@ -1043,8 +1124,13 @@ export class ReportsService implements OnModuleInit, OnModuleDestroy {
       await this.loadOrderResultsSnapshot(orderId, labId);
     const snapshotMs = Date.now() - snapshotStartMs;
     const bypassPaymentCheck = !!options?.bypassPaymentCheck;
+    const bypassResultCompletionCheck = !!options?.bypassResultCompletionCheck;
+    const disableCache = !!options?.disableCache;
+    const orderForRender = this.applyReportDesignOverride(order, options?.reportDesignOverride);
 
-    this.assertAllResultsEnteredForReport(reportableOrderTests);
+    if (!bypassResultCompletionCheck) {
+      this.assertAllResultsEnteredForReport(reportableOrderTests);
+    }
 
     if (!bypassPaymentCheck && order.paymentStatus !== 'paid') {
       throw new ForbiddenException(
@@ -1054,37 +1140,11 @@ export class ReportsService implements OnModuleInit, OnModuleDestroy {
 
     const cacheKey = this.buildReportPdfCacheKey({
       labId,
-      order,
+      order: orderForRender,
       reportableOrderTests,
       latestVerifiedAt,
       bypassPaymentCheck,
     });
-    const cachedPdf = this.getCachedPdf(cacheKey);
-    if (cachedPdf) {
-      this.logResultsPdfPerformance({
-        orderId,
-        labId,
-        totalMs: Date.now() - startMs,
-        snapshotMs,
-        cacheHit: true,
-        inFlightJoin: false,
-      });
-      return cachedPdf;
-    }
-
-    const existingInFlight = this.pdfInFlight.get(cacheKey);
-    if (existingInFlight) {
-      const pdf = await existingInFlight;
-      this.logResultsPdfPerformance({
-        orderId,
-        labId,
-        totalMs: Date.now() - startMs,
-        snapshotMs,
-        cacheHit: false,
-        inFlightJoin: true,
-      });
-      return Buffer.from(pdf);
-    }
 
     let verifierLookupMs = 0;
     let assetsMs = 0;
@@ -1092,7 +1152,7 @@ export class ReportsService implements OnModuleInit, OnModuleDestroy {
     let renderMs = 0;
     let fallbackMs = 0;
 
-    const generatePromise = (async () => {
+    const generatePdf = async () => {
       const verifierLookupStartMs = Date.now();
       const verifierIds = [
         ...new Set(
@@ -1151,7 +1211,7 @@ export class ReportsService implements OnModuleInit, OnModuleDestroy {
 
       const htmlStartMs = Date.now();
       const html = buildResultsReportHtml({
-        order,
+        order: orderForRender,
         orderTests: reportableOrderTests,
         verifiedCount: verifiedTests.length,
         reportableCount: reportableOrderTests.length,
@@ -1173,11 +1233,11 @@ export class ReportsService implements OnModuleInit, OnModuleDestroy {
           throw error;
         }
         this.logger.warn(
-          `Playwright PDF rendering failed; using fallback renderer for order ${order.id}.`,
+          `Playwright PDF rendering failed; using fallback renderer for order ${orderForRender.id}.`,
         );
         const fallbackStartMs = Date.now();
         const fallbackPdf = await this.renderTestResultsFallbackPDF({
-          order,
+          order: orderForRender,
           orderTests: reportableOrderTests,
           verifiers: verifierNames,
           latestVerifiedAt: latestVerifiedAt ?? null,
@@ -1186,7 +1246,54 @@ export class ReportsService implements OnModuleInit, OnModuleDestroy {
         fallbackMs = Date.now() - fallbackStartMs;
         return fallbackPdf;
       }
-    })();
+    };
+
+    if (disableCache) {
+      const pdf = await generatePdf();
+      this.logResultsPdfPerformance({
+        orderId,
+        labId,
+        totalMs: Date.now() - startMs,
+        snapshotMs,
+        verifierLookupMs,
+        assetsMs,
+        htmlMs,
+        renderMs,
+        fallbackMs,
+        cacheHit: false,
+        inFlightJoin: false,
+      });
+      return Buffer.from(pdf);
+    }
+
+    const cachedPdf = this.getCachedPdf(cacheKey);
+    if (cachedPdf) {
+      this.logResultsPdfPerformance({
+        orderId,
+        labId,
+        totalMs: Date.now() - startMs,
+        snapshotMs,
+        cacheHit: true,
+        inFlightJoin: false,
+      });
+      return cachedPdf;
+    }
+
+    const existingInFlight = this.pdfInFlight.get(cacheKey);
+    if (existingInFlight) {
+      const pdf = await existingInFlight;
+      this.logResultsPdfPerformance({
+        orderId,
+        labId,
+        totalMs: Date.now() - startMs,
+        snapshotMs,
+        cacheHit: false,
+        inFlightJoin: true,
+      });
+      return Buffer.from(pdf);
+    }
+
+    const generatePromise = generatePdf();
 
     this.pdfInFlight.set(cacheKey, generatePromise);
     try {

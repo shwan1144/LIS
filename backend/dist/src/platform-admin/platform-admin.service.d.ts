@@ -9,7 +9,7 @@ import { Shift } from '../entities/shift.entity';
 import { Department } from '../entities/department.entity';
 import { AuditService } from '../audit/audit.service';
 import { ReportsService } from '../reports/reports.service';
-import type { ReportStyleConfig } from '../reports/report-style.config';
+import { type ReportStyleConfig } from '../reports/report-style.config';
 import { AdminAuthService } from '../admin-auth/admin-auth.service';
 import { AuthService } from '../auth/auth.service';
 export interface PlatformActorContext {
@@ -246,6 +246,14 @@ export declare class PlatformAdminService {
         pdfBuffer: Buffer;
         fileName: string;
     }>;
+    generateLabReportPreviewPdf(labId: string, payload: {
+        orderId: string;
+        reportBranding: unknown;
+        reportStyle: unknown;
+    }): Promise<{
+        pdfBuffer: Buffer;
+        fileName: string;
+    }>;
     listAuditLogs(params: AdminAuditLogFilters & {
         page?: number;
         size?: number;
@@ -442,6 +450,10 @@ export declare class PlatformAdminService {
     private normalizeDateKey;
     private toSubdomainFromCode;
     private toAdminOrderListItem;
+    private normalizeUuidV4;
+    private normalizeReportImageDataUrl;
+    private normalizePreviewReportBranding;
+    private normalizePreviewReportStyle;
     private logPlatformSensitiveRead;
     private logLabAudit;
 }
