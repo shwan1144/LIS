@@ -84,6 +84,7 @@ let SettingsService = class SettingsService {
         };
     }
     async updateLabSettings(labId, data) {
+        const shouldVerifyReportDesignPersistence = data.reportBranding !== undefined || data.reportStyle !== undefined;
         const lab = await this.labRepo.findOne({ where: { id: labId } });
         if (!lab)
             throw new common_1.NotFoundException('Lab not found');
@@ -185,7 +186,22 @@ let SettingsService = class SettingsService {
             lab.referringDoctors = this.normalizeReferringDoctors(data.referringDoctors);
         }
         await this.labRepo.save(lab);
-        return this.getLabSettings(labId);
+        const settings = await this.getLabSettings(labId);
+        if (shouldVerifyReportDesignPersistence) {
+            const expectedFingerprint = (0, report_design_fingerprint_util_1.buildReportDesignFingerprint)({
+                reportBranding: {
+                    bannerDataUrl: lab.reportBannerDataUrl ?? null,
+                    footerDataUrl: lab.reportFooterDataUrl ?? null,
+                    logoDataUrl: lab.reportLogoDataUrl ?? null,
+                    watermarkDataUrl: lab.reportWatermarkDataUrl ?? null,
+                },
+                reportStyle: lab.reportStyle ? (0, report_style_config_1.resolveReportStyleConfig)(lab.reportStyle) : null,
+            });
+            if (settings.reportDesignFingerprint !== expectedFingerprint) {
+                throw new common_1.InternalServerErrorException('Server did not persist report design');
+            }
+        }
+        return settings;
     }
     normalizeReportImageDataUrl(value, fieldName) {
         if (value === null || value === undefined)

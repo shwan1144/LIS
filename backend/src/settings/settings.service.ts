@@ -3,6 +3,7 @@ import {
   NotFoundException,
   ConflictException,
   BadRequestException,
+  InternalServerErrorException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { EntityManager, Repository } from 'typeorm';
@@ -121,6 +122,8 @@ export class SettingsService {
       referringDoctors?: string[] | null;
     },
   ) {
+    const shouldVerifyReportDesignPersistence =
+      data.reportBranding !== undefined || data.reportStyle !== undefined;
     const lab = await this.labRepo.findOne({ where: { id: labId } });
     if (!lab) throw new NotFoundException('Lab not found');
     if (data.labelSequenceBy !== undefined) {
@@ -246,7 +249,27 @@ export class SettingsService {
       lab.referringDoctors = this.normalizeReferringDoctors(data.referringDoctors);
     }
     await this.labRepo.save(lab);
-    return this.getLabSettings(labId);
+    const settings = await this.getLabSettings(labId);
+
+    if (shouldVerifyReportDesignPersistence) {
+      const expectedFingerprint = buildReportDesignFingerprint({
+        reportBranding: {
+          bannerDataUrl: lab.reportBannerDataUrl ?? null,
+          footerDataUrl: lab.reportFooterDataUrl ?? null,
+          logoDataUrl: lab.reportLogoDataUrl ?? null,
+          watermarkDataUrl: lab.reportWatermarkDataUrl ?? null,
+        },
+        reportStyle: lab.reportStyle ? resolveReportStyleConfig(lab.reportStyle) : null,
+      });
+
+      if (settings.reportDesignFingerprint !== expectedFingerprint) {
+        throw new InternalServerErrorException(
+          'Server did not persist report design',
+        );
+      }
+    }
+
+    return settings;
   }
 
   private normalizeReportImageDataUrl(

@@ -211,6 +211,32 @@ describe('SettingsService referringDoctors', () => {
     );
   });
 
+  it('throws when report design cannot be read back after save', async () => {
+    const persistedLab = createLab({
+      reportBannerDataUrl: 'data:image/png;base64,AAAA',
+      reportStyle: DEFAULT_REPORT_STYLE_V1,
+    });
+    const staleReadLab = createLab({
+      reportBannerDataUrl: null,
+      reportStyle: null,
+    });
+
+    const findOne = jest
+      .fn()
+      .mockResolvedValueOnce(persistedLab)
+      .mockResolvedValueOnce(staleReadLab);
+    const save = jest.fn().mockImplementation(async (entity: Lab) => entity);
+    const service = createService({ findOne, save });
+
+    await expect(
+      service.updateLabSettings('lab-id', {
+        reportBranding: {
+          bannerDataUrl: 'data:image/png;base64,BBBB',
+        },
+      }),
+    ).rejects.toThrow('Server did not persist report design');
+  });
+
   it('rejects malformed reportStyle config', async () => {
     const lab = createLab();
     const service = createService({
