@@ -529,6 +529,10 @@ function getErrorMessage(err: unknown): string | null {
     return 'Request timed out. Please retry.';
   }
 
+  if (error.response?.status === 413) {
+    return 'The image or design data is too large for the server. Please use smaller images or check VPS configuration.';
+  }
+
   if (!error.response) {
     if (/network error/i.test(error.message ?? '')) {
       return 'Network error. Please check your connection and retry.';

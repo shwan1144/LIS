@@ -75,7 +75,7 @@ const IMAGE_SETTINGS: ImageSettingMeta[] = [
 ];
 
 const ALLOWED_MIME_TYPES = new Set(['image/png', 'image/jpeg', 'image/jpg', 'image/webp']);
-const MAX_UPLOAD_INPUT_BYTES = 12 * 1024 * 1024;
+const MAX_UPLOAD_INPUT_BYTES = 50 * 1024 * 1024;
 const ONLINE_WATERMARK_MAX_BYTES = 2 * 1024 * 1024;
 const ALIGN_OPTIONS = [
   { label: 'Left', value: 'left' },
@@ -987,191 +987,191 @@ export function AdminLabReportDesignPage() {
                     </Col>
                     <Col xs={24} xl={10}>
                       <div style={{ position: 'sticky', top: 16 }}>
-                      <div ref={previewCardRef}>
-                      <Card title="Live Preview" loading={loading}>
-                        <div
-                          style={{
-                            border: `1px solid ${reportStyle.patientInfo.borderColor}`,
-                            borderRadius: reportStyle.patientInfo.borderRadiusPx,
-                            background: reportStyle.patientInfo.backgroundColor,
-                            color: reportStyle.patientInfo.textColor,
-                            fontSize: reportStyle.patientInfo.fontSizePx,
-                            textAlign: reportStyle.patientInfo.textAlign,
-                            padding: `${reportStyle.patientInfo.paddingYpx}px ${reportStyle.patientInfo.paddingXpx}px`,
-                            marginBottom: 12,
-                          }}
-                        >
-                          <div style={{ marginBottom: 6 }}>
-                            <span
+                        <div ref={previewCardRef}>
+                          <Card title="Live Preview" loading={loading}>
+                            <div
                               style={{
-                                color: reportStyle.patientInfo.labelColor,
-                                fontWeight: reportStyle.patientInfo.labelFontWeight,
-                                marginRight: 4,
+                                border: `1px solid ${reportStyle.patientInfo.borderColor}`,
+                                borderRadius: reportStyle.patientInfo.borderRadiusPx,
+                                background: reportStyle.patientInfo.backgroundColor,
+                                color: reportStyle.patientInfo.textColor,
+                                fontSize: reportStyle.patientInfo.fontSizePx,
+                                textAlign: reportStyle.patientInfo.textAlign,
+                                padding: `${reportStyle.patientInfo.paddingYpx}px ${reportStyle.patientInfo.paddingXpx}px`,
+                                marginBottom: 12,
                               }}
                             >
-                              Name:
-                            </span>
-                            <span style={{ fontWeight: reportStyle.patientInfo.valueFontWeight }}>Sample Patient</span>
-                          </div>
-                          <div style={{ marginBottom: 6 }}>
-                            <span
-                              style={{
-                                color: reportStyle.patientInfo.labelColor,
-                                fontWeight: reportStyle.patientInfo.labelFontWeight,
-                                marginRight: 4,
-                              }}
-                            >
-                              Age/Sex:
-                            </span>
-                            <span style={{ fontWeight: reportStyle.patientInfo.valueFontWeight }}>36 Years/Male</span>
-                          </div>
-                          <div>
-                            <span
-                              style={{
-                                color: reportStyle.patientInfo.labelColor,
-                                fontWeight: reportStyle.patientInfo.labelFontWeight,
-                                marginRight: 4,
-                              }}
-                            >
-                              Order No:
-                            </span>
-                            <span style={{ fontWeight: reportStyle.patientInfo.valueFontWeight }}>260304011</span>
-                          </div>
-                        </div>
+                              <div style={{ marginBottom: 6 }}>
+                                <span
+                                  style={{
+                                    color: reportStyle.patientInfo.labelColor,
+                                    fontWeight: reportStyle.patientInfo.labelFontWeight,
+                                    marginRight: 4,
+                                  }}
+                                >
+                                  Name:
+                                </span>
+                                <span style={{ fontWeight: reportStyle.patientInfo.valueFontWeight }}>Sample Patient</span>
+                              </div>
+                              <div style={{ marginBottom: 6 }}>
+                                <span
+                                  style={{
+                                    color: reportStyle.patientInfo.labelColor,
+                                    fontWeight: reportStyle.patientInfo.labelFontWeight,
+                                    marginRight: 4,
+                                  }}
+                                >
+                                  Age/Sex:
+                                </span>
+                                <span style={{ fontWeight: reportStyle.patientInfo.valueFontWeight }}>36 Years/Male</span>
+                              </div>
+                              <div>
+                                <span
+                                  style={{
+                                    color: reportStyle.patientInfo.labelColor,
+                                    fontWeight: reportStyle.patientInfo.labelFontWeight,
+                                    marginRight: 4,
+                                  }}
+                                >
+                                  Order No:
+                                </span>
+                                <span style={{ fontWeight: reportStyle.patientInfo.valueFontWeight }}>260304011</span>
+                              </div>
+                            </div>
 
-                        <div style={{ overflowX: 'auto' }}>
-                          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                            <thead>
-                              <tr>
-                                <th style={previewHeaderCellStyle}>Test</th>
-                                <th style={previewHeaderCellStyle}>Result</th>
-                                <th style={previewHeaderCellStyle}>Unit</th>
-                                <th style={previewHeaderCellStyle}>Status</th>
-                                <th style={previewHeaderCellStyle}>Reference Value</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              <tr>
-                                <td
-                                  colSpan={5}
-                                  style={{
-                                    ...previewBodyCellStyle,
-                                    background: reportStyle.resultsTable.departmentRowBackgroundColor,
-                                    color: reportStyle.resultsTable.departmentRowTextColor,
-                                    textAlign: reportStyle.resultsTable.departmentRowTextAlign,
-                                    fontSize: reportStyle.resultsTable.departmentRowFontSizePx,
-                                    fontWeight: 800,
-                                  }}
-                                >
-                                  Chemistry
-                                </td>
-                              </tr>
-                              <tr>
-                                <td
-                                  colSpan={5}
-                                  style={{
-                                    ...previewBodyCellStyle,
-                                    background: reportStyle.resultsTable.categoryRowBackgroundColor,
-                                    color: reportStyle.resultsTable.categoryRowTextColor,
-                                    textAlign: reportStyle.resultsTable.categoryRowTextAlign,
-                                    fontSize: reportStyle.resultsTable.categoryRowFontSizePx,
-                                    fontWeight: 700,
-                                  }}
-                                >
-                                  Routine
-                                </td>
-                              </tr>
-                              <tr>
-                                <td style={{ ...previewBodyCellStyle, background: stripedRowBg }}>Glucose</td>
-                                <td style={{ ...previewBodyCellStyle, background: stripedRowBg }}>110</td>
-                                <td style={{ ...previewBodyCellStyle, background: stripedRowBg }}>mg/dL</td>
-                                <td
-                                  style={{
-                                    ...previewBodyCellStyle,
-                                    background: stripedRowBg,
-                                    color: reportStyle.resultsTable.statusNormalColor,
-                                    fontWeight: 700,
-                                  }}
-                                >
-                                  Normal
-                                </td>
-                                <td
-                                  style={{
-                                    ...previewBodyCellStyle,
-                                    background: stripedRowBg,
-                                    color: reportStyle.resultsTable.referenceValueColor,
-                                  }}
-                                >
-                                  70-110
-                                </td>
-                              </tr>
-                              <tr>
-                                <td
-                                  style={{
-                                    ...previewBodyCellStyle,
-                                    background: reportStyle.resultsTable.abnormalRowBackgroundColor,
-                                  }}
-                                >
-                                  ALT
-                                </td>
-                                <td
-                                  style={{
-                                    ...previewBodyCellStyle,
-                                    background: reportStyle.resultsTable.abnormalRowBackgroundColor,
-                                  }}
-                                >
-                                  82
-                                </td>
-                                <td
-                                  style={{
-                                    ...previewBodyCellStyle,
-                                    background: reportStyle.resultsTable.abnormalRowBackgroundColor,
-                                  }}
-                                >
-                                  U/L
-                                </td>
-                                <td
-                                  style={{
-                                    ...previewBodyCellStyle,
-                                    background: reportStyle.resultsTable.abnormalRowBackgroundColor,
-                                    color: reportStyle.resultsTable.statusHighColor,
-                                    fontWeight: 700,
-                                  }}
-                                >
-                                  High
-                                </td>
-                                <td
-                                  style={{
-                                    ...previewBodyCellStyle,
-                                    background: reportStyle.resultsTable.abnormalRowBackgroundColor,
-                                    color: reportStyle.resultsTable.referenceValueColor,
-                                  }}
-                                >
-                                  0-40
-                                </td>
-                              </tr>
-                              <tr>
-                                <td style={previewBodyCellStyle}>HDL</td>
-                                <td style={previewBodyCellStyle}>35</td>
-                                <td style={previewBodyCellStyle}>mg/dL</td>
-                                <td
-                                  style={{
-                                    ...previewBodyCellStyle,
-                                    color: reportStyle.resultsTable.statusLowColor,
-                                    fontWeight: 700,
-                                  }}
-                                >
-                                  Low
-                                </td>
-                                <td style={{ ...previewBodyCellStyle, color: reportStyle.resultsTable.referenceValueColor }}>
-                                  &gt; 40
-                                </td>
-                              </tr>
-                            </tbody>
-                          </table>
+                            <div style={{ overflowX: 'auto' }}>
+                              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                                <thead>
+                                  <tr>
+                                    <th style={previewHeaderCellStyle}>Test</th>
+                                    <th style={previewHeaderCellStyle}>Result</th>
+                                    <th style={previewHeaderCellStyle}>Unit</th>
+                                    <th style={previewHeaderCellStyle}>Status</th>
+                                    <th style={previewHeaderCellStyle}>Reference Value</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  <tr>
+                                    <td
+                                      colSpan={5}
+                                      style={{
+                                        ...previewBodyCellStyle,
+                                        background: reportStyle.resultsTable.departmentRowBackgroundColor,
+                                        color: reportStyle.resultsTable.departmentRowTextColor,
+                                        textAlign: reportStyle.resultsTable.departmentRowTextAlign,
+                                        fontSize: reportStyle.resultsTable.departmentRowFontSizePx,
+                                        fontWeight: 800,
+                                      }}
+                                    >
+                                      Chemistry
+                                    </td>
+                                  </tr>
+                                  <tr>
+                                    <td
+                                      colSpan={5}
+                                      style={{
+                                        ...previewBodyCellStyle,
+                                        background: reportStyle.resultsTable.categoryRowBackgroundColor,
+                                        color: reportStyle.resultsTable.categoryRowTextColor,
+                                        textAlign: reportStyle.resultsTable.categoryRowTextAlign,
+                                        fontSize: reportStyle.resultsTable.categoryRowFontSizePx,
+                                        fontWeight: 700,
+                                      }}
+                                    >
+                                      Routine
+                                    </td>
+                                  </tr>
+                                  <tr>
+                                    <td style={{ ...previewBodyCellStyle, background: stripedRowBg }}>Glucose</td>
+                                    <td style={{ ...previewBodyCellStyle, background: stripedRowBg }}>110</td>
+                                    <td style={{ ...previewBodyCellStyle, background: stripedRowBg }}>mg/dL</td>
+                                    <td
+                                      style={{
+                                        ...previewBodyCellStyle,
+                                        background: stripedRowBg,
+                                        color: reportStyle.resultsTable.statusNormalColor,
+                                        fontWeight: 700,
+                                      }}
+                                    >
+                                      Normal
+                                    </td>
+                                    <td
+                                      style={{
+                                        ...previewBodyCellStyle,
+                                        background: stripedRowBg,
+                                        color: reportStyle.resultsTable.referenceValueColor,
+                                      }}
+                                    >
+                                      70-110
+                                    </td>
+                                  </tr>
+                                  <tr>
+                                    <td
+                                      style={{
+                                        ...previewBodyCellStyle,
+                                        background: reportStyle.resultsTable.abnormalRowBackgroundColor,
+                                      }}
+                                    >
+                                      ALT
+                                    </td>
+                                    <td
+                                      style={{
+                                        ...previewBodyCellStyle,
+                                        background: reportStyle.resultsTable.abnormalRowBackgroundColor,
+                                      }}
+                                    >
+                                      82
+                                    </td>
+                                    <td
+                                      style={{
+                                        ...previewBodyCellStyle,
+                                        background: reportStyle.resultsTable.abnormalRowBackgroundColor,
+                                      }}
+                                    >
+                                      U/L
+                                    </td>
+                                    <td
+                                      style={{
+                                        ...previewBodyCellStyle,
+                                        background: reportStyle.resultsTable.abnormalRowBackgroundColor,
+                                        color: reportStyle.resultsTable.statusHighColor,
+                                        fontWeight: 700,
+                                      }}
+                                    >
+                                      High
+                                    </td>
+                                    <td
+                                      style={{
+                                        ...previewBodyCellStyle,
+                                        background: reportStyle.resultsTable.abnormalRowBackgroundColor,
+                                        color: reportStyle.resultsTable.referenceValueColor,
+                                      }}
+                                    >
+                                      0-40
+                                    </td>
+                                  </tr>
+                                  <tr>
+                                    <td style={previewBodyCellStyle}>HDL</td>
+                                    <td style={previewBodyCellStyle}>35</td>
+                                    <td style={previewBodyCellStyle}>mg/dL</td>
+                                    <td
+                                      style={{
+                                        ...previewBodyCellStyle,
+                                        color: reportStyle.resultsTable.statusLowColor,
+                                        fontWeight: 700,
+                                      }}
+                                    >
+                                      Low
+                                    </td>
+                                    <td style={{ ...previewBodyCellStyle, color: reportStyle.resultsTable.referenceValueColor }}>
+                                      &gt; 40
+                                    </td>
+                                  </tr>
+                                </tbody>
+                              </table>
+                            </div>
+                          </Card>
                         </div>
-                      </Card>
-                      </div>
                       </div>
                     </Col>
                   </Row>

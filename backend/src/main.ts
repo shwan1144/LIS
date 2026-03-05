@@ -610,8 +610,8 @@ async function bootstrap() {
       crossOriginEmbedderPolicy: false,
     }),
   );
-  app.use(json({ limit: '10mb' }));
-  app.use(urlencoded({ extended: true, limit: '10mb' }));
+  app.use(json({ limit: '50mb' }));
+  app.use(urlencoded({ extended: true, limit: '50mb' }));
   const dataSource = app.get(DataSource);
   try {
     await ensureReportBrandingColumns(dataSource);
