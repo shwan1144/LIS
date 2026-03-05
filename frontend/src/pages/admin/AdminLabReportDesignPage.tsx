@@ -6,6 +6,7 @@ import {
   Col,
   ColorPicker,
   Empty,
+  FloatButton,
   Input,
   InputNumber,
   Row,
@@ -17,6 +18,7 @@ import {
   Typography,
   message,
 } from 'antd';
+import { EyeOutlined } from '@ant-design/icons';
 import {
   getAdminLabSettings,
   updateAdminLabSettings,
@@ -235,6 +237,7 @@ export function AdminLabReportDesignPage() {
   const { labs, selectedLab, selectedLabId, loadingLabs, selectLab } = useAdminLabSelection();
   const fileInputRefs = useRef<Partial<Record<BrandingKey, HTMLInputElement | null>>>({});
   const onlineWatermarkInputRef = useRef<HTMLInputElement | null>(null);
+  const previewCardRef = useRef<HTMLDivElement | null>(null);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [uploadingKey, setUploadingKey] = useState<BrandingKey | null>(null);
@@ -243,6 +246,7 @@ export function AdminLabReportDesignPage() {
   const [reportStyle, setReportStyle] = useState<ReportStyleDto>(defaultReportStyle);
   const [onlineResultWatermarkDataUrl, setOnlineResultWatermarkDataUrl] = useState<string | null>(null);
   const [onlineResultWatermarkText, setOnlineResultWatermarkText] = useState('');
+  const [activeTabKey, setActiveTabKey] = useState('pdf-design');
   const [savedSnapshot, setSavedSnapshot] = useState<{
     branding: ReportBrandingDto;
     reportStyle: ReportStyleDto;
@@ -469,6 +473,9 @@ export function AdminLabReportDesignPage() {
   const stripedRowBg = reportStyle.resultsTable.rowStripeEnabled
     ? reportStyle.resultsTable.rowStripeColor
     : 'transparent';
+  const scrollToPreview = () => {
+    previewCardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
 
   return (
     <div>
@@ -515,6 +522,8 @@ export function AdminLabReportDesignPage() {
           <Tabs
             style={{ marginTop: 16 }}
             defaultActiveKey="pdf-design"
+            activeKey={activeTabKey}
+            onChange={setActiveTabKey}
             items={[
               {
                 key: 'pdf-design',
@@ -921,6 +930,7 @@ export function AdminLabReportDesignPage() {
                     </Col>
                     <Col xs={24} xl={10}>
                       <div style={{ position: 'sticky', top: 16 }}>
+                      <div ref={previewCardRef}>
                       <Card title="Live Preview" loading={loading}>
                         <div
                           style={{
@@ -1105,6 +1115,7 @@ export function AdminLabReportDesignPage() {
                         </div>
                       </Card>
                       </div>
+                      </div>
                     </Col>
                   </Row>
                 ),
@@ -1212,6 +1223,14 @@ export function AdminLabReportDesignPage() {
               {!canMutate ? <Tag color="orange">Read-only mode</Tag> : null}
             </Space>
           </div>
+          {activeTabKey === 'report-style' ? (
+            <FloatButton
+              icon={<EyeOutlined />}
+              tooltip="Jump to live preview"
+              onClick={scrollToPreview}
+              style={{ insetInlineEnd: 24, bottom: 96 }}
+            />
+          ) : null}
         </>
       )}
     </div>

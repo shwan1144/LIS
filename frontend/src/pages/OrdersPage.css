@@ -78,24 +78,6 @@
   padding-inline: 8px;
 }
 
-.orders-header-referred-group {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 280px;
-  max-width: 440px;
-}
-
-.orders-header-referred-label {
-  white-space: nowrap;
-  font-size: 12px;
-}
-
-.orders-header-referred-control {
-  width: 320px;
-  max-width: 100%;
-}
-
 .orders-history-content {
   display: flex;
   flex-direction: column;
@@ -156,6 +138,10 @@
   align-items: center;
   margin-bottom: 8px;
   gap: 8px;
+}
+
+.order-draft-referred-row {
+  margin-bottom: 2px;
 }
 
 .order-selected-tests-table .ant-table-thead>tr>th {
@@ -565,17 +551,6 @@
 
   .orders-header-patient-name {
     max-width: 100%;
-  }
-
-  .orders-header-referred-group {
-    min-width: 0;
-    max-width: none;
-    width: 100%;
-    flex-wrap: wrap;
-  }
-
-  .orders-header-referred-control {
-    width: 100%;
   }
 
   .locked-order-content,

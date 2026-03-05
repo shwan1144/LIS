@@ -1579,30 +1579,10 @@ export function OrdersPage() {
                       </Tag>
                     </>
                   ) : (
-                    <>
-                      <span className="orders-header-context-item">
-                        <Text type="secondary">Shift:</Text>
-                        <Text strong>{currentShiftLabel || '-'}</Text>
-                      </span>
-                      <div className="orders-header-referred-group">
-                        <Text strong className="orders-header-referred-label">
-                          Referred by
-                        </Text>
-                        <AutoComplete
-                          value={referredBy}
-                          onChange={setReferredBy}
-                          options={referringDoctorOptions.map((name) => ({ value: name }))}
-                          placeholder="Select from list or type doctor name"
-                          className="orders-header-referred-control"
-                          filterOption={(inputValue, option) =>
-                            String(option?.value ?? '')
-                              .toLowerCase()
-                              .includes(inputValue.toLowerCase())
-                          }
-                          allowClear
-                        />
-                      </div>
-                    </>
+                    <span className="orders-header-context-item">
+                      <Text type="secondary">Shift:</Text>
+                      <Text strong>{currentShiftLabel || '-'}</Text>
+                    </span>
                   )}
                 </div>
               </div>
@@ -2034,6 +2014,24 @@ export function OrdersPage() {
                   <Row gutter={[12, 12]} className="order-composer-grid">
                     <Col xs={24} xl={16}>
                       <Card size="small" className="orders-section-card" title="Select tests">
+                        <div className="order-draft-referred-row">
+                          <Text strong style={{ display: 'block', marginBottom: 6 }}>
+                            Referred by
+                          </Text>
+                          <AutoComplete
+                            value={referredBy}
+                            onChange={setReferredBy}
+                            options={referringDoctorOptions.map((name) => ({ value: name }))}
+                            placeholder="Select from list or type doctor name"
+                            style={{ width: '100%', marginBottom: 12 }}
+                            filterOption={(inputValue, option) =>
+                              String(option?.value ?? '')
+                                .toLowerCase()
+                                .includes(inputValue.toLowerCase())
+                            }
+                            allowClear
+                          />
+                        </div>
                         <Select
                           showSearch
                           placeholder="Search tests by name or code..."
