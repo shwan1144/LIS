@@ -55,6 +55,7 @@ export interface OrderListQueryParams {
   search?: string;
   status?: OrderStatus;
   patientId?: string;
+  shiftId?: string;
   startDate?: string;
   endDate?: string;
   resultStatus?: OrderResultStatus;
@@ -248,6 +249,7 @@ export class OrdersService {
           paymentStatus: 'unpaid',
           paidAmount: null,
           registeredAt: now,
+          deliveryMethods: dto.deliveryMethods || [],
         });
 
         const sampleInsertStartedAt = process.hrtime.bigint();
@@ -487,6 +489,7 @@ export class OrdersService {
               resultStatus: params.resultStatus ?? null,
               hasSearch: Boolean(params.search?.trim()),
               patientId: params.patientId ?? null,
+              shiftId: params.shiftId ?? null,
               startDate: params.startDate ?? null,
               endDate: params.endDate ?? null,
             },
@@ -1420,6 +1423,10 @@ export class OrdersService {
 
     if (params.patientId) {
       qb.andWhere('order.patientId = :patientId', { patientId: params.patientId });
+    }
+
+    if (params.shiftId) {
+      qb.andWhere('order.shiftId = :shiftId', { shiftId: params.shiftId });
     }
 
     if (params.search?.trim()) {

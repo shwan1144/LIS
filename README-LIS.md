@@ -8,6 +8,8 @@
   - `DOCKPLOY_FRONTEND_DOCKERFILE_FIX.md`
 - Dockploy new lab onboarding + subdomain activation (medilis.net):
   - `DOCKPLOY_NEW_LAB_ONBOARDING.md`
+- Dockploy Medonic M51 HL7 direct integration (no connector):
+  - `DOCKPLOY_MEDONIC_M51_NO_CONNECTOR.md`
 
 ## CBC/GUE Panel Reseed (Future Orders Only)
 

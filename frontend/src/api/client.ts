@@ -1029,6 +1029,7 @@ export interface OrderSearchParams {
   status?: OrderStatus;
   resultStatus?: OrderResultStatus;
   patientId?: string;
+  shiftId?: string;
   startDate?: string;
   endDate?: string;
 }

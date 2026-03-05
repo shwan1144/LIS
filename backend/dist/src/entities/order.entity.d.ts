@@ -29,6 +29,7 @@ export declare class Order {
     paymentStatus: string;
     paidAmount: number | null;
     registeredAt: Date;
+    deliveryMethods: string[];
     createdAt: Date;
     updatedAt: Date;
     patient: Patient;

@@ -75,6 +75,7 @@ export class OrdersController {
     @Query('search') search?: string,
     @Query('status') status?: string,
     @Query('patientId') patientId?: string,
+    @Query('shiftId') shiftId?: string,
     @Query('startDate') startDate?: string,
     @Query('endDate') endDate?: string,
   ) {
@@ -88,6 +89,7 @@ export class OrdersController {
       search,
       status: status as OrderStatus | undefined,
       patientId,
+      shiftId,
       startDate,
       endDate,
     });
@@ -157,6 +159,7 @@ export class OrdersController {
     @Query('search') search?: string,
     @Query('status') status?: string,
     @Query('patientId') patientId?: string,
+    @Query('shiftId') shiftId?: string,
     @Query('startDate') startDate?: string,
     @Query('endDate') endDate?: string,
     @Query('resultStatus', new ParseEnumPipe(OrderResultStatus, { optional: true }))
@@ -172,6 +175,7 @@ export class OrdersController {
       search,
       status: status as OrderStatus | undefined,
       patientId,
+      shiftId,
       startDate,
       endDate,
       resultStatus,

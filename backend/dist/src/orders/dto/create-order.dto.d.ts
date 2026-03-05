@@ -15,4 +15,5 @@ export declare class CreateOrderDto {
     notes?: string;
     discountPercent?: number;
     samples: CreateSampleDto[];
+    deliveryMethods?: string[];
 }

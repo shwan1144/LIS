@@ -25,6 +25,7 @@ export interface OrderListQueryParams {
     search?: string;
     status?: OrderStatus;
     patientId?: string;
+    shiftId?: string;
     startDate?: string;
     endDate?: string;
     resultStatus?: OrderResultStatus;

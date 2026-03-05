@@ -63,4 +63,9 @@ export class CreateOrderDto {
   @ValidateNested({ each: true })
   @Type(() => CreateSampleDto)
   samples: CreateSampleDto[];
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  deliveryMethods?: string[];
 }

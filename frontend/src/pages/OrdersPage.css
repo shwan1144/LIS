@@ -193,13 +193,88 @@
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  overflow-x: hidden;
+  overflow-x: auto;
   border: 1px solid rgba(22, 119, 255, 0.2);
   border-radius: 10px;
   background: rgba(22, 119, 255, 0.04);
   scrollbar-gutter: stable both-edges;
   scrollbar-width: thin;
   scrollbar-color: #69b1ff rgba(22, 119, 255, 0.16);
+}
+
+.order-history-grid-row {
+  display: grid;
+  grid-template-columns: minmax(210px, 2.2fr) minmax(102px, 1fr) minmax(96px, 0.95fr) minmax(110px, 1fr) minmax(138px, 1.1fr) 34px;
+  column-gap: 8px;
+  align-items: center;
+  min-width: 690px;
+}
+
+.order-history-grid-header {
+  align-items: center;
+}
+
+.order-history-header-text {
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.order-history-list .ant-list-item {
+  align-items: center;
+}
+
+.order-history-grid-body {
+  width: 100%;
+}
+
+.order-history-patient-cell {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.order-history-patient-name {
+  display: block;
+  min-width: 0;
+  margin: 0;
+  font-size: 13px;
+  line-height: 18px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.order-history-cell {
+  min-width: 0;
+}
+
+.order-history-value-text {
+  display: block;
+  font-size: 11px;
+  line-height: 16px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.order-history-tag.ant-tag {
+  margin: 0;
+  font-size: 10.5px;
+  line-height: 15px;
+  padding-inline: 6px;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.order-history-action-cell {
+  min-width: 34px;
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
 }
 
 .orders-right-card .ant-card-body {

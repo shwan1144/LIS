@@ -8,6 +8,7 @@ import {
   message,
   Select,
   Input,
+  DatePicker,
   Pagination,
   Typography,
   InputNumber,
@@ -39,6 +40,7 @@ import {
   getTests,
   getPatient,
   getDepartments,
+  getShifts,
   searchOrdersHistory,
   getOrder,
   getNextOrderNumber,
@@ -56,6 +58,7 @@ import {
   type OrderHistoryItemDto,
   type OrderStatus,
   type DepartmentDto,
+  type ShiftDto,
 } from '../api/client';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
@@ -69,6 +72,7 @@ import { buildKeyboardSearchVariants } from '../utils/keyboard-map';
 import './OrdersPage.css';
 
 const { Title, Text } = Typography;
+const { RangePicker } = DatePicker;
 
 interface SelectedTest {
   testId: string;
@@ -232,7 +236,6 @@ export function OrdersPage() {
     }),
     [isDark]
   );
-  const orderHistoryGridTemplate = 'minmax(150px, 1.9fr) 88px 76px 74px 98px';
 
   const [patientList, setPatientList] = useState<OrderListRow[]>([]);
   const [selectedRowId, setSelectedRowId] = useState<string | null>(null);
@@ -244,6 +247,12 @@ export function OrdersPage() {
   const [listQueryInput, setListQueryInput] = useState('');
   const [listQuery, setListQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'ALL' | OrderStatus>('ALL');
+  const [historyDateRange, setHistoryDateRange] = useState<[dayjs.Dayjs, dayjs.Dayjs]>([
+    dayjs().startOf('day'),
+    dayjs().startOf('day'),
+  ]);
+  const [historyShiftFilter, setHistoryShiftFilter] = useState<string>('ALL');
+  const [historyShiftOptions, setHistoryShiftOptions] = useState<ShiftDto[]>([]);
   const [draftPatient, setDraftPatient] = useState<PatientDto | null>(null);
   /** When set, loadOrderHistory will select the draft row for this patient (e.g. after "Go to order" from Patients). Cleared after use. Ref to avoid extra list reload. */
   const focusDraftPatientIdRef = useRef<string | null>(null);
@@ -348,6 +357,9 @@ export function OrdersPage() {
           size: ORDER_PAGE_SIZE,
           search: listQuery.trim() || undefined,
           status: statusFilter === 'ALL' ? undefined : statusFilter,
+          startDate: historyDateRange[0].format('YYYY-MM-DD'),
+          endDate: historyDateRange[1].format('YYYY-MM-DD'),
+          shiftId: historyShiftFilter === 'ALL' ? undefined : historyShiftFilter,
         });
         if (requestSeq !== historyRequestSeqRef.current) {
           return;
@@ -430,7 +442,7 @@ export function OrdersPage() {
         }
       }
     },
-    [draftPatient, listPage, listQuery, statusFilter],
+    [draftPatient, historyDateRange, historyShiftFilter, listPage, listQuery, statusFilter],
   );
 
   useEffect(() => {
@@ -477,13 +489,15 @@ export function OrdersPage() {
     async function init() {
       setLoadingTests(true);
       try {
-        const [depts, tsts, settings] = await Promise.all([
+        const [depts, tsts, settings, shifts] = await Promise.all([
           getDepartments(),
           getTests(),
-          getLabSettings()
+          getLabSettings(),
+          getShifts().catch(() => []),
         ]);
         setDepartments(depts);
         setTestOptions(tsts);
+        setHistoryShiftOptions(shifts ?? []);
         const activeIds = new Set(tsts.filter((t) => t.isActive).map((t) => t.id));
         const validGroups = (settings.uiTestGroups || []).map(g => ({
           ...g,
@@ -501,6 +515,12 @@ export function OrdersPage() {
     }
     init();
   }, []);
+
+  useEffect(() => {
+    if (historyShiftFilter === 'ALL') return;
+    if (historyShiftOptions.some((shift) => shift.id === historyShiftFilter)) return;
+    setHistoryShiftFilter('ALL');
+  }, [historyShiftFilter, historyShiftOptions]);
 
   useEffect(() => {
     getLabSettings()
@@ -1196,6 +1216,21 @@ export function OrdersPage() {
       ? 'Select at least one test to create the order.'
       : undefined;
 
+  const handleHistoryDateRangeChange = (
+    dates: null | [dayjs.Dayjs | null, dayjs.Dayjs | null],
+  ) => {
+    if (!dates || !dates[0] || !dates[1]) return;
+    const start = dates[0].startOf('day');
+    const end = dates[1].startOf('day');
+    setHistoryDateRange([start, end]);
+    setListPage(1);
+  };
+
+  const handleHistoryShiftFilterChange = (value: string) => {
+    setHistoryShiftFilter(value);
+    setListPage(1);
+  };
+
   const handleApplyHistorySearch = () => {
     const nextQuery = listQueryInput.trim();
     if (listPage !== 1) {
@@ -1488,6 +1523,27 @@ export function OrdersPage() {
                     }}
                     disabled={historyRefreshing || patientBootstrapLoading}
                   />
+                  <RangePicker
+                    allowClear={false}
+                    value={historyDateRange}
+                    onChange={handleHistoryDateRangeChange}
+                    disabled={historyRefreshing || patientBootstrapLoading}
+                  />
+                  {historyShiftOptions.length > 0 ? (
+                    <Select<string>
+                      style={{ minWidth: 170 }}
+                      value={historyShiftFilter}
+                      options={[
+                        { label: 'All shifts', value: 'ALL' },
+                        ...historyShiftOptions.map((shift) => ({
+                          label: shift.name?.trim() || shift.code?.trim() || shift.id,
+                          value: shift.id,
+                        })),
+                      ]}
+                      onChange={handleHistoryShiftFilterChange}
+                      disabled={historyRefreshing || patientBootstrapLoading}
+                    />
+                  ) : null}
                   <Button
                     type="primary"
                     onClick={handleApplyHistorySearch}
@@ -1509,34 +1565,23 @@ export function OrdersPage() {
                     className={`order-history-scroll${isDark ? ' order-history-scroll-dark' : ''}`}
                   >
                     <div
+                      className="order-history-grid-row order-history-grid-header"
                       style={{
-                        padding: '4px 8px 6px',
+                        padding: '6px 8px',
                         borderBottom: styles.border,
                       }}
                     >
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <div style={{ width: 14 }} />
-                        <div
-                          style={{
-                            minWidth: 0,
-                            flex: 1,
-                            display: 'grid',
-                            gridTemplateColumns: orderHistoryGridTemplate,
-                            columnGap: 4,
-                          }}
-                        >
-                          <Text type="secondary" style={{ fontSize: 11, fontWeight: 600 }}>Patient</Text>
-                          <Text type="secondary" style={{ fontSize: 11, fontWeight: 600 }}>Status</Text>
-                          <Text type="secondary" style={{ fontSize: 11, fontWeight: 600 }}>Order</Text>
-                          <Text type="secondary" style={{ fontSize: 11, fontWeight: 600 }}>Shift</Text>
-                          <Text type="secondary" style={{ fontSize: 11, fontWeight: 600 }}>Time</Text>
-                        </div>
-                        <div style={{ width: 24 }} />
-                      </div>
+                      <Text type="secondary" className="order-history-header-text">Patient</Text>
+                      <Text type="secondary" className="order-history-header-text">Status</Text>
+                      <Text type="secondary" className="order-history-header-text">Order</Text>
+                      <Text type="secondary" className="order-history-header-text">Shift</Text>
+                      <Text type="secondary" className="order-history-header-text">Time</Text>
+                      <span aria-hidden="true" />
                     </div>
 
                     <List
                       size="small"
+                      className="order-history-list"
                       dataSource={patientList}
                       renderItem={(row) => {
                         const isLocked = row.createdOrder != null;
@@ -1551,153 +1596,71 @@ export function OrdersPage() {
                               padding: '6px 8px',
                               cursor: 'pointer',
                               backgroundColor: isSelected ? 'rgba(22, 119, 255, 0.08)' : undefined,
-                              borderLeft: isSelected ? '3px solid #1677ff' : undefined,
+                              boxShadow: isSelected ? 'inset 3px 0 0 #1677ff' : undefined,
                             }}
                             onClick={() => setSelectedRowId(row.rowId)}
                           >
-                            <div
-                              style={{
-                                width: '100%',
-                                display: 'flex',
-                                alignItems: 'flex-start',
-                                justifyContent: 'space-between',
-                                gap: 8,
-                              }}
-                            >
-                              <Space size={8} align="start" style={{ minWidth: 0, flex: 1 }}>
-                                <UserOutlined style={{ fontSize: 14, color: '#1677ff', marginTop: 2 }} />
-                                <div
-                                  style={{
-                                    minWidth: 0,
-                                    flex: 1,
-                                    display: 'grid',
-                                    gridTemplateColumns: orderHistoryGridTemplate,
-                                    alignItems: 'center',
-                                    columnGap: 4,
-                                  }}
-                                >
-                                  <Text
-                                    strong={isSelected}
-                                    style={{
-                                      fontSize: 13,
-                                      lineHeight: '16px',
-                                      wordBreak: 'break-word',
-                                      margin: 0,
-                                    }}
+                            <div className="order-history-grid-row order-history-grid-body">
+                              <div className="order-history-patient-cell">
+                                <UserOutlined style={{ fontSize: 14, color: '#1677ff' }} />
+                                <Text strong={isSelected} className="order-history-patient-name">
+                                  {name || '-'}
+                                </Text>
+                              </div>
+
+                              <div className="order-history-cell">
+                                {isLocked ? (
+                                  <Tag
+                                    color={ORDER_STATUS_TAG_COLORS[row.createdOrder?.status ?? 'REGISTERED']}
+                                    className="order-history-tag"
                                   >
-                                    {name || '-'}
+                                    {row.createdOrder?.status ?? 'REGISTERED'}
+                                  </Tag>
+                                ) : (
+                                  <Tag color="gold" icon={<PlusOutlined />} className="order-history-tag">
+                                    New
+                                  </Tag>
+                                )}
+                              </div>
+
+                              <Text type="secondary" className="order-history-value-text">
+                                {isLocked && row.createdOrder
+                                  ? (row.createdOrder.orderNumber || row.createdOrder.id.substring(0, 8))
+                                  : (nextOrderNumber ?? '-')}
+                              </Text>
+
+                              <div className="order-history-cell">
+                                {isLocked ? (
+                                  <Tag color={shiftTagColor ?? 'default'} className="order-history-tag">
+                                    {shiftLabel}
+                                  </Tag>
+                                ) : (
+                                  <Text type="secondary" className="order-history-value-text">
+                                    -
                                   </Text>
+                                )}
+                              </div>
 
-                                  {isLocked ? (
-                                    <Tag
-                                      color={ORDER_STATUS_TAG_COLORS[row.createdOrder?.status ?? 'REGISTERED']}
-                                      style={{
-                                        margin: 0,
-                                        fontSize: 10,
-                                        lineHeight: '14px',
-                                        paddingInline: 4,
-                                        maxWidth: '100%',
-                                        overflow: 'hidden',
-                                        textOverflow: 'ellipsis',
-                                        whiteSpace: 'nowrap',
-                                      }}
-                                    >
-                                      {row.createdOrder?.status ?? 'REGISTERED'}
-                                    </Tag>
-                                  ) : (
-                                    <Tag
-                                      color="gold"
-                                      icon={<PlusOutlined />}
-                                      style={{
-                                        margin: 0,
-                                        fontSize: 10,
-                                        lineHeight: '14px',
-                                        paddingInline: 4,
-                                        maxWidth: '100%',
-                                        overflow: 'hidden',
-                                        textOverflow: 'ellipsis',
-                                        whiteSpace: 'nowrap',
-                                      }}
-                                    >
-                                      New
-                                    </Tag>
-                                  )}
+                              <Text type="secondary" className="order-history-value-text">
+                                {isLocked && row.createdOrder
+                                  ? dayjs(row.createdOrder.registeredAt).format('YYYY-MM-DD HH:mm')
+                                  : '-'}
+                              </Text>
 
-                                  <Text
-                                    type="secondary"
-                                    style={{
-                                      fontSize: 10,
-                                      lineHeight: '14px',
-                                      whiteSpace: 'nowrap',
-                                      overflow: 'hidden',
-                                      textOverflow: 'ellipsis',
+                              <div className="order-history-action-cell">
+                                {!isLocked ? (
+                                  <Button
+                                    type="text"
+                                    danger
+                                    size="small"
+                                    icon={<DeleteOutlined />}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      removePatientFromList(row.rowId);
                                     }}
-                                  >
-                                    {isLocked && row.createdOrder
-                                      ? (row.createdOrder.orderNumber || row.createdOrder.id.substring(0, 8))
-                                      : (nextOrderNumber ?? '-')}
-                                  </Text>
-
-                                  {isLocked ? (
-                                    <Tag
-                                      color={shiftTagColor ?? 'default'}
-                                      style={{
-                                        margin: 0,
-                                        fontSize: 10,
-                                        lineHeight: '14px',
-                                        paddingInline: 4,
-                                        maxWidth: '100%',
-                                        overflow: 'hidden',
-                                        textOverflow: 'ellipsis',
-                                        whiteSpace: 'nowrap',
-                                      }}
-                                    >
-                                      {shiftLabel}
-                                    </Tag>
-                                  ) : (
-                                    <Text
-                                      type="secondary"
-                                      style={{
-                                        fontSize: 10,
-                                        lineHeight: '14px',
-                                        whiteSpace: 'nowrap',
-                                        overflow: 'hidden',
-                                        textOverflow: 'ellipsis',
-                                      }}
-                                    >
-                                      -
-                                    </Text>
-                                  )}
-
-                                  <Text
-                                    type="secondary"
-                                    style={{
-                                      fontSize: 10,
-                                      lineHeight: '14px',
-                                      whiteSpace: 'nowrap',
-                                      overflow: 'hidden',
-                                      textOverflow: 'ellipsis',
-                                    }}
-                                  >
-                                    {isLocked && row.createdOrder
-                                      ? dayjs(row.createdOrder.registeredAt).format('YYYY-MM-DD HH:mm')
-                                      : '-'}
-                                  </Text>
-                                </div>
-                              </Space>
-
-                              {!isLocked ? (
-                                <Button
-                                  type="text"
-                                  danger
-                                  size="small"
-                                  icon={<DeleteOutlined />}
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    removePatientFromList(row.rowId);
-                                  }}
-                                />
-                              ) : null}
+                                  />
+                                ) : null}
+                              </div>
                             </div>
                           </List.Item>
                         );

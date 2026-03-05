@@ -86,6 +86,9 @@ export class Order {
   @Column({ type: 'timestamp', default: () => 'CURRENT_TIMESTAMP' })
   registeredAt: Date;
 
+  @Column({ type: 'simple-array', nullable: true })
+  deliveryMethods: string[];
+
   @CreateDateColumn()
   createdAt: Date;
 
