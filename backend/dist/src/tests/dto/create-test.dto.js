@@ -210,10 +210,19 @@ __decorate([
 ], CreateTestDto.prototype, "normalMaxFemale", void 0);
 __decorate([
     (0, class_validator_1.IsString)(),
-    (0, class_validator_1.MaxLength)(255),
     (0, class_validator_1.IsOptional)(),
     __metadata("design:type", String)
 ], CreateTestDto.prototype, "normalText", void 0);
+__decorate([
+    (0, class_validator_1.IsString)(),
+    (0, class_validator_1.IsOptional)(),
+    __metadata("design:type", String)
+], CreateTestDto.prototype, "normalTextMale", void 0);
+__decorate([
+    (0, class_validator_1.IsString)(),
+    (0, class_validator_1.IsOptional)(),
+    __metadata("design:type", String)
+], CreateTestDto.prototype, "normalTextFemale", void 0);
 __decorate([
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsIn)(exports.TEST_RESULT_ENTRY_TYPES),

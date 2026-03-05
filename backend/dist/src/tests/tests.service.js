@@ -72,7 +72,9 @@ let TestsService = class TestsService {
             normalMaxMale: dto.normalMaxMale ?? null,
             normalMinFemale: dto.normalMinFemale ?? null,
             normalMaxFemale: dto.normalMaxFemale ?? null,
-            normalText: dto.normalText?.trim() || null,
+            normalText: this.toNullableRawText(dto.normalText),
+            normalTextMale: this.toNullableRawText(dto.normalTextMale),
+            normalTextFemale: this.toNullableRawText(dto.normalTextFemale),
             resultEntryType,
             resultTextOptions,
             allowCustomResultText,
@@ -123,7 +125,11 @@ let TestsService = class TestsService {
         if (dto.normalMaxFemale !== undefined)
             test.normalMaxFemale = dto.normalMaxFemale;
         if (dto.normalText !== undefined)
-            test.normalText = dto.normalText?.trim() || null;
+            test.normalText = this.toNullableRawText(dto.normalText);
+        if (dto.normalTextMale !== undefined)
+            test.normalTextMale = this.toNullableRawText(dto.normalTextMale);
+        if (dto.normalTextFemale !== undefined)
+            test.normalTextFemale = this.toNullableRawText(dto.normalTextFemale);
         if (dto.numericAgeRanges !== undefined) {
             test.numericAgeRanges = this.normalizeNumericAgeRanges(dto.numericAgeRanges);
         }
@@ -217,6 +223,11 @@ let TestsService = class TestsService {
             return maxA - maxB;
         });
         return normalized;
+    }
+    toNullableRawText(value) {
+        if (value === null || value === undefined)
+            return null;
+        return value.length > 0 ? value : null;
     }
     normalizeResultEntryType(value) {
         const normalized = (value || 'NUMERIC').toUpperCase();

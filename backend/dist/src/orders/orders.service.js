@@ -1251,6 +1251,8 @@ let OrdersService = OrdersService_1 = class OrdersService {
                 delete testPayload.normalMinFemale;
                 delete testPayload.normalMaxFemale;
                 delete testPayload.normalText;
+                delete testPayload.normalTextMale;
+                delete testPayload.normalTextFemale;
                 delete testPayload.resultEntryType;
                 delete testPayload.resultTextOptions;
                 delete testPayload.allowCustomResultText;

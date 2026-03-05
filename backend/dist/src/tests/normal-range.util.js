@@ -1,6 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.normalizePatientSex = normalizePatientSex;
+exports.resolveNormalText = resolveNormalText;
 exports.resolveNumericRange = resolveNumericRange;
 function toNullableNumber(value) {
     if (value === null || value === undefined || value === '')
@@ -22,6 +23,25 @@ function normalizePatientSex(value) {
     if (upper === 'F' || upper === 'FEMALE')
         return 'F';
     return null;
+}
+function toNonEmptyText(value) {
+    if (value === null || value === undefined)
+        return null;
+    return value.length > 0 ? value : null;
+}
+function resolveNormalText(test, patientSexRaw) {
+    const patientSex = normalizePatientSex(patientSexRaw);
+    if (patientSex === 'M') {
+        const maleText = toNonEmptyText(test.normalTextMale);
+        if (maleText !== null)
+            return maleText;
+    }
+    if (patientSex === 'F') {
+        const femaleText = toNonEmptyText(test.normalTextFemale);
+        if (femaleText !== null)
+            return femaleText;
+    }
+    return toNonEmptyText(test.normalText);
 }
 function normalizeAgeRange(range) {
     const sex = (range.sex || 'ANY').toUpperCase();

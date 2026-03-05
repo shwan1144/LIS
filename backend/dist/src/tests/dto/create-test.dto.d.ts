@@ -42,6 +42,8 @@ export declare class CreateTestDto {
     normalMinFemale?: number;
     normalMaxFemale?: number;
     normalText?: string;
+    normalTextMale?: string;
+    normalTextFemale?: string;
     resultEntryType?: (typeof TEST_RESULT_ENTRY_TYPES)[number];
     resultTextOptions?: TestResultTextOptionDto[] | null;
     panelComponents?: TestPanelComponentDto[] | null;

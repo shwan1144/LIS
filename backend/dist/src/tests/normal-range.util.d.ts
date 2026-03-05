@@ -9,11 +9,17 @@ export interface NumericRangeCarrier {
     normalMaxFemale: NumericLike;
     numericAgeRanges?: TestNumericAgeRange[] | null;
 }
+export interface TextRangeCarrier {
+    normalText?: string | null;
+    normalTextMale?: string | null;
+    normalTextFemale?: string | null;
+}
 export interface ResolvedNumericRange {
     normalMin: number | null;
     normalMax: number | null;
     source: 'age' | 'sex' | 'general' | 'none';
 }
 export declare function normalizePatientSex(value: string | null | undefined): 'M' | 'F' | null;
+export declare function resolveNormalText(test: TextRangeCarrier, patientSexRaw: string | null | undefined): string | null;
 export declare function resolveNumericRange(test: NumericRangeCarrier, patientSexRaw: string | null | undefined, patientAgeYears: number | null): ResolvedNumericRange;
 export {};

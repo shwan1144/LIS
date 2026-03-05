@@ -116,9 +116,17 @@ __decorate([
     __metadata("design:type", Object)
 ], Test.prototype, "normalMaxFemale", void 0);
 __decorate([
-    (0, typeorm_1.Column)({ type: 'varchar', length: 255, nullable: true }),
+    (0, typeorm_1.Column)({ type: 'text', nullable: true }),
     __metadata("design:type", Object)
 ], Test.prototype, "normalText", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ type: 'text', nullable: true }),
+    __metadata("design:type", Object)
+], Test.prototype, "normalTextMale", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ type: 'text', nullable: true }),
+    __metadata("design:type", Object)
+], Test.prototype, "normalTextFemale", void 0);
 __decorate([
     (0, typeorm_1.Column)({ type: 'varchar', length: 16, default: 'NUMERIC' }),
     __metadata("design:type", String)

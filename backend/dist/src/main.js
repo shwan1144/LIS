@@ -119,6 +119,22 @@ async function ensureReportBrandingColumns(dataSource) {
         'ALTER TABLE IF EXISTS "tests" ADD COLUMN IF NOT EXISTS "resultTextOptions" jsonb',
         'ALTER TABLE IF EXISTS "tests" ADD COLUMN IF NOT EXISTS "allowCustomResultText" boolean NOT NULL DEFAULT false',
         'ALTER TABLE IF EXISTS "tests" ADD COLUMN IF NOT EXISTS "abbreviation" varchar(32)',
+        'ALTER TABLE IF EXISTS "tests" ADD COLUMN IF NOT EXISTS "normalTextMale" text',
+        'ALTER TABLE IF EXISTS "tests" ADD COLUMN IF NOT EXISTS "normalTextFemale" text',
+        `
+      DO $$
+      BEGIN
+        IF EXISTS (
+          SELECT 1
+          FROM information_schema.columns
+          WHERE table_schema = 'public'
+            AND table_name = 'tests'
+            AND column_name = 'normalText'
+        ) THEN
+          ALTER TABLE "tests" ALTER COLUMN "normalText" TYPE text;
+        END IF;
+      END $$;
+    `,
         `
       DO $$
       DECLARE

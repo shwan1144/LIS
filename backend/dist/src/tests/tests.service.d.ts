@@ -19,6 +19,7 @@ export declare class TestsService {
     create(labId: string, dto: CreateTestDto): Promise<Test>;
     update(id: string, labId: string, dto: UpdateTestDto): Promise<Test>;
     private normalizeNumericAgeRanges;
+    private toNullableRawText;
     private normalizeResultEntryType;
     private normalizeResultTextOptions;
     private normalizeResultFlag;

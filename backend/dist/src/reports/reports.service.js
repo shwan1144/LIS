@@ -50,8 +50,9 @@ function computeAgeYears(dateOfBirth) {
 }
 function getNormalRange(test, sex, ageYears) {
     const { normalMin: min, normalMax: max } = (0, normal_range_util_1.resolveNumericRange)(test, sex, ageYears);
-    if (test.normalText?.trim())
-        return test.normalText.trim();
+    const resolvedText = (0, normal_range_util_1.resolveNormalText)(test, sex);
+    if (resolvedText !== null)
+        return resolvedText;
     if (min != null && max != null)
         return `${min}-${max}`;
     if (min != null)
@@ -161,6 +162,47 @@ function resolveReadablePath(candidates) {
     }
     return null;
 }
+function stableJsonStringify(value) {
+    const seen = new WeakSet();
+    const normalize = (input) => {
+        if (input === null || typeof input !== 'object') {
+            return input;
+        }
+        if (input instanceof Date) {
+            return input.toISOString();
+        }
+        if (Array.isArray(input)) {
+            return input.map((item) => normalize(item));
+        }
+        if (seen.has(input)) {
+            return '[Circular]';
+        }
+        seen.add(input);
+        const source = input;
+        const normalized = {};
+        for (const key of Object.keys(source).sort()) {
+            normalized[key] = normalize(source[key]);
+        }
+        return normalized;
+    };
+    try {
+        return JSON.stringify(normalize(value));
+    }
+    catch {
+        return '';
+    }
+}
+function buildLabReportDesignFingerprint(lab) {
+    const reportLab = (lab ?? {});
+    const rawDesignPayload = [
+        reportLab.reportBannerDataUrl ?? '',
+        reportLab.reportFooterDataUrl ?? '',
+        reportLab.reportLogoDataUrl ?? '',
+        reportLab.reportWatermarkDataUrl ?? '',
+        stableJsonStringify(reportLab.reportStyle ?? null),
+    ].join('::');
+    return (0, crypto_1.createHash)('sha1').update(rawDesignPayload).digest('hex');
+}
 let ReportsService = ReportsService_1 = class ReportsService {
     constructor(orderRepo, orderTestRepo, patientRepo, labRepo, userRepo, auditLogRepo) {
         this.orderRepo = orderRepo;
@@ -255,12 +297,14 @@ let ReportsService = ReportsService_1 = class ReportsService {
         })
             .sort()
             .join('|');
+        const reportDesignFingerprint = buildLabReportDesignFingerprint(input.order.lab);
         const rawKey = [
             input.labId,
             input.order.id,
             input.order.paymentStatus,
             input.order.updatedAt ? new Date(input.order.updatedAt).toISOString() : '-',
             input.order.lab?.updatedAt ? new Date(input.order.lab.updatedAt).toISOString() : '-',
+            reportDesignFingerprint,
             input.latestVerifiedAt ? new Date(input.latestVerifiedAt).toISOString() : '-',
             input.bypassPaymentCheck ? 'bypass' : 'strict',
             String(input.reportableOrderTests.length),

@@ -52,8 +52,9 @@ function formatRange(ot, patientSex, patientAgeYears) {
     if (!test)
         return '-';
     const { normalMin: min, normalMax: max } = (0, normal_range_util_1.resolveNumericRange)(test, patientSex, patientAgeYears);
-    if (test.normalText)
-        return String(test.normalText);
+    const resolvedText = (0, normal_range_util_1.resolveNormalText)(test, patientSex);
+    if (resolvedText !== null)
+        return resolvedText;
     if (min != null && max != null)
         return `${min}-${max}`;
     if (min != null)
@@ -309,7 +310,7 @@ function buildResultsReportHtml(input) {
             <td style="width:14%;" class="nowrap">${escapeHtml(formatResultValue(child))}</td>
             <td style="width:14%;" class="nowrap">${escapeHtml(ct?.unit || '-')}</td>
             <td style="width:14%;" class="${statusClass}">${escapeHtml(statusText)}</td>
-            <td style="width:30%;" class="nowrap reference-value">${escapeHtml(formatRange(child, order.patient?.sex ?? null, age))}</td>
+            <td style="width:30%;" class="reference-value">${escapeHtml(formatRange(child, order.patient?.sex ?? null, age))}</td>
           </tr>`;
             })
                 .join('');
@@ -377,7 +378,7 @@ function buildResultsReportHtml(input) {
             <td style="width:14%;" class="nowrap">${escapeHtml(formatResultValue(ot))}</td>
             <td style="width:14%;" class="nowrap">${escapeHtml(t?.unit || '-')}</td>
             <td style="width:14%;" class="${statusClass}">${escapeHtml(statusText)}</td>
-            <td style="width:30%;" class="nowrap reference-value">${escapeHtml(formatRange(ot, order.patient?.sex ?? null, age))}</td>
+            <td style="width:30%;" class="reference-value">${escapeHtml(formatRange(ot, order.patient?.sex ?? null, age))}</td>
           </tr>`;
                 })
                     .join('');
@@ -602,7 +603,7 @@ function buildResultsReportHtml(input) {
     .status-low { color: var(--results-status-low-color); font-weight: 700; }
     .status-high { color: var(--results-status-high-color); font-weight: 700; }
     .status-normal { color: var(--results-status-normal-color); }
-    .reference-value { color: var(--results-reference-color); }
+    .reference-value { color: var(--results-reference-color); white-space: pre-wrap; word-break: break-word; }
     .param-abnormal { color: #c00; font-size: 11px; font-weight: 600; margin-left: 4px; }
     tr.abnormal td { background-color: var(--results-abnormal-row-bg); }
     .panel-section { margin-top: 20px; }

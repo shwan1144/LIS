@@ -333,10 +333,6 @@ export function TestsPage() {
         category: fullTest.category || undefined,
         normalMin: toNumberOrUndefined(fullTest.normalMin),
         normalMax: toNumberOrUndefined(fullTest.normalMax),
-        normalMinMale: toNumberOrUndefined(fullTest.normalMinMale),
-        normalMaxMale: toNumberOrUndefined(fullTest.normalMaxMale),
-        normalMinFemale: toNumberOrUndefined(fullTest.normalMinFemale),
-        normalMaxFemale: toNumberOrUndefined(fullTest.normalMaxFemale),
         numericAgeRanges: (fullTest.numericAgeRanges ?? []).map((range) => ({
           sex: range.sex ?? 'ANY',
           minAgeYears: toNumberOrUndefined(range.minAgeYears),
@@ -536,20 +532,16 @@ export function TestsPage() {
 
     const normalizedNormalMin = toNumberOrNull(values.normalMin);
     const normalizedNormalMax = toNumberOrNull(values.normalMax);
-    const normalizedNormalMinMale = toNumberOrNull(values.normalMinMale);
-    const normalizedNormalMaxMale = toNumberOrNull(values.normalMaxMale);
-    const normalizedNormalMinFemale = toNumberOrNull(values.normalMinFemale);
-    const normalizedNormalMaxFemale = toNumberOrNull(values.normalMaxFemale);
     const normalizedSortOrder = toNumberOrUndefined(values.sortOrder);
     const normalizedExpectedCompletionMinutes = toNumberOrNull(values.expectedCompletionMinutes);
     const payload: CreateTestDto = {
       ...values,
       normalMin: normalizedNormalMin,
       normalMax: normalizedNormalMax,
-      normalMinMale: normalizedNormalMinMale,
-      normalMaxMale: normalizedNormalMaxMale,
-      normalMinFemale: normalizedNormalMinFemale,
-      normalMaxFemale: normalizedNormalMaxFemale,
+      normalMinMale: null,
+      normalMaxMale: null,
+      normalMinFemale: null,
+      normalMaxFemale: null,
       sortOrder: normalizedSortOrder,
       expectedCompletionMinutes: normalizedExpectedCompletionMinutes,
       category: categoryValue ? categoryValue.trim() || null : null,
@@ -1223,9 +1215,9 @@ export function TestsPage() {
                               <Col span={12}>
                                 <Form.Item name="normalTextMale" label="Normal Text (Male)">
                                   <Input.TextArea
-                                    rows={4}
-                                    autoSize={{ minRows: 3, maxRows: 8 }}
-                                    style={{ maxHeight: 170, overflowY: 'auto' }}
+                                    rows={6}
+                                    autoSize={{ minRows: 6, maxRows: 12 }}
+                                    style={{ maxHeight: 260, overflowY: 'auto' }}
                                     placeholder='e.g., "Adult male: 13.5 - 17.5 g/dL"'
                                   />
                                 </Form.Item>
@@ -1233,9 +1225,9 @@ export function TestsPage() {
                               <Col span={12}>
                                 <Form.Item name="normalTextFemale" label="Normal Text (Female)">
                                   <Input.TextArea
-                                    rows={4}
-                                    autoSize={{ minRows: 3, maxRows: 8 }}
-                                    style={{ maxHeight: 170, overflowY: 'auto' }}
+                                    rows={6}
+                                    autoSize={{ minRows: 6, maxRows: 12 }}
+                                    style={{ maxHeight: 260, overflowY: 'auto' }}
                                     placeholder='e.g., "Adult female: 12.0 - 16.0 g/dL"'
                                   />
                                 </Form.Item>

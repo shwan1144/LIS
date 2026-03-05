@@ -58,6 +58,8 @@ export declare class Test {
     normalMinFemale: number | null;
     normalMaxFemale: number | null;
     normalText: string | null;
+    normalTextMale: string | null;
+    normalTextFemale: string | null;
     resultEntryType: TestResultEntryType;
     resultTextOptions: TestResultTextOption[] | null;
     allowCustomResultText: boolean;
