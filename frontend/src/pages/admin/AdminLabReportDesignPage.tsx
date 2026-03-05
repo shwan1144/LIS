@@ -75,7 +75,7 @@ const IMAGE_SETTINGS: ImageSettingMeta[] = [
 ];
 
 const ALLOWED_MIME_TYPES = new Set(['image/png', 'image/jpeg', 'image/jpg', 'image/webp']);
-const MAX_UPLOAD_INPUT_BYTES = 50 * 1024 * 1024;
+const MAX_UPLOAD_INPUT_BYTES = 12 * 1024 * 1024;
 const ONLINE_WATERMARK_MAX_BYTES = 2 * 1024 * 1024;
 const ALIGN_OPTIONS = [
   { label: 'Left', value: 'left' },
