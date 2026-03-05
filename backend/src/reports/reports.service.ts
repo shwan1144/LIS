@@ -15,6 +15,7 @@ import { User } from '../entities/user.entity';
 import { AuditAction, AuditLog } from '../entities/audit-log.entity';
 import { TestType, type Test } from '../entities/test.entity';
 import { buildResultsReportHtml } from './html/results-report.template';
+import { buildReportDesignFingerprint } from './report-design-fingerprint.util';
 import type { Browser } from 'playwright';
 import { resolveNormalText, resolveNumericRange } from '../tests/normal-range.util';
 
@@ -222,38 +223,6 @@ function resolveReadablePath(candidates: string[]): string | null {
   return null;
 }
 
-function stableJsonStringify(value: unknown): string {
-  const seen = new WeakSet<object>();
-  const normalize = (input: unknown): unknown => {
-    if (input === null || typeof input !== 'object') {
-      return input;
-    }
-    if (input instanceof Date) {
-      return input.toISOString();
-    }
-    if (Array.isArray(input)) {
-      return input.map((item) => normalize(item));
-    }
-    if (seen.has(input as object)) {
-      return '[Circular]';
-    }
-    seen.add(input as object);
-
-    const source = input as Record<string, unknown>;
-    const normalized: Record<string, unknown> = {};
-    for (const key of Object.keys(source).sort()) {
-      normalized[key] = normalize(source[key]);
-    }
-    return normalized;
-  };
-
-  try {
-    return JSON.stringify(normalize(value));
-  } catch {
-    return '';
-  }
-}
-
 function buildLabReportDesignFingerprint(lab: unknown): string {
   const reportLab = (lab ?? {}) as {
     reportBannerDataUrl?: string | null;
@@ -262,16 +231,15 @@ function buildLabReportDesignFingerprint(lab: unknown): string {
     reportWatermarkDataUrl?: string | null;
     reportStyle?: unknown;
   };
-
-  const rawDesignPayload = [
-    reportLab.reportBannerDataUrl ?? '',
-    reportLab.reportFooterDataUrl ?? '',
-    reportLab.reportLogoDataUrl ?? '',
-    reportLab.reportWatermarkDataUrl ?? '',
-    stableJsonStringify(reportLab.reportStyle ?? null),
-  ].join('::');
-
-  return createHash('sha1').update(rawDesignPayload).digest('hex');
+  return buildReportDesignFingerprint({
+    reportBranding: {
+      bannerDataUrl: reportLab.reportBannerDataUrl ?? null,
+      footerDataUrl: reportLab.reportFooterDataUrl ?? null,
+      logoDataUrl: reportLab.reportLogoDataUrl ?? null,
+      watermarkDataUrl: reportLab.reportWatermarkDataUrl ?? null,
+    },
+    reportStyle: reportLab.reportStyle ?? null,
+  });
 }
 
 @Injectable()

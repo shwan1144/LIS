@@ -29,6 +29,7 @@ const user_entity_1 = require("../entities/user.entity");
 const audit_log_entity_1 = require("../entities/audit-log.entity");
 const test_entity_1 = require("../entities/test.entity");
 const results_report_template_1 = require("./html/results-report.template");
+const report_design_fingerprint_util_1 = require("./report-design-fingerprint.util");
 const normal_range_util_1 = require("../tests/normal-range.util");
 const REPORT_BANNER_WIDTH = 2480;
 const REPORT_BANNER_HEIGHT = 220;
@@ -162,46 +163,17 @@ function resolveReadablePath(candidates) {
     }
     return null;
 }
-function stableJsonStringify(value) {
-    const seen = new WeakSet();
-    const normalize = (input) => {
-        if (input === null || typeof input !== 'object') {
-            return input;
-        }
-        if (input instanceof Date) {
-            return input.toISOString();
-        }
-        if (Array.isArray(input)) {
-            return input.map((item) => normalize(item));
-        }
-        if (seen.has(input)) {
-            return '[Circular]';
-        }
-        seen.add(input);
-        const source = input;
-        const normalized = {};
-        for (const key of Object.keys(source).sort()) {
-            normalized[key] = normalize(source[key]);
-        }
-        return normalized;
-    };
-    try {
-        return JSON.stringify(normalize(value));
-    }
-    catch {
-        return '';
-    }
-}
 function buildLabReportDesignFingerprint(lab) {
     const reportLab = (lab ?? {});
-    const rawDesignPayload = [
-        reportLab.reportBannerDataUrl ?? '',
-        reportLab.reportFooterDataUrl ?? '',
-        reportLab.reportLogoDataUrl ?? '',
-        reportLab.reportWatermarkDataUrl ?? '',
-        stableJsonStringify(reportLab.reportStyle ?? null),
-    ].join('::');
-    return (0, crypto_1.createHash)('sha1').update(rawDesignPayload).digest('hex');
+    return (0, report_design_fingerprint_util_1.buildReportDesignFingerprint)({
+        reportBranding: {
+            bannerDataUrl: reportLab.reportBannerDataUrl ?? null,
+            footerDataUrl: reportLab.reportFooterDataUrl ?? null,
+            logoDataUrl: reportLab.reportLogoDataUrl ?? null,
+            watermarkDataUrl: reportLab.reportWatermarkDataUrl ?? null,
+        },
+        reportStyle: reportLab.reportStyle ?? null,
+    });
 }
 let ReportsService = ReportsService_1 = class ReportsService {
     constructor(orderRepo, orderTestRepo, patientRepo, labRepo, userRepo, auditLogRepo) {

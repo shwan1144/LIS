@@ -56,6 +56,7 @@ export declare class SettingsService {
             watermarkDataUrl: string | null;
         };
         reportStyle: ReportStyleConfig | null;
+        reportDesignFingerprint: string;
         uiTestGroups: {
             id: string;
             name: string;
@@ -96,6 +97,7 @@ export declare class SettingsService {
             watermarkDataUrl: string | null;
         };
         reportStyle: ReportStyleConfig | null;
+        reportDesignFingerprint: string;
         uiTestGroups: {
             id: string;
             name: string;

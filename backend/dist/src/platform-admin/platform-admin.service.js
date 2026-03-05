@@ -8,6 +8,7 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
 var __metadata = (this && this.__metadata) || function (k, v) {
     if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
 };
+var PlatformAdminService_1;
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.PlatformAdminService = void 0;
 const common_1 = require("@nestjs/common");
@@ -25,7 +26,7 @@ const reports_service_1 = require("../reports/reports.service");
 const typeorm_1 = require("typeorm");
 const admin_auth_service_1 = require("../admin-auth/admin-auth.service");
 const auth_service_1 = require("../auth/auth.service");
-let PlatformAdminService = class PlatformAdminService {
+let PlatformAdminService = PlatformAdminService_1 = class PlatformAdminService {
     constructor(rlsSessionService, settingsService, auditService, reportsService, adminAuthService, authService) {
         this.rlsSessionService = rlsSessionService;
         this.settingsService = settingsService;
@@ -33,6 +34,7 @@ let PlatformAdminService = class PlatformAdminService {
         this.reportsService = reportsService;
         this.adminAuthService = adminAuthService;
         this.authService = authService;
+        this.logger = new common_1.Logger(PlatformAdminService_1.name);
     }
     async listLabs() {
         return this.rlsSessionService.withPlatformAdminContext(async (manager) => {
@@ -1007,7 +1009,13 @@ let PlatformAdminService = class PlatformAdminService {
         return settings;
     }
     async updateLabSettings(labId, data) {
-        return this.settingsService.updateLabSettings(labId, data);
+        const settings = await this.settingsService.updateLabSettings(labId, data);
+        this.logger.log(JSON.stringify({
+            event: 'admin.lab_settings.update',
+            labId,
+            reportDesignFingerprint: settings.reportDesignFingerprint ?? null,
+        }));
+        return settings;
     }
     async getLabUsers(labId, actor) {
         const users = await this.settingsService.getUsersForLab(labId);
@@ -1335,7 +1343,7 @@ let PlatformAdminService = class PlatformAdminService {
     }
 };
 exports.PlatformAdminService = PlatformAdminService;
-exports.PlatformAdminService = PlatformAdminService = __decorate([
+exports.PlatformAdminService = PlatformAdminService = PlatformAdminService_1 = __decorate([
     (0, common_1.Injectable)(),
     __metadata("design:paramtypes", [rls_session_service_1.RlsSessionService,
         settings_service_1.SettingsService,

@@ -159,6 +159,7 @@ export declare class PlatformAdminService {
     private readonly reportsService;
     private readonly adminAuthService;
     private readonly authService;
+    private readonly logger;
     constructor(rlsSessionService: RlsSessionService, settingsService: SettingsService, auditService: AuditService, reportsService: ReportsService, adminAuthService: AdminAuthService, authService: AuthService);
     listLabs(): Promise<AdminLabListItem[]>;
     listLabsPaged(params: {
@@ -295,6 +296,7 @@ export declare class PlatformAdminService {
             watermarkDataUrl: string | null;
         };
         reportStyle: ReportStyleConfig | null;
+        reportDesignFingerprint: string;
         uiTestGroups: {
             id: string;
             name: string;
@@ -344,6 +346,7 @@ export declare class PlatformAdminService {
             watermarkDataUrl: string | null;
         };
         reportStyle: ReportStyleConfig | null;
+        reportDesignFingerprint: string;
         uiTestGroups: {
             id: string;
             name: string;

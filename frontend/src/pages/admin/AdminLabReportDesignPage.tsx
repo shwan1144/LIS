@@ -29,7 +29,6 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useAdminLabSelection } from './useAdminLabSelection';
 
 const { Title, Text } = Typography;
-const REPORT_DESIGN_VERSION_STORAGE_KEY = 'lis_report_design_version';
 const MAX_BANNER_FOOTER_BYTES = Math.floor(2.75 * 1024 * 1024);
 const MIN_REPORT_BANNER_WIDTH = 2400;
 const MIN_REPORT_BANNER_HEIGHT = 600;
@@ -418,6 +417,16 @@ export function AdminLabReportDesignPage() {
     }
     setSaving(true);
     try {
+      const expectedBranding = {
+        bannerDataUrl: branding.bannerDataUrl ?? null,
+        footerDataUrl: branding.footerDataUrl ?? null,
+        logoDataUrl: branding.logoDataUrl ?? null,
+        watermarkDataUrl: branding.watermarkDataUrl ?? null,
+      };
+      const expectedReportStyle = cloneReportStyle(reportStyle);
+      const expectedWatermarkDataUrl = onlineResultWatermarkDataUrl ?? null;
+      const expectedWatermarkText = onlineResultWatermarkText.trim();
+
       const updated = await updateAdminLabSettings(selectedLabId, {
         reportBranding: branding,
         reportStyle,
@@ -438,15 +447,21 @@ export function AdminLabReportDesignPage() {
         onlineResultWatermarkDataUrl: nextWatermarkDataUrl,
         onlineResultWatermarkText: nextWatermarkText,
       });
-      try {
-        window.localStorage.setItem(
-          REPORT_DESIGN_VERSION_STORAGE_KEY,
-          `${selectedLabId}:${Date.now()}`,
-        );
-      } catch {
-        // Ignore local storage errors.
+
+      const serverDidNotPersist =
+        JSON.stringify(nextBranding) !== JSON.stringify(expectedBranding) ||
+        JSON.stringify(nextReportStyle) !== JSON.stringify(expectedReportStyle) ||
+        nextWatermarkDataUrl !== expectedWatermarkDataUrl ||
+        nextWatermarkText !== expectedWatermarkText;
+
+      if (serverDidNotPersist) {
+        message.error('Server did not persist report design; settings reloaded from server.');
+      } else {
+        const labLabel = selectedLab
+          ? `${selectedLab.name} (${selectedLab.code})`
+          : selectedLabId;
+        message.success(`Report design saved for ${labLabel}`);
       }
-      message.success('Report design settings saved');
     } catch (error) {
       message.error(getErrorMessage(error) || 'Failed to save report design settings');
     } finally {

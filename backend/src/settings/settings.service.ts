@@ -19,6 +19,7 @@ import {
   resolveReportStyleConfig,
   validateAndNormalizeReportStyleConfig,
 } from '../reports/report-style.config';
+import { buildReportDesignFingerprint } from '../reports/report-design-fingerprint.util';
 
 const ROLES = ['SUPER_ADMIN', 'LAB_ADMIN', 'RECEPTION', 'TECHNICIAN', 'VERIFIER', 'DOCTOR', 'INSTRUMENT_SERVICE'];
 const MAX_REPORT_IMAGE_DATA_URL_LENGTH = 4 * 1024 * 1024;
@@ -70,6 +71,18 @@ export class SettingsService {
   async getLabSettings(labId: string) {
     const lab = await this.labRepo.findOne({ where: { id: labId } });
     if (!lab) throw new NotFoundException('Lab not found');
+    const reportBranding = {
+      bannerDataUrl: lab.reportBannerDataUrl ?? null,
+      footerDataUrl: lab.reportFooterDataUrl ?? null,
+      logoDataUrl: lab.reportLogoDataUrl ?? null,
+      watermarkDataUrl: lab.reportWatermarkDataUrl ?? null,
+    };
+    const reportStyle = lab.reportStyle ? resolveReportStyleConfig(lab.reportStyle) : null;
+    const reportDesignFingerprint = buildReportDesignFingerprint({
+      reportBranding,
+      reportStyle,
+    });
+
     return {
       id: lab.id,
       code: lab.code,
@@ -85,13 +98,9 @@ export class SettingsService {
         labelsPrinterName: lab.labelsPrinterName ?? null,
         reportPrinterName: lab.reportPrinterName ?? null,
       },
-      reportBranding: {
-        bannerDataUrl: lab.reportBannerDataUrl ?? null,
-        footerDataUrl: lab.reportFooterDataUrl ?? null,
-        logoDataUrl: lab.reportLogoDataUrl ?? null,
-        watermarkDataUrl: lab.reportWatermarkDataUrl ?? null,
-      },
-      reportStyle: lab.reportStyle ? resolveReportStyleConfig(lab.reportStyle) : null,
+      reportBranding,
+      reportStyle,
+      reportDesignFingerprint,
       uiTestGroups: lab.uiTestGroups ?? [],
       referringDoctors: this.normalizeReferringDoctorsForRead(lab.referringDoctors),
     };

@@ -69,7 +69,7 @@ const { Title, Text } = Typography;
 const { useBreakpoint } = Grid;
 const REPORT_PDF_CACHE_TTL_MS = 30 * 60 * 1000;
 const REPORT_PDF_CACHE_MAX_ENTRIES = 40;
-const REPORT_DESIGN_VERSION_STORAGE_KEY = 'lis_report_design_version';
+const REPORT_DESIGN_FINGERPRINT_STALE_MS = 60 * 1000;
 
 type EditResultMode = 'SINGLE' | 'PANEL';
 type ReportStatusFilter = 'COMPLETED' | 'UNVERIFIED' | 'PENDING' | 'REJECTED';
@@ -78,7 +78,7 @@ type ResultsPdfCacheEntry = {
   blob: Blob;
   cachedAt: number;
   lastAccessedAt: number;
-  designVersion: string;
+  reportDesignFingerprint: string;
 };
 
 const REPORT_STATUS_TO_RESULT_STATUS: Record<ReportStatusFilter, OrderResultStatus> = {
@@ -94,14 +94,6 @@ const ACTION_FLAG_FIELD_MAP: Record<ReportActionKind, ReportActionFlagField> = {
   WHATSAPP: 'whatsapp',
   VIBER: 'viber',
 };
-
-function getReportDesignVersion(): string {
-  try {
-    return window.localStorage.getItem(REPORT_DESIGN_VERSION_STORAGE_KEY) || '0';
-  } catch {
-    return '0';
-  }
-}
 
 type EditResultContext = {
   editMode: EditResultMode;
@@ -497,6 +489,11 @@ export function ReportsPage() {
   const [markingPaid, setMarkingPaid] = useState(false);
   const resultsPdfCacheRef = useRef<Record<string, ResultsPdfCacheEntry>>({});
   const resultsPdfInFlightRef = useRef<Record<string, Promise<Blob>>>({});
+  const reportDesignFingerprintRef = useRef<{ value: string; fetchedAt: number }>({
+    value: '0',
+    fetchedAt: 0,
+  });
+  const reportDesignFingerprintInFlightRef = useRef<Promise<string> | null>(null);
 
   const [editResultModalOpen, setEditResultModalOpen] = useState(false);
   const [editResultContext, setEditResultContext] = useState<EditResultContext | null>(null);
@@ -703,13 +700,54 @@ export function ReportsPage() {
     document.body.removeChild(link);
   };
 
-  const getResultsPdfBlob = useCallback(async (orderId: string): Promise<Blob> => {
+  const getReportDesignFingerprint = useCallback(async (): Promise<string> => {
     const now = Date.now();
-    const designVersion = getReportDesignVersion();
+    const cached = reportDesignFingerprintRef.current;
+    if (
+      cached.value &&
+      now - cached.fetchedAt <= REPORT_DESIGN_FINGERPRINT_STALE_MS
+    ) {
+      return cached.value;
+    }
+
+    if (reportDesignFingerprintInFlightRef.current) {
+      return reportDesignFingerprintInFlightRef.current;
+    }
+
+    const request = getLabSettings()
+      .then((settings) => {
+        const nextFingerprint = settings.reportDesignFingerprint || '0';
+        if (cached.value && cached.value !== nextFingerprint) {
+          resultsPdfCacheRef.current = {};
+        }
+        reportDesignFingerprintRef.current = {
+          value: nextFingerprint,
+          fetchedAt: Date.now(),
+        };
+        return nextFingerprint;
+      })
+      .catch(() => {
+        reportDesignFingerprintRef.current = {
+          value: cached.value || '0',
+          fetchedAt: Date.now(),
+        };
+        return cached.value || '0';
+      })
+      .finally(() => {
+        reportDesignFingerprintInFlightRef.current = null;
+      });
+
+    reportDesignFingerprintInFlightRef.current = request;
+    return request;
+  }, []);
+
+  const getResultsPdfBlob = useCallback(async (orderId: string): Promise<Blob> => {
+    const reportDesignFingerprint = await getReportDesignFingerprint();
+    const now = Date.now();
     const cached = resultsPdfCacheRef.current[orderId];
     if (
       cached &&
-      cached.designVersion === designVersion &&
+      cached.reportDesignFingerprint === reportDesignFingerprint &&
       now - cached.cachedAt <= REPORT_PDF_CACHE_TTL_MS
     ) {
       cached.lastAccessedAt = now;
@@ -728,7 +766,7 @@ export function ReportsPage() {
           blob,
           cachedAt,
           lastAccessedAt: cachedAt,
-          designVersion,
+          reportDesignFingerprint,
         };
 
         const cacheEntries = Object.entries(resultsPdfCacheRef.current);
@@ -749,7 +787,7 @@ export function ReportsPage() {
 
     resultsPdfInFlightRef.current[orderId] = fetchPromise;
     return fetchPromise;
-  }, []);
+  }, [getReportDesignFingerprint]);
 
   const handleDownloadResults = async (
     orderId: string,

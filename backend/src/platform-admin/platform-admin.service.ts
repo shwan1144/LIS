@@ -1,4 +1,4 @@
-import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { Lab } from '../entities/lab.entity';
 import { Order, OrderStatus } from '../entities/order.entity';
 import { AuditLog } from '../entities/audit-log.entity';
@@ -172,6 +172,8 @@ export interface AdminImpersonationStatus {
 
 @Injectable()
 export class PlatformAdminService {
+  private readonly logger = new Logger(PlatformAdminService.name);
+
   constructor(
     private readonly rlsSessionService: RlsSessionService,
     private readonly settingsService: SettingsService,
@@ -1455,7 +1457,16 @@ export class PlatformAdminService {
       referringDoctors?: string[] | null;
     },
   ) {
-    return this.settingsService.updateLabSettings(labId, data);
+    const settings = await this.settingsService.updateLabSettings(labId, data);
+    this.logger.log(
+      JSON.stringify({
+        event: 'admin.lab_settings.update',
+        labId,
+        reportDesignFingerprint:
+          (settings as { reportDesignFingerprint?: string }).reportDesignFingerprint ?? null,
+      }),
+    );
+    return settings;
   }
 
   async getLabUsers(labId: string, actor?: PlatformActorContext): Promise<User[]> {

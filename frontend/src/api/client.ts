@@ -1929,6 +1929,7 @@ export interface LabSettingsDto {
   id: string;
   code: string;
   name: string;
+  reportDesignFingerprint: string;
   labelSequenceBy: 'tube_type' | 'department';
   sequenceResetBy: 'day' | 'shift';
   enableOnlineResults: boolean;

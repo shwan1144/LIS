@@ -1,0 +1,151 @@
+:root {
+  --primary: #6366f1;
+  --secondary: #a855f7;
+  --bg: #0f172a;
+  --card-bg: rgba(30, 41, 59, 0.7);
+  --text: #f8fafc;
+  --success: #22c55e;
+  --error: #ef4444;
+  --warning: #f59e0b;
+}
+
+body {
+  margin: 0;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  background: radial-gradient(circle at top right, #1e1b4b, #0f172a);
+  color: var(--text);
+  overflow: hidden;
+  height: 100vh;
+}
+
+#root {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+
+.app-container {
+  padding: 2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  height: 100%;
+  box-sizing: border-box;
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.title {
+  font-size: 1.5rem;
+  font-weight: 700;
+  background: linear-gradient(to right, #818cf8, #c084fc);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.status-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1rem;
+}
+
+.card {
+  background: var(--card-bg);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 1rem;
+  padding: 1.25rem;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.3);
+}
+
+.status-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  display: inline-block;
+  margin-right: 8px;
+}
+
+.status-ONLINE {
+  background-color: var(--success);
+  box-shadow: 0 0 10px var(--success);
+}
+
+.status-OFFLINE {
+  background-color: #64748b;
+}
+
+.status-CONNECTED {
+  background-color: #3b82f6;
+  box-shadow: 0 0 10px #3b82f6;
+}
+
+.status-ERROR {
+  background-color: var(--error);
+  box-shadow: 0 0 10px var(--error);
+}
+
+.settings-panel {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.5rem;
+  min-height: 0;
+}
+
+.config-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+label {
+  font-size: 0.875rem;
+  color: #94a3b8;
+}
+
+input,
+select {
+  background: rgba(15, 23, 42, 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 0.5rem;
+  padding: 0.6rem;
+  color: white;
+  width: 100%;
+}
+
+.log-view {
+  background: #000;
+  border-radius: 0.5rem;
+  padding: 1rem;
+  font-family: 'Fira Code', 'Courier New', monospace;
+  font-size: 0.75rem;
+  height: 200px;
+  overflow-y: auto;
+  color: #a3e635;
+  border: 1px solid #1e293b;
+}
+
+.btn {
+  background: linear-gradient(to right, var(--primary), var(--secondary));
+  border: none;
+  border-radius: 0.5rem;
+  padding: 0.75rem 1.5rem;
+  color: white;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.2s;
+}
+
+.btn:hover {
+  opacity: 0.8;
+}

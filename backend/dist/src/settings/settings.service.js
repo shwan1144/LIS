@@ -25,6 +25,7 @@ const lab_entity_1 = require("../entities/lab.entity");
 const shift_entity_1 = require("../entities/shift.entity");
 const password_util_1 = require("../auth/password.util");
 const report_style_config_1 = require("../reports/report-style.config");
+const report_design_fingerprint_util_1 = require("../reports/report-design-fingerprint.util");
 const ROLES = ['SUPER_ADMIN', 'LAB_ADMIN', 'RECEPTION', 'TECHNICIAN', 'VERIFIER', 'DOCTOR', 'INSTRUMENT_SERVICE'];
 const MAX_REPORT_IMAGE_DATA_URL_LENGTH = 4 * 1024 * 1024;
 const REPORT_IMAGE_DATA_URL_PATTERN = /^data:image\/(png|jpeg|jpg|webp);base64,[a-zA-Z0-9+/=]+$/;
@@ -49,6 +50,17 @@ let SettingsService = class SettingsService {
         const lab = await this.labRepo.findOne({ where: { id: labId } });
         if (!lab)
             throw new common_1.NotFoundException('Lab not found');
+        const reportBranding = {
+            bannerDataUrl: lab.reportBannerDataUrl ?? null,
+            footerDataUrl: lab.reportFooterDataUrl ?? null,
+            logoDataUrl: lab.reportLogoDataUrl ?? null,
+            watermarkDataUrl: lab.reportWatermarkDataUrl ?? null,
+        };
+        const reportStyle = lab.reportStyle ? (0, report_style_config_1.resolveReportStyleConfig)(lab.reportStyle) : null;
+        const reportDesignFingerprint = (0, report_design_fingerprint_util_1.buildReportDesignFingerprint)({
+            reportBranding,
+            reportStyle,
+        });
         return {
             id: lab.id,
             code: lab.code,
@@ -64,13 +76,9 @@ let SettingsService = class SettingsService {
                 labelsPrinterName: lab.labelsPrinterName ?? null,
                 reportPrinterName: lab.reportPrinterName ?? null,
             },
-            reportBranding: {
-                bannerDataUrl: lab.reportBannerDataUrl ?? null,
-                footerDataUrl: lab.reportFooterDataUrl ?? null,
-                logoDataUrl: lab.reportLogoDataUrl ?? null,
-                watermarkDataUrl: lab.reportWatermarkDataUrl ?? null,
-            },
-            reportStyle: lab.reportStyle ? (0, report_style_config_1.resolveReportStyleConfig)(lab.reportStyle) : null,
+            reportBranding,
+            reportStyle,
+            reportDesignFingerprint,
             uiTestGroups: lab.uiTestGroups ?? [],
             referringDoctors: this.normalizeReferringDoctorsForRead(lab.referringDoctors),
         };
