@@ -32,13 +32,35 @@ function normalizeOrigin(input) {
         return trimmed.toLowerCase();
     }
 }
+function normalizeCorsRule(input) {
+    const trimmed = input.trim().replace(/\/+$/, '');
+    if (!trimmed)
+        return '';
+    if (!trimmed.includes('://')) {
+        return trimmed.toLowerCase();
+    }
+    return normalizeOrigin(trimmed);
+}
+function toWildcardRegex(pattern) {
+    const escaped = pattern
+        .replace(/[.+?^${}()|[\]\\]/g, '\\$&')
+        .replace(/\*/g, '.*');
+    return new RegExp(`^${escaped}$`, 'i');
+}
+function extractOriginHost(origin) {
+    try {
+        return new URL(origin).host.toLowerCase();
+    }
+    catch {
+        return null;
+    }
+}
 function parseCorsRules() {
     const raw = (process.env.CORS_ORIGIN || '').trim();
     const baseRules = raw
         .split(',')
-        .map((part) => part.trim())
-        .filter((part) => part.length > 0)
-        .map(normalizeOrigin);
+        .map(normalizeCorsRule)
+        .filter((part) => part.length > 0);
     if (baseRules.length === 0 && process.env.NODE_ENV !== 'production') {
         baseRules.push('http://localhost:5173');
     }
@@ -63,15 +85,20 @@ function validateCorsRules(rules) {
 }
 function isOriginAllowed(origin, rules) {
     const normalizedOrigin = normalizeOrigin(origin);
+    const originHost = extractOriginHost(normalizedOrigin);
     return rules.some((rule) => {
         if (rule === '*')
             return true;
+        if (rule.includes('://')) {
+            if (!rule.includes('*'))
+                return normalizedOrigin === rule;
+            return toWildcardRegex(rule).test(normalizedOrigin);
+        }
+        if (!originHost)
+            return false;
         if (!rule.includes('*'))
-            return normalizedOrigin === rule;
-        const escaped = rule
-            .replace(/[.+?^${}()|[\]\\]/g, '\\$&')
-            .replace(/\*/g, '.*');
-        return new RegExp(`^${escaped}$`, 'i').test(normalizedOrigin);
+            return originHost === rule;
+        return toWildcardRegex(rule).test(originHost);
     });
 }
 function shouldAutoSeedOnBoot() {

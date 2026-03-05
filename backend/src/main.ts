@@ -36,13 +36,39 @@ function normalizeOrigin(input: string): string {
   }
 }
 
+function normalizeCorsRule(input: string): string {
+  const trimmed = input.trim().replace(/\/+$/, '');
+  if (!trimmed) return '';
+
+  if (!trimmed.includes('://')) {
+    // Allow host-only rules (admin.medilis.net, *.medilis.net) for easier env configuration.
+    return trimmed.toLowerCase();
+  }
+
+  return normalizeOrigin(trimmed);
+}
+
+function toWildcardRegex(pattern: string): RegExp {
+  const escaped = pattern
+    .replace(/[.+?^${}()|[\]\\]/g, '\\$&')
+    .replace(/\*/g, '.*');
+  return new RegExp(`^${escaped}$`, 'i');
+}
+
+function extractOriginHost(origin: string): string | null {
+  try {
+    return new URL(origin).host.toLowerCase();
+  } catch {
+    return null;
+  }
+}
+
 function parseCorsRules(): string[] {
   const raw = (process.env.CORS_ORIGIN || '').trim();
   const baseRules = raw
     .split(',')
-    .map((part) => part.trim())
-    .filter((part) => part.length > 0)
-    .map(normalizeOrigin);
+    .map(normalizeCorsRule)
+    .filter((part) => part.length > 0);
 
   if (baseRules.length === 0 && process.env.NODE_ENV !== 'production') {
     baseRules.push('http://localhost:5173');
@@ -78,13 +104,19 @@ function validateCorsRules(rules: string[]): void {
 
 function isOriginAllowed(origin: string, rules: string[]): boolean {
   const normalizedOrigin = normalizeOrigin(origin);
+  const originHost = extractOriginHost(normalizedOrigin);
+
   return rules.some((rule) => {
     if (rule === '*') return true;
-    if (!rule.includes('*')) return normalizedOrigin === rule;
-    const escaped = rule
-      .replace(/[.+?^${}()|[\]\\]/g, '\\$&')
-      .replace(/\*/g, '.*');
-    return new RegExp(`^${escaped}$`, 'i').test(normalizedOrigin);
+
+    if (rule.includes('://')) {
+      if (!rule.includes('*')) return normalizedOrigin === rule;
+      return toWildcardRegex(rule).test(normalizedOrigin);
+    }
+
+    if (!originHost) return false;
+    if (!rule.includes('*')) return originHost === rule;
+    return toWildcardRegex(rule).test(originHost);
   });
 }
 
