@@ -153,51 +153,51 @@ const MEDONIC_M51_CBC_MAPPING_SUGGESTIONS: Array<{
   instrumentCode: string;
   lisCandidates: string[];
 }> = [
-  { instrumentCode: 'WBC', lisCandidates: ['WBC'] },
-  { instrumentCode: 'RBC', lisCandidates: ['RBC'] },
-  { instrumentCode: 'HGB', lisCandidates: ['HGB', 'HB'] },
-  { instrumentCode: 'HCT', lisCandidates: ['HCT'] },
-  { instrumentCode: 'MCV', lisCandidates: ['MCV'] },
-  { instrumentCode: 'MCH', lisCandidates: ['MCH'] },
-  { instrumentCode: 'MCHC', lisCandidates: ['MCHC'] },
-  { instrumentCode: 'PLT', lisCandidates: ['PLT'] },
-  { instrumentCode: 'MPV', lisCandidates: ['MPV'] },
-  { instrumentCode: 'RDW', lisCandidates: ['RDW', 'RDW-CV'] },
-  { instrumentCode: 'LYM%', lisCandidates: ['LYM%', 'LYM_PCT', 'LYM PCT'] },
-  { instrumentCode: 'MID%', lisCandidates: ['MID%', 'MID_PCT', 'MID PCT'] },
-  { instrumentCode: 'GRA%', lisCandidates: ['GRA%', 'NEU%', 'NEUT%', 'NEUTROPHIL%'] },
-  { instrumentCode: 'LYM#', lisCandidates: ['LYM#', 'LYM_ABS', 'LYM ABS'] },
-  { instrumentCode: 'MID#', lisCandidates: ['MID#', 'MID_ABS', 'MID ABS'] },
-  { instrumentCode: 'GRA#', lisCandidates: ['GRA#', 'NEU#', 'NEUT#', 'ANC'] },
-  { instrumentCode: 'PCT', lisCandidates: ['PCT'] },
-  { instrumentCode: 'PDW', lisCandidates: ['PDW'] },
-];
+    { instrumentCode: 'WBC', lisCandidates: ['WBC'] },
+    { instrumentCode: 'RBC', lisCandidates: ['RBC'] },
+    { instrumentCode: 'HGB', lisCandidates: ['HGB', 'HB'] },
+    { instrumentCode: 'HCT', lisCandidates: ['HCT'] },
+    { instrumentCode: 'MCV', lisCandidates: ['MCV'] },
+    { instrumentCode: 'MCH', lisCandidates: ['MCH'] },
+    { instrumentCode: 'MCHC', lisCandidates: ['MCHC'] },
+    { instrumentCode: 'PLT', lisCandidates: ['PLT'] },
+    { instrumentCode: 'MPV', lisCandidates: ['MPV'] },
+    { instrumentCode: 'RDW', lisCandidates: ['RDW', 'RDW-CV'] },
+    { instrumentCode: 'LYM%', lisCandidates: ['LYM%', 'LYM_PCT', 'LYM PCT'] },
+    { instrumentCode: 'MID%', lisCandidates: ['MID%', 'MID_PCT', 'MID PCT'] },
+    { instrumentCode: 'GRA%', lisCandidates: ['GRA%', 'NEU%', 'NEUT%', 'NEUTROPHIL%'] },
+    { instrumentCode: 'LYM#', lisCandidates: ['LYM#', 'LYM_ABS', 'LYM ABS'] },
+    { instrumentCode: 'MID#', lisCandidates: ['MID#', 'MID_ABS', 'MID ABS'] },
+    { instrumentCode: 'GRA#', lisCandidates: ['GRA#', 'NEU#', 'NEUT#', 'ANC'] },
+    { instrumentCode: 'PCT', lisCandidates: ['PCT'] },
+    { instrumentCode: 'PDW', lisCandidates: ['PDW'] },
+  ];
 
 const COBAS_C111_CHEM_MAPPING_SUGGESTIONS: Array<{
   instrumentCode: string;
   lisCandidates: string[];
 }> = [
-  { instrumentCode: 'GLU', lisCandidates: ['GLU', 'GLUCOSE'] },
-  { instrumentCode: 'CRE', lisCandidates: ['CRE', 'CREAT', 'CREATININE'] },
-  { instrumentCode: 'UREA', lisCandidates: ['UREA', 'BUN'] },
-  { instrumentCode: 'ALT', lisCandidates: ['ALT', 'SGPT'] },
-  { instrumentCode: 'AST', lisCandidates: ['AST', 'SGOT'] },
-  { instrumentCode: 'ALP', lisCandidates: ['ALP'] },
-  { instrumentCode: 'GGT', lisCandidates: ['GGT'] },
-  { instrumentCode: 'TBIL', lisCandidates: ['TBIL', 'BILI-T', 'TOTAL BILIRUBIN'] },
-  { instrumentCode: 'DBIL', lisCandidates: ['DBIL', 'BILI-D', 'DIRECT BILIRUBIN'] },
-  { instrumentCode: 'TP', lisCandidates: ['TP', 'TOTAL PROTEIN'] },
-  { instrumentCode: 'ALB', lisCandidates: ['ALB', 'ALBUMIN'] },
-  { instrumentCode: 'CHOL', lisCandidates: ['CHOL', 'CHOLESTEROL'] },
-  { instrumentCode: 'TRIG', lisCandidates: ['TRIG', 'TG', 'TRIGLYCERIDES'] },
-  { instrumentCode: 'HDL', lisCandidates: ['HDL', 'HDL-C'] },
-  { instrumentCode: 'LDL', lisCandidates: ['LDL', 'LDL-C'] },
-  { instrumentCode: 'UA', lisCandidates: ['UA', 'URIC', 'URIC ACID'] },
-  { instrumentCode: 'CA', lisCandidates: ['CA', 'CALCIUM'] },
-  { instrumentCode: 'NA', lisCandidates: ['NA', 'SODIUM'] },
-  { instrumentCode: 'K', lisCandidates: ['K', 'POTASSIUM'] },
-  { instrumentCode: 'CL', lisCandidates: ['CL', 'CHLORIDE'] },
-];
+    { instrumentCode: 'GLU', lisCandidates: ['GLU', 'GLUCOSE'] },
+    { instrumentCode: 'CRE', lisCandidates: ['CRE', 'CREAT', 'CREATININE'] },
+    { instrumentCode: 'UREA', lisCandidates: ['UREA', 'BUN'] },
+    { instrumentCode: 'ALT', lisCandidates: ['ALT', 'SGPT'] },
+    { instrumentCode: 'AST', lisCandidates: ['AST', 'SGOT'] },
+    { instrumentCode: 'ALP', lisCandidates: ['ALP'] },
+    { instrumentCode: 'GGT', lisCandidates: ['GGT'] },
+    { instrumentCode: 'TBIL', lisCandidates: ['TBIL', 'BILI-T', 'TOTAL BILIRUBIN'] },
+    { instrumentCode: 'DBIL', lisCandidates: ['DBIL', 'BILI-D', 'DIRECT BILIRUBIN'] },
+    { instrumentCode: 'TP', lisCandidates: ['TP', 'TOTAL PROTEIN'] },
+    { instrumentCode: 'ALB', lisCandidates: ['ALB', 'ALBUMIN'] },
+    { instrumentCode: 'CHOL', lisCandidates: ['CHOL', 'CHOLESTEROL'] },
+    { instrumentCode: 'TRIG', lisCandidates: ['TRIG', 'TG', 'TRIGLYCERIDES'] },
+    { instrumentCode: 'HDL', lisCandidates: ['HDL', 'HDL-C'] },
+    { instrumentCode: 'LDL', lisCandidates: ['LDL', 'LDL-C'] },
+    { instrumentCode: 'UA', lisCandidates: ['UA', 'URIC', 'URIC ACID'] },
+    { instrumentCode: 'CA', lisCandidates: ['CA', 'CALCIUM'] },
+    { instrumentCode: 'NA', lisCandidates: ['NA', 'SODIUM'] },
+    { instrumentCode: 'K', lisCandidates: ['K', 'POTASSIUM'] },
+    { instrumentCode: 'CL', lisCandidates: ['CL', 'CHLORIDE'] },
+  ];
 
 const normalizeCode = (value: string) =>
   value
@@ -264,7 +264,7 @@ export function SettingsInstrumentsPage() {
   const [trackerRunning, setTrackerRunning] = useState(true);
   const [selectedMessage, setSelectedMessage] = useState<InstrumentMessageDto | null>(null);
   const trackerIntervalRef = useRef<NodeJS.Timeout | null>(null);
-  
+
   // Simulator
   const [simulatorMessage, setSimulatorMessage] = useState('');
   const [simulatorSending, setSimulatorSending] = useState(false);
@@ -873,7 +873,7 @@ export function SettingsInstrumentsPage() {
 
   // Sample HL7/ASTM messages for testing
   const getTimestamp = () => new Date().toISOString().replace(/[-:T]/g, '').slice(0, 14);
-  
+
   const sampleMessages: Record<string, { name: string; message: string }> = {
     cbc: {
       name: 'CBC Panel (Full)',
@@ -1449,7 +1449,12 @@ L|1|N`,
       >
         {selectedInstrument && (
           <>
-            <Descriptions size="small" column={3} style={{ marginBottom: 16 }}>
+            <Descriptions size="small" column={1} bordered style={{ marginBottom: 16 }}>
+              <Descriptions.Item label="Instrument ID">
+                <Text copyable={{ text: selectedInstrument.id }}>
+                  <Text code>{selectedInstrument.id}</Text>
+                </Text>
+              </Descriptions.Item>
               <Descriptions.Item label="Code">{selectedInstrument.code}</Descriptions.Item>
               <Descriptions.Item label="Protocol">{selectedInstrument.protocol}</Descriptions.Item>
               <Descriptions.Item label="Port">{selectedInstrument.port || '—'}</Descriptions.Item>
@@ -1775,8 +1780,8 @@ L|1|N`,
             )}
 
             {/* Simulator */}
-            <Card 
-              size="small" 
+            <Card
+              size="small"
               title={<><ApiOutlined /> Message Simulator - Test Panels</>}
               style={{ marginBottom: 16 }}
               extra={
@@ -1879,9 +1884,9 @@ L|1|N`,
                             <Tag
                               color={
                                 msg.status === 'PROCESSED' || msg.status === 'ACKNOWLEDGED' ? 'success' :
-                                msg.status === 'ERROR' ? 'error' :
-                                msg.status === 'RECEIVED' ? 'processing' :
-                                msg.status === 'SENT' ? 'cyan' : 'default'
+                                  msg.status === 'ERROR' ? 'error' :
+                                    msg.status === 'RECEIVED' ? 'processing' :
+                                      msg.status === 'SENT' ? 'cyan' : 'default'
                               }
                               style={{ margin: 0 }}
                             >
