@@ -221,6 +221,58 @@ function resolveReadablePath(candidates: string[]): string | null {
   return null;
 }
 
+function stableJsonStringify(value: unknown): string {
+  const seen = new WeakSet<object>();
+  const normalize = (input: unknown): unknown => {
+    if (input === null || typeof input !== 'object') {
+      return input;
+    }
+    if (input instanceof Date) {
+      return input.toISOString();
+    }
+    if (Array.isArray(input)) {
+      return input.map((item) => normalize(item));
+    }
+    if (seen.has(input as object)) {
+      return '[Circular]';
+    }
+    seen.add(input as object);
+
+    const source = input as Record<string, unknown>;
+    const normalized: Record<string, unknown> = {};
+    for (const key of Object.keys(source).sort()) {
+      normalized[key] = normalize(source[key]);
+    }
+    return normalized;
+  };
+
+  try {
+    return JSON.stringify(normalize(value));
+  } catch {
+    return '';
+  }
+}
+
+function buildLabReportDesignFingerprint(lab: unknown): string {
+  const reportLab = (lab ?? {}) as {
+    reportBannerDataUrl?: string | null;
+    reportFooterDataUrl?: string | null;
+    reportLogoDataUrl?: string | null;
+    reportWatermarkDataUrl?: string | null;
+    reportStyle?: unknown;
+  };
+
+  const rawDesignPayload = [
+    reportLab.reportBannerDataUrl ?? '',
+    reportLab.reportFooterDataUrl ?? '',
+    reportLab.reportLogoDataUrl ?? '',
+    reportLab.reportWatermarkDataUrl ?? '',
+    stableJsonStringify(reportLab.reportStyle ?? null),
+  ].join('::');
+
+  return createHash('sha1').update(rawDesignPayload).digest('hex');
+}
+
 @Injectable()
 export class ReportsService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(ReportsService.name);
@@ -341,6 +393,7 @@ export class ReportsService implements OnModuleInit, OnModuleDestroy {
       })
       .sort()
       .join('|');
+    const reportDesignFingerprint = buildLabReportDesignFingerprint(input.order.lab);
 
     const rawKey = [
       input.labId,
@@ -348,6 +401,7 @@ export class ReportsService implements OnModuleInit, OnModuleDestroy {
       input.order.paymentStatus,
       input.order.updatedAt ? new Date(input.order.updatedAt).toISOString() : '-',
       input.order.lab?.updatedAt ? new Date(input.order.lab.updatedAt).toISOString() : '-',
+      reportDesignFingerprint,
       input.latestVerifiedAt ? new Date(input.latestVerifiedAt).toISOString() : '-',
       input.bypassPaymentCheck ? 'bypass' : 'strict',
       String(input.reportableOrderTests.length),
