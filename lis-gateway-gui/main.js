@@ -61,6 +61,19 @@ ipcMain.handle('save-config', (event, config) => {
     return { success: true };
 });
 
+ipcMain.handle('test-connection', async (event, { url, apiKey }) => {
+    try {
+        const response = await axios.get(`${url}/patients?size=1`, {
+            headers: { Authorization: `Bearer ${apiKey}` },
+            timeout: 5000,
+        });
+        return { success: true, message: 'Connected to Cloud LIS successfully!' };
+    } catch (error) {
+        const msg = error.response?.data?.message || error.message;
+        return { success: false, message: `Connection failed: ${msg}` };
+    }
+});
+
 // Listener Management
 let activeListeners = {};
 

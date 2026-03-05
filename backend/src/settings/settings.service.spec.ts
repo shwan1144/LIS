@@ -132,6 +132,52 @@ describe('SettingsService referringDoctors', () => {
     expect(result.reportDesignFingerprint).toMatch(/^[a-f0-9]{40}$/);
   });
 
+  it('reads reportStyle when persisted as JSON string', async () => {
+    const lab = createLab({
+      reportStyle: JSON.stringify(DEFAULT_REPORT_STYLE_V1) as unknown as Lab['reportStyle'],
+    });
+    const service = createService({
+      findOne: jest.fn().mockResolvedValue(lab),
+      save: jest.fn().mockResolvedValue(lab),
+    });
+
+    const result = await service.getLabSettings('lab-id');
+
+    expect(result.reportStyle).toEqual(DEFAULT_REPORT_STYLE_V1);
+    expect(result.reportDesignFingerprint).toMatch(/^[a-f0-9]{40}$/);
+  });
+
+  it('persists and reads back reportStyle when DB stores it as JSON string', async () => {
+    let persistedLab = createLab();
+    const findOne = jest.fn().mockImplementation(async () => persistedLab);
+    const save = jest.fn().mockImplementation(async (entity: Lab) => {
+      persistedLab = createLab({
+        ...persistedLab,
+        ...entity,
+        reportStyle:
+          entity.reportStyle == null
+            ? null
+            : (JSON.stringify(entity.reportStyle) as unknown as Lab['reportStyle']),
+      });
+      return persistedLab;
+    });
+    const service = createService({ findOne, save });
+
+    const nextStyle = {
+      ...DEFAULT_REPORT_STYLE_V1,
+      resultsTable: {
+        ...DEFAULT_REPORT_STYLE_V1.resultsTable,
+        headerBackgroundColor: '#101010',
+      },
+    };
+    const result = await service.updateLabSettings('lab-id', {
+      reportStyle: nextStyle,
+    });
+
+    expect(result.reportStyle).toEqual(nextStyle);
+    expect(result.reportDesignFingerprint).toMatch(/^[a-f0-9]{40}$/);
+  });
+
   it('persists report branding/style and returns matching design payload', async () => {
     const lab = createLab();
     const findOne = jest.fn().mockResolvedValue(lab);

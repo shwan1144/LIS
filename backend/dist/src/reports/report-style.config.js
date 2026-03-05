@@ -202,6 +202,18 @@ function validateAndNormalizeReportStyleConfig(value, fieldName = 'reportStyle')
     };
 }
 function resolveReportStyleConfig(value) {
+    if (typeof value === 'string') {
+        const trimmed = value.trim();
+        if (!trimmed)
+            return exports.DEFAULT_REPORT_STYLE_V1;
+        try {
+            const parsed = JSON.parse(trimmed);
+            return resolveReportStyleConfig(parsed);
+        }
+        catch {
+            return exports.DEFAULT_REPORT_STYLE_V1;
+        }
+    }
     try {
         return validateAndNormalizeReportStyleConfig(value);
     }

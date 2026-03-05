@@ -6,4 +6,5 @@ contextBridge.exposeInMainWorld('electronAPI', {
     onStatusUpdate: (callback) => ipcRenderer.on('status-update', (event, data) => callback(data)),
     onLogMessage: (callback) => ipcRenderer.on('log-message', (event, msg) => callback(msg)),
     getSerialPorts: () => ipcRenderer.invoke('get-serial-ports'),
+    testConnection: (credentials) => ipcRenderer.invoke('test-connection', credentials),
 });

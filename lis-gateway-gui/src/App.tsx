@@ -9,6 +9,7 @@ declare global {
       onStatusUpdate: (callback: (data: any) => void) => void;
       onLogMessage: (callback: (msg: string) => void) => void;
       getSerialPorts: () => Promise<any[]>;
+      testConnection: (credentials: { url: string; apiKey: string }) => Promise<{ success: boolean; message: string }>;
     };
   }
 }
@@ -45,6 +46,18 @@ function App() {
   const handleSave = async () => {
     await window.electronAPI.saveConfig(config);
     alert('Settings saved and listeners restarted!');
+  };
+
+  const handleTestConnection = async () => {
+    if (!config.lisApiUrl || !config.lisApiKey) {
+      alert('Please enter both API URL and API Key first.');
+      return;
+    }
+    const result = await window.electronAPI.testConnection({
+      url: config.lisApiUrl,
+      apiKey: config.lisApiKey
+    });
+    alert(result.message);
   };
 
   if (!config) return <div className="loading">Loading Configuration...</div>;
@@ -89,6 +102,13 @@ function App() {
               onChange={e => setConfig({ ...config, lisApiKey: e.target.value })}
             />
           </div>
+          <button
+            className="btn btn-secondary"
+            onClick={handleTestConnection}
+            style={{ marginTop: '1rem', width: '100%' }}
+          >
+            Test Connection
+          </button>
         </div>
 
         <div className="card config-section">

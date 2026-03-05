@@ -356,6 +356,17 @@ export function validateAndNormalizeReportStyleConfig(
 }
 
 export function resolveReportStyleConfig(value: unknown): ReportStyleConfig {
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) return DEFAULT_REPORT_STYLE_V1;
+    try {
+      const parsed = JSON.parse(trimmed) as unknown;
+      return resolveReportStyleConfig(parsed);
+    } catch {
+      return DEFAULT_REPORT_STYLE_V1;
+    }
+  }
+
   try {
     return validateAndNormalizeReportStyleConfig(value);
   } catch {
