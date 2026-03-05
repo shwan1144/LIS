@@ -672,6 +672,9 @@ export class ReportsService implements OnModuleInit, OnModuleDestroy {
     const hasDirectResult =
       (orderTest.resultText?.trim()?.length ?? 0) > 0 ||
       (orderTest.resultValue !== null && orderTest.resultValue !== undefined);
+    const hasParameterResult = hasNonEmptyResultParameters(
+      orderTest.resultParameters as Record<string, string> | null,
+    );
 
     // Panel parent rows with child tests represent a container; children carry actual results.
     if (test.type === TestType.PANEL && !orderTest.parentOrderTestId) {
@@ -679,13 +682,14 @@ export class ReportsService implements OnModuleInit, OnModuleDestroy {
         return true;
       }
       // Parameter-only panels store answers in resultParameters.
-      if (hasNonEmptyResultParameters(orderTest.resultParameters as Record<string, string> | null)) {
+      if (hasParameterResult) {
         return true;
       }
       return hasDirectResult;
     }
 
-    return hasDirectResult;
+    // Non-panel tests can also be parameter-based (component grids), so allow non-empty resultParameters.
+    return hasDirectResult || hasParameterResult;
   }
 
   private assertAllResultsEnteredForReport(orderTests: OrderTest[]): void {

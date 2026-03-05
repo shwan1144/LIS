@@ -536,16 +536,17 @@ let ReportsService = ReportsService_1 = class ReportsService {
             return false;
         const hasDirectResult = (orderTest.resultText?.trim()?.length ?? 0) > 0 ||
             (orderTest.resultValue !== null && orderTest.resultValue !== undefined);
+        const hasParameterResult = hasNonEmptyResultParameters(orderTest.resultParameters);
         if (test.type === test_entity_1.TestType.PANEL && !orderTest.parentOrderTestId) {
             if (childOrderTestParentIds.has(orderTest.id)) {
                 return true;
             }
-            if (hasNonEmptyResultParameters(orderTest.resultParameters)) {
+            if (hasParameterResult) {
                 return true;
             }
             return hasDirectResult;
         }
-        return hasDirectResult;
+        return hasDirectResult || hasParameterResult;
     }
     assertAllResultsEnteredForReport(orderTests) {
         if (orderTests.length === 0) {

@@ -382,6 +382,35 @@ function extractApiErrorMessage(error: unknown): string | null {
   return typeof rawMessage === 'string' && rawMessage.trim().length > 0 ? rawMessage : null;
 }
 
+async function extractApiErrorMessageAsync(error: unknown): Promise<string | null> {
+  const direct = extractApiErrorMessage(error);
+  if (direct) return direct;
+  if (!error || typeof error !== 'object' || !('response' in error)) {
+    return null;
+  }
+
+  const response = (
+    error as { response?: { data?: unknown } }
+  ).response;
+  const payload = response?.data;
+  if (!(payload instanceof Blob)) {
+    return null;
+  }
+
+  try {
+    const text = await payload.text();
+    const parsed = JSON.parse(text) as { message?: string | string[] };
+    if (Array.isArray(parsed.message)) {
+      return parsed.message.filter((entry) => typeof entry === 'string').join(', ') || null;
+    }
+    return typeof parsed.message === 'string' && parsed.message.trim().length > 0
+      ? parsed.message
+      : null;
+  } catch {
+    return null;
+  }
+}
+
 function getOrderTestRows(order: OrderDto): ExpandedOrderTestRow[] {
   const rows: ExpandedOrderTestRow[] = [];
   const allTestsInOrder = (order.samples ?? []).flatMap((s) => s.orderTests ?? []);
@@ -724,7 +753,7 @@ export function ReportsPage() {
         typeof error === 'object' &&
         'response' in error &&
         (error as { response?: { status?: number } }).response?.status === 403;
-      const backendMessage = extractApiErrorMessage(error);
+      const backendMessage = await extractApiErrorMessageAsync(error);
 
       if (is403 && summaryOrder) {
         setPaymentModalOrder(summaryOrder);
@@ -817,7 +846,7 @@ export function ReportsPage() {
         typeof error === 'object' &&
         'response' in error &&
         (error as { response?: { status?: number } }).response?.status === 403;
-      const backendMessage = extractApiErrorMessage(error);
+      const backendMessage = await extractApiErrorMessageAsync(error);
 
       if (is403 && summaryOrder) {
         setPaymentModalOrder(summaryOrder);
