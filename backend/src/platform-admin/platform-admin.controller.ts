@@ -27,6 +27,7 @@ import { SetLabStatusDto } from './dto/set-lab-status.dto';
 import { ExportAuditLogsDto } from './dto/export-audit-logs.dto';
 import { ResetLabUserPasswordDto } from './dto/reset-lab-user-password.dto';
 import { StartImpersonationDto } from './dto/start-impersonation.dto';
+import type { ReportStyleConfig } from '../reports/report-style.config';
 
 interface RequestWithPlatformUser {
   user: {
@@ -187,6 +188,7 @@ export class PlatformAdminController {
         logoDataUrl?: string | null;
         watermarkDataUrl?: string | null;
       };
+      reportStyle?: ReportStyleConfig | null;
       referringDoctors?: string[] | null;
     },
   ) {

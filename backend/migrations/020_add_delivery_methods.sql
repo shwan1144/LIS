@@ -1,1 +1,1 @@
-ALTER TABLE "orders" ADD "deliveryMethods" text;
+ALTER TABLE "orders" ADD COLUMN IF NOT EXISTS "deliveryMethods" text;

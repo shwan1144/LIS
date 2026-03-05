@@ -1,4 +1,4 @@
-import { OrderStatus } from '../../entities/order.entity';
+import { DeliveryMethod, OrderStatus } from '../../entities/order.entity';
 import { Patient } from '../../entities/patient.entity';
 
 export enum CreateOrderView {
@@ -23,6 +23,7 @@ export interface CreateOrderSummaryDto {
   orderNumber: string | null;
   status: OrderStatus;
   registeredAt: Date;
+  deliveryMethods: DeliveryMethod[];
   paymentStatus: 'unpaid' | 'partial' | 'paid';
   paidAmount: number | null;
   totalAmount: number;

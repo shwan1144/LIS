@@ -14,6 +14,11 @@ import { Department } from '../entities/department.entity';
 import { Lab } from '../entities/lab.entity';
 import { Shift } from '../entities/shift.entity';
 import { hashPassword } from '../auth/password.util';
+import {
+  type ReportStyleConfig,
+  resolveReportStyleConfig,
+  validateAndNormalizeReportStyleConfig,
+} from '../reports/report-style.config';
 
 const ROLES = ['SUPER_ADMIN', 'LAB_ADMIN', 'RECEPTION', 'TECHNICIAN', 'VERIFIER', 'DOCTOR', 'INSTRUMENT_SERVICE'];
 const MAX_REPORT_IMAGE_DATA_URL_LENGTH = 4 * 1024 * 1024;
@@ -86,6 +91,7 @@ export class SettingsService {
         logoDataUrl: lab.reportLogoDataUrl ?? null,
         watermarkDataUrl: lab.reportWatermarkDataUrl ?? null,
       },
+      reportStyle: lab.reportStyle ? resolveReportStyleConfig(lab.reportStyle) : null,
       uiTestGroups: lab.uiTestGroups ?? [],
       referringDoctors: this.normalizeReferringDoctorsForRead(lab.referringDoctors),
     };
@@ -101,6 +107,7 @@ export class SettingsService {
       onlineResultWatermarkText?: string | null;
       printing?: LabPrintingUpdate;
       reportBranding?: ReportBrandingUpdate;
+      reportStyle?: ReportStyleConfig | null;
       uiTestGroups?: UiTestGroup[] | null;
       referringDoctors?: string[] | null;
     },
@@ -198,6 +205,18 @@ export class SettingsService {
           data.reportBranding.watermarkDataUrl,
           'reportBranding.watermarkDataUrl',
         );
+      }
+    }
+    if (data.reportStyle !== undefined) {
+      if (data.reportStyle === null) {
+        lab.reportStyle = null;
+      } else {
+        try {
+          lab.reportStyle = validateAndNormalizeReportStyleConfig(data.reportStyle, 'reportStyle');
+        } catch (error) {
+          const message = error instanceof Error ? error.message : 'Invalid reportStyle';
+          throw new BadRequestException(message);
+        }
       }
     }
     if (data.uiTestGroups !== undefined) {

@@ -1410,6 +1410,19 @@ export function ReportsPage() {
     const printDone = Boolean(flags?.print);
     const whatsappDone = Boolean(flags?.whatsapp);
     const viberDone = Boolean(flags?.viber);
+    const preferredMethods = new Set(
+      (record.deliveryMethods ?? [])
+        .map((value) => String(value ?? '').trim().toUpperCase())
+        .filter((value) => value.length > 0),
+    );
+    const printPreferred = preferredMethods.has('PRINT');
+    const whatsappPreferred = preferredMethods.has('WHATSAPP');
+    const viberPreferred = preferredMethods.has('VIBER');
+
+    const preferredClassName = (preferred: boolean, disabled: boolean) => {
+      if (!preferred) return undefined;
+      return disabled ? 'preferred-action preferred-action--muted' : 'preferred-action';
+    };
 
     const withTick = (label: string, done: boolean, color?: string) => (
       <Space size={4}>
@@ -1428,21 +1441,33 @@ export function ReportsPage() {
       },
       {
         key: 'print',
-        label: withTick('Print', printDone),
+        label: (
+          <span className={preferredClassName(printPreferred, !reportReady)}>
+            {withTick('Print', printDone)}
+          </span>
+        ),
         icon: <PrinterOutlined />,
         disabled: !reportReady,
         onClick: () => handlePrintResults(record.id, record),
       },
       {
         key: 'wa',
-        label: withTick('WhatsApp', whatsappDone, '#25D366'),
+        label: (
+          <span className={preferredClassName(whatsappPreferred, !hasPhone || !reportReady)}>
+            {withTick('WhatsApp', whatsappDone, '#25D366')}
+          </span>
+        ),
         icon: <WhatsAppOutlined />,
         disabled: !hasPhone || !reportReady,
         onClick: () => handleSendWhatsApp(record),
       },
       {
         key: 'viber',
-        label: withTick('Viber', viberDone, '#7360F2'),
+        label: (
+          <span className={preferredClassName(viberPreferred, !hasPhone || !reportReady)}>
+            {withTick('Viber', viberDone, '#7360F2')}
+          </span>
+        ),
         icon: <MessageOutlined />,
         disabled: !hasPhone || !reportReady,
         onClick: () => handleSendViber(record),
@@ -1483,6 +1508,7 @@ export function ReportsPage() {
             type="link"
             size="small"
             icon={<PrinterOutlined />}
+            className={preferredClassName(printPreferred, !reportReady)}
             disabled={!reportReady}
             loading={downloading === `print-${record.id}`}
             onClick={() => handlePrintResults(record.id, record)}
@@ -1497,6 +1523,7 @@ export function ReportsPage() {
             type="link"
             size="small"
             icon={<WhatsAppOutlined />}
+            className={preferredClassName(whatsappPreferred, !hasPhone || !reportReady)}
             disabled={!hasPhone || !reportReady}
             onClick={() => handleSendWhatsApp(record)}
             style={{ color: hasPhone ? '#25D366' : undefined }}
@@ -1511,6 +1538,7 @@ export function ReportsPage() {
             type="link"
             size="small"
             icon={<MessageOutlined />}
+            className={preferredClassName(viberPreferred, !hasPhone || !reportReady)}
             disabled={!hasPhone || !reportReady}
             onClick={() => handleSendViber(record)}
             style={{ color: hasPhone ? '#7360F2' : undefined }}
@@ -1719,6 +1747,23 @@ export function ReportsPage() {
         .reports-subtests-table .ant-table-tbody > tr > td {
           padding-top: 3px !important;
           padding-bottom: 3px !important;
+        }
+        .preferred-action {
+          border-radius: 999px !important;
+          border: 1px solid #91caff !important;
+          background: rgba(22, 119, 255, 0.12) !important;
+        }
+        .preferred-action--muted {
+          border-color: rgba(0, 0, 0, 0.18) !important;
+          background: rgba(0, 0, 0, 0.06) !important;
+        }
+        html[data-theme='dark'] .preferred-action {
+          border-color: rgba(145, 202, 255, 0.7) !important;
+          background: rgba(22, 119, 255, 0.25) !important;
+        }
+        html[data-theme='dark'] .preferred-action--muted {
+          border-color: rgba(255, 255, 255, 0.26) !important;
+          background: rgba(255, 255, 255, 0.08) !important;
         }
         .reports-eta-cell {
           display: flex;

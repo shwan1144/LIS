@@ -14,6 +14,7 @@ import { AuditAction, AuditActorType } from '../entities/audit-log.entity';
 import { OrderTest, OrderTestStatus } from '../entities/order-test.entity';
 import { Patient } from '../entities/patient.entity';
 import { ReportsService } from '../reports/reports.service';
+import type { ReportStyleConfig } from '../reports/report-style.config';
 import { EntityManager, In, SelectQueryBuilder } from 'typeorm';
 import { AdminAuthService } from '../admin-auth/admin-auth.service';
 import { AuthService } from '../auth/auth.service';
@@ -1450,6 +1451,7 @@ export class PlatformAdminService {
         logoDataUrl?: string | null;
         watermarkDataUrl?: string | null;
       };
+      reportStyle?: ReportStyleConfig | null;
       referringDoctors?: string[] | null;
     },
   ) {

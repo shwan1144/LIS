@@ -16,6 +16,7 @@ import { SettingsService } from './settings.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
+import type { ReportStyleConfig } from '../reports/report-style.config';
 
 interface RequestWithUser {
   user: { userId: string; username: string; labId: string; role: string };
@@ -63,6 +64,7 @@ export class SettingsController {
         logoDataUrl?: string | null;
         watermarkDataUrl?: string | null;
       };
+      reportStyle?: ReportStyleConfig | null;
       uiTestGroups?: { id: string; name: string; testIds: string[] }[] | null;
       referringDoctors?: string[] | null;
     },
@@ -75,7 +77,8 @@ export class SettingsController {
       body.enableOnlineResults !== undefined ||
       body.onlineResultWatermarkDataUrl !== undefined ||
       body.onlineResultWatermarkText !== undefined ||
-      body.reportBranding !== undefined
+      body.reportBranding !== undefined ||
+      body.reportStyle !== undefined
     ) {
       throw new ForbiddenException(
         'Online result and report design settings moved to admin panel.',

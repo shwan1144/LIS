@@ -59,6 +59,10 @@ export class Lab {
   @Column({ type: 'text', nullable: true })
   reportWatermarkDataUrl: string | null;
 
+  /** Optional report style configuration (patient info + result tables). */
+  @Column({ type: 'jsonb', nullable: true })
+  reportStyle: any | null;
+
   /** Optional image watermark shown on public online result page. */
   @Column({ type: 'text', nullable: true })
   onlineResultWatermarkDataUrl: string | null;

@@ -2,6 +2,7 @@ import { BadRequestException } from '@nestjs/common';
 import type { Repository } from 'typeorm';
 import { SettingsService } from './settings.service';
 import { Lab } from '../entities/lab.entity';
+import { DEFAULT_REPORT_STYLE_V1 } from '../reports/report-style.config';
 
 type MockRepo<T extends object> = Partial<Record<keyof Repository<T>, jest.Mock>>;
 
@@ -35,6 +36,7 @@ function createLab(overrides: Partial<Lab> = {}): Lab {
     reportFooterDataUrl: null,
     reportLogoDataUrl: null,
     reportWatermarkDataUrl: null,
+    reportStyle: null,
     uiTestGroups: [],
     referringDoctors: [],
     ...overrides,
@@ -113,5 +115,60 @@ describe('SettingsService referringDoctors', () => {
     const result = await service.getLabSettings('lab-id');
 
     expect(result.referringDoctors).toEqual(['Dr Noor']);
+  });
+
+  it('saves validated reportStyle config', async () => {
+    const lab = createLab();
+    const findOne = jest.fn().mockResolvedValue(lab);
+    const save = jest.fn().mockResolvedValue(lab);
+    const service = createService({ findOne, save });
+
+    const result = await service.updateLabSettings('lab-id', {
+      reportStyle: DEFAULT_REPORT_STYLE_V1,
+    });
+
+    expect(save).toHaveBeenCalled();
+    expect(result.reportStyle).toEqual(DEFAULT_REPORT_STYLE_V1);
+  });
+
+  it('rejects malformed reportStyle config', async () => {
+    const lab = createLab();
+    const service = createService({
+      findOne: jest.fn().mockResolvedValue(lab),
+      save: jest.fn().mockResolvedValue(lab),
+    });
+
+    await expect(
+      service.updateLabSettings('lab-id', {
+        reportStyle: {
+          version: 1,
+          patientInfo: {
+            ...DEFAULT_REPORT_STYLE_V1.patientInfo,
+            backgroundColor: 'red',
+          },
+          resultsTable: DEFAULT_REPORT_STYLE_V1.resultsTable,
+        } as unknown as typeof DEFAULT_REPORT_STYLE_V1,
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('rejects unknown keys in reportStyle config', async () => {
+    const lab = createLab();
+    const service = createService({
+      findOne: jest.fn().mockResolvedValue(lab),
+      save: jest.fn().mockResolvedValue(lab),
+    });
+
+    await expect(
+      service.updateLabSettings('lab-id', {
+        reportStyle: {
+          ...DEFAULT_REPORT_STYLE_V1,
+          resultsTable: {
+            ...DEFAULT_REPORT_STYLE_V1.resultsTable,
+            extraKey: '#FFFFFF',
+          },
+        } as unknown as typeof DEFAULT_REPORT_STYLE_V1,
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
   });
 });

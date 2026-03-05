@@ -1,8 +1,26 @@
 import { type ChangeEvent, useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, Button, Card, Col, Empty, Input, Row, Select, Space, Tabs, Tag, Typography, message } from 'antd';
+import {
+  Alert,
+  Button,
+  Card,
+  Col,
+  ColorPicker,
+  Empty,
+  Input,
+  InputNumber,
+  Row,
+  Select,
+  Space,
+  Switch,
+  Tabs,
+  Tag,
+  Typography,
+  message,
+} from 'antd';
 import {
   getAdminLabSettings,
   updateAdminLabSettings,
+  type ReportStyleDto,
   type ReportBrandingDto,
 } from '../../api/client';
 import { useAuth } from '../../contexts/AuthContext';
@@ -58,6 +76,26 @@ const IMAGE_SETTINGS: ImageSettingMeta[] = [
 const ALLOWED_MIME_TYPES = new Set(['image/png', 'image/jpeg', 'image/jpg', 'image/webp']);
 const MAX_UPLOAD_INPUT_BYTES = 12 * 1024 * 1024;
 const ONLINE_WATERMARK_MAX_BYTES = 2 * 1024 * 1024;
+const ALIGN_OPTIONS = [
+  { label: 'Left', value: 'left' },
+  { label: 'Center', value: 'center' },
+  { label: 'Right', value: 'right' },
+] as const;
+const LABEL_WEIGHT_OPTIONS = [
+  { label: '600', value: 600 },
+  { label: '700', value: 700 },
+  { label: '800', value: 800 },
+] as const;
+const VALUE_WEIGHT_OPTIONS = [
+  { label: '400', value: 400 },
+  { label: '500', value: 500 },
+  { label: '600', value: 600 },
+  { label: '700', value: 700 },
+] as const;
+const BREAK_OPTIONS = [
+  { label: 'Avoid break', value: 'avoid' },
+  { label: 'Auto', value: 'auto' },
+] as const;
 
 function emptyBranding(): ReportBrandingDto {
   return {
@@ -66,6 +104,66 @@ function emptyBranding(): ReportBrandingDto {
     logoDataUrl: null,
     watermarkDataUrl: null,
   };
+}
+
+function defaultReportStyle(): ReportStyleDto {
+  return {
+    version: 1,
+    patientInfo: {
+      backgroundColor: '#FAFAFA',
+      borderColor: '#CCCCCC',
+      textColor: '#333333',
+      labelColor: '#333333',
+      fontSizePx: 13,
+      labelFontWeight: 700,
+      valueFontWeight: 400,
+      textAlign: 'left',
+      borderRadiusPx: 6,
+      paddingYpx: 10,
+      paddingXpx: 12,
+    },
+    resultsTable: {
+      headerBackgroundColor: '#F2F2F2',
+      headerTextColor: '#333333',
+      headerFontSizePx: 12,
+      headerTextAlign: 'left',
+      bodyTextColor: '#333333',
+      bodyFontSizePx: 12,
+      cellTextAlign: 'left',
+      borderColor: '#EEEEEE',
+      rowStripeEnabled: false,
+      rowStripeColor: '#F9FBFF',
+      abnormalRowBackgroundColor: '#FFF5F5',
+      referenceValueColor: '#333333',
+      departmentRowBackgroundColor: '#222222',
+      departmentRowTextColor: '#FFFFFF',
+      departmentRowFontSizePx: 12,
+      departmentRowTextAlign: 'left',
+      categoryRowBackgroundColor: '#F2F2F2',
+      categoryRowTextColor: '#555555',
+      categoryRowFontSizePx: 12,
+      categoryRowTextAlign: 'left',
+      statusNormalColor: '#0F8A1F',
+      statusHighColor: '#D00000',
+      statusLowColor: '#0066CC',
+      regularDepartmentBlockBreak: 'avoid',
+      regularRowBreak: 'avoid',
+      panelTableBreak: 'auto',
+      panelRowBreak: 'avoid',
+    },
+  };
+}
+
+function cloneReportStyle(style: ReportStyleDto): ReportStyleDto {
+  return JSON.parse(JSON.stringify(style)) as ReportStyleDto;
+}
+
+function normalizeHexColor(value: string): string {
+  const normalized = value.trim();
+  if (!normalized.startsWith('#')) {
+    return `#${normalized}`.toUpperCase();
+  }
+  return normalized.toUpperCase();
 }
 
 function formatMegabytes(bytes: number): string {
@@ -112,6 +210,25 @@ function readImageDimensions(file: Blob): Promise<{ width: number; height: numbe
   });
 }
 
+function StyleColorControl(props: {
+  label: string;
+  value: string;
+  disabled: boolean;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+      <Text>{props.label}</Text>
+      <ColorPicker
+        value={props.value}
+        disabled={props.disabled}
+        showText
+        onChange={(color: any) => props.onChange(normalizeHexColor(color.toHexString()))}
+      />
+    </div>
+  );
+}
+
 export function AdminLabReportDesignPage() {
   const { user } = useAuth();
   const canMutate = user?.role === 'SUPER_ADMIN';
@@ -123,10 +240,12 @@ export function AdminLabReportDesignPage() {
   const [uploadingKey, setUploadingKey] = useState<BrandingKey | null>(null);
   const [uploadingOnlineWatermark, setUploadingOnlineWatermark] = useState(false);
   const [branding, setBranding] = useState<ReportBrandingDto>(emptyBranding);
+  const [reportStyle, setReportStyle] = useState<ReportStyleDto>(defaultReportStyle);
   const [onlineResultWatermarkDataUrl, setOnlineResultWatermarkDataUrl] = useState<string | null>(null);
   const [onlineResultWatermarkText, setOnlineResultWatermarkText] = useState('');
   const [savedSnapshot, setSavedSnapshot] = useState<{
     branding: ReportBrandingDto;
+    reportStyle: ReportStyleDto;
     onlineResultWatermarkDataUrl: string | null;
     onlineResultWatermarkText: string;
   } | null>(null);
@@ -138,13 +257,16 @@ export function AdminLabReportDesignPage() {
       try {
         const data = await getAdminLabSettings(selectedLabId);
         const nextBranding = data.reportBranding || emptyBranding();
+        const nextReportStyle = data.reportStyle || defaultReportStyle();
         const nextWatermarkDataUrl = data.onlineResultWatermarkDataUrl || null;
         const nextWatermarkText = data.onlineResultWatermarkText || '';
         setBranding(nextBranding);
+        setReportStyle(cloneReportStyle(nextReportStyle));
         setOnlineResultWatermarkDataUrl(nextWatermarkDataUrl);
         setOnlineResultWatermarkText(nextWatermarkText);
         setSavedSnapshot({
           branding: nextBranding,
+          reportStyle: cloneReportStyle(nextReportStyle),
           onlineResultWatermarkDataUrl: nextWatermarkDataUrl,
           onlineResultWatermarkText: nextWatermarkText,
         });
@@ -164,13 +286,40 @@ export function AdminLabReportDesignPage() {
       savedSnapshot.branding.footerDataUrl !== branding.footerDataUrl ||
       savedSnapshot.branding.logoDataUrl !== branding.logoDataUrl ||
       savedSnapshot.branding.watermarkDataUrl !== branding.watermarkDataUrl ||
+      JSON.stringify(savedSnapshot.reportStyle) !== JSON.stringify(reportStyle) ||
       savedSnapshot.onlineResultWatermarkDataUrl !== onlineResultWatermarkDataUrl ||
       savedSnapshot.onlineResultWatermarkText !== onlineResultWatermarkText
     );
-  }, [branding, onlineResultWatermarkDataUrl, onlineResultWatermarkText, savedSnapshot]);
+  }, [branding, reportStyle, onlineResultWatermarkDataUrl, onlineResultWatermarkText, savedSnapshot]);
 
   const setImage = (key: BrandingKey, value: string | null) => {
     setBranding((prev) => ({ ...prev, [key]: value }));
+  };
+
+  const updatePatientStyle = <K extends keyof ReportStyleDto['patientInfo']>(
+    key: K,
+    value: ReportStyleDto['patientInfo'][K],
+  ) => {
+    setReportStyle((prev) => ({
+      ...prev,
+      patientInfo: {
+        ...prev.patientInfo,
+        [key]: value,
+      },
+    }));
+  };
+
+  const updateResultsStyle = <K extends keyof ReportStyleDto['resultsTable']>(
+    key: K,
+    value: ReportStyleDto['resultsTable'][K],
+  ) => {
+    setReportStyle((prev) => ({
+      ...prev,
+      resultsTable: {
+        ...prev.resultsTable,
+        [key]: value,
+      },
+    }));
   };
 
   const handleFileSelect = async (key: BrandingKey, maxBytes: number, event: ChangeEvent<HTMLInputElement>) => {
@@ -267,17 +416,21 @@ export function AdminLabReportDesignPage() {
     try {
       const updated = await updateAdminLabSettings(selectedLabId, {
         reportBranding: branding,
+        reportStyle,
         onlineResultWatermarkDataUrl,
         onlineResultWatermarkText: onlineResultWatermarkText.trim() || null,
       });
       const nextBranding = updated.reportBranding || emptyBranding();
+      const nextReportStyle = updated.reportStyle || defaultReportStyle();
       const nextWatermarkDataUrl = updated.onlineResultWatermarkDataUrl || null;
       const nextWatermarkText = updated.onlineResultWatermarkText || '';
       setBranding(nextBranding);
+      setReportStyle(cloneReportStyle(nextReportStyle));
       setOnlineResultWatermarkDataUrl(nextWatermarkDataUrl);
       setOnlineResultWatermarkText(nextWatermarkText);
       setSavedSnapshot({
         branding: nextBranding,
+        reportStyle: cloneReportStyle(nextReportStyle),
         onlineResultWatermarkDataUrl: nextWatermarkDataUrl,
         onlineResultWatermarkText: nextWatermarkText,
       });
@@ -297,12 +450,32 @@ export function AdminLabReportDesignPage() {
     }
   };
 
+  const previewHeaderCellStyle = {
+    border: `1px solid ${reportStyle.resultsTable.borderColor}`,
+    padding: '6px 8px',
+    background: reportStyle.resultsTable.headerBackgroundColor,
+    color: reportStyle.resultsTable.headerTextColor,
+    fontSize: reportStyle.resultsTable.headerFontSizePx,
+    fontWeight: 700,
+    textAlign: reportStyle.resultsTable.headerTextAlign,
+  };
+  const previewBodyCellStyle = {
+    border: `1px solid ${reportStyle.resultsTable.borderColor}`,
+    padding: '6px 8px',
+    color: reportStyle.resultsTable.bodyTextColor,
+    fontSize: reportStyle.resultsTable.bodyFontSizePx,
+    textAlign: reportStyle.resultsTable.cellTextAlign,
+  };
+  const stripedRowBg = reportStyle.resultsTable.rowStripeEnabled
+    ? reportStyle.resultsTable.rowStripeColor
+    : 'transparent';
+
   return (
     <div>
       <Title level={4} style={{ marginTop: 0 }}>
         Report Design
       </Title>
-      <Text type="secondary">Manage report branding per lab from admin panel.</Text>
+      <Text type="secondary">Manage report branding and style per lab from admin panel.</Text>
 
       <Card style={{ marginTop: 16 }}>
         <div style={{ maxWidth: 420 }}>
@@ -417,6 +590,526 @@ export function AdminLabReportDesignPage() {
                 ),
               },
               {
+                key: 'report-style',
+                label: 'Report Style',
+                children: (
+                  <Row gutter={[16, 16]}>
+                    <Col xs={24} xl={14}>
+                      <Card title="Style Controls" loading={loading}>
+                        <Row gutter={[16, 16]}>
+                          <Col xs={24}>
+                            <Card size="small" title="Patient Information">
+                              <Space direction="vertical" style={{ width: '100%' }} size={12}>
+                                <StyleColorControl
+                                  label="Background"
+                                  value={reportStyle.patientInfo.backgroundColor}
+                                  disabled={!canMutate}
+                                  onChange={(value) => updatePatientStyle('backgroundColor', value)}
+                                />
+                                <StyleColorControl
+                                  label="Border"
+                                  value={reportStyle.patientInfo.borderColor}
+                                  disabled={!canMutate}
+                                  onChange={(value) => updatePatientStyle('borderColor', value)}
+                                />
+                                <StyleColorControl
+                                  label="Text"
+                                  value={reportStyle.patientInfo.textColor}
+                                  disabled={!canMutate}
+                                  onChange={(value) => updatePatientStyle('textColor', value)}
+                                />
+                                <StyleColorControl
+                                  label="Label Text"
+                                  value={reportStyle.patientInfo.labelColor}
+                                  disabled={!canMutate}
+                                  onChange={(value) => updatePatientStyle('labelColor', value)}
+                                />
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                  <Text>Font Size</Text>
+                                  <InputNumber
+                                    min={10}
+                                    max={18}
+                                    value={reportStyle.patientInfo.fontSizePx}
+                                    onChange={(value) => updatePatientStyle('fontSizePx', Number(value ?? 13))}
+                                    disabled={!canMutate}
+                                  />
+                                </div>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                  <Text>Label Weight</Text>
+                                  <Select
+                                    style={{ width: 120 }}
+                                    value={reportStyle.patientInfo.labelFontWeight}
+                                    options={LABEL_WEIGHT_OPTIONS}
+                                    onChange={(value) => updatePatientStyle('labelFontWeight', value)}
+                                    disabled={!canMutate}
+                                  />
+                                </div>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                  <Text>Value Weight</Text>
+                                  <Select
+                                    style={{ width: 120 }}
+                                    value={reportStyle.patientInfo.valueFontWeight}
+                                    options={VALUE_WEIGHT_OPTIONS}
+                                    onChange={(value) => updatePatientStyle('valueFontWeight', value)}
+                                    disabled={!canMutate}
+                                  />
+                                </div>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                  <Text>Alignment</Text>
+                                  <Select
+                                    style={{ width: 120 }}
+                                    value={reportStyle.patientInfo.textAlign}
+                                    options={ALIGN_OPTIONS as unknown as { label: string; value: string }[]}
+                                    onChange={(value) => updatePatientStyle('textAlign', value)}
+                                    disabled={!canMutate}
+                                  />
+                                </div>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                  <Text>Border Radius</Text>
+                                  <InputNumber
+                                    min={0}
+                                    max={12}
+                                    value={reportStyle.patientInfo.borderRadiusPx}
+                                    onChange={(value) => updatePatientStyle('borderRadiusPx', Number(value ?? 6))}
+                                    disabled={!canMutate}
+                                  />
+                                </div>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                  <Text>Padding Y</Text>
+                                  <InputNumber
+                                    min={6}
+                                    max={18}
+                                    value={reportStyle.patientInfo.paddingYpx}
+                                    onChange={(value) => updatePatientStyle('paddingYpx', Number(value ?? 10))}
+                                    disabled={!canMutate}
+                                  />
+                                </div>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                  <Text>Padding X</Text>
+                                  <InputNumber
+                                    min={8}
+                                    max={24}
+                                    value={reportStyle.patientInfo.paddingXpx}
+                                    onChange={(value) => updatePatientStyle('paddingXpx', Number(value ?? 12))}
+                                    disabled={!canMutate}
+                                  />
+                                </div>
+                              </Space>
+                            </Card>
+                          </Col>
+
+                          <Col xs={24}>
+                            <Card size="small" title="Results Table">
+                              <Space direction="vertical" style={{ width: '100%' }} size={12}>
+                                <StyleColorControl
+                                  label="Header Background"
+                                  value={reportStyle.resultsTable.headerBackgroundColor}
+                                  disabled={!canMutate}
+                                  onChange={(value) => updateResultsStyle('headerBackgroundColor', value)}
+                                />
+                                <StyleColorControl
+                                  label="Header Text"
+                                  value={reportStyle.resultsTable.headerTextColor}
+                                  disabled={!canMutate}
+                                  onChange={(value) => updateResultsStyle('headerTextColor', value)}
+                                />
+                                <StyleColorControl
+                                  label="Body Text"
+                                  value={reportStyle.resultsTable.bodyTextColor}
+                                  disabled={!canMutate}
+                                  onChange={(value) => updateResultsStyle('bodyTextColor', value)}
+                                />
+                                <StyleColorControl
+                                  label="Border"
+                                  value={reportStyle.resultsTable.borderColor}
+                                  disabled={!canMutate}
+                                  onChange={(value) => updateResultsStyle('borderColor', value)}
+                                />
+                                <StyleColorControl
+                                  label="Stripe Color"
+                                  value={reportStyle.resultsTable.rowStripeColor}
+                                  disabled={!canMutate}
+                                  onChange={(value) => updateResultsStyle('rowStripeColor', value)}
+                                />
+                                <StyleColorControl
+                                  label="Abnormal Row"
+                                  value={reportStyle.resultsTable.abnormalRowBackgroundColor}
+                                  disabled={!canMutate}
+                                  onChange={(value) => updateResultsStyle('abnormalRowBackgroundColor', value)}
+                                />
+                                <StyleColorControl
+                                  label="Reference Value"
+                                  value={reportStyle.resultsTable.referenceValueColor}
+                                  disabled={!canMutate}
+                                  onChange={(value) => updateResultsStyle('referenceValueColor', value)}
+                                />
+                                <StyleColorControl
+                                  label="Department Row Bg"
+                                  value={reportStyle.resultsTable.departmentRowBackgroundColor}
+                                  disabled={!canMutate}
+                                  onChange={(value) => updateResultsStyle('departmentRowBackgroundColor', value)}
+                                />
+                                <StyleColorControl
+                                  label="Department Row Text"
+                                  value={reportStyle.resultsTable.departmentRowTextColor}
+                                  disabled={!canMutate}
+                                  onChange={(value) => updateResultsStyle('departmentRowTextColor', value)}
+                                />
+                                <StyleColorControl
+                                  label="Category Row Bg"
+                                  value={reportStyle.resultsTable.categoryRowBackgroundColor}
+                                  disabled={!canMutate}
+                                  onChange={(value) => updateResultsStyle('categoryRowBackgroundColor', value)}
+                                />
+                                <StyleColorControl
+                                  label="Category Row Text"
+                                  value={reportStyle.resultsTable.categoryRowTextColor}
+                                  disabled={!canMutate}
+                                  onChange={(value) => updateResultsStyle('categoryRowTextColor', value)}
+                                />
+                                <StyleColorControl
+                                  label="Status Normal"
+                                  value={reportStyle.resultsTable.statusNormalColor}
+                                  disabled={!canMutate}
+                                  onChange={(value) => updateResultsStyle('statusNormalColor', value)}
+                                />
+                                <StyleColorControl
+                                  label="Status High"
+                                  value={reportStyle.resultsTable.statusHighColor}
+                                  disabled={!canMutate}
+                                  onChange={(value) => updateResultsStyle('statusHighColor', value)}
+                                />
+                                <StyleColorControl
+                                  label="Status Low"
+                                  value={reportStyle.resultsTable.statusLowColor}
+                                  disabled={!canMutate}
+                                  onChange={(value) => updateResultsStyle('statusLowColor', value)}
+                                />
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                  <Text>Header Font Size</Text>
+                                  <InputNumber
+                                    min={10}
+                                    max={16}
+                                    value={reportStyle.resultsTable.headerFontSizePx}
+                                    onChange={(value) => updateResultsStyle('headerFontSizePx', Number(value ?? 12))}
+                                    disabled={!canMutate}
+                                  />
+                                </div>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                  <Text>Body Font Size</Text>
+                                  <InputNumber
+                                    min={9}
+                                    max={14}
+                                    value={reportStyle.resultsTable.bodyFontSizePx}
+                                    onChange={(value) => updateResultsStyle('bodyFontSizePx', Number(value ?? 12))}
+                                    disabled={!canMutate}
+                                  />
+                                </div>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                  <Text>Department Font Size</Text>
+                                  <InputNumber
+                                    min={10}
+                                    max={16}
+                                    value={reportStyle.resultsTable.departmentRowFontSizePx}
+                                    onChange={(value) => updateResultsStyle('departmentRowFontSizePx', Number(value ?? 12))}
+                                    disabled={!canMutate}
+                                  />
+                                </div>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                  <Text>Category Font Size</Text>
+                                  <InputNumber
+                                    min={10}
+                                    max={16}
+                                    value={reportStyle.resultsTable.categoryRowFontSizePx}
+                                    onChange={(value) => updateResultsStyle('categoryRowFontSizePx', Number(value ?? 12))}
+                                    disabled={!canMutate}
+                                  />
+                                </div>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                  <Text>Header Align</Text>
+                                  <Select
+                                    style={{ width: 120 }}
+                                    value={reportStyle.resultsTable.headerTextAlign}
+                                    options={ALIGN_OPTIONS as unknown as { label: string; value: string }[]}
+                                    onChange={(value) => updateResultsStyle('headerTextAlign', value)}
+                                    disabled={!canMutate}
+                                  />
+                                </div>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                  <Text>Cell Align</Text>
+                                  <Select
+                                    style={{ width: 120 }}
+                                    value={reportStyle.resultsTable.cellTextAlign}
+                                    options={ALIGN_OPTIONS as unknown as { label: string; value: string }[]}
+                                    onChange={(value) => updateResultsStyle('cellTextAlign', value)}
+                                    disabled={!canMutate}
+                                  />
+                                </div>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                  <Text>Department Align</Text>
+                                  <Select
+                                    style={{ width: 120 }}
+                                    value={reportStyle.resultsTable.departmentRowTextAlign}
+                                    options={ALIGN_OPTIONS as unknown as { label: string; value: string }[]}
+                                    onChange={(value) => updateResultsStyle('departmentRowTextAlign', value)}
+                                    disabled={!canMutate}
+                                  />
+                                </div>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                  <Text>Category Align</Text>
+                                  <Select
+                                    style={{ width: 120 }}
+                                    value={reportStyle.resultsTable.categoryRowTextAlign}
+                                    options={ALIGN_OPTIONS as unknown as { label: string; value: string }[]}
+                                    onChange={(value) => updateResultsStyle('categoryRowTextAlign', value)}
+                                    disabled={!canMutate}
+                                  />
+                                </div>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                  <Text>Enable Row Stripe</Text>
+                                  <Switch
+                                    checked={reportStyle.resultsTable.rowStripeEnabled}
+                                    onChange={(value) => updateResultsStyle('rowStripeEnabled', value)}
+                                    disabled={!canMutate}
+                                  />
+                                </div>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                  <Text>Single Dept Break</Text>
+                                  <Select
+                                    style={{ width: 140 }}
+                                    value={reportStyle.resultsTable.regularDepartmentBlockBreak}
+                                    options={BREAK_OPTIONS as unknown as { label: string; value: string }[]}
+                                    onChange={(value) => updateResultsStyle('regularDepartmentBlockBreak', value)}
+                                    disabled={!canMutate}
+                                  />
+                                </div>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                  <Text>Single Row Break</Text>
+                                  <Select
+                                    style={{ width: 140 }}
+                                    value={reportStyle.resultsTable.regularRowBreak}
+                                    options={BREAK_OPTIONS as unknown as { label: string; value: string }[]}
+                                    onChange={(value) => updateResultsStyle('regularRowBreak', value)}
+                                    disabled={!canMutate}
+                                  />
+                                </div>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                  <Text>Panel Table Break</Text>
+                                  <Select
+                                    style={{ width: 140 }}
+                                    value={reportStyle.resultsTable.panelTableBreak}
+                                    options={BREAK_OPTIONS as unknown as { label: string; value: string }[]}
+                                    onChange={(value) => updateResultsStyle('panelTableBreak', value)}
+                                    disabled={!canMutate}
+                                  />
+                                </div>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                  <Text>Panel Row Break</Text>
+                                  <Select
+                                    style={{ width: 140 }}
+                                    value={reportStyle.resultsTable.panelRowBreak}
+                                    options={BREAK_OPTIONS as unknown as { label: string; value: string }[]}
+                                    onChange={(value) => updateResultsStyle('panelRowBreak', value)}
+                                    disabled={!canMutate}
+                                  />
+                                </div>
+                              </Space>
+                            </Card>
+                          </Col>
+                        </Row>
+                      </Card>
+                    </Col>
+                    <Col xs={24} xl={10}>
+                      <div style={{ position: 'sticky', top: 16 }}>
+                      <Card title="Live Preview" loading={loading}>
+                        <div
+                          style={{
+                            border: `1px solid ${reportStyle.patientInfo.borderColor}`,
+                            borderRadius: reportStyle.patientInfo.borderRadiusPx,
+                            background: reportStyle.patientInfo.backgroundColor,
+                            color: reportStyle.patientInfo.textColor,
+                            fontSize: reportStyle.patientInfo.fontSizePx,
+                            textAlign: reportStyle.patientInfo.textAlign,
+                            padding: `${reportStyle.patientInfo.paddingYpx}px ${reportStyle.patientInfo.paddingXpx}px`,
+                            marginBottom: 12,
+                          }}
+                        >
+                          <div style={{ marginBottom: 6 }}>
+                            <span
+                              style={{
+                                color: reportStyle.patientInfo.labelColor,
+                                fontWeight: reportStyle.patientInfo.labelFontWeight,
+                                marginRight: 4,
+                              }}
+                            >
+                              Name:
+                            </span>
+                            <span style={{ fontWeight: reportStyle.patientInfo.valueFontWeight }}>Sample Patient</span>
+                          </div>
+                          <div style={{ marginBottom: 6 }}>
+                            <span
+                              style={{
+                                color: reportStyle.patientInfo.labelColor,
+                                fontWeight: reportStyle.patientInfo.labelFontWeight,
+                                marginRight: 4,
+                              }}
+                            >
+                              Age/Sex:
+                            </span>
+                            <span style={{ fontWeight: reportStyle.patientInfo.valueFontWeight }}>36 Years/Male</span>
+                          </div>
+                          <div>
+                            <span
+                              style={{
+                                color: reportStyle.patientInfo.labelColor,
+                                fontWeight: reportStyle.patientInfo.labelFontWeight,
+                                marginRight: 4,
+                              }}
+                            >
+                              Order No:
+                            </span>
+                            <span style={{ fontWeight: reportStyle.patientInfo.valueFontWeight }}>260304011</span>
+                          </div>
+                        </div>
+
+                        <div style={{ overflowX: 'auto' }}>
+                          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                            <thead>
+                              <tr>
+                                <th style={previewHeaderCellStyle}>Test</th>
+                                <th style={previewHeaderCellStyle}>Result</th>
+                                <th style={previewHeaderCellStyle}>Unit</th>
+                                <th style={previewHeaderCellStyle}>Status</th>
+                                <th style={previewHeaderCellStyle}>Reference Value</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              <tr>
+                                <td
+                                  colSpan={5}
+                                  style={{
+                                    ...previewBodyCellStyle,
+                                    background: reportStyle.resultsTable.departmentRowBackgroundColor,
+                                    color: reportStyle.resultsTable.departmentRowTextColor,
+                                    textAlign: reportStyle.resultsTable.departmentRowTextAlign,
+                                    fontSize: reportStyle.resultsTable.departmentRowFontSizePx,
+                                    fontWeight: 800,
+                                  }}
+                                >
+                                  Chemistry
+                                </td>
+                              </tr>
+                              <tr>
+                                <td
+                                  colSpan={5}
+                                  style={{
+                                    ...previewBodyCellStyle,
+                                    background: reportStyle.resultsTable.categoryRowBackgroundColor,
+                                    color: reportStyle.resultsTable.categoryRowTextColor,
+                                    textAlign: reportStyle.resultsTable.categoryRowTextAlign,
+                                    fontSize: reportStyle.resultsTable.categoryRowFontSizePx,
+                                    fontWeight: 700,
+                                  }}
+                                >
+                                  Routine
+                                </td>
+                              </tr>
+                              <tr>
+                                <td style={{ ...previewBodyCellStyle, background: stripedRowBg }}>Glucose</td>
+                                <td style={{ ...previewBodyCellStyle, background: stripedRowBg }}>110</td>
+                                <td style={{ ...previewBodyCellStyle, background: stripedRowBg }}>mg/dL</td>
+                                <td
+                                  style={{
+                                    ...previewBodyCellStyle,
+                                    background: stripedRowBg,
+                                    color: reportStyle.resultsTable.statusNormalColor,
+                                    fontWeight: 700,
+                                  }}
+                                >
+                                  Normal
+                                </td>
+                                <td
+                                  style={{
+                                    ...previewBodyCellStyle,
+                                    background: stripedRowBg,
+                                    color: reportStyle.resultsTable.referenceValueColor,
+                                  }}
+                                >
+                                  70-110
+                                </td>
+                              </tr>
+                              <tr>
+                                <td
+                                  style={{
+                                    ...previewBodyCellStyle,
+                                    background: reportStyle.resultsTable.abnormalRowBackgroundColor,
+                                  }}
+                                >
+                                  ALT
+                                </td>
+                                <td
+                                  style={{
+                                    ...previewBodyCellStyle,
+                                    background: reportStyle.resultsTable.abnormalRowBackgroundColor,
+                                  }}
+                                >
+                                  82
+                                </td>
+                                <td
+                                  style={{
+                                    ...previewBodyCellStyle,
+                                    background: reportStyle.resultsTable.abnormalRowBackgroundColor,
+                                  }}
+                                >
+                                  U/L
+                                </td>
+                                <td
+                                  style={{
+                                    ...previewBodyCellStyle,
+                                    background: reportStyle.resultsTable.abnormalRowBackgroundColor,
+                                    color: reportStyle.resultsTable.statusHighColor,
+                                    fontWeight: 700,
+                                  }}
+                                >
+                                  High
+                                </td>
+                                <td
+                                  style={{
+                                    ...previewBodyCellStyle,
+                                    background: reportStyle.resultsTable.abnormalRowBackgroundColor,
+                                    color: reportStyle.resultsTable.referenceValueColor,
+                                  }}
+                                >
+                                  0-40
+                                </td>
+                              </tr>
+                              <tr>
+                                <td style={previewBodyCellStyle}>HDL</td>
+                                <td style={previewBodyCellStyle}>35</td>
+                                <td style={previewBodyCellStyle}>mg/dL</td>
+                                <td
+                                  style={{
+                                    ...previewBodyCellStyle,
+                                    color: reportStyle.resultsTable.statusLowColor,
+                                    fontWeight: 700,
+                                  }}
+                                >
+                                  Low
+                                </td>
+                                <td style={{ ...previewBodyCellStyle, color: reportStyle.resultsTable.referenceValueColor }}>
+                                  &gt; 40
+                                </td>
+                              </tr>
+                            </tbody>
+                          </table>
+                        </div>
+                      </Card>
+                      </div>
+                    </Col>
+                  </Row>
+                ),
+              },
+              {
                 key: 'online-watermark',
                 label: 'Online Result Watermark',
                 children: (
@@ -499,9 +1192,16 @@ export function AdminLabReportDesignPage() {
                 Save report design
               </Button>
               <Button
+                onClick={() => setReportStyle(defaultReportStyle())}
+                disabled={!canMutate}
+              >
+                Reset style to default
+              </Button>
+              <Button
                 onClick={() => {
                   if (!savedSnapshot) return;
                   setBranding(savedSnapshot.branding);
+                  setReportStyle(cloneReportStyle(savedSnapshot.reportStyle));
                   setOnlineResultWatermarkDataUrl(savedSnapshot.onlineResultWatermarkDataUrl);
                   setOnlineResultWatermarkText(savedSnapshot.onlineResultWatermarkText);
                 }}

@@ -28,6 +28,12 @@ export enum PatientType {
   CONTRACT = 'CONTRACT',
 }
 
+export enum DeliveryMethod {
+  PRINT = 'PRINT',
+  WHATSAPP = 'WHATSAPP',
+  VIBER = 'VIBER',
+}
+
 @Entity('orders')
 @Index('UQ_orders_lab_order_number', ['labId', 'orderNumber'], {
   unique: true,
@@ -87,7 +93,7 @@ export class Order {
   registeredAt: Date;
 
   @Column({ type: 'simple-array', nullable: true })
-  deliveryMethods: string[];
+  deliveryMethods: DeliveryMethod[];
 
   @CreateDateColumn()
   createdAt: Date;

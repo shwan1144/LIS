@@ -7,7 +7,7 @@ import {
 import { randomUUID } from 'crypto';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, Between, EntityManager, SelectQueryBuilder } from 'typeorm';
-import { Order, OrderStatus, PatientType } from '../entities/order.entity';
+import { DeliveryMethod, Order, OrderStatus, PatientType } from '../entities/order.entity';
 import { Sample, TubeType as SampleTubeType } from '../entities/sample.entity';
 import { OrderTest, OrderTestStatus } from '../entities/order-test.entity';
 import { Patient } from '../entities/patient.entity';
@@ -66,6 +66,7 @@ export interface OrderHistoryItem {
   orderNumber: string | null;
   status: OrderStatus;
   registeredAt: Date;
+  deliveryMethods: DeliveryMethod[];
   paymentStatus: 'unpaid' | 'partial' | 'paid';
   paidAmount: number | null;
   finalAmount: number;
@@ -183,6 +184,7 @@ export class OrdersService {
 
       const pricingStartedAt = process.hrtime.bigint();
       const patientType = dto.patientType || PatientType.WALK_IN;
+      const deliveryMethods = this.normalizeDeliveryMethods(dto.deliveryMethods);
       const pricingValues =
         uniqueTestIds.length > 0
           ? await Promise.all(
@@ -249,7 +251,7 @@ export class OrdersService {
           paymentStatus: 'unpaid',
           paidAmount: null,
           registeredAt: now,
-          deliveryMethods: dto.deliveryMethods || [],
+          deliveryMethods,
         });
 
         const sampleInsertStartedAt = process.hrtime.bigint();
@@ -322,6 +324,7 @@ export class OrdersService {
           orderNumber,
           status: OrderStatus.REGISTERED,
           registeredAt: now,
+          deliveryMethods,
           paymentStatus: 'unpaid',
           paidAmount: null,
           totalAmount: Math.round(totalAmount * 100) / 100,
@@ -448,6 +451,7 @@ export class OrdersService {
           orderNumber: order.orderNumber,
           status: order.status,
           registeredAt: order.registeredAt,
+          deliveryMethods: this.normalizeDeliveryMethods(order.deliveryMethods),
           paymentStatus: this.normalizePaymentStatus(order.paymentStatus),
           paidAmount: order.paidAmount != null ? Number(order.paidAmount) : null,
           finalAmount: Number(order.finalAmount ?? 0),
@@ -588,6 +592,21 @@ export class OrdersService {
       },
     );
 
+    return this.findOne(id, labId);
+  }
+
+  async updateDeliveryMethods(
+    id: string,
+    labId: string,
+    deliveryMethods?: unknown[],
+  ): Promise<Order> {
+    const order = await this.orderRepo.findOne({ where: { id, labId } });
+    if (!order) {
+      throw new NotFoundException('Order not found');
+    }
+
+    order.deliveryMethods = this.normalizeDeliveryMethods(deliveryMethods);
+    await this.orderRepo.save(order);
     return this.findOne(id, labId);
   }
 
@@ -1726,6 +1745,33 @@ export class OrdersService {
       }
     }
     return order;
+  }
+
+  private normalizeDeliveryMethods(
+    values: unknown[] | null | undefined,
+  ): DeliveryMethod[] {
+    if (!Array.isArray(values) || values.length === 0) {
+      return [];
+    }
+
+    const stableOrder: DeliveryMethod[] = [
+      DeliveryMethod.PRINT,
+      DeliveryMethod.WHATSAPP,
+      DeliveryMethod.VIBER,
+    ];
+    const allowed = new Set(stableOrder);
+    const selected = new Set<DeliveryMethod>();
+
+    for (const raw of values) {
+      if (typeof raw !== 'string') continue;
+      const normalized = raw.trim().toUpperCase();
+      if (!normalized) continue;
+      if (!allowed.has(normalized as DeliveryMethod)) continue;
+      selected.add(normalized as DeliveryMethod);
+      if (selected.size >= 3) break;
+    }
+
+    return stableOrder.filter((method) => selected.has(method));
   }
 
   private normalizePaymentStatus(value: string | null | undefined): 'unpaid' | 'partial' | 'paid' {

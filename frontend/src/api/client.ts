@@ -67,6 +67,7 @@ export interface LabDto {
   onlineResultWatermarkDataUrl?: string | null;
   onlineResultWatermarkText?: string | null;
   reportBranding?: ReportBrandingDto;
+  reportStyle?: ReportStyleDto | null;
 }
 
 export interface ReportBrandingDto {
@@ -74,6 +75,58 @@ export interface ReportBrandingDto {
   footerDataUrl: string | null;
   logoDataUrl: string | null;
   watermarkDataUrl: string | null;
+}
+
+export type ReportTextAlign = 'left' | 'center' | 'right';
+
+export interface ReportPatientInfoStyleDto {
+  backgroundColor: string;
+  borderColor: string;
+  textColor: string;
+  labelColor: string;
+  fontSizePx: number;
+  labelFontWeight: 600 | 700 | 800;
+  valueFontWeight: 400 | 500 | 600 | 700;
+  textAlign: ReportTextAlign;
+  borderRadiusPx: number;
+  paddingYpx: number;
+  paddingXpx: number;
+}
+
+export interface ReportResultsTableStyleDto {
+  headerBackgroundColor: string;
+  headerTextColor: string;
+  headerFontSizePx: number;
+  headerTextAlign: ReportTextAlign;
+  bodyTextColor: string;
+  bodyFontSizePx: number;
+  cellTextAlign: ReportTextAlign;
+  borderColor: string;
+  rowStripeEnabled: boolean;
+  rowStripeColor: string;
+  abnormalRowBackgroundColor: string;
+  referenceValueColor: string;
+  departmentRowBackgroundColor: string;
+  departmentRowTextColor: string;
+  departmentRowFontSizePx: number;
+  departmentRowTextAlign: ReportTextAlign;
+  categoryRowBackgroundColor: string;
+  categoryRowTextColor: string;
+  categoryRowFontSizePx: number;
+  categoryRowTextAlign: ReportTextAlign;
+  statusNormalColor: string;
+  statusHighColor: string;
+  statusLowColor: string;
+  regularDepartmentBlockBreak: 'auto' | 'avoid';
+  regularRowBreak: 'auto' | 'avoid';
+  panelTableBreak: 'auto' | 'avoid';
+  panelRowBreak: 'auto' | 'avoid';
+}
+
+export interface ReportStyleDto {
+  version: 1;
+  patientInfo: ReportPatientInfoStyleDto;
+  resultsTable: ReportResultsTableStyleDto;
 }
 
 export interface UserDto {
@@ -608,6 +661,7 @@ export async function updateAdminLabSettings(
       reportPrinterName?: string | null;
     };
     reportBranding?: Partial<ReportBrandingDto>;
+    reportStyle?: ReportStyleDto | null;
     uiTestGroups?: { id: string; name: string; testIds: string[] }[] | null;
     referringDoctors?: string[] | null;
   },
@@ -990,6 +1044,7 @@ export interface OrderDto {
   paymentStatus?: 'unpaid' | 'partial' | 'paid';
   /** Amount paid so far (for partial) */
   paidAmount?: number | null;
+  deliveryMethods?: DeliveryMethod[];
   registeredAt: string;
   createdAt: string;
   updatedAt: string;
@@ -1013,12 +1068,15 @@ export interface CreateSampleDto {
   tests: CreateOrderTestDto[];
 }
 
+export type DeliveryMethod = 'PRINT' | 'WHATSAPP' | 'VIBER';
+
 export interface CreateOrderDto {
   patientId: string;
   shiftId?: string;
   patientType?: PatientType;
   notes?: string;
   discountPercent?: number;
+  deliveryMethods?: DeliveryMethod[];
   samples: CreateSampleDto[];
 }
 
@@ -1047,6 +1105,7 @@ export interface OrderHistoryItemDto {
   orderNumber: string | null;
   status: OrderStatus;
   registeredAt: string;
+  deliveryMethods?: DeliveryMethod[];
   paymentStatus: 'unpaid' | 'partial' | 'paid';
   paidAmount: number | null;
   totalAmount?: number;
@@ -1077,6 +1136,7 @@ export interface OrderCreateSummaryDto {
   orderNumber: string | null;
   status: OrderStatus;
   registeredAt: string;
+  deliveryMethods?: DeliveryMethod[];
   paymentStatus: 'unpaid' | 'partial' | 'paid';
   paidAmount: number | null;
   totalAmount: number;
@@ -1170,6 +1230,7 @@ function toHistoryItem(order: OrderDto): OrderHistoryItemDto {
     orderNumber: order.orderNumber,
     status: order.status,
     registeredAt: order.registeredAt,
+    deliveryMethods: order.deliveryMethods ?? [],
     paymentStatus: order.paymentStatus === 'paid' || order.paymentStatus === 'partial' ? order.paymentStatus : 'unpaid',
     paidAmount: order.paidAmount != null ? Number(order.paidAmount) : null,
     totalAmount: Number(order.totalAmount ?? 0),
@@ -1236,6 +1297,14 @@ export async function updateOrderTests(
   data: { testIds: string[] },
 ): Promise<OrderDto> {
   const res = await api.patch<OrderDto>(`/orders/${orderId}/tests`, data);
+  return res.data;
+}
+
+export async function updateOrderDeliveryMethods(
+  orderId: string,
+  data: { deliveryMethods?: DeliveryMethod[] },
+): Promise<OrderDto> {
+  const res = await api.patch<OrderDto>(`/orders/${orderId}/delivery-methods`, data);
   return res.data;
 }
 
@@ -1868,6 +1937,7 @@ export interface LabSettingsDto {
     reportPrinterName: string | null;
   };
   reportBranding: ReportBrandingDto;
+  reportStyle: ReportStyleDto | null;
   uiTestGroups?: { id: string; name: string; testIds: string[] }[];
   referringDoctors?: string[];
 }
@@ -1890,6 +1960,7 @@ export interface UpdateLabSettingsDto {
     reportPrinterName?: string | null;
   };
   reportBranding?: Partial<ReportBrandingDto>;
+  reportStyle?: ReportStyleDto | null;
   uiTestGroups?: { id: string; name: string; testIds: string[] }[] | null;
   referringDoctors?: string[] | null;
 }

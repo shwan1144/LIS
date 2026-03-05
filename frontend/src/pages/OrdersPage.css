@@ -20,20 +20,80 @@
 
 .orders-page-header-meta {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: flex-end;
-  gap: 8px;
-  flex-wrap: wrap;
-  text-align: right;
-}
-
-.orders-header-patient-name {
-  font-size: 15px;
-  line-height: 1.2;
+  flex: 1;
+  min-width: 0;
 }
 
 .orders-main-grid {
   align-items: stretch;
+}
+
+.orders-header-context {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+  width: 100%;
+  min-width: 0;
+}
+
+.orders-header-context-row {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.orders-header-context-top {
+  min-height: 24px;
+}
+
+.orders-header-context-bottom {
+  min-height: 28px;
+}
+
+.orders-header-patient-name {
+  max-width: 260px;
+  font-size: 15px;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.orders-header-context-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  line-height: 1.2;
+}
+
+.orders-header-lock-tag.ant-tag {
+  line-height: 18px;
+  padding-inline: 8px;
+}
+
+.orders-header-referred-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 280px;
+  max-width: 440px;
+}
+
+.orders-header-referred-label {
+  white-space: nowrap;
+  font-size: 12px;
+}
+
+.orders-header-referred-control {
+  width: 320px;
+  max-width: 100%;
 }
 
 .orders-history-content {
@@ -75,32 +135,10 @@
   height: 100%;
 }
 
-.orders-workspace-card .ant-card-body > .locked-order-view,
-.orders-workspace-card .ant-card-body > .draft-order-view {
+.orders-workspace-card .ant-card-body>.locked-order-view,
+.orders-workspace-card .ant-card-body>.draft-order-view {
   flex: 1;
   min-height: 0;
-}
-
-.order-composer-head-card {
-  margin-bottom: 10px;
-}
-
-.order-composer-head-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px 12px;
-}
-
-.order-composer-head-value {
-  margin-top: 2px;
-  font-size: 15px;
-  font-weight: 600;
-  line-height: 1.3;
-  word-break: break-word;
-}
-
-.order-composer-referred-row {
-  margin-top: 10px;
 }
 
 .order-composer-grid .ant-card-head {
@@ -120,13 +158,13 @@
   gap: 8px;
 }
 
-.order-selected-tests-table .ant-table-thead > tr > th {
+.order-selected-tests-table .ant-table-thead>tr>th {
   font-size: 11.5px;
   padding: 4px 8px;
   line-height: 1.1;
 }
 
-.order-selected-tests-table .ant-table-tbody > tr > td {
+.order-selected-tests-table .ant-table-tbody>tr>td {
   font-size: 11.5px;
   padding: 3px 8px;
   height: 26px;
@@ -136,18 +174,18 @@
   line-height: 1.1;
 }
 
-.order-selected-tests-table .ant-table-thead > tr > th:nth-child(1),
-.order-selected-tests-table .ant-table-tbody > tr > td:nth-child(1) {
+.order-selected-tests-table .ant-table-thead>tr>th:nth-child(1),
+.order-selected-tests-table .ant-table-tbody>tr>td:nth-child(1) {
   width: calc((100% - 38px) * 0.6);
 }
 
-.order-selected-tests-table .ant-table-thead > tr > th:nth-child(2),
-.order-selected-tests-table .ant-table-tbody > tr > td:nth-child(2) {
+.order-selected-tests-table .ant-table-thead>tr>th:nth-child(2),
+.order-selected-tests-table .ant-table-tbody>tr>td:nth-child(2) {
   width: calc((100% - 38px) * 0.4);
 }
 
-.order-selected-tests-table .ant-table-thead > tr > th:nth-child(3),
-.order-selected-tests-table .ant-table-tbody > tr > td:nth-child(3) {
+.order-selected-tests-table .ant-table-thead>tr>th:nth-child(3),
+.order-selected-tests-table .ant-table-tbody>tr>td:nth-child(3) {
   width: 38px;
   padding-inline: 4px;
 }
@@ -181,6 +219,27 @@
 .order-composer-groups .ant-btn {
   border-radius: 999px;
   padding-inline: 12px;
+}
+
+.order-delivery-preferences {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid #d9d9d9;
+  background: #fff;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.order-delivery-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.order-delivery-buttons .ant-btn {
+  min-width: 92px;
 }
 
 .order-composer-new-patient-btn {
@@ -239,12 +298,13 @@
   display: block;
   min-width: 0;
   margin: 0;
-  font-size: 13px;
-  line-height: 18px;
+  font-size: 18px;
+  line-height: 22px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
+
 
 .order-history-cell {
   min-width: 0;
@@ -397,25 +457,6 @@
   font-size: 18px;
 }
 
-.locked-order-summary-card {
-  margin-bottom: 8px;
-}
-
-.locked-order-summary-icon {
-  color: #52c41a;
-  font-size: 32px;
-}
-
-.locked-order-summary-title {
-  font-size: 18px;
-}
-
-.locked-order-summary-meta {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 6px 14px;
-}
-
 .order-dock-action-row {
   display: flex;
   flex-wrap: nowrap;
@@ -432,9 +473,10 @@
   height: auto;
   white-space: normal;
   text-align: center;
-  line-height: 1.1;
-  padding: 7px 8px;
-  font-size: 13px;
+  line-height: 1.25;
+  padding: 12px 10px;
+  font-size: 15px;
+  font-weight: 600;
 }
 
 .order-dock-create-btn {
@@ -510,7 +552,30 @@
 
   .orders-page-header-meta {
     justify-content: flex-start;
-    text-align: left;
+    width: 100%;
+  }
+
+  .orders-header-context {
+    align-items: stretch;
+  }
+
+  .orders-header-context-row {
+    justify-content: flex-start;
+  }
+
+  .orders-header-patient-name {
+    max-width: 100%;
+  }
+
+  .orders-header-referred-group {
+    min-width: 0;
+    max-width: none;
+    width: 100%;
+    flex-wrap: wrap;
+  }
+
+  .orders-header-referred-control {
+    width: 100%;
   }
 
   .locked-order-content,
@@ -518,16 +583,8 @@
     padding-bottom: 0;
   }
 
-  .order-composer-head-grid {
-    grid-template-columns: 1fr;
-  }
-
   .order-dock-summary-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .locked-order-summary-meta {
-    grid-template-columns: 1fr;
   }
 
   .order-dock-action-row {

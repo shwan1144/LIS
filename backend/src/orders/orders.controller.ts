@@ -19,6 +19,7 @@ import { CreateOrderDto } from './dto/create-order.dto';
 import { UpdateOrderPaymentDto } from './dto/update-payment.dto';
 import { UpdateOrderTestsDto } from './dto/update-order-tests.dto';
 import { UpdateOrderDiscountDto } from './dto/update-order-discount.dto';
+import { UpdateOrderDeliveryMethodsDto } from './dto/update-order-delivery-methods.dto';
 import {
   CreateOrderView,
   OrderDetailView,
@@ -239,5 +240,19 @@ export class OrdersController {
       throw new Error('Lab ID not found in token');
     }
     return this.ordersService.updateOrderTests(id, labId, dto.testIds);
+  }
+
+  @Patch(':id/delivery-methods')
+  @UsePipes(new ValidationPipe({ whitelist: true }))
+  async updateOrderDeliveryMethods(
+    @Req() req: RequestWithUser,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UpdateOrderDeliveryMethodsDto,
+  ) {
+    const labId = req.user?.labId;
+    if (!labId) {
+      throw new Error('Lab ID not found in token');
+    }
+    return this.ordersService.updateDeliveryMethods(id, labId, dto.deliveryMethods);
   }
 }

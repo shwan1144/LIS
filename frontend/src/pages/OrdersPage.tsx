@@ -27,7 +27,6 @@ import {
   PrinterOutlined,
   UserOutlined,
   DeleteOutlined,
-  CheckCircleOutlined,
   LockOutlined,
   PlusOutlined,
   ReloadOutlined,
@@ -49,8 +48,9 @@ import {
   updateOrderPayment,
   updateOrderDiscount,
   updateOrderTests,
-  updateLabSettings,
+  updateOrderDeliveryMethods,
   type CreateOrderDto,
+  type DeliveryMethod,
   type PatientDto,
   type TestDto,
   type OrderDto,
@@ -113,6 +113,12 @@ const ORDER_STATUS_TAG_COLORS: Record<OrderStatus, string> = {
   COMPLETED: 'green',
   CANCELLED: 'red',
 };
+const DELIVERY_METHODS: DeliveryMethod[] = ['PRINT', 'WHATSAPP', 'VIBER'];
+const DELIVERY_METHOD_LABELS: Record<DeliveryMethod, string> = {
+  PRINT: 'Print',
+  WHATSAPP: 'WhatsApp',
+  VIBER: 'Viber',
+};
 const SHIFT_COLOR_PALETTE = [
   'magenta',
   'volcano',
@@ -154,6 +160,18 @@ function getShiftTagColor(shiftLabel: string): (typeof SHIFT_COLOR_PALETTE)[numb
   return SHIFT_COLOR_PALETTE[Math.abs(hash) % SHIFT_COLOR_PALETTE.length];
 }
 
+function normalizeDeliveryMethods(methods: readonly string[] | null | undefined): DeliveryMethod[] {
+  if (!Array.isArray(methods) || methods.length === 0) return [];
+  const selected = new Set<DeliveryMethod>();
+  for (const raw of methods) {
+    const normalized = String(raw ?? '').trim().toUpperCase();
+    if (!normalized) continue;
+    if (!DELIVERY_METHODS.includes(normalized as DeliveryMethod)) continue;
+    selected.add(normalized as DeliveryMethod);
+  }
+  return DELIVERY_METHODS.filter((method) => selected.has(method));
+}
+
 function toOrderHistoryItem(order: OrderDto): OrderHistoryItemDto {
   const readyTestsCount = Number(order.readyTestsCount ?? 0) || 0;
   return {
@@ -161,6 +179,7 @@ function toOrderHistoryItem(order: OrderDto): OrderHistoryItemDto {
     orderNumber: order.orderNumber,
     status: order.status,
     registeredAt: order.registeredAt,
+    deliveryMethods: normalizeDeliveryMethods(order.deliveryMethods),
     paymentStatus:
       order.paymentStatus === 'paid' || order.paymentStatus === 'partial'
         ? order.paymentStatus
@@ -184,6 +203,7 @@ function toOrderHistoryItemFromSummary(order: OrderCreateSummaryDto): OrderHisto
     orderNumber: order.orderNumber,
     status: order.status,
     registeredAt: order.registeredAt,
+    deliveryMethods: normalizeDeliveryMethods(order.deliveryMethods),
     paymentStatus:
       order.paymentStatus === 'paid' || order.paymentStatus === 'partial'
         ? order.paymentStatus
@@ -267,6 +287,8 @@ export function OrdersPage() {
   const [uiTestGroups, setUiTestGroups] = useState<{ id: string; name: string; testIds: string[] }[]>([]);
   const [referringDoctorOptions, setReferringDoctorOptions] = useState<string[]>([]);
   const [referredBy, setReferredBy] = useState('');
+  const [selectedDeliveryMethods, setSelectedDeliveryMethods] = useState<DeliveryMethod[]>([]);
+  const [savingDeliveryMethods, setSavingDeliveryMethods] = useState(false);
 
   const [subtotal, setSubtotal] = useState<number | null>(0);
   const [loadingPrice, setLoadingPrice] = useState(false);
@@ -293,6 +315,7 @@ export function OrdersPage() {
   const orderDetailsRequestVersionRef = useRef<Record<string, number>>({});
   const discountSaveTimerRef = useRef<number | null>(null);
   const discountSaveRequestVersionRef = useRef(0);
+  const draftDeliveryMethodsRef = useRef<DeliveryMethod[]>([]);
 
   const selectedRow = useMemo(
     () => patientList.find((r) => r.rowId === selectedRowId) ?? null,
@@ -314,6 +337,7 @@ export function OrdersPage() {
     submitting ||
     updatingPayment ||
     updatingDiscount ||
+    savingDeliveryMethods ||
     savingEditedTests ||
     printingAction !== null;
   const lockedOrderBaseActionsDisabled = lockedOrderActionsBusy || !lockedOrderContextActive;
@@ -462,6 +486,8 @@ export function OrdersPage() {
         setSelectedTests([]);
         setDiscountPercent(0);
         setReferredBy('');
+        draftDeliveryMethodsRef.current = [];
+        setSelectedDeliveryMethods([]);
         setListPage(1);
       })
       .catch(() => {
@@ -713,6 +739,22 @@ export function OrdersPage() {
     }
   };
 
+  const toggleDeliveryMethod = (method: DeliveryMethod) => {
+    setSelectedDeliveryMethods((previous) => {
+      const nextSet = new Set(previous);
+      if (nextSet.has(method)) {
+        nextSet.delete(method);
+      } else {
+        nextSet.add(method);
+      }
+      const next = DELIVERY_METHODS.filter((item) => nextSet.has(item));
+      if (!isSelectedLocked) {
+        draftDeliveryMethodsRef.current = next;
+      }
+      return next;
+    });
+  };
+
   const applyUpdatedOrderToList = (updatedOrder: OrderDto) => {
     const historyItem = toOrderHistoryItem(updatedOrder);
     setOrderDetailsCache((prev) => ({ ...prev, [updatedOrder.id]: updatedOrder }));
@@ -802,6 +844,22 @@ export function OrdersPage() {
     setDiscountPercent((current) =>
       Math.abs(current - normalizedDiscount) < 0.001 ? current : normalizedDiscount,
     );
+  }, [isSelectedLocked, selectedCreatedOrder, selectedCreatedOrderSummary]);
+
+  useEffect(() => {
+    if (isSelectedLocked) {
+      const sourceMethods =
+        selectedCreatedOrder?.deliveryMethods ?? selectedCreatedOrderSummary?.deliveryMethods ?? [];
+      const normalized = normalizeDeliveryMethods(sourceMethods);
+      setSelectedDeliveryMethods((current) => {
+        if (current.length === normalized.length && current.every((method, idx) => method === normalized[idx])) {
+          return current;
+        }
+        return normalized;
+      });
+      return;
+    }
+    setSelectedDeliveryMethods(draftDeliveryMethodsRef.current);
   }, [isSelectedLocked, selectedCreatedOrder, selectedCreatedOrderSummary]);
 
   useEffect(() => () => {
@@ -911,6 +969,7 @@ export function OrdersPage() {
         patientType: 'WALK_IN',
         discountPercent: discountPercent || undefined,
         notes: referredBy.trim() || undefined,
+        deliveryMethods: selectedDeliveryMethods.length > 0 ? selectedDeliveryMethods : undefined,
         ...(currentShiftId ? { shiftId: currentShiftId } : {}),
         samples: Object.entries(testsByTube).map(([tubeType, tests]) => ({
           tubeType: tubeType as CreateOrderDto['samples'][0]['tubeType'],
@@ -960,6 +1019,8 @@ export function OrdersPage() {
       setDraftPatient(null);
       setSelectedTests([]);
       setReferredBy('');
+      draftDeliveryMethodsRef.current = [];
+      setSelectedDeliveryMethods([]);
       setListPage(1);
       void loadOrderHistory({
         focusOrderId: createdOrder.id,
@@ -1002,6 +1063,8 @@ export function OrdersPage() {
     setSelectedTests([]);
     setDiscountPercent(0);
     setReferredBy('');
+    draftDeliveryMethodsRef.current = [];
+    setSelectedDeliveryMethods([]);
   };
 
   const addNewOrderForPatient = (patient: PatientDto) => {
@@ -1015,6 +1078,8 @@ export function OrdersPage() {
     setSelectedTests([]);
     setDiscountPercent(0);
     setReferredBy('');
+    draftDeliveryMethodsRef.current = [];
+    setSelectedDeliveryMethods([]);
     setListPage(1);
   };
 
@@ -1133,6 +1198,23 @@ export function OrdersPage() {
   const handleLockedStartNewOrder = () => {
     if (lockedOrderBaseActionsDisabled || !selectedCreatedOrderSummary || !selectedPatient) return;
     addNewOrderForPatient(selectedCreatedOrderSummary.patient ?? selectedPatient);
+  };
+
+  const handleSaveDeliveryPreferences = async () => {
+    if (!selectedCreatedOrderSummary || !isSelectedLocked) return;
+    setSavingDeliveryMethods(true);
+    try {
+      const updated = await updateOrderDeliveryMethods(selectedCreatedOrderSummary.id, {
+        deliveryMethods: selectedDeliveryMethods,
+      });
+      applyUpdatedOrderToList(updated);
+      setSelectedDeliveryMethods(normalizeDeliveryMethods(updated.deliveryMethods));
+      message.success('Delivery preferences saved');
+    } catch {
+      message.error('Failed to save delivery preferences');
+    } finally {
+      setSavingDeliveryMethods(false);
+    }
   };
 
   const handleSummaryDiscountChange = (value: number | null) => {
@@ -1259,6 +1341,12 @@ export function OrdersPage() {
       : `${summaryTotalAmount.toFixed(0)} IQD`;
 
   const currentPaymentStatus = selectedCreatedOrderSummary?.paymentStatus ?? 'unpaid';
+  const lockedDeliveryMethods = normalizeDeliveryMethods(
+    selectedCreatedOrder?.deliveryMethods ?? selectedCreatedOrderSummary?.deliveryMethods ?? [],
+  );
+  const hasLockedDeliveryMethodChanges =
+    lockedDeliveryMethods.length !== selectedDeliveryMethods.length ||
+    lockedDeliveryMethods.some((method, idx) => method !== selectedDeliveryMethods[idx]);
   const orderDockBar = selectedPatient ? (
     <div className={`order-dock-bar${isDark ? ' order-dock-bar-dark' : ''}`}>
       <div className="order-dock-summary-grid">
@@ -1444,23 +1532,92 @@ export function OrdersPage() {
             <Text type="secondary">Create orders with fast summary response and background detail hydration.</Text>
           </div>
           <div className="orders-page-header-meta">
-            <Tag color={isSelectedLocked ? 'success' : selectedPatient ? 'processing' : 'default'} style={{ margin: 0 }}>
-              {isSelectedLocked ? 'Locked order' : selectedPatient ? 'Draft order' : 'No selection'}
-            </Tag>
             {selectedPatient ? (
-              <Text strong className="orders-header-patient-name">
-                {getPatientName(selectedPatient)}
-              </Text>
+              <div className="orders-header-context">
+                <div className="orders-header-context-row orders-header-context-top">
+                  <Tag color={isSelectedLocked ? 'success' : 'processing'} style={{ margin: 0 }}>
+                    {isSelectedLocked ? 'Locked order' : 'Draft order'}
+                  </Tag>
+                  <Text strong className="orders-header-patient-name" title={getPatientName(selectedPatient)}>
+                    {getPatientName(selectedPatient)}
+                  </Text>
+                  {selectedCreatedOrderSummary ? (
+                    <Tag color="blue" style={{ margin: 0 }}>
+                      Order #{selectedCreatedOrderSummary.orderNumber || selectedCreatedOrderSummary.id.substring(0, 8)}
+                    </Tag>
+                  ) : nextOrderNumber ? (
+                    <Tag color="gold" style={{ margin: 0 }}>Next #{nextOrderNumber}</Tag>
+                  ) : null}
+                </div>
+                <div className="orders-header-context-row orders-header-context-bottom">
+                  {isSelectedLocked && selectedCreatedOrderSummary ? (
+                    <>
+                      <span className="orders-header-context-item">
+                        <Text type="secondary">Shift:</Text>
+                        <Text strong>
+                          {selectedCreatedOrderSummary.shift?.name ||
+                            selectedCreatedOrderSummary.shift?.code ||
+                            currentShiftLabel ||
+                            '-'}
+                        </Text>
+                      </span>
+                      <span className="orders-header-context-item">
+                        <Text type="secondary">Time:</Text>
+                        <Text strong>{dayjs(selectedCreatedOrderSummary.registeredAt).format('YYYY-MM-DD HH:mm')}</Text>
+                      </span>
+                      <span className="orders-header-context-item">
+                        <Text type="secondary">Referred by:</Text>
+                        <Text strong>{selectedCreatedOrder?.notes?.trim() || '-'}</Text>
+                      </span>
+                      <Tag
+                        color="success"
+                        icon={<LockOutlined />}
+                        className="orders-header-lock-tag"
+                        style={{ margin: 0 }}
+                      >
+                        Locked for delete - test list can still be edited
+                      </Tag>
+                    </>
+                  ) : (
+                    <>
+                      <span className="orders-header-context-item">
+                        <Text type="secondary">Shift:</Text>
+                        <Text strong>{currentShiftLabel || '-'}</Text>
+                      </span>
+                      <div className="orders-header-referred-group">
+                        <Text strong className="orders-header-referred-label">
+                          Referred by
+                        </Text>
+                        <AutoComplete
+                          value={referredBy}
+                          onChange={setReferredBy}
+                          options={referringDoctorOptions.map((name) => ({ value: name }))}
+                          placeholder="Select from list or type doctor name"
+                          className="orders-header-referred-control"
+                          filterOption={(inputValue, option) =>
+                            String(option?.value ?? '')
+                              .toLowerCase()
+                              .includes(inputValue.toLowerCase())
+                          }
+                          allowClear
+                        />
+                      </div>
+                    </>
+                  )}
+                </div>
+              </div>
             ) : (
-              <Text type="secondary">Select a row to begin</Text>
+              <div className="orders-header-context">
+                <div className="orders-header-context-row orders-header-context-top">
+                  <Tag color="default" style={{ margin: 0 }}>
+                    No selection
+                  </Tag>
+                </div>
+                <div className="orders-header-context-row orders-header-context-bottom">
+                  <Text type="secondary">Select a row to begin</Text>
+                </div>
+              </div>
             )}
-            {selectedCreatedOrderSummary ? (
-              <Tag color="blue" style={{ margin: 0 }}>
-                Order #{selectedCreatedOrderSummary.orderNumber || selectedCreatedOrderSummary.id.substring(0, 8)}
-              </Tag>
-            ) : nextOrderNumber ? (
-              <Tag color="gold" style={{ margin: 0 }}>Next #{nextOrderNumber}</Tag>
-            ) : null}
           </div>
         </div>
       </Card>
@@ -1729,54 +1886,7 @@ export function OrdersPage() {
             ) : isSelectedLocked && selectedCreatedOrderSummary ? (
               <div className="locked-order-view">
                 <div className="locked-order-content">
-                  <Card size="small" className="locked-order-summary-card orders-section-card">
-                    <Space direction="vertical" size={8} style={{ width: '100%' }}>
-                      <Space size={10} align="center">
-                        <CheckCircleOutlined className="locked-order-summary-icon" />
-                        <Text strong className="locked-order-summary-title">
-                          Order details
-                        </Text>
-                      </Space>
-                      <div className="locked-order-summary-meta">
-                        <div>
-                          <Text type="secondary">Patient: </Text>
-                          <Text strong>{getPatientName(selectedCreatedOrderSummary.patient ?? selectedPatient)}</Text>
-                        </div>
-                        <div>
-                          <Text type="secondary">Order ID: </Text>
-                          <Text strong>
-                            {selectedCreatedOrderSummary.orderNumber || selectedCreatedOrderSummary.id}
-                          </Text>
-                        </div>
-                        <div>
-                          <Text type="secondary">Shift: </Text>
-                          <Tag
-                            color={getShiftTagColor(getShiftLabel(selectedCreatedOrderSummary))}
-                            style={{ margin: 0, fontSize: 12, lineHeight: '18px', paddingInline: 8 }}
-                          >
-                            {selectedCreatedOrderSummary.shift?.name ||
-                              selectedCreatedOrderSummary.shift?.code ||
-                              currentShiftLabel ||
-                              '-'}
-                          </Tag>
-                        </div>
-                        <div>
-                          <Text type="secondary">Time: </Text>
-                          <Text strong>
-                            {dayjs(selectedCreatedOrderSummary.registeredAt).format('YYYY-MM-DD HH:mm')}
-                          </Text>
-                        </div>
-                        <div>
-                          <Text type="secondary">Referred by: </Text>
-                          <Text strong>{selectedCreatedOrder?.notes?.trim() || '-'}</Text>
-                        </div>
-                      </div>
-                      <Tag color="success" icon={<LockOutlined />} style={{ marginInlineEnd: 0, width: 'fit-content' }}>
-                        Locked for delete - test list can still be edited
-                      </Tag>
-                    </Space>
-                  </Card>
-                  <Card type="inner" className="orders-section-card" title="Tests in this order" style={{ marginTop: 10 }}>
+                  <Card type="inner" className="orders-section-card" title="Tests in this order">
                     <Text type="secondary" style={{ display: 'block', marginBottom: 8 }}>
                       You can update tests for this order without changing order number or existing label sequence numbers.
                     </Text>
@@ -1847,7 +1957,7 @@ export function OrdersPage() {
                             )}
                           </Col>
                           <Col span={6}>
-                            <div className="order-composer-tubes-summary" style={{ padding: '8px 12px', backgroundColor: styles.bgSubtle, borderRadius: 8, border: styles.border, height: '100%' }}>
+                            <div className="order-composer-tubes-summary" style={{ padding: '8px 12px', backgroundColor: styles.bgSubtle, borderRadius: 8, border: styles.border }}>
                               <Space direction="vertical" size={6} style={{ width: '100%' }}>
                                 <Text strong style={{ fontSize: 13 }}>Tubes required:</Text>
                                 {lockedTubesRequired.length === 0 ? (
@@ -1868,6 +1978,31 @@ export function OrdersPage() {
                                   </Space>
                                 )}
                               </Space>
+                            </div>
+                            <div className="order-delivery-preferences">
+                              <Text strong style={{ fontSize: 13 }}>Preferred delivery:</Text>
+                              <div className="order-delivery-buttons">
+                                {DELIVERY_METHODS.map((method) => (
+                                  <Button
+                                    key={method}
+                                    size="small"
+                                    type={selectedDeliveryMethods.includes(method) ? 'primary' : 'default'}
+                                    disabled={lockedOrderBaseActionsDisabled}
+                                    onClick={() => toggleDeliveryMethod(method)}
+                                  >
+                                    {DELIVERY_METHOD_LABELS[method]}
+                                  </Button>
+                                ))}
+                              </div>
+                              <Button
+                                block
+                                size="small"
+                                onClick={() => void handleSaveDeliveryPreferences()}
+                                loading={savingDeliveryMethods}
+                                disabled={lockedOrderBaseActionsDisabled || !hasLockedDeliveryMethodChanges}
+                              >
+                                Save preferences
+                              </Button>
                             </div>
                           </Col>
                         </Row>
@@ -1896,37 +2031,6 @@ export function OrdersPage() {
             ) : (
               <div className="draft-order-view">
                 <div className="draft-order-content">
-                  <Card size="small" className="orders-section-card order-composer-head-card">
-                    <div className="order-composer-head-grid">
-                      <div>
-                        <Text type="secondary">Patient</Text>
-                        <div className="order-composer-head-value">{getPatientName(selectedPatient)}</div>
-                      </div>
-                      <div>
-                        <Text type="secondary">Order number</Text>
-                        <div className="order-composer-head-value">{nextOrderNumber ?? '-'}</div>
-                      </div>
-                    </div>
-                    <div className="order-composer-referred-row">
-                      <Text strong style={{ display: 'block', marginBottom: 8 }}>
-                        Referred by
-                      </Text>
-                      <AutoComplete
-                        value={referredBy}
-                        onChange={setReferredBy}
-                        options={referringDoctorOptions.map((name) => ({ value: name }))}
-                        placeholder="Select from list or type doctor name"
-                        style={{ width: '100%' }}
-                        filterOption={(inputValue, option) =>
-                          String(option?.value ?? '')
-                            .toLowerCase()
-                            .includes(inputValue.toLowerCase())
-                        }
-                        allowClear
-                      />
-                    </div>
-                  </Card>
-
                   <Row gutter={[12, 12]} className="order-composer-grid">
                     <Col xs={24} xl={16}>
                       <Card size="small" className="orders-section-card" title="Select tests">
@@ -2070,6 +2174,23 @@ export function OrdersPage() {
                             Grouped by {printLabelSequenceBy === 'department' ? 'department' : 'tube type'}
                           </Text>
                         </Space>
+                      </div>
+
+                      <div className="order-delivery-preferences">
+                        <Text strong style={{ fontSize: 13 }}>Preferred delivery:</Text>
+                        <div className="order-delivery-buttons">
+                          {DELIVERY_METHODS.map((method) => (
+                            <Button
+                              key={method}
+                              size="small"
+                              type={selectedDeliveryMethods.includes(method) ? 'primary' : 'default'}
+                              disabled={submitting}
+                              onClick={() => toggleDeliveryMethod(method)}
+                            >
+                              {DELIVERY_METHOD_LABELS[method]}
+                            </Button>
+                          ))}
+                        </div>
                       </div>
                     </Col>
                   </Row>

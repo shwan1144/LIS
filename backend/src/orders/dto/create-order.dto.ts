@@ -10,8 +10,8 @@ import {
   Min,
   Max,
 } from 'class-validator';
-import { Type } from 'class-transformer';
-import { PatientType, OrderStatus } from '../../entities/order.entity';
+import { Transform, Type } from 'class-transformer';
+import { DeliveryMethod, PatientType } from '../../entities/order.entity';
 import { TubeType } from '../../entities/sample.entity';
 
 export class CreateOrderTestDto {
@@ -65,7 +65,12 @@ export class CreateOrderDto {
   samples: CreateSampleDto[];
 
   @IsOptional()
+  @Transform(({ value }) =>
+    Array.isArray(value)
+      ? value.map((item) => (typeof item === 'string' ? item.trim().toUpperCase() : item))
+      : value,
+  )
   @IsArray()
-  @IsString({ each: true })
-  deliveryMethods?: string[];
+  @IsEnum(DeliveryMethod, { each: true })
+  deliveryMethods?: DeliveryMethod[];
 }

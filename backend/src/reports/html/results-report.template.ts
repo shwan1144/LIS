@@ -1,6 +1,7 @@
 import type { Order } from '../../entities/order.entity';
 import type { OrderTest } from '../../entities/order-test.entity';
 import { TestType } from '../../entities/test.entity';
+import { resolveReportStyleConfig } from '../report-style.config';
 import { resolveNumericRange } from '../../tests/normal-range.util';
 
 // Fallback logo (from provided template)
@@ -162,6 +163,7 @@ export function buildResultsReportHtml(input: {
 
   // Branding: only use values explicitly configured for this lab.
   const labAny: any = order.lab as any;
+  const reportStyle = resolveReportStyleConfig(labAny?.reportStyle);
   const bannerSrc: string = (labAny?.reportBannerDataUrl as string) || '';
   const footerSrc: string = (labAny?.reportFooterDataUrl as string) || '';
   const logoSrc: string = (labAny?.reportLogoDataUrl as string) || '';
@@ -178,6 +180,12 @@ export function buildResultsReportHtml(input: {
   const watermarkUrlAttr = watermarkSrc ? `src="${escapeHtml(watermarkSrc)}"` : '';
   const hasHeaderBanner = hasCustomBanner && Boolean(bannerUrlAttr);
   const hasHeaderLogoOnly = !hasHeaderBanner && hasCustomLogo && Boolean(logoUrlAttr);
+  const rowStripeCss = reportStyle.resultsTable.rowStripeEnabled
+    ? `
+    .regular-results-table tbody.regular-dept-block tr:not(.dept-row):not(.cat-row):not(.abnormal):nth-child(even) td { background: ${reportStyle.resultsTable.rowStripeColor}; }
+    .panel-page tbody tr:not(.abnormal):nth-child(even) td { background: ${reportStyle.resultsTable.rowStripeColor}; }
+    `
+    : '';
   const kurdishFontFace = input.kurdishFontBase64
     ? `@font-face { font-family: 'KurdishReportFont'; src: url('${escapeHtml(input.kurdishFontBase64)}') format('truetype'); font-weight: 400; font-style: normal; }`
     : '';
@@ -322,7 +330,7 @@ export function buildResultsReportHtml(input: {
             <td style="width:28%;font-weight:600;">${escapeHtml(p?.label || p?.code || '')}</td>
             <td style="width:24%;">${valueCell}</td>
             <td style="width:24%;" class="${statusClass}">${escapeHtml(statusText)}</td>
-            <td style="width:24%;">${escapeHtml(referenceValue)}</td>
+            <td style="width:24%;" class="reference-value">${escapeHtml(referenceValue)}</td>
           </tr>`;
         })
         .join('');
@@ -332,7 +340,7 @@ export function buildResultsReportHtml(input: {
           .map(([k, v]) => `<tr>
             <td style="width:28%;font-weight:600;">${escapeHtml(k)}</td>
             <td style="width:24%;">${escapeHtml(String(v))}</td>
-            <td style="width:24%;">-</td>
+            <td style="width:24%;" class="reference-value">-</td>
             <td style="width:24%;">-</td>
           </tr>`)
           .join('');
@@ -354,7 +362,7 @@ export function buildResultsReportHtml(input: {
             <td style="width:14%;" class="nowrap">${escapeHtml(formatResultValue(child))}</td>
             <td style="width:14%;" class="nowrap">${escapeHtml(ct?.unit || '-')}</td>
             <td style="width:14%;" class="${statusClass}">${escapeHtml(statusText)}</td>
-            <td style="width:30%;" class="nowrap">${escapeHtml(formatRange(child, order.patient?.sex ?? null, age))}</td>
+            <td style="width:30%;" class="nowrap reference-value">${escapeHtml(formatRange(child, order.patient?.sex ?? null, age))}</td>
           </tr>`;
         })
         .join('');
@@ -426,7 +434,7 @@ export function buildResultsReportHtml(input: {
             <td style="width:14%;" class="nowrap">${escapeHtml(formatResultValue(ot))}</td>
             <td style="width:14%;" class="nowrap">${escapeHtml(t?.unit || '-')}</td>
             <td style="width:14%;" class="${statusClass}">${escapeHtml(statusText)}</td>
-            <td style="width:30%;" class="nowrap">${escapeHtml(formatRange(ot, order.patient?.sex ?? null, age))}</td>
+            <td style="width:30%;" class="nowrap reference-value">${escapeHtml(formatRange(ot, order.patient?.sex ?? null, age))}</td>
           </tr>`;
           })
           .join('');
@@ -486,10 +494,46 @@ export function buildResultsReportHtml(input: {
     body {
       --content-x: 3mm;
       --footer-height: 18mm;
+      --patient-info-bg: ${reportStyle.patientInfo.backgroundColor};
+      --patient-info-border-color: ${reportStyle.patientInfo.borderColor};
+      --patient-info-text-color: ${reportStyle.patientInfo.textColor};
+      --patient-info-label-color: ${reportStyle.patientInfo.labelColor};
+      --patient-info-font-size: ${reportStyle.patientInfo.fontSizePx}px;
+      --patient-info-label-weight: ${reportStyle.patientInfo.labelFontWeight};
+      --patient-info-value-weight: ${reportStyle.patientInfo.valueFontWeight};
+      --patient-info-align: ${reportStyle.patientInfo.textAlign};
+      --patient-info-radius: ${reportStyle.patientInfo.borderRadiusPx}px;
+      --patient-info-padding-y: ${reportStyle.patientInfo.paddingYpx}px;
+      --patient-info-padding-x: ${reportStyle.patientInfo.paddingXpx}px;
+      --results-header-bg: ${reportStyle.resultsTable.headerBackgroundColor};
+      --results-header-text-color: ${reportStyle.resultsTable.headerTextColor};
+      --results-header-font-size: ${reportStyle.resultsTable.headerFontSizePx}px;
+      --results-header-align: ${reportStyle.resultsTable.headerTextAlign};
+      --results-body-text-color: ${reportStyle.resultsTable.bodyTextColor};
+      --results-body-font-size: ${reportStyle.resultsTable.bodyFontSizePx}px;
+      --results-cell-align: ${reportStyle.resultsTable.cellTextAlign};
+      --results-border-color: ${reportStyle.resultsTable.borderColor};
+      --results-abnormal-row-bg: ${reportStyle.resultsTable.abnormalRowBackgroundColor};
+      --results-reference-color: ${reportStyle.resultsTable.referenceValueColor};
+      --results-dept-bg: ${reportStyle.resultsTable.departmentRowBackgroundColor};
+      --results-dept-text-color: ${reportStyle.resultsTable.departmentRowTextColor};
+      --results-dept-font-size: ${reportStyle.resultsTable.departmentRowFontSizePx}px;
+      --results-dept-text-align: ${reportStyle.resultsTable.departmentRowTextAlign};
+      --results-cat-bg: ${reportStyle.resultsTable.categoryRowBackgroundColor};
+      --results-cat-text-color: ${reportStyle.resultsTable.categoryRowTextColor};
+      --results-cat-font-size: ${reportStyle.resultsTable.categoryRowFontSizePx}px;
+      --results-cat-text-align: ${reportStyle.resultsTable.categoryRowTextAlign};
+      --results-status-normal-color: ${reportStyle.resultsTable.statusNormalColor};
+      --results-status-high-color: ${reportStyle.resultsTable.statusHighColor};
+      --results-status-low-color: ${reportStyle.resultsTable.statusLowColor};
+      --results-regular-dept-break: ${reportStyle.resultsTable.regularDepartmentBlockBreak};
+      --results-regular-row-break: ${reportStyle.resultsTable.regularRowBreak};
+      --results-panel-table-break: ${reportStyle.resultsTable.panelTableBreak};
+      --results-panel-row-break: ${reportStyle.resultsTable.panelRowBreak};
       margin: 0;
       font-family: 'Segoe UI', Tahoma, Arial, sans-serif;
       font-size: 12px;
-      color: #333;
+      color: var(--results-body-text-color);
       position: relative;
     }
     .rtl {
@@ -539,11 +583,23 @@ export function buildResultsReportHtml(input: {
     .logo-wrap { flex: 0 0 120px; text-align: center; }
     .logo { width: 90px; height: auto; object-fit: contain; }
     .report-title { text-align: center; font-size: 20px; font-weight: 800; text-decoration: underline; margin: 12px 0 10px; }
-    .patient-info { margin-top: 8px; margin-bottom: 8px; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; border: 1px solid #ccc; border-radius: 6px; padding: 10px 12px; background: #fafafa; }
+    .patient-info {
+      margin-top: 8px;
+      margin-bottom: 8px;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      border: 1px solid var(--patient-info-border-color);
+      border-radius: var(--patient-info-radius);
+      padding: var(--patient-info-padding-y) var(--patient-info-padding-x);
+      background: var(--patient-info-bg);
+      color: var(--patient-info-text-color);
+      text-align: var(--patient-info-align);
+    }
     .patient-info-col { display: flex; flex-direction: column; gap: 6px; }
-    .info-item { font-size: 13px; }
-    .info-item .label { font-weight: 700; margin-right: 4px; }
-    .name-value { display: inline-block; }
+    .info-item { font-size: var(--patient-info-font-size); color: var(--patient-info-text-color); }
+    .info-item .label { font-weight: var(--patient-info-label-weight); margin-right: 4px; color: var(--patient-info-label-color); }
+    .name-value { display: inline-block; font-weight: var(--patient-info-value-weight); }
     .rtl-text {
       direction: rtl;
       unicode-bidi: isolate;
@@ -554,8 +610,19 @@ export function buildResultsReportHtml(input: {
     }
     .content { padding: 0; }
     table { width: 100%; border-collapse: collapse; margin-bottom: 8px; }
-    th, td { border: 1px solid #eee; padding: 6px 8px; text-align: left; font-size: 12px; }
-    th { background: #f2f2f2; font-weight: 700; }
+    th, td { border: 1px solid var(--results-border-color); padding: 6px 8px; }
+    th {
+      background: var(--results-header-bg);
+      color: var(--results-header-text-color);
+      font-weight: 700;
+      font-size: var(--results-header-font-size);
+      text-align: var(--results-header-align);
+    }
+    td {
+      color: var(--results-body-text-color);
+      font-size: var(--results-body-font-size);
+      text-align: var(--results-cell-align);
+    }
     .regular-results-table {
       page-break-inside: auto;
       break-inside: auto;
@@ -567,26 +634,30 @@ export function buildResultsReportHtml(input: {
       display: table-row-group;
     }
     .regular-results-table tbody.regular-dept-block {
-      page-break-inside: avoid;
-      break-inside: avoid;
+      page-break-inside: var(--results-regular-dept-break);
+      break-inside: var(--results-regular-dept-break);
     }
     .regular-results-table tr {
-      page-break-inside: avoid;
-      break-inside: avoid;
+      page-break-inside: var(--results-regular-row-break);
+      break-inside: var(--results-regular-row-break);
     }
     .regular-results-table .dept-row td {
-      background: #222;
-      color: #fff;
-      border-color: #222;
+      background: var(--results-dept-bg);
+      color: var(--results-dept-text-color);
+      border-color: var(--results-dept-bg);
       padding: 8px 12px;
       font-weight: 800;
+      font-size: var(--results-dept-font-size);
+      text-align: var(--results-dept-text-align);
     }
     .regular-results-table .cat-row td {
-      background: #f2f2f2;
-      color: #555;
+      background: var(--results-cat-bg);
+      color: var(--results-cat-text-color);
       padding: 6px 12px;
       font-weight: 700;
-      border: 1px solid #ddd;
+      border: 1px solid var(--results-border-color);
+      font-size: var(--results-cat-font-size);
+      text-align: var(--results-cat-text-align);
     }
     .regular-empty-state {
       background: #222;
@@ -595,19 +666,21 @@ export function buildResultsReportHtml(input: {
       font-weight: 800;
       margin-top: 12px;
     }
-    .status-low { color: #0066cc; font-weight: 700; }
-    .status-high { color: #d00000; font-weight: 700; }
-    .status-normal { color: #0f8a1f; }
+    .status-low { color: var(--results-status-low-color); font-weight: 700; }
+    .status-high { color: var(--results-status-high-color); font-weight: 700; }
+    .status-normal { color: var(--results-status-normal-color); }
+    .reference-value { color: var(--results-reference-color); }
     .param-abnormal { color: #c00; font-size: 11px; font-weight: 600; margin-left: 4px; }
-    tr.abnormal td { background-color: #fff5f5; }
+    tr.abnormal td { background-color: var(--results-abnormal-row-bg); }
     .panel-section { margin-top: 20px; }
     .panel-page-title { font-size: 18px; font-weight: 800; margin-bottom: 12px; border-bottom: 2px solid #222; padding-bottom: 6px; }
     .panel-page { page-break-inside: auto; break-inside: auto; }
     .panel-page .content { padding: 0; overflow: visible; }
     .panel-page .panel-section { page-break-inside: auto; break-inside: auto; }
-    .panel-page table { page-break-inside: auto; break-inside: auto; }
-    .panel-page tr { page-break-inside: avoid; break-inside: avoid; }
+    .panel-page table { page-break-inside: var(--results-panel-table-break); break-inside: var(--results-panel-table-break); }
+    .panel-page tr { page-break-inside: var(--results-panel-row-break); break-inside: var(--results-panel-row-break); }
     .gue-gse-table { width: 100%; margin-top: 8px; margin-bottom: 12px; }
+    ${rowStripeCss}
     .report-footer {
       position: absolute;
       left: var(--content-x);

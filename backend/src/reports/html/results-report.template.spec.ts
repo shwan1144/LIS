@@ -1,6 +1,7 @@
 import type { Order } from '../../entities/order.entity';
 import type { OrderTest } from '../../entities/order-test.entity';
 import { TestType } from '../../entities/test.entity';
+import { DEFAULT_REPORT_STYLE_V1 } from '../report-style.config';
 import { buildResultsReportHtml } from './results-report.template';
 
 function countMatches(haystack: string, needle: string): number {
@@ -320,12 +321,16 @@ describe('buildResultsReportHtml panel page isolation', () => {
       comments: [],
     });
 
-    expect(html).toContain('.panel-page table { page-break-inside: auto; break-inside: auto; }');
-    expect(html).toContain('.panel-page tr { page-break-inside: avoid; break-inside: avoid; }');
+    expect(html).toContain('--results-regular-dept-break: avoid;');
+    expect(html).toContain('--results-regular-row-break: avoid;');
+    expect(html).toContain('--results-panel-table-break: auto;');
+    expect(html).toContain('--results-panel-row-break: avoid;');
+    expect(html).toContain('.panel-page table { page-break-inside: var(--results-panel-table-break); break-inside: var(--results-panel-table-break); }');
+    expect(html).toContain('.panel-page tr { page-break-inside: var(--results-panel-row-break); break-inside: var(--results-panel-row-break); }');
     expect(html).toContain('.regular-results-table thead {');
     expect(html).toContain('display: table-header-group;');
     expect(html).toContain('.regular-results-table tbody.regular-dept-block {');
-    expect(html).toContain('page-break-inside: avoid;');
+    expect(html).toContain('page-break-inside: var(--results-regular-dept-break);');
   });
 
   it('uses contain footer rendering and updated footer height CSS', () => {
@@ -343,6 +348,55 @@ describe('buildResultsReportHtml panel page isolation', () => {
     expect(html).toContain('.footer-image {');
     expect(html).toContain('object-fit: contain;');
     expect(html).not.toContain('object-fit: fill;');
+  });
+
+  it('injects style variables for patient and results sections', () => {
+    const html = buildResultsReportHtml({
+      order: createOrder(),
+      orderTests: [],
+      reportableCount: 0,
+      verifiedCount: 0,
+      verifiers: [],
+      latestVerifiedAt: null,
+      comments: [],
+    });
+
+    expect(html).toContain(`--patient-info-bg: ${DEFAULT_REPORT_STYLE_V1.patientInfo.backgroundColor};`);
+    expect(html).toContain(`--results-header-bg: ${DEFAULT_REPORT_STYLE_V1.resultsTable.headerBackgroundColor};`);
+    expect(html).toContain('.reference-value { color: var(--results-reference-color); }');
+  });
+
+  it('uses lab reportStyle values when provided', () => {
+    const customStyle = {
+      ...DEFAULT_REPORT_STYLE_V1,
+      patientInfo: {
+        ...DEFAULT_REPORT_STYLE_V1.patientInfo,
+        backgroundColor: '#101010',
+      },
+      resultsTable: {
+        ...DEFAULT_REPORT_STYLE_V1.resultsTable,
+        statusHighColor: '#AA0000',
+      },
+    };
+    const order = createOrder({
+      lab: {
+        ...createOrder().lab,
+        reportStyle: customStyle,
+      } as Order['lab'],
+    });
+
+    const html = buildResultsReportHtml({
+      order,
+      orderTests: [],
+      reportableCount: 0,
+      verifiedCount: 0,
+      verifiers: [],
+      latestVerifiedAt: null,
+      comments: [],
+    });
+
+    expect(html).toContain('--patient-info-bg: #101010;');
+    expect(html).toContain('--results-status-high-color: #AA0000;');
   });
 
   it('prefers order notes for Referred By over patient address fallback', () => {
