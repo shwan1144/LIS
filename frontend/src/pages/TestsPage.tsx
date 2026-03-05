@@ -1212,6 +1212,9 @@ export function TestsPage() {
                         children: (
                           <>
                             <Text type="secondary" style={{ display: 'block', marginBottom: 12 }}>
+                              Min/Max are optional for each sex. Use the Text Value tab when you need free-text reference notes.
+                            </Text>
+                            <Text type="secondary" style={{ display: 'block', marginBottom: 12 }}>
                               Male Range
                             </Text>
                             <Row gutter={16}>
@@ -1343,7 +1346,11 @@ export function TestsPage() {
                         label: 'Text Value',
                         children: (
                           <Form.Item name="normalText" label="Normal Text">
-                            <Input placeholder='e.g., "Negative", "Non-reactive", "< 10"' />
+                            <Input.TextArea
+                              rows={3}
+                              autoSize={{ minRows: 2, maxRows: 8 }}
+                              placeholder='e.g., "Negative", "Non-reactive", "< 10", "Female: up to trace"'
+                            />
                           </Form.Item>
                         ),
                       },

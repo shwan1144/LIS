@@ -175,7 +175,6 @@ export class CreateTestDto {
   normalMaxFemale?: number;
 
   @IsString()
-  @MaxLength(255)
   @IsOptional()
   normalText?: string;
 

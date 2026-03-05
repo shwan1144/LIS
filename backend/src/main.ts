@@ -135,6 +135,20 @@ async function ensureReportBrandingColumns(dataSource: DataSource): Promise<void
     'ALTER TABLE IF EXISTS "tests" ADD COLUMN IF NOT EXISTS "abbreviation" varchar(32)',
     `
       DO $$
+      BEGIN
+        IF EXISTS (
+          SELECT 1
+          FROM information_schema.columns
+          WHERE table_schema = 'public'
+            AND table_name = 'tests'
+            AND column_name = 'normalText'
+        ) THEN
+          ALTER TABLE "tests" ALTER COLUMN "normalText" TYPE text;
+        END IF;
+      END $$;
+    `,
+    `
+      DO $$
       DECLARE
         enum_name text;
       BEGIN

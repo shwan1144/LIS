@@ -129,7 +129,7 @@ export class Test {
   normalMaxFemale: number | null;
 
   // For text-based normal values (e.g., "Negative", "Non-reactive")
-  @Column({ type: 'varchar', length: 255, nullable: true })
+  @Column({ type: 'text', nullable: true })
   normalText: string | null;
 
   /** Result entry behavior: numeric input, qualitative dropdown, or free text */
