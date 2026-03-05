@@ -426,12 +426,39 @@ export function AdminLabReportDesignPage() {
       const expectedReportStyle = cloneReportStyle(reportStyle);
       const expectedWatermarkDataUrl = onlineResultWatermarkDataUrl ?? null;
       const expectedWatermarkText = onlineResultWatermarkText.trim();
+      const hasBrandingChanges =
+        !savedSnapshot ||
+        JSON.stringify(savedSnapshot.branding) !== JSON.stringify(expectedBranding);
+      const hasReportStyleChanges =
+        !savedSnapshot ||
+        JSON.stringify(savedSnapshot.reportStyle) !== JSON.stringify(expectedReportStyle);
+      const hasOnlineWatermarkDataUrlChanges =
+        !savedSnapshot ||
+        savedSnapshot.onlineResultWatermarkDataUrl !== expectedWatermarkDataUrl;
+      const hasOnlineWatermarkTextChanges =
+        !savedSnapshot ||
+        savedSnapshot.onlineResultWatermarkText !== expectedWatermarkText;
+
+      if (
+        !hasBrandingChanges &&
+        !hasReportStyleChanges &&
+        !hasOnlineWatermarkDataUrlChanges &&
+        !hasOnlineWatermarkTextChanges
+      ) {
+        message.info('No changes to save');
+        setSaving(false);
+        return;
+      }
 
       const updated = await updateAdminLabSettings(selectedLabId, {
-        reportBranding: branding,
-        reportStyle,
-        onlineResultWatermarkDataUrl,
-        onlineResultWatermarkText: onlineResultWatermarkText.trim() || null,
+        reportBranding: hasBrandingChanges ? expectedBranding : undefined,
+        reportStyle: hasReportStyleChanges ? expectedReportStyle : undefined,
+        onlineResultWatermarkDataUrl: hasOnlineWatermarkDataUrlChanges
+          ? expectedWatermarkDataUrl
+          : undefined,
+        onlineResultWatermarkText: hasOnlineWatermarkTextChanges
+          ? expectedWatermarkText || null
+          : undefined,
       });
       const nextBranding = updated.reportBranding || emptyBranding();
       const nextReportStyle = updated.reportStyle || defaultReportStyle();
@@ -455,7 +482,22 @@ export function AdminLabReportDesignPage() {
         nextWatermarkText !== expectedWatermarkText;
 
       if (serverDidNotPersist) {
-        message.error('Server did not persist report design; settings reloaded from server.');
+        const mismatchFields: string[] = [];
+        if (JSON.stringify(nextBranding) !== JSON.stringify(expectedBranding)) {
+          mismatchFields.push('reportBranding');
+        }
+        if (JSON.stringify(nextReportStyle) !== JSON.stringify(expectedReportStyle)) {
+          mismatchFields.push('reportStyle');
+        }
+        if (nextWatermarkDataUrl !== expectedWatermarkDataUrl) {
+          mismatchFields.push('onlineResultWatermarkDataUrl');
+        }
+        if (nextWatermarkText !== expectedWatermarkText) {
+          mismatchFields.push('onlineResultWatermarkText');
+        }
+        message.error(
+          `Server did not persist report design (${mismatchFields.join(', ')}); settings reloaded from server.`,
+        );
       } else {
         const labLabel = selectedLab
           ? `${selectedLab.name} (${selectedLab.code})`
