@@ -108,6 +108,7 @@ type EditResultContext = {
   orderTestId: string;
   orderNumber: string;
   patientName: string;
+  patientSex: string | null;
   testCode: string;
   testName: string;
   testUnit: string | null;
@@ -194,13 +195,38 @@ function formatDisplayDecimal(value: string | number | null | undefined): string
   return raw.replace(/(\.\d*?[1-9])0+$/, '$1').replace(/\.0+$/, '').replace(/^\+/, '');
 }
 
+function resolveSexSpecificNormalText(
+  test:
+    | {
+      normalText?: string | null;
+      normalTextMale?: string | null;
+      normalTextFemale?: string | null;
+    }
+    | null
+    | undefined,
+  patientSex: string | null | undefined,
+): string | null {
+  if (!test) return null;
+  const sex = String(patientSex ?? '').trim().toUpperCase();
+  if ((sex === 'M' || sex === 'MALE') && test.normalTextMale && test.normalTextMale.length > 0) {
+    return test.normalTextMale;
+  }
+  if ((sex === 'F' || sex === 'FEMALE') && test.normalTextFemale && test.normalTextFemale.length > 0) {
+    return test.normalTextFemale;
+  }
+  if (test.normalText && test.normalText.length > 0) {
+    return test.normalText;
+  }
+  return null;
+}
+
 function formatReferenceRange(
   normalText: string | null | undefined,
   normalMin: string | number | null | undefined,
   normalMax: string | number | null | undefined,
   unit?: string | null,
 ): string {
-  if (normalText?.trim()) return normalText.trim();
+  if (normalText && normalText.length > 0) return normalText;
   const min = formatDisplayDecimal(normalMin);
   const max = formatDisplayDecimal(normalMax);
   if (min === '-' && max === '-') return '-';
@@ -1002,12 +1028,13 @@ export function ReportsPage() {
       orderTestId: orderTest.id,
       orderNumber: order.orderNumber || order.id.substring(0, 8),
       patientName: order.patient?.fullName || '-',
+      patientSex: order.patient?.sex ?? null,
       testCode: orderTest.test?.code || '-',
       testName: orderTest.test?.name || '-',
       testUnit: orderTest.test?.unit ?? null,
       normalMin: orderTest.test?.normalMin ?? null,
       normalMax: orderTest.test?.normalMax ?? null,
-      normalText: orderTest.test?.normalText ?? null,
+      normalText: resolveSexSpecificNormalText(orderTest.test, order.patient?.sex ?? null),
       resultEntryType: orderTest.test?.resultEntryType ?? 'NUMERIC',
       resultTextOptions: orderTest.test?.resultTextOptions ?? [],
       allowCustomResultText: Boolean(orderTest.test?.allowCustomResultText),
@@ -1294,17 +1321,25 @@ export function ReportsPage() {
               <Text style={{ fontSize: 12 }}>{value}</Text>
             )}
             {row.raw.test?.type !== 'PANEL' &&
-              (row.raw.test?.normalMin !== null ||
-                row.raw.test?.normalMax !== null ||
-                row.raw.test?.normalText) && (
+              (() => {
+                const resolvedNormalText = resolveSexSpecificNormalText(
+                  row.raw.test,
+                  order.patient?.sex ?? null,
+                );
+                return (row.raw.test?.normalMin !== null ||
+                  row.raw.test?.normalMax !== null ||
+                  resolvedNormalText);
+              })() && (
                 <div style={{ fontSize: 10, color: 'rgba(128,128,128,0.7)', marginTop: 2 }}>
                   Range:{' '}
-                  {formatReferenceRange(
-                    row.raw.test?.normalText,
-                    row.raw.test?.normalMin,
-                    row.raw.test?.normalMax,
-                    row.raw.test?.unit,
-                  )}
+                  <span style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+                    {formatReferenceRange(
+                      resolveSexSpecificNormalText(row.raw.test, order.patient?.sex ?? null),
+                      row.raw.test?.normalMin,
+                      row.raw.test?.normalMax,
+                      row.raw.test?.unit,
+                    )}
+                  </span>
                 </div>
               )}
           </div>
@@ -1952,7 +1987,7 @@ export function ReportsPage() {
                 <div style={{ marginTop: 8, paddingTop: 8, borderTop: isDark ? '1px solid rgba(255,255,255,0.06)' : '1px solid #f0f0f0' }}>
                   <Text type="secondary" style={{ fontSize: 12 }}>Normal range</Text>
                   <div style={{ marginTop: 2 }}>
-                    <Text>
+                    <Text style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
                       {formatReferenceRange(
                         editResultContext.normalText,
                         editResultContext.normalMin,
@@ -2133,9 +2168,21 @@ export function ReportsPage() {
                                 <div style={{ flex: '1 1 14%', textAlign: 'center', fontSize: 11 }}>
                                   {target.test?.unit || '-'}
                                 </div>
-                                <div style={{ flex: '1 1 22%', textAlign: 'right', fontSize: 11, color: 'rgba(128,128,128,0.8)' }}>
+                                <div
+                                  style={{
+                                    flex: '1 1 22%',
+                                    textAlign: 'right',
+                                    fontSize: 11,
+                                    color: 'rgba(128,128,128,0.8)',
+                                    whiteSpace: 'pre-wrap',
+                                    wordBreak: 'break-word',
+                                  }}
+                                >
                                   {formatReferenceRange(
-                                    target.test?.normalText,
+                                    resolveSexSpecificNormalText(
+                                      target.test,
+                                      editResultContext.patientSex,
+                                    ),
                                     target.test?.normalMin,
                                     target.test?.normalMax,
                                     target.test?.unit,

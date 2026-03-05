@@ -97,7 +97,7 @@ function formatResult(item: WorklistItem): string {
 }
 
 function formatReferenceRange(item: WorklistItem): string {
-  if (item.normalText?.trim()) return item.normalText.trim();
+  if (item.normalText && item.normalText.length > 0) return item.normalText;
   if (item.normalMin != null || item.normalMax != null) {
     return `${item.normalMin ?? '-'} - ${item.normalMax ?? '-'}${item.testUnit ? ` ${item.testUnit}` : ''}`;
   }
@@ -1090,7 +1090,15 @@ export function VerificationPage() {
                       </Tag>
                     </div>
 
-                    <div style={{ flex: '1 1 9%', textAlign: 'right', fontSize: 10 }}>
+                    <div
+                      style={{
+                        flex: '1 1 9%',
+                        textAlign: 'right',
+                        fontSize: 10,
+                        whiteSpace: 'pre-wrap',
+                        wordBreak: 'break-word',
+                      }}
+                    >
                       {formatReferenceRange(item)}
                     </div>
 

@@ -2,7 +2,7 @@ import type { Order } from '../../entities/order.entity';
 import type { OrderTest } from '../../entities/order-test.entity';
 import { TestType } from '../../entities/test.entity';
 import { resolveReportStyleConfig } from '../report-style.config';
-import { resolveNumericRange } from '../../tests/normal-range.util';
+import { resolveNormalText, resolveNumericRange } from '../../tests/normal-range.util';
 
 // Fallback logo (from provided template)
 const TEMPLATE_LOGO_BASE64 =
@@ -62,8 +62,8 @@ function formatRange(
     patientSex,
     patientAgeYears,
   );
-
-  if (test.normalText) return String(test.normalText);
+  const resolvedText = resolveNormalText(test, patientSex);
+  if (resolvedText !== null) return resolvedText;
   if (min != null && max != null) return `${min}-${max}`;
   if (min != null) return `>= ${min}`;
   if (max != null) return `<= ${max}`;
@@ -362,7 +362,7 @@ export function buildResultsReportHtml(input: {
             <td style="width:14%;" class="nowrap">${escapeHtml(formatResultValue(child))}</td>
             <td style="width:14%;" class="nowrap">${escapeHtml(ct?.unit || '-')}</td>
             <td style="width:14%;" class="${statusClass}">${escapeHtml(statusText)}</td>
-            <td style="width:30%;" class="nowrap reference-value">${escapeHtml(formatRange(child, order.patient?.sex ?? null, age))}</td>
+            <td style="width:30%;" class="reference-value">${escapeHtml(formatRange(child, order.patient?.sex ?? null, age))}</td>
           </tr>`;
         })
         .join('');
@@ -434,7 +434,7 @@ export function buildResultsReportHtml(input: {
             <td style="width:14%;" class="nowrap">${escapeHtml(formatResultValue(ot))}</td>
             <td style="width:14%;" class="nowrap">${escapeHtml(t?.unit || '-')}</td>
             <td style="width:14%;" class="${statusClass}">${escapeHtml(statusText)}</td>
-            <td style="width:30%;" class="nowrap reference-value">${escapeHtml(formatRange(ot, order.patient?.sex ?? null, age))}</td>
+            <td style="width:30%;" class="reference-value">${escapeHtml(formatRange(ot, order.patient?.sex ?? null, age))}</td>
           </tr>`;
           })
           .join('');
@@ -669,7 +669,7 @@ export function buildResultsReportHtml(input: {
     .status-low { color: var(--results-status-low-color); font-weight: 700; }
     .status-high { color: var(--results-status-high-color); font-weight: 700; }
     .status-normal { color: var(--results-status-normal-color); }
-    .reference-value { color: var(--results-reference-color); }
+    .reference-value { color: var(--results-reference-color); white-space: pre-wrap; word-break: break-word; }
     .param-abnormal { color: #c00; font-size: 11px; font-weight: 600; margin-left: 4px; }
     tr.abnormal td { background-color: var(--results-abnormal-row-bg); }
     .panel-section { margin-top: 20px; }

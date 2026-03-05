@@ -178,6 +178,14 @@ export class CreateTestDto {
   @IsOptional()
   normalText?: string;
 
+  @IsString()
+  @IsOptional()
+  normalTextMale?: string;
+
+  @IsString()
+  @IsOptional()
+  normalTextFemale?: string;
+
   @IsOptional()
   @IsIn(TEST_RESULT_ENTRY_TYPES)
   resultEntryType?: (typeof TEST_RESULT_ENTRY_TYPES)[number];

@@ -666,6 +666,11 @@ export function TestsPage() {
 
   const formatNormalRange = (test: TestDto) => {
     const ageRulesCount = test.numericAgeRanges?.length ?? 0;
+    if (test.normalTextMale || test.normalTextFemale) {
+      const male = test.normalTextMale || '-';
+      const female = test.normalTextFemale || '-';
+      return `Male: ${male} | Female: ${female}`;
+    }
     if (test.normalText) return test.normalText;
     if (test.normalMin !== null || test.normalMax !== null) {
       const min = formatRangeNumericValue(test.normalMin);
@@ -1212,35 +1217,27 @@ export function TestsPage() {
                         children: (
                           <>
                             <Text type="secondary" style={{ display: 'block', marginBottom: 12 }}>
-                              Min/Max are optional for each sex. Use the Text Value tab when you need free-text reference notes.
-                            </Text>
-                            <Text type="secondary" style={{ display: 'block', marginBottom: 12 }}>
-                              Male Range
+                              Enter text exactly as you want it shown in normal range for each gender.
                             </Text>
                             <Row gutter={16}>
                               <Col span={12}>
-                                <Form.Item name="normalMinMale" label="Min (Male)">
-                                  <InputNumber style={{ width: '100%' }} placeholder="Min male" />
+                                <Form.Item name="normalTextMale" label="Normal Text (Male)">
+                                  <Input.TextArea
+                                    rows={4}
+                                    autoSize={{ minRows: 3, maxRows: 8 }}
+                                    style={{ maxHeight: 170, overflowY: 'auto' }}
+                                    placeholder='e.g., "Adult male: 13.5 - 17.5 g/dL"'
+                                  />
                                 </Form.Item>
                               </Col>
                               <Col span={12}>
-                                <Form.Item name="normalMaxMale" label="Max (Male)">
-                                  <InputNumber style={{ width: '100%' }} placeholder="Max male" />
-                                </Form.Item>
-                              </Col>
-                            </Row>
-                            <Text type="secondary" style={{ display: 'block', marginBottom: 12 }}>
-                              Female Range
-                            </Text>
-                            <Row gutter={16}>
-                              <Col span={12}>
-                                <Form.Item name="normalMinFemale" label="Min (Female)">
-                                  <InputNumber style={{ width: '100%' }} placeholder="Min female" />
-                                </Form.Item>
-                              </Col>
-                              <Col span={12}>
-                                <Form.Item name="normalMaxFemale" label="Max (Female)">
-                                  <InputNumber style={{ width: '100%' }} placeholder="Max female" />
+                                <Form.Item name="normalTextFemale" label="Normal Text (Female)">
+                                  <Input.TextArea
+                                    rows={4}
+                                    autoSize={{ minRows: 3, maxRows: 8 }}
+                                    style={{ maxHeight: 170, overflowY: 'auto' }}
+                                    placeholder='e.g., "Adult female: 12.0 - 16.0 g/dL"'
+                                  />
                                 </Form.Item>
                               </Col>
                             </Row>

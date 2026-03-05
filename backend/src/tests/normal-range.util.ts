@@ -12,6 +12,12 @@ export interface NumericRangeCarrier {
   numericAgeRanges?: TestNumericAgeRange[] | null;
 }
 
+export interface TextRangeCarrier {
+  normalText?: string | null;
+  normalTextMale?: string | null;
+  normalTextFemale?: string | null;
+}
+
 export interface ResolvedNumericRange {
   normalMin: number | null;
   normalMax: number | null;
@@ -34,6 +40,30 @@ export function normalizePatientSex(value: string | null | undefined): 'M' | 'F'
   if (upper === 'M' || upper === 'MALE') return 'M';
   if (upper === 'F' || upper === 'FEMALE') return 'F';
   return null;
+}
+
+function toNonEmptyText(value: string | null | undefined): string | null {
+  if (value === null || value === undefined) return null;
+  return value.length > 0 ? value : null;
+}
+
+export function resolveNormalText(
+  test: TextRangeCarrier,
+  patientSexRaw: string | null | undefined,
+): string | null {
+  const patientSex = normalizePatientSex(patientSexRaw);
+
+  if (patientSex === 'M') {
+    const maleText = toNonEmptyText(test.normalTextMale);
+    if (maleText !== null) return maleText;
+  }
+
+  if (patientSex === 'F') {
+    const femaleText = toNonEmptyText(test.normalTextFemale);
+    if (femaleText !== null) return femaleText;
+  }
+
+  return toNonEmptyText(test.normalText);
 }
 
 function normalizeAgeRange(range: TestNumericAgeRange): TestNumericAgeRange {

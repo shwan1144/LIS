@@ -132,6 +132,13 @@ export class Test {
   @Column({ type: 'text', nullable: true })
   normalText: string | null;
 
+  // Optional: Gender-specific text normal values shown by patient sex.
+  @Column({ type: 'text', nullable: true })
+  normalTextMale: string | null;
+
+  @Column({ type: 'text', nullable: true })
+  normalTextFemale: string | null;
+
   /** Result entry behavior: numeric input, qualitative dropdown, or free text */
   @Column({ type: 'varchar', length: 16, default: 'NUMERIC' })
   resultEntryType: TestResultEntryType;

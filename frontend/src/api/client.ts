@@ -1463,6 +1463,8 @@ export interface TestDto {
   normalMinFemale: number | null;
   normalMaxFemale: number | null;
   normalText: string | null;
+  normalTextMale: string | null;
+  normalTextFemale: string | null;
   numericAgeRanges: TestNumericAgeRange[] | null;
   resultEntryType: TestResultEntryType;
   resultTextOptions: TestResultTextOption[] | null;
@@ -1493,6 +1495,8 @@ export interface CreateTestDto {
   normalMinFemale?: number | null;
   normalMaxFemale?: number | null;
   normalText?: string;
+  normalTextMale?: string | null;
+  normalTextFemale?: string | null;
   numericAgeRanges?: TestNumericAgeRange[] | null;
   resultEntryType?: TestResultEntryType;
   resultTextOptions?: TestResultTextOption[] | null;

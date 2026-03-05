@@ -363,7 +363,9 @@ describe('buildResultsReportHtml panel page isolation', () => {
 
     expect(html).toContain(`--patient-info-bg: ${DEFAULT_REPORT_STYLE_V1.patientInfo.backgroundColor};`);
     expect(html).toContain(`--results-header-bg: ${DEFAULT_REPORT_STYLE_V1.resultsTable.headerBackgroundColor};`);
-    expect(html).toContain('.reference-value { color: var(--results-reference-color); }');
+    expect(html).toContain(
+      '.reference-value { color: var(--results-reference-color); white-space: pre-wrap; word-break: break-word; }',
+    );
   });
 
   it('uses lab reportStyle values when provided', () => {

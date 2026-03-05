@@ -22,7 +22,7 @@ import { AuditAction } from '../entities/audit-log.entity';
 import { OrderStatus } from '../entities/order.entity';
 import { PanelStatusService } from '../panels/panel-status.service';
 import { LabActorContext } from '../types/lab-actor-context';
-import { resolveNumericRange } from '../tests/normal-range.util';
+import { resolveNormalText, resolveNumericRange } from '../tests/normal-range.util';
 import type { TestNumericAgeRange } from '../entities/test.entity';
 import {
   formatDateKeyForTimeZone,
@@ -293,6 +293,8 @@ export class WorklistService {
         'test.normalMaxFemale AS "normalMaxFemale"',
         'test.numericAgeRanges AS "numericAgeRanges"',
         'test.normalText AS "normalText"',
+        'test.normalTextMale AS "normalTextMale"',
+        'test.normalTextFemale AS "normalTextFemale"',
         'ot.status AS status',
         'ot.resultValue AS "resultValue"',
         'ot.resultText AS "resultText"',
@@ -365,7 +367,14 @@ export class WorklistService {
           testUnit: item.testUnit,
           normalMin: resolvedRange.normalMin,
           normalMax: resolvedRange.normalMax,
-          normalText: item.normalText,
+          normalText: resolveNormalText(
+            {
+              normalText: (item.normalText as string | null) ?? null,
+              normalTextMale: (item.normalTextMale as string | null) ?? null,
+              normalTextFemale: (item.normalTextFemale as string | null) ?? null,
+            },
+            item.patientSex,
+          ),
           resultEntryType: this.normalizeResultEntryType(item.resultEntryType),
           resultTextOptions:
             (parseJsonField(item.resultTextOptions) as TestResultTextOption[] | null) ??
@@ -746,6 +755,8 @@ export class WorklistService {
           'test.normalMaxFemale AS "normalMaxFemale"',
           'test.numericAgeRanges AS "numericAgeRanges"',
           'test.normalText AS "normalText"',
+          'test.normalTextMale AS "normalTextMale"',
+          'test.normalTextFemale AS "normalTextFemale"',
           'test.resultEntryType AS "resultEntryType"',
           'test.resultTextOptions AS "resultTextOptions"',
           'test.allowCustomResultText AS "allowCustomResultText"',
@@ -885,7 +896,7 @@ export class WorklistService {
         testUnit: orderTest.test.unit,
         normalMin: resolvedRange.normalMin,
         normalMax: resolvedRange.normalMax,
-        normalText: orderTest.test.normalText,
+        normalText: resolveNormalText(orderTest.test, orderTest.sample.order.patient?.sex ?? null),
         resultEntryType: this.normalizeResultEntryType(orderTest.test.resultEntryType),
         resultTextOptions: this.normalizeResultTextOptions(orderTest.test.resultTextOptions),
         allowCustomResultText: Boolean(orderTest.test.allowCustomResultText),
@@ -1523,7 +1534,14 @@ export class WorklistService {
       testUnit: (item.testUnit as string | null) ?? null,
       normalMin: resolvedRange.normalMin,
       normalMax: resolvedRange.normalMax,
-      normalText: (item.normalText as string | null) ?? null,
+      normalText: resolveNormalText(
+        {
+          normalText: (item.normalText as string | null) ?? null,
+          normalTextMale: (item.normalTextMale as string | null) ?? null,
+          normalTextFemale: (item.normalTextFemale as string | null) ?? null,
+        },
+        (item.patientSex as string | null) ?? null,
+      ),
       resultEntryType: this.normalizeResultEntryType(
         item.resultEntryType as string | null | undefined,
       ),

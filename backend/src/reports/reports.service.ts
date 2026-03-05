@@ -16,7 +16,7 @@ import { AuditAction, AuditLog } from '../entities/audit-log.entity';
 import { TestType, type Test } from '../entities/test.entity';
 import { buildResultsReportHtml } from './html/results-report.template';
 import type { Browser } from 'playwright';
-import { resolveNumericRange } from '../tests/normal-range.util';
+import { resolveNormalText, resolveNumericRange } from '../tests/normal-range.util';
 
 type PdfKitDocument = InstanceType<typeof PDFDocument>;
 const REPORT_BANNER_WIDTH = 2480;
@@ -91,7 +91,8 @@ function getNormalRange(
     sex,
     ageYears,
   );
-  if (test.normalText?.trim()) return test.normalText.trim();
+  const resolvedText = resolveNormalText(test, sex);
+  if (resolvedText !== null) return resolvedText;
   if (min != null && max != null) return `${min}-${max}`;
   if (min != null) return `>= ${min}`;
   if (max != null) return `<= ${max}`;
