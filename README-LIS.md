@@ -10,6 +10,8 @@
   - `DOCKPLOY_NEW_LAB_ONBOARDING.md`
 - Dockploy Medonic M51 HL7 direct integration (no connector):
   - `DOCKPLOY_MEDONIC_M51_NO_CONNECTOR.md`
+- Dockploy production schema/body-size recovery (`deliveryMethods` + report design save):
+  - `DOCKPLOY_PROD_SCHEMA_AND_BODY_LIMIT_FIX.md`
 
 ## CBC/GUE Panel Reseed (Future Orders Only)
 

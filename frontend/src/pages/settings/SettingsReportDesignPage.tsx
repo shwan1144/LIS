@@ -67,6 +67,44 @@ function emptyBranding(): ReportBrandingDto {
   };
 }
 
+function getChangedBrandingFields(
+  previous: ReportBrandingDto,
+  next: ReportBrandingDto,
+): Partial<ReportBrandingDto> | undefined {
+  const changed: Partial<ReportBrandingDto> = {};
+  (Object.keys(previous) as BrandingKey[]).forEach((key) => {
+    if (previous[key] !== next[key]) {
+      changed[key] = next[key];
+    }
+  });
+  return Object.keys(changed).length > 0 ? changed : undefined;
+}
+
+function getSaveErrorMessage(err: unknown, fallback: string): string {
+  if (!err || typeof err !== 'object' || !('response' in err)) {
+    return fallback;
+  }
+
+  const response = (err as {
+    response?: {
+      status?: number;
+      data?: { message?: string | string[] };
+    };
+  }).response;
+  if (response?.status === 413) {
+    return 'Payload too large; compress image or reduce dimensions.';
+  }
+
+  const raw = response?.data?.message;
+  if (Array.isArray(raw)) {
+    return raw[0] || fallback;
+  }
+  if (typeof raw === 'string' && raw.trim()) {
+    return raw.trim();
+  }
+  return fallback;
+}
+
 function formatMegabytes(bytes: number): string {
   const mb = bytes / (1024 * 1024);
   if (Number.isInteger(mb)) return String(mb);
@@ -244,12 +282,32 @@ export function SettingsReportDesignPage() {
   };
 
   const handleSave = async () => {
+    if (!settings) return;
+
     setSaving(true);
     try {
+      const currentBranding = settings.reportBranding || emptyBranding();
+      const changedBranding = getChangedBrandingFields(currentBranding, branding);
+      const trimmedWatermarkText = onlineResultWatermarkText.trim();
+      const hasOnlineWatermarkDataUrlChanges =
+        (settings.onlineResultWatermarkDataUrl || null) !== onlineResultWatermarkDataUrl;
+      const hasOnlineWatermarkTextChanges =
+        (settings.onlineResultWatermarkText || '') !== onlineResultWatermarkText;
+
+      if (!changedBranding && !hasOnlineWatermarkDataUrlChanges && !hasOnlineWatermarkTextChanges) {
+        message.info('No changes to save');
+        setSaving(false);
+        return;
+      }
+
       const updated = await updateLabSettings({
-        reportBranding: branding,
-        onlineResultWatermarkDataUrl,
-        onlineResultWatermarkText: onlineResultWatermarkText.trim() || null,
+        reportBranding: changedBranding,
+        onlineResultWatermarkDataUrl: hasOnlineWatermarkDataUrlChanges
+          ? onlineResultWatermarkDataUrl
+          : undefined,
+        onlineResultWatermarkText: hasOnlineWatermarkTextChanges
+          ? trimmedWatermarkText || null
+          : undefined,
       });
       setSettings(updated);
       setBranding(updated.reportBranding || emptyBranding());
@@ -262,11 +320,7 @@ export function SettingsReportDesignPage() {
       }
       message.success('Report design settings saved');
     } catch (err: unknown) {
-      const msg =
-        err && typeof err === 'object' && 'response' in err
-          ? (err as { response?: { data?: { message?: string } } }).response?.data?.message
-          : 'Failed to save report design settings';
-      message.error(msg || 'Failed to save report design settings');
+      message.error(getSaveErrorMessage(err, 'Failed to save report design settings'));
     } finally {
       setSaving(false);
     }

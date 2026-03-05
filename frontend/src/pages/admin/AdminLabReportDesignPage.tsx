@@ -107,6 +107,19 @@ function emptyBranding(): ReportBrandingDto {
   };
 }
 
+function getChangedBrandingFields(
+  previous: ReportBrandingDto,
+  next: ReportBrandingDto,
+): Partial<ReportBrandingDto> | undefined {
+  const changed: Partial<ReportBrandingDto> = {};
+  (Object.keys(previous) as BrandingKey[]).forEach((key) => {
+    if (previous[key] !== next[key]) {
+      changed[key] = next[key];
+    }
+  });
+  return Object.keys(changed).length > 0 ? changed : undefined;
+}
+
 function defaultReportStyle(): ReportStyleDto {
   return {
     version: 1,
@@ -426,9 +439,10 @@ export function AdminLabReportDesignPage() {
       const expectedReportStyle = cloneReportStyle(reportStyle);
       const expectedWatermarkDataUrl = onlineResultWatermarkDataUrl ?? null;
       const expectedWatermarkText = onlineResultWatermarkText.trim();
+      const previousBranding = savedSnapshot?.branding || emptyBranding();
+      const brandingChanges = getChangedBrandingFields(previousBranding, expectedBranding);
       const hasBrandingChanges =
-        !savedSnapshot ||
-        JSON.stringify(savedSnapshot.branding) !== JSON.stringify(expectedBranding);
+        !!brandingChanges;
       const hasReportStyleChanges =
         !savedSnapshot ||
         JSON.stringify(savedSnapshot.reportStyle) !== JSON.stringify(expectedReportStyle);
@@ -451,7 +465,7 @@ export function AdminLabReportDesignPage() {
       }
 
       const updated = await updateAdminLabSettings(selectedLabId, {
-        reportBranding: hasBrandingChanges ? expectedBranding : undefined,
+        reportBranding: brandingChanges,
         reportStyle: hasReportStyleChanges ? expectedReportStyle : undefined,
         onlineResultWatermarkDataUrl: hasOnlineWatermarkDataUrlChanges
           ? expectedWatermarkDataUrl
@@ -1298,7 +1312,16 @@ function getErrorMessage(err: unknown): string | null {
   if (!err || typeof err !== 'object' || !('response' in err)) {
     return null;
   }
-  const data = (err as { response?: { data?: { message?: string | string[] } } }).response?.data;
+  const response = (err as {
+    response?: {
+      status?: number;
+      data?: { message?: string | string[] };
+    };
+  }).response;
+  if (response?.status === 413) {
+    return 'Payload too large; compress image or reduce dimensions.';
+  }
+  const data = response?.data;
   const msg = data?.message;
   if (Array.isArray(msg)) {
     return msg[0] ?? null;

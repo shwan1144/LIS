@@ -25,6 +25,23 @@ const DEV_CORS_RULES = [
   'https://127.0.0.1:*',
   'https://*.localhost:*',
 ];
+const DEFAULT_API_BODY_LIMIT = '10mb';
+
+function resolveApiBodyLimit(): string {
+  const configured = (process.env.API_BODY_LIMIT || '').trim().toLowerCase();
+  if (!configured) {
+    return DEFAULT_API_BODY_LIMIT;
+  }
+
+  if (!/^\d+(b|kb|mb|gb)$/i.test(configured)) {
+    bootstrapLogger.warn(
+      `Invalid API_BODY_LIMIT="${configured}". Falling back to ${DEFAULT_API_BODY_LIMIT}.`,
+    );
+    return DEFAULT_API_BODY_LIMIT;
+  }
+
+  return configured;
+}
 
 function normalizeOrigin(input: string): string {
   const trimmed = input.trim().replace(/\/+$/, '');
@@ -136,6 +153,7 @@ function toBoolean(value: unknown): boolean {
 
 async function ensureReportBrandingColumns(dataSource: DataSource): Promise<void> {
   const sqlStatements = [
+    'ALTER TABLE IF EXISTS "orders" ADD COLUMN IF NOT EXISTS "deliveryMethods" text',
     'ALTER TABLE IF EXISTS "labs" ADD COLUMN IF NOT EXISTS "reportBannerDataUrl" text',
     'ALTER TABLE IF EXISTS "labs" ADD COLUMN IF NOT EXISTS "reportFooterDataUrl" text',
     'ALTER TABLE IF EXISTS "labs" ADD COLUMN IF NOT EXISTS "reportLogoDataUrl" text',
@@ -642,8 +660,10 @@ async function bootstrap() {
       crossOriginEmbedderPolicy: false,
     }),
   );
-  app.use(json({ limit: '10mb' }));
-  app.use(urlencoded({ extended: true, limit: '10mb' }));
+  const apiBodyLimit = resolveApiBodyLimit();
+  bootstrapLogger.log(`API body limit: ${apiBodyLimit}`);
+  app.use(json({ limit: apiBodyLimit }));
+  app.use(urlencoded({ extended: true, limit: apiBodyLimit }));
   const dataSource = app.get(DataSource);
   try {
     await ensureReportBrandingColumns(dataSource);
