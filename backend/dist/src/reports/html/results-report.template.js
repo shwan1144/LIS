@@ -576,7 +576,11 @@ function buildResultsReportHtml(input) {
       color: var(--patient-info-label-color);
       font-weight: 600;
     }
-    .info-item { font-size: var(--patient-info-font-size); color: var(--patient-info-text-color); }
+    .info-item {
+      font-size: var(--patient-info-font-size);
+      color: var(--patient-info-text-color);
+      font-weight: var(--patient-info-value-weight);
+    }
     .info-item .label { font-weight: var(--patient-info-label-weight); margin-right: 4px; color: var(--patient-info-label-color); }
     .name-value { display: inline-block; font-weight: var(--patient-info-value-weight); }
     .rtl-text {
