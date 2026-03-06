@@ -382,11 +382,19 @@ export class InstrumentsService {
 
     if (dedupKey) {
       const existing = await this.messageRepo.findOne({
-        where: {
-          instrumentId: instrument.id,
-          direction: 'IN',
-          messageControlId: dedupKey,
-        },
+        where: [
+          {
+            instrumentId: instrument.id,
+            direction: 'IN',
+            gatewayDedupKey: dedupKey,
+          },
+          // Backward compatibility for the short period where dedup key was stored in messageControlId.
+          {
+            instrumentId: instrument.id,
+            direction: 'IN',
+            messageControlId: dedupKey,
+          },
+        ],
         order: { createdAt: 'DESC' },
       });
 

@@ -12,6 +12,8 @@ const REPORT_DESIGN_VERSION_STORAGE_KEY = 'lis_report_design_version';
 const MAX_BANNER_FOOTER_BYTES = Math.floor(2.75 * 1024 * 1024);
 const MIN_REPORT_BANNER_WIDTH = 2400;
 const MIN_REPORT_BANNER_HEIGHT = 600;
+const REPORT_BANNER_RECOMMENDED_SIZE_MM = '198 x 50 mm';
+const REPORT_FOOTER_RECOMMENDED_SIZE_MM = '198 x 18 mm';
 
 type BrandingKey = keyof ReportBrandingDto;
 
@@ -27,15 +29,15 @@ const IMAGE_SETTINGS: ImageSettingMeta[] = [
   {
     key: 'bannerDataUrl',
     title: 'Report Banner',
-    recommendedSize: '3000 x 750 px',
-    note: 'Wide image for the top of every report page.',
+    recommendedSize: REPORT_BANNER_RECOMMENDED_SIZE_MM,
+    note: 'Wide image for the top of every report page (A4 printable width).',
     maxBytes: MAX_BANNER_FOOTER_BYTES,
   },
   {
     key: 'footerDataUrl',
     title: 'Report Footer',
-    recommendedSize: '3000 x 750 px',
-    note: 'Wide image for the bottom of every report page.',
+    recommendedSize: REPORT_FOOTER_RECOMMENDED_SIZE_MM,
+    note: 'Wide image for the bottom of every report page (A4 printable width).',
     maxBytes: MAX_BANNER_FOOTER_BYTES,
   },
   {
@@ -232,8 +234,12 @@ export function SettingsReportDesignPage() {
       if (key === 'bannerDataUrl' || key === 'footerDataUrl') {
         const { width, height } = await readImageDimensions(file);
         if (width < MIN_REPORT_BANNER_WIDTH || height < MIN_REPORT_BANNER_HEIGHT) {
+          const recommendedSize =
+            key === 'bannerDataUrl'
+              ? REPORT_BANNER_RECOMMENDED_SIZE_MM
+              : REPORT_FOOTER_RECOMMENDED_SIZE_MM;
           message.error(
-            `${setting.title} resolution is too low (${width} x ${height}). Use at least ${MIN_REPORT_BANNER_WIDTH} x ${MIN_REPORT_BANNER_HEIGHT} for sharp PDF/print output.`,
+            `${setting.title} resolution is too low for print. Upload a higher-resolution image designed for ${recommendedSize}.`,
           );
           return;
         }
@@ -338,7 +344,7 @@ export function SettingsReportDesignPage() {
         showIcon
         style={{ marginBottom: 16, maxWidth: 980 }}
         message="Design tip"
-        description={`Use PNG for transparent logo/watermark. For sharp report PDF/print, use banner/footer at least ${MIN_REPORT_BANNER_WIDTH} x ${MIN_REPORT_BANNER_HEIGHT}.`}
+        description={`Use PNG for transparent logo/watermark. Banner: ${REPORT_BANNER_RECOMMENDED_SIZE_MM}. Footer: ${REPORT_FOOTER_RECOMMENDED_SIZE_MM}.`}
       />
 
       <Tabs

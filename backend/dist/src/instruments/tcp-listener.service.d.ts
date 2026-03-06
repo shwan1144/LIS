@@ -38,6 +38,7 @@ export declare class TCPListenerService implements OnModuleInit, OnModuleDestroy
     }>;
     private processMessage;
     private processMessageInternal;
+    private isUniqueViolation;
     private processORU;
     sendMessage(instrument: Instrument, message: string): Promise<boolean>;
     private sendAstmControl;

@@ -8,6 +8,7 @@ import {
   JoinColumn,
   OneToMany,
   Unique,
+  Index,
 } from 'typeorm';
 import { Lab } from './lab.entity';
 import { Test } from './test.entity';
@@ -203,6 +204,14 @@ export class InstrumentTestMapping {
 }
 
 @Entity('instrument_messages')
+@Index(
+  'UQ_instrument_messages_inbound_gateway_dedup',
+  ['instrumentId', 'gatewayDedupKey'],
+  {
+    unique: true,
+    where: `"direction" = 'IN' AND "gatewayDedupKey" IS NOT NULL`,
+  },
+)
 export class InstrumentMessage {
   @PrimaryGeneratedColumn('uuid')
   id: string;
@@ -218,6 +227,9 @@ export class InstrumentMessage {
 
   @Column({ type: 'varchar', length: 50, nullable: true })
   messageControlId: string | null;
+
+  @Column({ type: 'varchar', length: 300, nullable: true })
+  gatewayDedupKey: string | null;
 
   @Column({ type: 'text' })
   rawMessage: string;

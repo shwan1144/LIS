@@ -544,35 +544,35 @@ function buildResultsReportHtml(input) {
       text-align: var(--patient-info-align);
     }
     .patient-info.has-order-qr {
-      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 86px;
-      column-gap: 12px;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 66px;
+      column-gap: 10px;
       align-items: start;
     }
     .patient-info-col { display: flex; flex-direction: column; gap: 6px; }
     .patient-info-qr {
-      width: 86px;
+      width: 66px;
       justify-self: end;
       align-self: start;
       display: flex;
       flex-direction: column;
       align-items: center;
-      gap: 4px;
+      gap: 2px;
       text-align: center;
     }
     .patient-info-qr-image {
-      width: 82px;
-      height: 82px;
+      width: 62px;
+      height: 62px;
       display: block;
       object-fit: contain;
       border: 1px solid var(--patient-info-border-color);
-      border-radius: 4px;
+      border-radius: 3px;
       background: #fff;
-      padding: 3px;
+      padding: 2px;
       box-sizing: border-box;
     }
     .patient-info-qr-caption {
-      font-size: 10px;
-      line-height: 1;
+      font-size: 9px;
+      line-height: 1.05;
       color: var(--patient-info-label-color);
       font-weight: 600;
     }

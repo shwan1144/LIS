@@ -245,11 +245,18 @@ let InstrumentsService = class InstrumentsService {
         const dedupKey = this.buildGatewayDedupKey(payload.localMessageId, payload.gatewayId);
         if (dedupKey) {
             const existing = await this.messageRepo.findOne({
-                where: {
-                    instrumentId: instrument.id,
-                    direction: 'IN',
-                    messageControlId: dedupKey,
-                },
+                where: [
+                    {
+                        instrumentId: instrument.id,
+                        direction: 'IN',
+                        gatewayDedupKey: dedupKey,
+                    },
+                    {
+                        instrumentId: instrument.id,
+                        direction: 'IN',
+                        messageControlId: dedupKey,
+                    },
+                ],
                 order: { createdAt: 'DESC' },
             });
             if (existing) {

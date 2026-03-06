@@ -351,7 +351,7 @@ export class TCPListenerService implements OnModuleInit, OnModuleDestroy {
       instrumentId: instrument.id,
       direction: 'IN',
       messageType: 'UNKNOWN',
-      messageControlId: options?.dedupKey || null,
+      gatewayDedupKey: options?.dedupKey || null,
       rawMessage,
       status: 'RECEIVED',
     });
@@ -440,6 +440,29 @@ export class TCPListenerService implements OnModuleInit, OnModuleDestroy {
       return { success: true, message: `Processed ${parsed.messageType} message`, messageId: messageRecord.id };
 
     } catch (error) {
+      if (options?.dedupKey && this.isUniqueViolation(error)) {
+        const existing = await this.messageRepo.findOne({
+          where: {
+            instrumentId: instrument.id,
+            direction: 'IN',
+            gatewayDedupKey: options.dedupKey,
+          },
+          order: { createdAt: 'DESC' },
+        });
+
+        if (existing) {
+          this.logger.warn(
+            `Duplicate gateway message detected for ${instrument.code} (dedupKey=${options.dedupKey})`,
+          );
+          return {
+            success: true,
+            duplicate: true,
+            message: 'Duplicate message already processed',
+            messageId: existing.id,
+          };
+        }
+      }
+
       const errorMsg = error instanceof Error ? error.message : 'Unknown error';
       this.logger.error(`Error processing message from ${instrument.code}: ${errorMsg}`);
       
@@ -469,6 +492,20 @@ export class TCPListenerService implements OnModuleInit, OnModuleDestroy {
       
       return { success: false, message: errorMsg, messageId: messageRecord.id };
     }
+  }
+
+  private isUniqueViolation(error: unknown): boolean {
+    if (!error || typeof error !== 'object') {
+      return false;
+    }
+
+    const maybeDriverError = (error as { driverError?: { code?: string } }).driverError;
+    if (maybeDriverError?.code === '23505') {
+      return true;
+    }
+
+    const maybeCode = (error as { code?: string }).code;
+    return maybeCode === '23505';
   }
 
   /**

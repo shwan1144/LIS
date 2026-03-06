@@ -235,6 +235,24 @@ async function ensureOrderFlowPerformanceIndexes(dataSource) {
         await dataSource.query(sql);
     }
 }
+async function ensureGatewayDedupSchema(dataSource) {
+    const sqlStatements = [
+        `ALTER TABLE IF EXISTS "instrument_messages" ADD COLUMN IF NOT EXISTS "gatewayDedupKey" varchar(300)`,
+        `
+      DO $$
+      BEGIN
+        IF to_regclass('public.instrument_messages') IS NOT NULL THEN
+          CREATE UNIQUE INDEX IF NOT EXISTS "UQ_instrument_messages_inbound_gateway_dedup"
+            ON "instrument_messages" ("instrumentId", "gatewayDedupKey")
+            WHERE "direction" = 'IN' AND "gatewayDedupKey" IS NOT NULL;
+        END IF;
+      END $$;
+    `,
+    ];
+    for (const sql of sqlStatements) {
+        await dataSource.query(sql);
+    }
+}
 async function ensureTenantRolePrivileges(dataSource) {
     const roleBootstrapStatements = [
         `
@@ -629,6 +647,12 @@ async function bootstrap() {
     }
     catch (error) {
         bootstrapLogger.warn(`Failed to auto-ensure order-flow performance indexes: ${error instanceof Error ? error.message : String(error)}`);
+    }
+    try {
+        await ensureGatewayDedupSchema(dataSource);
+    }
+    catch (error) {
+        bootstrapLogger.warn(`Failed to auto-ensure gateway dedup schema: ${error instanceof Error ? error.message : String(error)}`);
     }
     try {
         await ensureTenantRolePrivileges(dataSource);

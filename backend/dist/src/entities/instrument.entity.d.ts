@@ -75,6 +75,7 @@ export declare class InstrumentMessage {
     direction: 'IN' | 'OUT';
     messageType: string;
     messageControlId: string | null;
+    gatewayDedupKey: string | null;
     rawMessage: string;
     parsedMessage: Record<string, unknown> | null;
     status: 'RECEIVED' | 'PROCESSED' | 'ERROR' | 'SENT' | 'ACKNOWLEDGED';

@@ -275,6 +275,10 @@ __decorate([
     __metadata("design:type", Object)
 ], InstrumentMessage.prototype, "messageControlId", void 0);
 __decorate([
+    (0, typeorm_1.Column)({ type: 'varchar', length: 300, nullable: true }),
+    __metadata("design:type", Object)
+], InstrumentMessage.prototype, "gatewayDedupKey", void 0);
+__decorate([
     (0, typeorm_1.Column)({ type: 'text' }),
     __metadata("design:type", String)
 ], InstrumentMessage.prototype, "rawMessage", void 0);
@@ -308,6 +312,10 @@ __decorate([
     __metadata("design:type", Instrument)
 ], InstrumentMessage.prototype, "instrument", void 0);
 exports.InstrumentMessage = InstrumentMessage = __decorate([
-    (0, typeorm_1.Entity)('instrument_messages')
+    (0, typeorm_1.Entity)('instrument_messages'),
+    (0, typeorm_1.Index)('UQ_instrument_messages_inbound_gateway_dedup', ['instrumentId', 'gatewayDedupKey'], {
+        unique: true,
+        where: `"direction" = 'IN' AND "gatewayDedupKey" IS NOT NULL`,
+    })
 ], InstrumentMessage);
 //# sourceMappingURL=instrument.entity.js.map

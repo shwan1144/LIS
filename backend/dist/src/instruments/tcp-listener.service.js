@@ -254,7 +254,7 @@ let TCPListenerService = TCPListenerService_1 = class TCPListenerService {
             instrumentId: instrument.id,
             direction: 'IN',
             messageType: 'UNKNOWN',
-            messageControlId: options?.dedupKey || null,
+            gatewayDedupKey: options?.dedupKey || null,
             rawMessage,
             status: 'RECEIVED',
         });
@@ -325,6 +325,25 @@ let TCPListenerService = TCPListenerService_1 = class TCPListenerService {
             return { success: true, message: `Processed ${parsed.messageType} message`, messageId: messageRecord.id };
         }
         catch (error) {
+            if (options?.dedupKey && this.isUniqueViolation(error)) {
+                const existing = await this.messageRepo.findOne({
+                    where: {
+                        instrumentId: instrument.id,
+                        direction: 'IN',
+                        gatewayDedupKey: options.dedupKey,
+                    },
+                    order: { createdAt: 'DESC' },
+                });
+                if (existing) {
+                    this.logger.warn(`Duplicate gateway message detected for ${instrument.code} (dedupKey=${options.dedupKey})`);
+                    return {
+                        success: true,
+                        duplicate: true,
+                        message: 'Duplicate message already processed',
+                        messageId: existing.id,
+                    };
+                }
+            }
             const errorMsg = error instanceof Error ? error.message : 'Unknown error';
             this.logger.error(`Error processing message from ${instrument.code}: ${errorMsg}`);
             messageRecord.status = 'ERROR';
@@ -351,6 +370,17 @@ let TCPListenerService = TCPListenerService_1 = class TCPListenerService {
             }
             return { success: false, message: errorMsg, messageId: messageRecord.id };
         }
+    }
+    isUniqueViolation(error) {
+        if (!error || typeof error !== 'object') {
+            return false;
+        }
+        const maybeDriverError = error.driverError;
+        if (maybeDriverError?.code === '23505') {
+            return true;
+        }
+        const maybeCode = error.code;
+        return maybeCode === '23505';
     }
     async processORU(instrument, rawMessage, messageRecord) {
         try {
