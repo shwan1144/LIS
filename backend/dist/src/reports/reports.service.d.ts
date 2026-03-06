@@ -76,6 +76,10 @@ export declare class ReportsService implements OnModuleInit, OnModuleDestroy {
     private renderPdfFromHtml;
     onModuleDestroy(): Promise<void>;
     private buildReportPdfCacheKey;
+    private normalizeAbsoluteUrlBase;
+    private resolvePublicResultsBaseUrl;
+    private resolveOrderQrValue;
+    private generateOrderQrDataUrl;
     private getCachedPdf;
     private setCachedPdf;
     private logResultsPdfPerformance;

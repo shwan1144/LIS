@@ -168,10 +168,11 @@ export class InstrumentsController {
   async simulateMessage(
     @Req() req: RequestWithUser,
     @Param('id', ParseUUIDPipe) id: string,
-    @Body() body: { rawMessage: string },
+    @Body()
+    body: { rawMessage: string; localMessageId?: string; gatewayId?: string },
   ) {
     const labId = req.user?.labId;
     if (!labId) throw new Error('Lab ID not found');
-    return this.instrumentsService.simulateMessage(id, labId, body.rawMessage);
+    return this.instrumentsService.simulateMessage(id, labId, body);
   }
 }

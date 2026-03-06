@@ -9,4 +9,5 @@ export declare function buildResultsReportHtml(input: {
     latestVerifiedAt: Date | null;
     comments: string[];
     kurdishFontBase64?: string;
+    orderQrDataUrl?: string | null;
 }): string;

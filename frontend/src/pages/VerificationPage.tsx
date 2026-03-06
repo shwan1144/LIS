@@ -41,6 +41,7 @@ import {
   buildWorklistOrderGroups,
   type WorklistOrderGroupSummary,
 } from './worklistGrouping';
+import { useTheme } from '../contexts/ThemeContext';
 import './QueuePages.css';
 
 const { Title, Text } = Typography;
@@ -173,6 +174,7 @@ function resolveGroupByIdentity(
 }
 
 export function VerificationPage() {
+  const isDark = useTheme().theme === 'dark';
   const { containerRef, filledMinHeightPx } = useFillToViewportBottom();
   const [loading, setLoading] = useState(false);
   const [rows, setRows] = useState<WorklistOrderSummaryDto[]>([]);
@@ -722,6 +724,9 @@ export function VerificationPage() {
     <div>
       <style>{`
         .verification-orders-table .ant-table-thead > tr > th {
+          background: ${isDark ? 'rgba(255,255,255,0.06)' : '#f5f8ff'} !important;
+          color: ${isDark ? 'rgba(255,255,255,0.9)' : 'rgba(0,0,0,0.88)'} !important;
+          border-bottom: 1px solid ${isDark ? 'rgba(255,255,255,0.14)' : '#d9e5ff'} !important;
           font-weight: 700;
           font-size: 12px;
           padding-top: 4px !important;
@@ -732,30 +737,30 @@ export function VerificationPage() {
           padding-bottom: 4px !important;
         }
         .verification-orders-table .ant-table-expanded-row > td {
-          background: #f8fbff !important;
+          background: ${isDark ? 'rgba(16,24,39,0.55)' : '#f8fbff'} !important;
           border-top: none !important;
           padding: 8px 10px !important;
         }
         .verification-group-list {
           margin-top: 6px;
           margin-left: 22px;
-          border-left: 2px dashed #c7d9ff;
+          border-left: 2px dashed ${isDark ? 'rgba(148,163,184,0.35)' : '#c7d9ff'};
           padding-left: 10px;
           display: flex;
           flex-direction: column;
           gap: 8px;
         }
         .verification-group-shell {
-          border: 1px solid #dbe8ff;
+          border: 1px solid ${isDark ? 'rgba(148,163,184,0.22)' : '#dbe8ff'};
           border-radius: 10px;
-          background: #f3f8ff;
+          background: ${isDark ? 'rgba(2,6,23,0.36)' : '#f3f8ff'};
           padding: 8px;
         }
         .verification-group-shell-title {
           font-size: 11px;
           font-weight: 700;
           letter-spacing: 0.2px;
-          color: #1d4ed8;
+          color: ${isDark ? 'rgba(191,219,254,0.95)' : '#1d4ed8'};
           text-transform: uppercase;
         }
         .verification-group-item {
@@ -764,15 +769,15 @@ export function VerificationPage() {
           justify-content: space-between;
           gap: 10px;
           border-radius: 8px;
-          border: 1px solid #d9e8ff;
+          border: 1px solid ${isDark ? 'rgba(148,163,184,0.2)' : '#d9e8ff'};
           padding: 8px 10px;
           cursor: pointer;
         }
         .verification-group-item-single {
-          background: #eef5ff;
+          background: ${isDark ? 'rgba(30,58,138,0.16)' : '#eef5ff'};
         }
         .verification-group-item-panel {
-          background: #f5efff;
+          background: ${isDark ? 'rgba(88,28,135,0.16)' : '#f5efff'};
         }
         .verification-group-main {
           min-width: 0;
@@ -914,6 +919,13 @@ export function VerificationPage() {
         footer={null}
         width={1050}
         className="verification-review-modal"
+        styles={{
+          header: {
+            borderBottom: isDark
+              ? '1px solid rgba(255,255,255,0.08)'
+              : '1px solid #f0f0f0',
+          },
+        }}
       >
         {reviewLoading ? (
           <div style={{ padding: 28, textAlign: 'center' }}>
@@ -926,8 +938,10 @@ export function VerificationPage() {
                 marginBottom: 6,
                 padding: '6px 8px',
                 borderRadius: 6,
-                backgroundColor: '#fafafa',
-                border: '1px solid #f0f0f0',
+                backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : '#fafafa',
+                border: isDark
+                  ? '1px solid rgba(255,255,255,0.08)'
+                  : '1px solid #f0f0f0',
               }}
             >
               <Space direction="vertical" size={2} style={{ width: '100%' }}>
@@ -973,9 +987,11 @@ export function VerificationPage() {
             <div
               style={{
                 display: 'flex',
-                backgroundColor: '#f5f5f5',
+                backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : '#f5f5f5',
                 borderRadius: '6px 6px 0 0',
-                borderBottom: '1px solid #e8e8e8',
+                borderBottom: isDark
+                  ? '1px solid rgba(255,255,255,0.1)'
+                  : '1px solid #e8e8e8',
                 fontWeight: 600,
                 fontSize: 11,
                 textTransform: 'uppercase',
@@ -1007,7 +1023,9 @@ export function VerificationPage() {
                   {firstPanelIndex > 0 && index === firstPanelIndex && (
                     <div
                       style={{
-                        borderTop: '1px dashed #91caff',
+                        borderTop: isDark
+                          ? '1px dashed rgba(145,202,255,0.65)'
+                          : '1px dashed #91caff',
                         marginTop: 1,
                         paddingTop: 3,
                         marginBottom: 1,
@@ -1025,9 +1043,15 @@ export function VerificationPage() {
                       padding: '1px 6px',
                       borderBottom:
                         index < orderedReviewItems.length - 1
-                          ? '1px solid #f0f0f0'
+                          ? isDark
+                            ? '1px solid rgba(255,255,255,0.05)'
+                            : '1px solid #f0f0f0'
                           : 'none',
-                      backgroundColor: isPanelRoot ? 'rgba(114,46,209,0.08)' : 'transparent',
+                      backgroundColor: isPanelRoot
+                        ? isDark
+                          ? 'rgba(114,46,209,0.14)'
+                          : 'rgba(114,46,209,0.08)'
+                        : 'transparent',
                     }}
                   >
                     <div style={{ flex: '1 1 32%', paddingRight: 8 }}>

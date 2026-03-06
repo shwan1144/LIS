@@ -6,6 +6,9 @@ import { HL7ParserService } from './hl7-parser.service';
 import { AstmParserService } from './astm-parser.service';
 import { HL7IngestionService } from './hl7-ingestion.service';
 import { AstmIngestionService } from './astm-ingestion.service';
+interface ProcessMessageOptions {
+    dedupKey?: string | null;
+}
 export declare class TCPListenerService implements OnModuleInit, OnModuleDestroy {
     private readonly instrumentRepo;
     private readonly messageRepo;
@@ -27,10 +30,11 @@ export declare class TCPListenerService implements OnModuleInit, OnModuleDestroy
     private extractAstmMessages;
     private findAstmHeaderStart;
     private findAstmMessageEnd;
-    simulateMessage(instrument: Instrument, rawMessage: string): Promise<{
+    simulateMessage(instrument: Instrument, rawMessage: string, options?: ProcessMessageOptions): Promise<{
         success: boolean;
         message?: string;
         messageId?: string;
+        duplicate?: boolean;
     }>;
     private processMessage;
     private processMessageInternal;
@@ -45,3 +49,4 @@ export declare class TCPListenerService implements OnModuleInit, OnModuleDestroy
         hasServer: boolean;
     };
 }
+export {};

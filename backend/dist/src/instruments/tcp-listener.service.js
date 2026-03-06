@@ -232,10 +232,10 @@ let TCPListenerService = TCPListenerService_1 = class TCPListenerService {
         }
         return -1;
     }
-    async simulateMessage(instrument, rawMessage) {
+    async simulateMessage(instrument, rawMessage, options) {
         this.logger.log(`Simulating message for ${instrument.code}`);
         try {
-            const result = await this.processMessageInternal(instrument, rawMessage);
+            const result = await this.processMessageInternal(instrument, rawMessage, options);
             return result;
         }
         catch (error) {
@@ -246,7 +246,7 @@ let TCPListenerService = TCPListenerService_1 = class TCPListenerService {
     async processMessage(instrument, rawMessage) {
         await this.processMessageInternal(instrument, rawMessage);
     }
-    async processMessageInternal(instrument, rawMessage) {
+    async processMessageInternal(instrument, rawMessage, options) {
         this.logger.log(`Processing message from ${instrument.code}`);
         const shouldUseAstm = instrument.protocol === instrument_entity_1.InstrumentProtocol.ASTM ||
             (instrument.protocol !== instrument_entity_1.InstrumentProtocol.HL7_V2 && this.astmParser.isLikelyAstm(rawMessage));
@@ -254,6 +254,7 @@ let TCPListenerService = TCPListenerService_1 = class TCPListenerService {
             instrumentId: instrument.id,
             direction: 'IN',
             messageType: 'UNKNOWN',
+            messageControlId: options?.dedupKey || null,
             rawMessage,
             status: 'RECEIVED',
         });
@@ -291,8 +292,11 @@ let TCPListenerService = TCPListenerService_1 = class TCPListenerService {
             }
             const parsed = this.hl7Parser.parseMessage(rawMessage);
             messageRecord.messageType = parsed.messageType;
-            messageRecord.messageControlId = parsed.messageControlId;
+            if (!options?.dedupKey) {
+                messageRecord.messageControlId = parsed.messageControlId;
+            }
             messageRecord.parsedMessage = {
+                hl7MessageControlId: parsed.messageControlId,
                 sendingApp: parsed.sendingApplication,
                 sendingFacility: parsed.sendingFacility,
                 dateTime: parsed.dateTime,

@@ -147,6 +147,7 @@ export function buildResultsReportHtml(input: {
   latestVerifiedAt: Date | null;
   comments: string[];
   kurdishFontBase64?: string;
+  orderQrDataUrl?: string | null;
 }): string {
   const { order, orderTests } = input;
 
@@ -183,6 +184,9 @@ export function buildResultsReportHtml(input: {
   const footerUrlAttr = footerSrc ? `src="${escapeHtml(footerSrc)}"` : '';
   const logoUrlAttr = logoSrc ? `src="${escapeHtml(logoSrc)}"` : '';
   const watermarkUrlAttr = watermarkSrc ? `src="${escapeHtml(watermarkSrc)}"` : '';
+  const orderQrSrc = typeof input.orderQrDataUrl === 'string' ? input.orderQrDataUrl.trim() : '';
+  const orderQrUrlAttr = orderQrSrc ? `src="${escapeHtml(orderQrSrc)}"` : '';
+  const hasOrderQr = Boolean(orderQrUrlAttr);
   const hasHeaderBanner = hasCustomBanner && Boolean(bannerUrlAttr);
   const hasHeaderLogoOnly = !hasHeaderBanner && hasCustomLogo && Boolean(logoUrlAttr);
   const rowStripeCss = reportStyle.resultsTable.rowStripeEnabled
@@ -253,7 +257,7 @@ export function buildResultsReportHtml(input: {
         ? `<div class="logo-only-wrap"><img class="logo" ${logoUrlAttr} alt="Report Logo" /></div>`
         : `<div class="header-spacer" aria-hidden="true"></div>`
     }
-    <div class="patient-info">
+    <div class="patient-info${hasOrderQr ? ' has-order-qr' : ''}">
       <div class="patient-info-col">
         <div class="info-item"><span class="label">Name :</span><span class="name-value ${patientNameIsRtl ? 'rtl-text' : ''}">${escapeHtml(patientName)}</span></div>
         <div class="info-item"><span class="label">Age/Sex:</span>${escapeHtml(ageSex)}</div>
@@ -264,6 +268,9 @@ export function buildResultsReportHtml(input: {
         <div class="info-item"><span class="label">Order No:</span>${escapeHtml(orderNumber)}</div>
         <div class="info-item"><span class="label">Patient ID:</span>${escapeHtml(patientId)}</div>
       </div>
+      ${hasOrderQr
+        ? `<div class="patient-info-qr"><img class="patient-info-qr-image" ${orderQrUrlAttr} alt="Order QR Code" /><div class="patient-info-qr-caption">Order QR</div></div>`
+        : ''}
     </div>
     <div class="report-title">Laboratory Report</div>
   `;
@@ -603,7 +610,39 @@ export function buildResultsReportHtml(input: {
       color: var(--patient-info-text-color);
       text-align: var(--patient-info-align);
     }
+    .patient-info.has-order-qr {
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 86px;
+      column-gap: 12px;
+      align-items: start;
+    }
     .patient-info-col { display: flex; flex-direction: column; gap: 6px; }
+    .patient-info-qr {
+      width: 86px;
+      justify-self: end;
+      align-self: start;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+      text-align: center;
+    }
+    .patient-info-qr-image {
+      width: 82px;
+      height: 82px;
+      display: block;
+      object-fit: contain;
+      border: 1px solid var(--patient-info-border-color);
+      border-radius: 4px;
+      background: #fff;
+      padding: 3px;
+      box-sizing: border-box;
+    }
+    .patient-info-qr-caption {
+      font-size: 10px;
+      line-height: 1;
+      color: var(--patient-info-label-color);
+      font-weight: 600;
+    }
     .info-item { font-size: var(--patient-info-font-size); color: var(--patient-info-text-color); }
     .info-item .label { font-weight: var(--patient-info-label-weight); margin-right: 4px; color: var(--patient-info-label-color); }
     .name-value { display: inline-block; font-weight: var(--patient-info-value-weight); }
@@ -690,20 +729,22 @@ export function buildResultsReportHtml(input: {
     ${rowStripeCss}
     .report-footer {
       position: absolute;
-      left: var(--content-x);
-      right: var(--content-x);
+      left: 50%;
+      transform: translateX(-50%);
+      width: calc(100% - (var(--content-x) * 2));
       bottom: 1mm;
       height: var(--footer-height);
       display: flex;
       align-items: flex-end;
       justify-content: center;
       text-align: center;
+      overflow: hidden;
     }
     .report-footer-placeholder { min-height: var(--footer-height); }
     .footer-image {
       width: 100%;
       height: 100%;
-      object-fit: contain;
+      object-fit: cover;
       object-position: center bottom;
       display: block;
     }

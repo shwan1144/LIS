@@ -80,9 +80,16 @@ export declare class InstrumentsService {
         items: InstrumentMessage[];
         total: number;
     }>;
-    simulateMessage(instrumentId: string, labId: string, rawMessage: string): Promise<{
+    simulateMessage(instrumentId: string, labId: string, payload: {
+        rawMessage: string;
+        localMessageId?: string;
+        gatewayId?: string;
+    }): Promise<{
         success: boolean;
         message?: string;
         messageId?: string;
+        duplicate?: boolean;
     }>;
+    private normalizeOptionalKey;
+    private buildGatewayDedupKey;
 }

@@ -1,11 +1,15 @@
 import * as net from 'net';
 import { logger } from '../logger';
-import { forwarder } from '../forwarder';
+import { Outbox } from '../queue/outbox';
 
 export class TCPListener {
     private server: net.Server | null = null;
 
-    constructor(private port: number, private instrumentId: string) { }
+    constructor(
+        private port: number,
+        private instrumentId: string,
+        private readonly outbox: Outbox,
+    ) { }
 
     start() {
         this.server = net.createServer((socket) => {
@@ -30,8 +34,19 @@ export class TCPListener {
                     const message = buffer.substring(startIndex + startBlock.length, endIndex);
                     logger.log(`Received HL7 message (${message.length} bytes)`, `TCP:${this.port}`);
 
-                    // Forward to Cloud LIS
-                    forwarder.forward(this.instrumentId, message);
+                    try {
+                        this.outbox.enqueue({
+                            instrumentId: this.instrumentId,
+                            rawMessage: message,
+                            protocolHint: 'HL7_V2',
+                        });
+                    } catch (error) {
+                        const errorMsg = error instanceof Error ? error.message : String(error);
+                        logger.error(
+                            `Failed to enqueue message for ${this.instrumentId}: ${errorMsg}`,
+                            `TCP:${this.port}`,
+                        );
+                    }
 
                     buffer = buffer.substring(endIndex + endBlock.length);
                 }

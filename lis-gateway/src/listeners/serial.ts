@@ -1,7 +1,7 @@
 import { SerialPort } from 'serialport';
 import { ReadlineParser } from '@serialport/parser-readline';
 import { logger } from '../logger';
-import { forwarder } from '../forwarder';
+import { Outbox } from '../queue/outbox';
 
 export class SerialListener {
     private port: SerialPort | null = null;
@@ -9,7 +9,8 @@ export class SerialListener {
     constructor(
         private path: string,
         private baudRate: number,
-        private instrumentId: string
+        private instrumentId: string,
+        private readonly outbox: Outbox,
     ) { }
 
     start() {
@@ -39,7 +40,19 @@ export class SerialListener {
                 // Check for common ASTM termination L|...
                 if (buffer.includes('L|')) {
                     logger.log(`Received data from ${this.path} (${buffer.length} bytes)`, 'Serial');
-                    forwarder.forward(this.instrumentId, buffer);
+                    try {
+                        this.outbox.enqueue({
+                            instrumentId: this.instrumentId,
+                            rawMessage: buffer,
+                            protocolHint: 'ASTM',
+                        });
+                    } catch (error) {
+                        const errorMsg = error instanceof Error ? error.message : String(error);
+                        logger.error(
+                            `Failed to enqueue serial message for ${this.instrumentId}: ${errorMsg}`,
+                            'Serial',
+                        );
+                    }
                     buffer = '';
                 }
             });

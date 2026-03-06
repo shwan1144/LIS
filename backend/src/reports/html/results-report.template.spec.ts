@@ -368,6 +368,23 @@ describe('buildResultsReportHtml panel page isolation', () => {
     );
   });
 
+  it('renders an order QR in patient info when orderQrDataUrl is provided', () => {
+    const html = buildResultsReportHtml({
+      order: createOrder(),
+      orderTests: [],
+      reportableCount: 0,
+      verifiedCount: 0,
+      verifiers: [],
+      latestVerifiedAt: null,
+      comments: [],
+      orderQrDataUrl: 'data:image/png;base64,abc123',
+    });
+
+    expect(html).toContain('class="patient-info has-order-qr"');
+    expect(html).toContain('class="patient-info-qr-image" src="data:image/png;base64,abc123" alt="Order QR Code"');
+    expect(html).toContain('class="patient-info-qr-caption">Order QR</div>');
+  });
+
   it('uses lab reportStyle values when provided', () => {
     const customStyle = {
       ...DEFAULT_REPORT_STYLE_V1,

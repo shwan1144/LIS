@@ -371,9 +371,54 @@ export class InstrumentsService {
   async simulateMessage(
     instrumentId: string,
     labId: string,
-    rawMessage: string,
-  ): Promise<{ success: boolean; message?: string; messageId?: string }> {
+    payload: {
+      rawMessage: string;
+      localMessageId?: string;
+      gatewayId?: string;
+    },
+  ): Promise<{ success: boolean; message?: string; messageId?: string; duplicate?: boolean }> {
     const instrument = await this.findOne(instrumentId, labId);
-    return this.tcpListener.simulateMessage(instrument, rawMessage);
+    const dedupKey = this.buildGatewayDedupKey(payload.localMessageId, payload.gatewayId);
+
+    if (dedupKey) {
+      const existing = await this.messageRepo.findOne({
+        where: {
+          instrumentId: instrument.id,
+          direction: 'IN',
+          messageControlId: dedupKey,
+        },
+        order: { createdAt: 'DESC' },
+      });
+
+      if (existing) {
+        return {
+          success: true,
+          duplicate: true,
+          message: 'Duplicate message already processed',
+          messageId: existing.id,
+        };
+      }
+    }
+
+    return this.tcpListener.simulateMessage(instrument, payload.rawMessage, {
+      dedupKey,
+    });
+  }
+
+  private normalizeOptionalKey(value: string | undefined): string | null {
+    const trimmed = (value || '').trim();
+    if (!trimmed) return null;
+    return trimmed.slice(0, 128);
+  }
+
+  private buildGatewayDedupKey(
+    localMessageId?: string,
+    gatewayId?: string,
+  ): string | null {
+    const normalizedLocalMessageId = this.normalizeOptionalKey(localMessageId);
+    if (!normalizedLocalMessageId) return null;
+
+    const normalizedGatewayId = this.normalizeOptionalKey(gatewayId) || 'legacy';
+    return `GW:${normalizedGatewayId}:${normalizedLocalMessageId}`;
   }
 }

@@ -7,6 +7,13 @@ import { createHash } from 'crypto';
 // require() for CommonJS interop (pdfkit has no default export in some builds)
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const PDFDocument = require('pdfkit');
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const QRCode = require('qrcode') as {
+  toDataURL(
+    value: string,
+    options?: { errorCorrectionLevel?: string; margin?: number; width?: number },
+  ): Promise<string>;
+};
 import { Order } from '../entities/order.entity';
 import { OrderTest } from '../entities/order-test.entity';
 import { Patient } from '../entities/patient.entity';
@@ -360,6 +367,7 @@ export class ReportsService implements OnModuleInit, OnModuleDestroy {
     reportableOrderTests: OrderTest[];
     latestVerifiedAt: Date | null;
     bypassPaymentCheck: boolean;
+    orderQrValue: string;
   }): string {
     const reportableFingerprint = input.reportableOrderTests
       .map((ot) => {
@@ -381,11 +389,95 @@ export class ReportsService implements OnModuleInit, OnModuleDestroy {
       reportDesignFingerprint,
       input.latestVerifiedAt ? new Date(input.latestVerifiedAt).toISOString() : '-',
       input.bypassPaymentCheck ? 'bypass' : 'strict',
+      input.orderQrValue,
       String(input.reportableOrderTests.length),
       reportableFingerprint,
     ].join('::');
 
     return createHash('sha1').update(rawKey).digest('hex');
+  }
+
+  private normalizeAbsoluteUrlBase(value: string | undefined): string | null {
+    const raw = String(value ?? '').trim();
+    if (!raw) {
+      return null;
+    }
+    const withProtocol = /^[a-zA-Z][a-zA-Z\d+\-.]*:\/\//.test(raw) ? raw : `https://${raw}`;
+    try {
+      const parsed = new URL(withProtocol);
+      return `${parsed.protocol}//${parsed.host}${parsed.pathname.replace(/\/+$/, '')}`;
+    } catch {
+      return null;
+    }
+  }
+
+  private resolvePublicResultsBaseUrl(): string {
+    const directCandidates = [
+      process.env.PUBLIC_RESULTS_BASE_URL,
+      process.env.API_PUBLIC_BASE_URL,
+      process.env.PUBLIC_API_BASE_URL,
+      process.env.APP_API_URL,
+      process.env.VITE_API_URL,
+    ];
+    for (const candidate of directCandidates) {
+      const normalized = this.normalizeAbsoluteUrlBase(candidate);
+      if (normalized) {
+        return normalized;
+      }
+    }
+
+    const apiHost = String(process.env.APP_API_HOST ?? '').trim();
+    const normalizedApiHost = this.normalizeAbsoluteUrlBase(apiHost);
+    if (normalizedApiHost) {
+      return normalizedApiHost;
+    }
+
+    const adminHost = String(process.env.APP_ADMIN_HOST ?? '').trim().toLowerCase();
+    if (adminHost.startsWith('admin.')) {
+      const normalizedDerived = this.normalizeAbsoluteUrlBase(`api.${adminHost.slice('admin.'.length)}`);
+      if (normalizedDerived) {
+        return normalizedDerived;
+      }
+    }
+    const normalizedAdminHost = this.normalizeAbsoluteUrlBase(adminHost);
+    if (normalizedAdminHost) {
+      return normalizedAdminHost;
+    }
+
+    const baseDomain = String(process.env.APP_BASE_DOMAIN ?? '').trim().toLowerCase();
+    if (baseDomain) {
+      const normalizedDerived = this.normalizeAbsoluteUrlBase(`api.${baseDomain}`);
+      if (normalizedDerived) {
+        return normalizedDerived;
+      }
+    }
+
+    const port = String(process.env.PORT ?? '3000').trim() || '3000';
+    return `http://localhost:${port}`;
+  }
+
+  private resolveOrderQrValue(order: Order): string {
+    const baseUrl = this.resolvePublicResultsBaseUrl();
+    const orderId = encodeURIComponent(order.id);
+    return `${baseUrl}/public/results/${orderId}`;
+  }
+
+  private async generateOrderQrDataUrl(order: Order): Promise<string | null> {
+    const qrValue = this.resolveOrderQrValue(order);
+    if (!qrValue) {
+      return null;
+    }
+    try {
+      return await QRCode.toDataURL(qrValue, {
+        errorCorrectionLevel: 'M',
+        margin: 1,
+        width: 160,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      this.logger.warn(`Failed to generate order QR for order ${order.id}: ${message}`);
+      return null;
+    }
   }
 
   private getCachedPdf(cacheKey: string): Buffer | null {
@@ -1138,12 +1230,14 @@ export class ReportsService implements OnModuleInit, OnModuleDestroy {
       );
     }
 
+    const orderQrValue = this.resolveOrderQrValue(orderForRender);
     const cacheKey = this.buildReportPdfCacheKey({
       labId,
       order: orderForRender,
       reportableOrderTests,
       latestVerifiedAt,
       bypassPaymentCheck,
+      orderQrValue,
     });
 
     let verifierLookupMs = 0;
@@ -1209,6 +1303,8 @@ export class ReportsService implements OnModuleInit, OnModuleDestroy {
       }
       assetsMs = Date.now() - assetsStartMs;
 
+      const orderQrDataUrl = await this.generateOrderQrDataUrl(orderForRender);
+
       const htmlStartMs = Date.now();
       const html = buildResultsReportHtml({
         order: orderForRender,
@@ -1219,6 +1315,7 @@ export class ReportsService implements OnModuleInit, OnModuleDestroy {
         latestVerifiedAt: latestVerifiedAt ?? null,
         comments,
         kurdishFontBase64,
+        orderQrDataUrl,
       });
       htmlMs = Date.now() - htmlStartMs;
 

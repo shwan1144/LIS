@@ -21,6 +21,7 @@ const fs_1 = require("fs");
 const path_1 = require("path");
 const crypto_1 = require("crypto");
 const PDFDocument = require('pdfkit');
+const QRCode = require('qrcode');
 const order_entity_1 = require("../entities/order.entity");
 const order_test_entity_1 = require("../entities/order-test.entity");
 const patient_entity_1 = require("../entities/patient.entity");
@@ -279,10 +280,88 @@ let ReportsService = ReportsService_1 = class ReportsService {
             reportDesignFingerprint,
             input.latestVerifiedAt ? new Date(input.latestVerifiedAt).toISOString() : '-',
             input.bypassPaymentCheck ? 'bypass' : 'strict',
+            input.orderQrValue,
             String(input.reportableOrderTests.length),
             reportableFingerprint,
         ].join('::');
         return (0, crypto_1.createHash)('sha1').update(rawKey).digest('hex');
+    }
+    normalizeAbsoluteUrlBase(value) {
+        const raw = String(value ?? '').trim();
+        if (!raw) {
+            return null;
+        }
+        const withProtocol = /^[a-zA-Z][a-zA-Z\d+\-.]*:\/\//.test(raw) ? raw : `https://${raw}`;
+        try {
+            const parsed = new URL(withProtocol);
+            return `${parsed.protocol}//${parsed.host}${parsed.pathname.replace(/\/+$/, '')}`;
+        }
+        catch {
+            return null;
+        }
+    }
+    resolvePublicResultsBaseUrl() {
+        const directCandidates = [
+            process.env.PUBLIC_RESULTS_BASE_URL,
+            process.env.API_PUBLIC_BASE_URL,
+            process.env.PUBLIC_API_BASE_URL,
+            process.env.APP_API_URL,
+            process.env.VITE_API_URL,
+        ];
+        for (const candidate of directCandidates) {
+            const normalized = this.normalizeAbsoluteUrlBase(candidate);
+            if (normalized) {
+                return normalized;
+            }
+        }
+        const apiHost = String(process.env.APP_API_HOST ?? '').trim();
+        const normalizedApiHost = this.normalizeAbsoluteUrlBase(apiHost);
+        if (normalizedApiHost) {
+            return normalizedApiHost;
+        }
+        const adminHost = String(process.env.APP_ADMIN_HOST ?? '').trim().toLowerCase();
+        if (adminHost.startsWith('admin.')) {
+            const normalizedDerived = this.normalizeAbsoluteUrlBase(`api.${adminHost.slice('admin.'.length)}`);
+            if (normalizedDerived) {
+                return normalizedDerived;
+            }
+        }
+        const normalizedAdminHost = this.normalizeAbsoluteUrlBase(adminHost);
+        if (normalizedAdminHost) {
+            return normalizedAdminHost;
+        }
+        const baseDomain = String(process.env.APP_BASE_DOMAIN ?? '').trim().toLowerCase();
+        if (baseDomain) {
+            const normalizedDerived = this.normalizeAbsoluteUrlBase(`api.${baseDomain}`);
+            if (normalizedDerived) {
+                return normalizedDerived;
+            }
+        }
+        const port = String(process.env.PORT ?? '3000').trim() || '3000';
+        return `http://localhost:${port}`;
+    }
+    resolveOrderQrValue(order) {
+        const baseUrl = this.resolvePublicResultsBaseUrl();
+        const orderId = encodeURIComponent(order.id);
+        return `${baseUrl}/public/results/${orderId}`;
+    }
+    async generateOrderQrDataUrl(order) {
+        const qrValue = this.resolveOrderQrValue(order);
+        if (!qrValue) {
+            return null;
+        }
+        try {
+            return await QRCode.toDataURL(qrValue, {
+                errorCorrectionLevel: 'M',
+                margin: 1,
+                width: 160,
+            });
+        }
+        catch (error) {
+            const message = error instanceof Error ? error.message : 'Unknown error';
+            this.logger.warn(`Failed to generate order QR for order ${order.id}: ${message}`);
+            return null;
+        }
     }
     getCachedPdf(cacheKey) {
         if (this.pdfCacheTtlMs <= 0)
@@ -862,12 +941,14 @@ let ReportsService = ReportsService_1 = class ReportsService {
         if (!bypassPaymentCheck && order.paymentStatus !== 'paid') {
             throw new common_1.ForbiddenException('Order is unpaid or partially paid. Complete payment to download or print results.');
         }
+        const orderQrValue = this.resolveOrderQrValue(orderForRender);
         const cacheKey = this.buildReportPdfCacheKey({
             labId,
             order: orderForRender,
             reportableOrderTests,
             latestVerifiedAt,
             bypassPaymentCheck,
+            orderQrValue,
         });
         let verifierLookupMs = 0;
         let assetsMs = 0;
@@ -917,6 +998,7 @@ let ReportsService = ReportsService_1 = class ReportsService {
                 }
             }
             assetsMs = Date.now() - assetsStartMs;
+            const orderQrDataUrl = await this.generateOrderQrDataUrl(orderForRender);
             const htmlStartMs = Date.now();
             const html = (0, results_report_template_1.buildResultsReportHtml)({
                 order: orderForRender,
@@ -927,6 +1009,7 @@ let ReportsService = ReportsService_1 = class ReportsService {
                 latestVerifiedAt: latestVerifiedAt ?? null,
                 comments,
                 kurdishFontBase64,
+                orderQrDataUrl,
             });
             htmlMs = Date.now() - htmlStartMs;
             try {

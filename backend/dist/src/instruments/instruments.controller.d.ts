@@ -35,10 +35,13 @@ export declare class InstrumentsController {
     }>;
     simulateMessage(req: RequestWithUser, id: string, body: {
         rawMessage: string;
+        localMessageId?: string;
+        gatewayId?: string;
     }): Promise<{
         success: boolean;
         message?: string;
         messageId?: string;
+        duplicate?: boolean;
     }>;
 }
 export {};

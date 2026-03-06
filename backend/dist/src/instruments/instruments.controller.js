@@ -113,7 +113,7 @@ let InstrumentsController = class InstrumentsController {
         const labId = req.user?.labId;
         if (!labId)
             throw new Error('Lab ID not found');
-        return this.instrumentsService.simulateMessage(id, labId, body.rawMessage);
+        return this.instrumentsService.simulateMessage(id, labId, body);
     }
 };
 exports.InstrumentsController = InstrumentsController;

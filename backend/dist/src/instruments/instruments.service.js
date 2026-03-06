@@ -240,9 +240,43 @@ let InstrumentsService = class InstrumentsService {
         const items = await qb.skip(skip).take(size).getMany();
         return { items, total };
     }
-    async simulateMessage(instrumentId, labId, rawMessage) {
+    async simulateMessage(instrumentId, labId, payload) {
         const instrument = await this.findOne(instrumentId, labId);
-        return this.tcpListener.simulateMessage(instrument, rawMessage);
+        const dedupKey = this.buildGatewayDedupKey(payload.localMessageId, payload.gatewayId);
+        if (dedupKey) {
+            const existing = await this.messageRepo.findOne({
+                where: {
+                    instrumentId: instrument.id,
+                    direction: 'IN',
+                    messageControlId: dedupKey,
+                },
+                order: { createdAt: 'DESC' },
+            });
+            if (existing) {
+                return {
+                    success: true,
+                    duplicate: true,
+                    message: 'Duplicate message already processed',
+                    messageId: existing.id,
+                };
+            }
+        }
+        return this.tcpListener.simulateMessage(instrument, payload.rawMessage, {
+            dedupKey,
+        });
+    }
+    normalizeOptionalKey(value) {
+        const trimmed = (value || '').trim();
+        if (!trimmed)
+            return null;
+        return trimmed.slice(0, 128);
+    }
+    buildGatewayDedupKey(localMessageId, gatewayId) {
+        const normalizedLocalMessageId = this.normalizeOptionalKey(localMessageId);
+        if (!normalizedLocalMessageId)
+            return null;
+        const normalizedGatewayId = this.normalizeOptionalKey(gatewayId) || 'legacy';
+        return `GW:${normalizedGatewayId}:${normalizedLocalMessageId}`;
     }
 };
 exports.InstrumentsService = InstrumentsService;

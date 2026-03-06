@@ -21,6 +21,10 @@ interface ActiveConnection {
   instrumentId: string;
 }
 
+interface ProcessMessageOptions {
+  dedupKey?: string | null;
+}
+
 @Injectable()
 export class TCPListenerService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(TCPListenerService.name);
@@ -305,12 +309,16 @@ export class TCPListenerService implements OnModuleInit, OnModuleDestroy {
   /**
    * Simulate receiving a message (for testing)
    */
-  async simulateMessage(instrument: Instrument, rawMessage: string): Promise<{ success: boolean; message?: string; messageId?: string }> {
+  async simulateMessage(
+    instrument: Instrument,
+    rawMessage: string,
+    options?: ProcessMessageOptions,
+  ): Promise<{ success: boolean; message?: string; messageId?: string; duplicate?: boolean }> {
     this.logger.log(`Simulating message for ${instrument.code}`);
     
     try {
       // Process the message just like we received it from the instrument
-      const result = await this.processMessageInternal(instrument, rawMessage);
+      const result = await this.processMessageInternal(instrument, rawMessage, options);
       return result;
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : 'Unknown error';
@@ -328,7 +336,11 @@ export class TCPListenerService implements OnModuleInit, OnModuleDestroy {
   /**
    * Internal message processing
    */
-  private async processMessageInternal(instrument: Instrument, rawMessage: string): Promise<{ success: boolean; message?: string; messageId?: string }> {
+  private async processMessageInternal(
+    instrument: Instrument,
+    rawMessage: string,
+    options?: ProcessMessageOptions,
+  ): Promise<{ success: boolean; message?: string; messageId?: string; duplicate?: boolean }> {
     this.logger.log(`Processing message from ${instrument.code}`);
     const shouldUseAstm =
       instrument.protocol === InstrumentProtocol.ASTM ||
@@ -339,6 +351,7 @@ export class TCPListenerService implements OnModuleInit, OnModuleDestroy {
       instrumentId: instrument.id,
       direction: 'IN',
       messageType: 'UNKNOWN',
+      messageControlId: options?.dedupKey || null,
       rawMessage,
       status: 'RECEIVED',
     });
@@ -386,8 +399,11 @@ export class TCPListenerService implements OnModuleInit, OnModuleDestroy {
       // Parse the message
       const parsed = this.hl7Parser.parseMessage(rawMessage);
       messageRecord.messageType = parsed.messageType;
-      messageRecord.messageControlId = parsed.messageControlId;
+      if (!options?.dedupKey) {
+        messageRecord.messageControlId = parsed.messageControlId;
+      }
       messageRecord.parsedMessage = {
+        hl7MessageControlId: parsed.messageControlId,
         sendingApp: parsed.sendingApplication,
         sendingFacility: parsed.sendingFacility,
         dateTime: parsed.dateTime,
