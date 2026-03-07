@@ -35,7 +35,6 @@ import {
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import {
-  downloadOrderReceiptPDF,
   downloadTestResultsPDF,
   enterResult,
   getReportActionFlags,
@@ -56,6 +55,7 @@ import {
 } from '../api/client';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
+import { PrintPreviewModal } from '../components/Print';
 import { WorklistStatusDashboard } from '../components/WorklistStatusDashboard';
 import {
   directPrintReceipt,
@@ -487,6 +487,8 @@ export function ReportsPage() {
   const [paymentModalOrder, setPaymentModalOrder] = useState<OrderHistoryItemDto | null>(null);
   const [paymentModalPendingAction, setPaymentModalPendingAction] = useState<(() => Promise<void> | void) | null>(null);
   const [markingPaid, setMarkingPaid] = useState(false);
+  const [receiptPreviewOpen, setReceiptPreviewOpen] = useState(false);
+  const [receiptPreviewOrder, setReceiptPreviewOrder] = useState<OrderDto | null>(null);
   const resultsPdfCacheRef = useRef<Record<string, ResultsPdfCacheEntry>>({});
   const resultsPdfInFlightRef = useRef<Record<string, Promise<Blob>>>({});
   const reportDesignFingerprintRef = useRef<{ value: string; fetchedAt: number }>({
@@ -929,58 +931,40 @@ export function ReportsPage() {
   const handlePrintReceipt = async (order: OrderHistoryItemDto) => {
     setDownloading(`receipt-${order.id}`);
     try {
+      const fullOrder = await ensureOrderDetails(order.id);
+      if (!fullOrder) {
+        message.error('Order details unavailable for receipt preview');
+        return;
+      }
+
       try {
         const settings = await getLabSettings();
         const printerName = settings.printing?.receiptPrinterName?.trim();
         if (settings.printing?.mode === 'direct_qz' && printerName) {
-          if (isVirtualSavePrinterName(printerName)) {
-            message.info(
-              `Receipt printer "${printerName}" is a virtual PDF/XPS printer. Using browser print so Save dialog can appear.`,
-            );
-          } else {
+          if (!isVirtualSavePrinterName(printerName)) {
             try {
-              const fullOrder = await ensureOrderDetails(order.id);
-              if (!fullOrder) {
-                throw new Error('Order details unavailable for direct receipt print');
-              }
               await directPrintReceipt({
                 order: fullOrder,
+                labName: lab?.name,
                 printerName,
               });
               message.success(`Receipt sent to ${printerName}`);
               return;
             } catch (error) {
-              message.warning(`${getDirectPrintErrorMessage(error)} Falling back to browser print.`);
+              message.warning(`${getDirectPrintErrorMessage(error)} Falling back to print preview.`);
             }
+          } else {
+            message.info(
+              `Receipt printer "${printerName}" is a virtual PDF/XPS printer. Using print preview instead.`,
+            );
           }
         }
       } catch {
-        // continue with browser print fallback
+        // continue with preview fallback
       }
 
-      const blob = await downloadOrderReceiptPDF(order.id);
-      const url = window.URL.createObjectURL(blob);
-      const iframe = document.createElement('iframe');
-      iframe.style.position = 'fixed';
-      iframe.style.right = '0';
-      iframe.style.bottom = '0';
-      iframe.style.width = '1px';
-      iframe.style.height = '1px';
-      iframe.style.border = '0';
-      iframe.src = url;
-      const cleanup = () => {
-        window.URL.revokeObjectURL(url);
-        iframe.remove();
-      };
-      iframe.onload = () => {
-        try {
-          iframe.contentWindow?.focus();
-          iframe.contentWindow?.print();
-        } finally {
-          window.setTimeout(cleanup, 5000);
-        }
-      };
-      document.body.appendChild(iframe);
+      setReceiptPreviewOrder(fullOrder);
+      setReceiptPreviewOpen(true);
     } catch {
       message.error('Failed to print receipt');
     } finally {
@@ -1969,6 +1953,17 @@ export function ReportsPage() {
           Click &quot;Mark as paid&quot; to confirm payment and continue.
         </Typography.Paragraph>
       </Modal>
+
+      <PrintPreviewModal
+        open={receiptPreviewOpen}
+        onClose={() => {
+          setReceiptPreviewOpen(false);
+          setReceiptPreviewOrder(null);
+        }}
+        order={receiptPreviewOrder}
+        type="receipt"
+        labName={lab?.name}
+      />
 
       <Modal
         title={(
