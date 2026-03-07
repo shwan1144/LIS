@@ -3,9 +3,14 @@ export interface GatewayCloudInstrumentConfig {
   name: string;
   protocol: string;
   connectionType: string;
-  port: number;
-  hl7StartBlock: string;
-  hl7EndBlock: string;
+  port?: number;
+  hl7StartBlock?: string;
+  hl7EndBlock?: string;
+  serialPort?: string;
+  baudRate?: number;
+  dataBits?: string;
+  parity?: string;
+  stopBits?: string;
   enabled: boolean;
 }
 

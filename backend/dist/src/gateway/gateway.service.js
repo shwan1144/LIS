@@ -149,27 +149,56 @@ let GatewayService = class GatewayService {
             where: {
                 labId: auth.labId,
                 isActive: true,
-                protocol: instrument_entity_1.InstrumentProtocol.HL7_V2,
-                connectionType: instrument_entity_1.ConnectionType.TCP_SERVER,
             },
             order: { code: 'ASC' },
         });
+        const mappedInstruments = [];
+        for (const item of instruments) {
+            const isHl7Tcp = item.protocol === instrument_entity_1.InstrumentProtocol.HL7_V2 &&
+                item.connectionType === instrument_entity_1.ConnectionType.TCP_SERVER &&
+                Number.isFinite(item.port) &&
+                item.port != null;
+            if (isHl7Tcp) {
+                mappedInstruments.push({
+                    instrumentId: item.id,
+                    name: item.name,
+                    protocol: instrument_entity_1.InstrumentProtocol.HL7_V2,
+                    connectionType: instrument_entity_1.ConnectionType.TCP_SERVER,
+                    enabled: item.isActive !== false,
+                    port: item.port,
+                    hl7StartBlock: item.hl7StartBlock || '\u000b',
+                    hl7EndBlock: item.hl7EndBlock || '\u001c\r',
+                });
+                continue;
+            }
+            const isAstmSerial = item.protocol === instrument_entity_1.InstrumentProtocol.ASTM &&
+                item.connectionType === instrument_entity_1.ConnectionType.SERIAL &&
+                Boolean(item.serialPort?.trim()) &&
+                Number.isFinite(item.baudRate) &&
+                item.baudRate != null &&
+                Boolean(item.dataBits?.trim()) &&
+                Boolean(item.parity?.trim()) &&
+                Boolean(item.stopBits?.trim());
+            if (isAstmSerial) {
+                mappedInstruments.push({
+                    instrumentId: item.id,
+                    name: item.name,
+                    protocol: instrument_entity_1.InstrumentProtocol.ASTM,
+                    connectionType: instrument_entity_1.ConnectionType.SERIAL,
+                    enabled: item.isActive !== false,
+                    serialPort: item.serialPort,
+                    baudRate: item.baudRate,
+                    dataBits: item.dataBits,
+                    parity: item.parity,
+                    stopBits: item.stopBits,
+                });
+            }
+        }
         return {
             gatewayId: auth.gatewayId,
             pollIntervalSec: this.getConfigPollIntervalSec(),
             heartbeatIntervalSec: this.getHeartbeatIntervalSec(),
-            instruments: instruments
-                .filter((item) => Number.isFinite(item.port) && item.port != null)
-                .map((item) => ({
-                instrumentId: item.id,
-                name: item.name,
-                protocol: item.protocol,
-                connectionType: item.connectionType,
-                port: item.port,
-                hl7StartBlock: item.hl7StartBlock || '\u000b',
-                hl7EndBlock: item.hl7EndBlock || '\u001c\r',
-                enabled: item.isActive !== false,
-            })),
+            instruments: mappedInstruments,
         };
     }
     async ingestGatewayMessage(auth, dto) {

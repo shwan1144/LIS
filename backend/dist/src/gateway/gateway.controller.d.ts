@@ -28,16 +28,35 @@ export declare class GatewayController {
         gatewayId: string;
         pollIntervalSec: number;
         heartbeatIntervalSec: number;
-        instruments: Array<{
+        instruments: ({
             instrumentId: string;
             name: string;
-            protocol: string;
-            connectionType: string;
+            protocol: import("../entities/instrument.entity").InstrumentProtocol.HL7_V2;
+            connectionType: import("../entities/instrument.entity").ConnectionType.TCP_SERVER;
+            enabled: boolean;
             port: number;
             hl7StartBlock: string;
             hl7EndBlock: string;
+            serialPort?: undefined;
+            baudRate?: undefined;
+            dataBits?: undefined;
+            parity?: undefined;
+            stopBits?: undefined;
+        } | {
+            instrumentId: string;
+            name: string;
+            protocol: import("../entities/instrument.entity").InstrumentProtocol.ASTM;
+            connectionType: import("../entities/instrument.entity").ConnectionType.SERIAL;
             enabled: boolean;
-        }>;
+            serialPort: string;
+            baudRate: number;
+            dataBits: string;
+            parity: string;
+            stopBits: string;
+            port?: undefined;
+            hl7StartBlock?: undefined;
+            hl7EndBlock?: undefined;
+        })[];
     }>;
     ingestMessage(req: RequestWithGatewayAuth, dto: GatewayMessageDto): Promise<{
         accepted: true;

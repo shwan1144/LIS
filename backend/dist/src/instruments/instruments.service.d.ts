@@ -92,4 +92,6 @@ export declare class InstrumentsService {
     }>;
     private normalizeOptionalKey;
     private buildGatewayDedupKey;
+    private normalizeInstrumentInput;
+    private assertInstrumentTransportPolicy;
 }

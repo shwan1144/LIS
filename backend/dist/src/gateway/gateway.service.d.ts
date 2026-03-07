@@ -1,6 +1,6 @@
 import { Repository } from 'typeorm';
 import { JwtService } from '@nestjs/jwt';
-import { Instrument } from '../entities/instrument.entity';
+import { ConnectionType, Instrument, InstrumentProtocol } from '../entities/instrument.entity';
 import { Lab } from '../entities/lab.entity';
 import { GatewayActivationCode, GatewayDevice, GatewayMessageReceipt, GatewayToken } from '../entities/gateway.entity';
 import { InstrumentsService } from '../instruments/instruments.service';
@@ -13,6 +13,35 @@ interface GatewayAuthContext {
     gatewayId: string;
     labId: string;
 }
+type GatewayConfigInstrument = {
+    instrumentId: string;
+    name: string;
+    protocol: InstrumentProtocol.HL7_V2;
+    connectionType: ConnectionType.TCP_SERVER;
+    enabled: boolean;
+    port: number;
+    hl7StartBlock: string;
+    hl7EndBlock: string;
+    serialPort?: undefined;
+    baudRate?: undefined;
+    dataBits?: undefined;
+    parity?: undefined;
+    stopBits?: undefined;
+} | {
+    instrumentId: string;
+    name: string;
+    protocol: InstrumentProtocol.ASTM;
+    connectionType: ConnectionType.SERIAL;
+    enabled: boolean;
+    serialPort: string;
+    baudRate: number;
+    dataBits: string;
+    parity: string;
+    stopBits: string;
+    port?: undefined;
+    hl7StartBlock?: undefined;
+    hl7EndBlock?: undefined;
+};
 export declare class GatewayService {
     private readonly gatewayRepo;
     private readonly activationCodeRepo;
@@ -43,16 +72,7 @@ export declare class GatewayService {
         gatewayId: string;
         pollIntervalSec: number;
         heartbeatIntervalSec: number;
-        instruments: Array<{
-            instrumentId: string;
-            name: string;
-            protocol: string;
-            connectionType: string;
-            port: number;
-            hl7StartBlock: string;
-            hl7EndBlock: string;
-            enabled: boolean;
-        }>;
+        instruments: GatewayConfigInstrument[];
     }>;
     ingestGatewayMessage(auth: GatewayAuthContext, dto: GatewayMessageDto): Promise<{
         accepted: true;

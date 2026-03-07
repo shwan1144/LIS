@@ -29,6 +29,19 @@ function formatBytes(value: number | null | undefined): string {
   return `${size.toFixed(size >= 10 ? 0 : 1)} ${units[idx]}`;
 }
 
+function formatListenerEndpoint(item: any): string {
+  if (typeof item?.endpoint === 'string' && item.endpoint.trim()) {
+    return item.endpoint;
+  }
+  if (typeof item?.transport === 'string' && item.transport.toUpperCase() === 'SERIAL') {
+    return `SERIAL ${item?.serialPort || '-'}`;
+  }
+  if (Number.isFinite(item?.port)) {
+    return `TCP ${item.port}`;
+  }
+  return 'UNKNOWN';
+}
+
 function App() {
   const [status, setStatus] = useState<any>(null);
   const [config, setConfig] = useState<any>(null);
@@ -221,7 +234,7 @@ function App() {
                   <div>
                     <strong>{item.name}</strong>
                     <p>
-                      {item.instrumentId} | TCP {item.port}
+                      {item.instrumentId} | {formatListenerEndpoint(item)}
                     </p>
                   </div>
                   <div className={`state ${String(item.state || '').toLowerCase()}`}>{item.state}</div>

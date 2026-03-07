@@ -41,7 +41,7 @@ const agent = new agent_1.GatewayAgent();
 function bootstrap() {
     try {
         agent.start();
-        logger_1.logger.log('Gateway agent running and ready for HL7 TCP traffic.', 'System');
+        logger_1.logger.log('Gateway agent running and ready for HL7 TCP and ASTM serial traffic.', 'System');
     }
     catch (error) {
         const message = error instanceof Error ? error.message : String(error);

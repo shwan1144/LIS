@@ -9,7 +9,7 @@ const agent = new GatewayAgent();
 function bootstrap(): void {
   try {
     agent.start();
-    logger.log('Gateway agent running and ready for HL7 TCP traffic.', 'System');
+    logger.log('Gateway agent running and ready for HL7 TCP and ASTM serial traffic.', 'System');
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     logger.error(`Fatal startup error: ${message}`, 'System');

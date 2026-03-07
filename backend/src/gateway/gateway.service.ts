@@ -35,6 +35,38 @@ interface GatewayAuthContext {
   labId: string;
 }
 
+type GatewayConfigInstrument =
+  | {
+      instrumentId: string;
+      name: string;
+      protocol: InstrumentProtocol.HL7_V2;
+      connectionType: ConnectionType.TCP_SERVER;
+      enabled: boolean;
+      port: number;
+      hl7StartBlock: string;
+      hl7EndBlock: string;
+      serialPort?: undefined;
+      baudRate?: undefined;
+      dataBits?: undefined;
+      parity?: undefined;
+      stopBits?: undefined;
+    }
+  | {
+      instrumentId: string;
+      name: string;
+      protocol: InstrumentProtocol.ASTM;
+      connectionType: ConnectionType.SERIAL;
+      enabled: boolean;
+      serialPort: string;
+      baudRate: number;
+      dataBits: string;
+      parity: string;
+      stopBits: string;
+      port?: undefined;
+      hl7StartBlock?: undefined;
+      hl7EndBlock?: undefined;
+    };
+
 @Injectable()
 export class GatewayService {
   constructor(
@@ -194,16 +226,7 @@ export class GatewayService {
     gatewayId: string;
     pollIntervalSec: number;
     heartbeatIntervalSec: number;
-    instruments: Array<{
-      instrumentId: string;
-      name: string;
-      protocol: string;
-      connectionType: string;
-      port: number;
-      hl7StartBlock: string;
-      hl7EndBlock: string;
-      enabled: boolean;
-    }>;
+    instruments: GatewayConfigInstrument[];
   }> {
     await this.assertGateway(auth);
 
@@ -211,28 +234,61 @@ export class GatewayService {
       where: {
         labId: auth.labId,
         isActive: true,
-        protocol: InstrumentProtocol.HL7_V2,
-        connectionType: ConnectionType.TCP_SERVER,
       },
       order: { code: 'ASC' },
     });
+
+    const mappedInstruments: GatewayConfigInstrument[] = [];
+    for (const item of instruments) {
+      const isHl7Tcp =
+        item.protocol === InstrumentProtocol.HL7_V2 &&
+        item.connectionType === ConnectionType.TCP_SERVER &&
+        Number.isFinite(item.port) &&
+        item.port != null;
+      if (isHl7Tcp) {
+        mappedInstruments.push({
+          instrumentId: item.id,
+          name: item.name,
+          protocol: InstrumentProtocol.HL7_V2,
+          connectionType: ConnectionType.TCP_SERVER,
+          enabled: item.isActive !== false,
+          port: item.port as number,
+          hl7StartBlock: item.hl7StartBlock || '\u000b',
+          hl7EndBlock: item.hl7EndBlock || '\u001c\r',
+        });
+        continue;
+      }
+
+      const isAstmSerial =
+        item.protocol === InstrumentProtocol.ASTM &&
+        item.connectionType === ConnectionType.SERIAL &&
+        Boolean(item.serialPort?.trim()) &&
+        Number.isFinite(item.baudRate) &&
+        item.baudRate != null &&
+        Boolean(item.dataBits?.trim()) &&
+        Boolean(item.parity?.trim()) &&
+        Boolean(item.stopBits?.trim());
+      if (isAstmSerial) {
+        mappedInstruments.push({
+          instrumentId: item.id,
+          name: item.name,
+          protocol: InstrumentProtocol.ASTM,
+          connectionType: ConnectionType.SERIAL,
+          enabled: item.isActive !== false,
+          serialPort: item.serialPort as string,
+          baudRate: item.baudRate as number,
+          dataBits: item.dataBits as string,
+          parity: item.parity as string,
+          stopBits: item.stopBits as string,
+        });
+      }
+    }
 
     return {
       gatewayId: auth.gatewayId,
       pollIntervalSec: this.getConfigPollIntervalSec(),
       heartbeatIntervalSec: this.getHeartbeatIntervalSec(),
-      instruments: instruments
-        .filter((item) => Number.isFinite(item.port) && item.port != null)
-        .map((item) => ({
-          instrumentId: item.id,
-          name: item.name,
-          protocol: item.protocol,
-          connectionType: item.connectionType,
-          port: item.port as number,
-          hl7StartBlock: item.hl7StartBlock || '\u000b',
-          hl7EndBlock: item.hl7EndBlock || '\u001c\r',
-          enabled: item.isActive !== false,
-        })),
+      instruments: mappedInstruments,
     };
   }
 

@@ -106,6 +106,16 @@ export class InstrumentsService {
 
   async create(labId: string, dto: CreateInstrumentDto): Promise<Instrument> {
     const normalizedCode = dto.code.trim().toUpperCase();
+    const normalizedDto = this.normalizeInstrumentInput(dto);
+    this.assertInstrumentTransportPolicy({
+      protocol: normalizedDto.protocol ?? InstrumentProtocol.HL7_V2,
+      connectionType: normalizedDto.connectionType ?? ConnectionType.TCP_SERVER,
+      serialPort: normalizedDto.serialPort ?? null,
+      baudRate: normalizedDto.baudRate ?? null,
+      dataBits: normalizedDto.dataBits ?? null,
+      parity: normalizedDto.parity ?? null,
+      stopBits: normalizedDto.stopBits ?? null,
+    });
 
     // Check for duplicate code
     const existing = await this.instrumentRepo.findOne({
@@ -118,7 +128,7 @@ export class InstrumentsService {
 
     const instrument = this.instrumentRepo.create({
       labId,
-      ...dto,
+      ...normalizedDto,
       code: normalizedCode,
       status: InstrumentStatus.OFFLINE,
     });
@@ -139,28 +149,45 @@ export class InstrumentsService {
 
   async update(id: string, labId: string, dto: Partial<CreateInstrumentDto>): Promise<Instrument> {
     const instrument = await this.findOne(id, labId);
+    const normalizedDto = this.normalizeInstrumentInput(dto);
 
     // Check for duplicate code
-    if (dto.code && dto.code !== instrument.code) {
-      const normalizedCode = dto.code.trim().toUpperCase();
+    if (normalizedDto.code && normalizedDto.code !== instrument.code) {
+      const normalizedCode = normalizedDto.code.trim().toUpperCase();
       const existing = await this.instrumentRepo.findOne({
         where: { labId, code: normalizedCode },
       });
       if (existing) {
         throw new BadRequestException(`Instrument with code ${normalizedCode} already exists`);
       }
-      dto.code = normalizedCode;
+      normalizedDto.code = normalizedCode;
     }
 
-    Object.assign(instrument, dto);
+    this.assertInstrumentTransportPolicy({
+      protocol: (normalizedDto.protocol ?? instrument.protocol) as InstrumentProtocol,
+      connectionType: (normalizedDto.connectionType ?? instrument.connectionType) as ConnectionType,
+      serialPort:
+        normalizedDto.serialPort !== undefined ? normalizedDto.serialPort : instrument.serialPort,
+      baudRate: normalizedDto.baudRate !== undefined ? normalizedDto.baudRate : instrument.baudRate,
+      dataBits: normalizedDto.dataBits !== undefined ? normalizedDto.dataBits : instrument.dataBits,
+      parity: normalizedDto.parity !== undefined ? normalizedDto.parity : instrument.parity,
+      stopBits: normalizedDto.stopBits !== undefined ? normalizedDto.stopBits : instrument.stopBits,
+    });
+
+    Object.assign(instrument, normalizedDto);
     const saved = await this.instrumentRepo.save(instrument);
 
     // Restart listener if connection settings changed
     if (
-      dto.port !== undefined ||
-      dto.host !== undefined ||
-      dto.connectionType !== undefined ||
-      dto.isActive !== undefined
+      normalizedDto.port !== undefined ||
+      normalizedDto.host !== undefined ||
+      normalizedDto.connectionType !== undefined ||
+      normalizedDto.serialPort !== undefined ||
+      normalizedDto.baudRate !== undefined ||
+      normalizedDto.dataBits !== undefined ||
+      normalizedDto.parity !== undefined ||
+      normalizedDto.stopBits !== undefined ||
+      normalizedDto.isActive !== undefined
     ) {
       await this.tcpListener.restartListener(id);
     }
@@ -428,5 +455,65 @@ export class InstrumentsService {
 
     const normalizedGatewayId = this.normalizeOptionalKey(gatewayId) || 'legacy';
     return `GW:${normalizedGatewayId}:${normalizedLocalMessageId}`;
+  }
+
+  private normalizeInstrumentInput<T extends Partial<CreateInstrumentDto>>(dto: T): T {
+    const next = { ...dto };
+    if (typeof next.serialPort === 'string') {
+      next.serialPort = next.serialPort.trim() as T['serialPort'];
+    }
+    if (typeof next.dataBits === 'string') {
+      next.dataBits = next.dataBits.trim() as T['dataBits'];
+    }
+    if (typeof next.parity === 'string') {
+      next.parity = next.parity.trim().toUpperCase() as T['parity'];
+    }
+    if (typeof next.stopBits === 'string') {
+      next.stopBits = next.stopBits.trim() as T['stopBits'];
+    }
+    return next;
+  }
+
+  private assertInstrumentTransportPolicy(input: {
+    protocol: InstrumentProtocol;
+    connectionType: ConnectionType;
+    serialPort: string | null;
+    baudRate: number | null;
+    dataBits: string | null;
+    parity: string | null;
+    stopBits: string | null;
+  }): void {
+    if (input.protocol !== InstrumentProtocol.ASTM) {
+      return;
+    }
+
+    if (input.connectionType !== ConnectionType.SERIAL) {
+      throw new BadRequestException(
+        'ASTM instruments must use SERIAL connection type for gateway integration',
+      );
+    }
+
+    if (!input.serialPort?.trim()) {
+      throw new BadRequestException('serialPort is required for ASTM serial instruments');
+    }
+
+    if (!Number.isFinite(input.baudRate || NaN) || (input.baudRate || 0) <= 0) {
+      throw new BadRequestException('baudRate is required for ASTM serial instruments');
+    }
+
+    const dataBits = (input.dataBits || '').trim();
+    if (!['7', '8'].includes(dataBits)) {
+      throw new BadRequestException('dataBits must be 7 or 8 for ASTM serial instruments');
+    }
+
+    const parity = (input.parity || '').trim().toUpperCase();
+    if (!['NONE', 'EVEN', 'ODD'].includes(parity)) {
+      throw new BadRequestException('parity must be NONE, EVEN, or ODD for ASTM serial instruments');
+    }
+
+    const stopBits = (input.stopBits || '').trim();
+    if (!['1', '2'].includes(stopBits)) {
+      throw new BadRequestException('stopBits must be 1 or 2 for ASTM serial instruments');
+    }
   }
 }

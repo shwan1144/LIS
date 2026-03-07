@@ -154,16 +154,51 @@ class GatewayAgent {
                 throw new Error('Gateway config response is empty');
             }
             this.activeCloudConfig = response.data;
-            this.listenerManager?.applyConfig(response.data.instruments
-                .filter((item) => item.enabled && Number.isFinite(item.port))
-                .map((item) => ({
-                instrumentId: item.instrumentId,
-                name: item.name,
-                port: item.port,
-                hl7StartBlock: item.hl7StartBlock || '\x0b',
-                hl7EndBlock: item.hl7EndBlock || '\x1c\x0d',
-                enabled: item.enabled !== false,
-            })));
+            const listenerConfigs = [];
+            for (const item of response.data.instruments) {
+                if (!item.enabled)
+                    continue;
+                if (item.protocol === 'HL7_V2' &&
+                    item.connectionType === 'TCP_SERVER' &&
+                    Number.isFinite(item.port)) {
+                    listenerConfigs.push({
+                        instrumentId: item.instrumentId,
+                        name: item.name,
+                        protocol: 'HL7_V2',
+                        connectionType: 'TCP_SERVER',
+                        enabled: true,
+                        port: item.port,
+                        hl7StartBlock: item.hl7StartBlock || '\x0b',
+                        hl7EndBlock: item.hl7EndBlock || '\x1c\x0d',
+                    });
+                    continue;
+                }
+                if (item.protocol === 'ASTM' &&
+                    item.connectionType === 'SERIAL' &&
+                    typeof item.serialPort === 'string' &&
+                    item.serialPort.trim().length > 0 &&
+                    Number.isFinite(item.baudRate) &&
+                    typeof item.dataBits === 'string' &&
+                    item.dataBits.trim().length > 0 &&
+                    typeof item.parity === 'string' &&
+                    item.parity.trim().length > 0 &&
+                    typeof item.stopBits === 'string' &&
+                    item.stopBits.trim().length > 0) {
+                    listenerConfigs.push({
+                        instrumentId: item.instrumentId,
+                        name: item.name,
+                        protocol: 'ASTM',
+                        connectionType: 'SERIAL',
+                        enabled: true,
+                        serialPort: item.serialPort.trim(),
+                        baudRate: item.baudRate,
+                        dataBits: item.dataBits.trim(),
+                        parity: item.parity.trim().toUpperCase(),
+                        stopBits: item.stopBits.trim(),
+                    });
+                }
+            }
+            this.listenerManager?.applyConfig(listenerConfigs);
             if (response.etag) {
                 this.configStore.setLastConfigEtag(response.etag);
             }
@@ -222,7 +257,14 @@ class GatewayAgent {
                     instruments: this.activeCloudConfig.instruments.map((item) => ({
                         instrumentId: item.instrumentId,
                         name: item.name,
-                        port: item.port,
+                        protocol: item.protocol,
+                        connectionType: item.connectionType,
+                        port: item.port ?? null,
+                        serialPort: item.serialPort ?? null,
+                        baudRate: item.baudRate ?? null,
+                        dataBits: item.dataBits ?? null,
+                        parity: item.parity ?? null,
+                        stopBits: item.stopBits ?? null,
                         enabled: item.enabled,
                     })),
                 }
@@ -273,7 +315,7 @@ class GatewayAgent {
             this.outbox?.enqueue({
                 instrumentId: input.instrumentId,
                 rawMessage: input.rawMessage,
-                protocolHint: 'HL7_V2',
+                protocolHint: input.protocolHint,
             });
         }
         catch (error) {

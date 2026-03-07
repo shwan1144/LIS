@@ -81,18 +81,6 @@ const statusColors: Record<string, string> = {
   CONNECTING: 'processing',
 };
 
-const COBAS_E411_ASTM_PRESET = {
-  manufacturer: 'Roche',
-  model: 'cobas e411',
-  protocol: 'ASTM',
-  connectionType: 'TCP_SERVER',
-  port: 5001,
-  autoPost: true,
-  requireVerification: true,
-  bidirectionalEnabled: false,
-  isActive: true,
-};
-
 const COBAS_E411_SERIAL_PRESET = {
   manufacturer: 'Roche',
   model: 'cobas e411',
@@ -103,18 +91,6 @@ const COBAS_E411_SERIAL_PRESET = {
   dataBits: '8',
   parity: 'NONE',
   stopBits: '1',
-  autoPost: true,
-  requireVerification: true,
-  bidirectionalEnabled: false,
-  isActive: true,
-};
-
-const COBAS_C111_ASTM_PRESET = {
-  manufacturer: 'Roche',
-  model: 'cobas c111',
-  protocol: 'ASTM',
-  connectionType: 'TCP_SERVER',
-  port: 5001,
   autoPost: true,
   requireVerification: true,
   bidirectionalEnabled: false,
@@ -222,6 +198,50 @@ const serialStopBitsOptions = [
   { value: '1', label: '1' },
   { value: '2', label: '2' },
 ];
+
+const getConnectionTypeLabel = (connectionType: string): string => {
+  const opt = connectionTypeOptions.find((item) => item.value === connectionType);
+  return opt?.label || connectionType;
+};
+
+const toParityShortCode = (parity?: string | null): string => {
+  const normalized = (parity || '').toUpperCase();
+  if (normalized === 'EVEN') return 'E';
+  if (normalized === 'ODD') return 'O';
+  return 'N';
+};
+
+const formatInstrumentEndpoint = (
+  instrument: Pick<
+    InstrumentDto,
+    'connectionType' | 'host' | 'port' | 'serialPort' | 'baudRate' | 'dataBits' | 'parity' | 'stopBits' | 'watchFolder'
+  >,
+): string => {
+  if (instrument.connectionType === 'TCP_SERVER') {
+    return instrument.port ? `TCP ${instrument.port}` : 'TCP -';
+  }
+
+  if (instrument.connectionType === 'TCP_CLIENT') {
+    const host = instrument.host || '-';
+    const port = instrument.port || '-';
+    return `${host}:${port}`;
+  }
+
+  if (instrument.connectionType === 'SERIAL') {
+    const serialPort = instrument.serialPort || '-';
+    const baudRate = instrument.baudRate || '-';
+    const dataBits = instrument.dataBits || '-';
+    const stopBits = instrument.stopBits || '-';
+    const parity = toParityShortCode(instrument.parity);
+    return `${serialPort} @ ${baudRate} ${dataBits}${parity}${stopBits}`;
+  }
+
+  if (instrument.connectionType === 'FILE_WATCH') {
+    return instrument.watchFolder || '-';
+  }
+
+  return '-';
+};
 
 type M51MappingStatus = 'MAPPED' | 'READY_TO_MAP' | 'MISSING_LIS_TEST';
 
@@ -368,8 +388,8 @@ export function SettingsInstrumentsPage() {
     setEditingInstrument(null);
     form.resetFields();
     form.setFieldsValue({
-      ...COBAS_E411_ASTM_PRESET,
       protocol: 'HL7_V2',
+      connectionType: 'TCP_SERVER',
       manufacturer: undefined,
       model: undefined,
       port: undefined,
@@ -385,22 +405,6 @@ export function SettingsInstrumentsPage() {
     setModalOpen(true);
   };
 
-  const handleApplyCobasPreset = () => {
-    form.setFieldsValue({
-      ...COBAS_E411_ASTM_PRESET,
-      host: undefined,
-      port: COBAS_E411_ASTM_PRESET.port,
-      serialPort: undefined,
-      baudRate: undefined,
-      dataBits: undefined,
-      parity: undefined,
-      stopBits: undefined,
-      watchFolder: undefined,
-      filePattern: undefined,
-    });
-    message.success('Cobas e411 ASTM preset applied');
-  };
-
   const handleApplyCobasSerialPreset = () => {
     form.setFieldsValue({
       ...COBAS_E411_SERIAL_PRESET,
@@ -410,22 +414,6 @@ export function SettingsInstrumentsPage() {
       filePattern: undefined,
     });
     message.success('Cobas e411 serial preset applied');
-  };
-
-  const handleApplyCobasC111Preset = () => {
-    form.setFieldsValue({
-      ...COBAS_C111_ASTM_PRESET,
-      host: undefined,
-      port: COBAS_C111_ASTM_PRESET.port,
-      serialPort: undefined,
-      baudRate: undefined,
-      dataBits: undefined,
-      parity: undefined,
-      stopBits: undefined,
-      watchFolder: undefined,
-      filePattern: undefined,
-    });
-    message.success('Cobas c111 ASTM preset applied');
   };
 
   const handleApplyCobasC111SerialPreset = () => {
@@ -465,6 +453,30 @@ export function SettingsInstrumentsPage() {
   const handleSubmit = async () => {
     try {
       const values = await form.validateFields();
+
+      if (values.protocol === 'ASTM' && values.connectionType !== 'SERIAL') {
+        message.error('ASTM instruments must use Serial connection type.');
+        return;
+      }
+
+      if (values.connectionType !== 'SERIAL') {
+        values.serialPort = undefined;
+        values.baudRate = undefined;
+        values.dataBits = undefined;
+        values.parity = undefined;
+        values.stopBits = undefined;
+      }
+
+      if (values.connectionType !== 'TCP_SERVER' && values.connectionType !== 'TCP_CLIENT') {
+        values.host = undefined;
+        values.port = undefined;
+      }
+
+      if (values.connectionType !== 'FILE_WATCH') {
+        values.watchFolder = undefined;
+        values.filePattern = undefined;
+      }
+
       if (editingInstrument) {
         await updateInstrument(editingInstrument.id, values);
         message.success('Instrument updated');
@@ -1069,15 +1081,12 @@ L|1|N`,
       title: 'Connection',
       key: 'connection',
       width: 150,
-      render: (_, record) => {
-        const opt = connectionTypeOptions.find(o => o.value === record.connectionType);
-        return (
-          <span>
-            <Text type="secondary">{opt?.label.split('(')[0]}</Text>
-            {record.port && <Text> :{record.port}</Text>}
-          </span>
-        );
-      },
+      render: (_, record) => (
+        <span>
+          <Text type="secondary">{getConnectionTypeLabel(record.connectionType).split('(')[0].trim()}</Text>
+          <Text> : {formatInstrumentEndpoint(record)}</Text>
+        </span>
+      ),
     },
     {
       title: 'Status',
@@ -1263,7 +1272,35 @@ L|1|N`,
     },
   ];
 
+  const selectedProtocol = Form.useWatch('protocol', form);
   const connectionType = Form.useWatch('connectionType', form);
+  const isAstmProtocol = selectedProtocol === 'ASTM';
+  const isAstmSerial = isAstmProtocol && connectionType === 'SERIAL';
+  const connectionTypeSelectOptions = useMemo(() => {
+    if (isAstmProtocol) {
+      return connectionTypeOptions.filter((item) => item.value === 'SERIAL');
+    }
+    return connectionTypeOptions;
+  }, [isAstmProtocol]);
+
+  useEffect(() => {
+    if (!modalOpen) return;
+    if (selectedProtocol !== 'ASTM') return;
+    if (connectionType === 'SERIAL') return;
+
+    form.setFieldsValue({
+      connectionType: 'SERIAL',
+      host: undefined,
+      port: undefined,
+      watchFolder: undefined,
+      filePattern: undefined,
+      serialPort: form.getFieldValue('serialPort') || 'COM1',
+      baudRate: form.getFieldValue('baudRate') || 9600,
+      dataBits: form.getFieldValue('dataBits') || '8',
+      parity: form.getFieldValue('parity') || 'NONE',
+      stopBits: form.getFieldValue('stopBits') || '1',
+    });
+  }, [connectionType, form, modalOpen, selectedProtocol]);
 
   return (
     <div>
@@ -1308,14 +1345,8 @@ L|1|N`,
             message="Quick Preset"
             description={(
               <Space wrap>
-                <Button size="small" onClick={handleApplyCobasPreset}>
-                  Cobas e411 ASTM (TCP)
-                </Button>
                 <Button size="small" onClick={handleApplyCobasSerialPreset}>
                   Cobas e411 ASTM (Serial)
-                </Button>
-                <Button size="small" onClick={handleApplyCobasC111Preset}>
-                  Cobas c111 ASTM (TCP)
                 </Button>
                 <Button size="small" onClick={handleApplyCobasC111SerialPreset}>
                   Cobas c111 ASTM (Serial)
@@ -1324,7 +1355,7 @@ L|1|N`,
                   Medonic M51 HL7 (TCP)
                 </Button>
                 <Text type="secondary">
-                  TCP presets are for network analyzer connectivity. Serial preset is for COM/RS-232 setups.
+                  ASTM presets use Serial only. HL7/TCP remains available for analyzers like Medonic M51.
                 </Text>
               </Space>
             )}
@@ -1353,7 +1384,7 @@ L|1|N`,
               <Select options={protocolOptions} />
             </Form.Item>
             <Form.Item name="connectionType" label="Connection Type" rules={[{ required: true }]} style={{ flex: 1 }}>
-              <Select options={connectionTypeOptions} />
+              <Select options={connectionTypeSelectOptions} />
             </Form.Item>
           </Space>
 
@@ -1373,10 +1404,20 @@ L|1|N`,
           {connectionType === 'SERIAL' && (
             <>
               <Space style={{ display: 'flex' }} align="start">
-                <Form.Item name="serialPort" label="Serial Port" rules={[{ required: true }]} style={{ width: 140 }}>
+                <Form.Item
+                  name="serialPort"
+                  label="Serial Port"
+                  rules={isAstmSerial ? [{ required: true, message: 'Serial port is required for ASTM' }] : []}
+                  style={{ width: 140 }}
+                >
                   <Input placeholder="COM1" />
                 </Form.Item>
-                <Form.Item name="baudRate" label="Baud Rate" style={{ width: 140 }}>
+                <Form.Item
+                  name="baudRate"
+                  label="Baud Rate"
+                  rules={isAstmSerial ? [{ required: true, message: 'Baud rate is required for ASTM' }] : []}
+                  style={{ width: 140 }}
+                >
                   <Select options={[
                     { value: 9600, label: '9600' },
                     { value: 19200, label: '19200' },
@@ -1387,13 +1428,28 @@ L|1|N`,
                 </Form.Item>
               </Space>
               <Space style={{ display: 'flex' }} align="start">
-                <Form.Item name="dataBits" label="Data Bits" style={{ width: 140 }}>
+                <Form.Item
+                  name="dataBits"
+                  label="Data Bits"
+                  rules={isAstmSerial ? [{ required: true, message: 'Data bits are required for ASTM' }] : []}
+                  style={{ width: 140 }}
+                >
                   <Select options={serialDataBitsOptions} />
                 </Form.Item>
-                <Form.Item name="parity" label="Parity" style={{ width: 140 }}>
+                <Form.Item
+                  name="parity"
+                  label="Parity"
+                  rules={isAstmSerial ? [{ required: true, message: 'Parity is required for ASTM' }] : []}
+                  style={{ width: 140 }}
+                >
                   <Select options={serialParityOptions} />
                 </Form.Item>
-                <Form.Item name="stopBits" label="Stop Bits" style={{ width: 140 }}>
+                <Form.Item
+                  name="stopBits"
+                  label="Stop Bits"
+                  rules={isAstmSerial ? [{ required: true, message: 'Stop bits are required for ASTM' }] : []}
+                  style={{ width: 140 }}
+                >
                   <Select options={serialStopBitsOptions} />
                 </Form.Item>
               </Space>
@@ -1457,7 +1513,12 @@ L|1|N`,
               </Descriptions.Item>
               <Descriptions.Item label="Code">{selectedInstrument.code}</Descriptions.Item>
               <Descriptions.Item label="Protocol">{selectedInstrument.protocol}</Descriptions.Item>
-              <Descriptions.Item label="Port">{selectedInstrument.port || '—'}</Descriptions.Item>
+              <Descriptions.Item label="Connection">
+                {getConnectionTypeLabel(selectedInstrument.connectionType)}
+              </Descriptions.Item>
+              <Descriptions.Item label="Endpoint">
+                {formatInstrumentEndpoint(selectedInstrument)}
+              </Descriptions.Item>
               <Descriptions.Item label="Last Connected">
                 {selectedInstrument.lastConnectedAt
                   ? dayjs(selectedInstrument.lastConnectedAt).format('YYYY-MM-DD HH:mm')
