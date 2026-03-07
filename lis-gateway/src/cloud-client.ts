@@ -48,8 +48,9 @@ export class CloudClient {
       gatewayVersion: string;
     },
   ): Promise<{ gatewayId: string; accessToken: string; refreshToken: string; expiresInSec: number }> {
-    const res = await this.request(
-      `${apiBaseUrl}/gateway/activate`,
+    const res = await this.requestGatewayEndpoint(
+      apiBaseUrl,
+      'activate',
       {
         method: 'POST',
         headers: this.jsonHeaders(),
@@ -69,8 +70,9 @@ export class CloudClient {
     apiBaseUrl: string,
     payload: { gatewayId: string; refreshToken: string },
   ): Promise<{ accessToken: string; refreshToken?: string; expiresInSec: number }> {
-    const res = await this.request(
-      `${apiBaseUrl}/gateway/token/refresh`,
+    const res = await this.requestGatewayEndpoint(
+      apiBaseUrl,
+      'token/refresh',
       {
         method: 'POST',
         headers: this.jsonHeaders(),
@@ -86,8 +88,9 @@ export class CloudClient {
     accessToken: string,
     etag?: string | null,
   ): Promise<{ status: number; data: GatewayCloudConfigResponse | null; etag: string | null }> {
-    const response = await this.request(
-      `${apiBaseUrl}/gateway/config`,
+    const response = await this.requestGatewayEndpoint(
+      apiBaseUrl,
+      'config',
       {
         method: 'GET',
         headers: {
@@ -118,8 +121,9 @@ export class CloudClient {
       sourceMeta?: { remoteAddress?: string; remotePort?: number } | null;
     },
   ): Promise<{ accepted: boolean; serverMessageId?: string; duplicate?: boolean }> {
-    const res = await this.request(
-      `${apiBaseUrl}/gateway/messages`,
+    const res = await this.requestGatewayEndpoint(
+      apiBaseUrl,
+      'messages',
       {
         method: 'POST',
         headers: {
@@ -143,8 +147,9 @@ export class CloudClient {
       listeners: Array<{ instrumentId: string; state: string; lastError: string | null }>;
     },
   ): Promise<{ accepted: boolean }> {
-    const res = await this.request(
-      `${apiBaseUrl}/gateway/heartbeat`,
+    const res = await this.requestGatewayEndpoint(
+      apiBaseUrl,
+      'heartbeat',
       {
         method: 'POST',
         headers: {
@@ -168,6 +173,52 @@ export class CloudClient {
     return {
       'Content-Type': 'application/json',
     };
+  }
+
+  private async requestGatewayEndpoint(
+    apiBaseUrl: string,
+    endpointPath: string,
+    init: RequestInit,
+    allowedStatuses: number[],
+  ): Promise<{ status: number; data: unknown; headers: Headers }> {
+    const candidateUrls = this.buildGatewayUrls(apiBaseUrl, endpointPath);
+    let lastNotFoundError: CloudHttpError | null = null;
+
+    for (const url of candidateUrls) {
+      try {
+        return await this.request(url, init, allowedStatuses);
+      } catch (error) {
+        if (error instanceof CloudHttpError && error.status === 404 && candidateUrls.length > 1) {
+          lastNotFoundError = error;
+          continue;
+        }
+        throw error;
+      }
+    }
+
+    if (lastNotFoundError) {
+      throw lastNotFoundError;
+    }
+    throw new Error('Gateway endpoint request failed');
+  }
+
+  private buildGatewayUrls(apiBaseUrl: string, endpointPath: string): string[] {
+    const normalized = this.trimTrailingSlash(apiBaseUrl);
+    const basePath = `/gateway/${endpointPath}`;
+    const candidates = [`${normalized}${basePath}`];
+
+    if (normalized.toLowerCase().endsWith('/api')) {
+      const withoutApi = normalized.slice(0, -4);
+      candidates.push(`${withoutApi}${basePath}`);
+    } else {
+      candidates.push(`${normalized}/api${basePath}`);
+    }
+
+    return Array.from(new Set(candidates));
+  }
+
+  private trimTrailingSlash(input: string): string {
+    return input.replace(/\/+$/, '');
   }
 
   private async request(

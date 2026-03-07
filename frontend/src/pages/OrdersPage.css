@@ -764,74 +764,65 @@ html[data-theme='dark'] .order-delivery-preferences {
   border-bottom-color: rgba(250, 140, 22, 0.2);
 }
 
-.orders-edit-tests-table-test {
-  display: flex;
-  align-items: flex-start;
-  gap: 12px;
-  min-width: 0;
-}
-
-.orders-edit-tests-table-code-btn.ant-btn {
-  min-width: 82px;
-  height: 30px;
-  padding: 0 14px;
-  border: none;
-  border-radius: 12px;
-  background: linear-gradient(135deg, #1677ff 0%, #69b1ff 100%);
-  color: #fff;
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  box-shadow: 0 10px 20px rgba(22, 119, 255, 0.2);
-}
-
-.orders-edit-tests-table-code-btn.ant-btn:not(:disabled):hover,
-.orders-edit-tests-table-code-btn.ant-btn:not(:disabled):focus {
-  color: #fff;
-  background: linear-gradient(135deg, #4096ff 0%, #69b1ff 100%);
-}
-
-.orders-edit-tests-table-code-btn.ant-btn:disabled {
-  background: linear-gradient(135deg, rgba(148, 163, 184, 0.86) 0%, rgba(203, 213, 225, 0.9) 100%);
-  color: rgba(255, 255, 255, 0.86);
-  box-shadow: none;
-}
-
-.orders-edit-tests-table-test-copy {
+.orders-edit-tests-table-name-block {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
   min-width: 0;
 }
 
 .orders-edit-tests-table-name.ant-typography {
   margin: 0;
   display: block;
-  font-size: 15px;
-  line-height: 1.4;
+  font-size: 14px;
+  line-height: 1.45;
+  font-weight: 600;
   color: rgba(0, 0, 0, 0.88);
 }
 
-.orders-edit-tests-table-tags {
+.orders-edit-tests-table-subline {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+  align-items: center;
 }
 
+.orders-edit-tests-table-code {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: rgba(22, 119, 255, 0.92);
+}
+
+.orders-edit-tests-mini-chip,
 .orders-edit-tests-status-badge,
-.orders-edit-tests-pill,
-.orders-edit-tests-meta-pill {
+.orders-edit-tests-table-meta,
+.orders-edit-tests-table-sequence,
+.orders-edit-tests-table-price {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  min-height: 28px;
+  min-height: 26px;
   padding: 0 10px;
   border-radius: 999px;
   border: 1px solid transparent;
-  font-size: 11.5px;
+  font-size: 11px;
   font-weight: 600;
   line-height: 1;
   white-space: nowrap;
+}
+
+.orders-edit-tests-mini-chip {
+  border-color: rgba(148, 163, 184, 0.24);
+  background: rgba(15, 23, 42, 0.04);
+  color: rgba(15, 23, 42, 0.66);
+}
+
+.orders-edit-tests-status-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
 }
 
 .orders-edit-tests-status-badge {
@@ -876,22 +867,10 @@ html[data-theme='dark'] .order-delivery-preferences {
   color: rgba(0, 0, 0, 0.65);
 }
 
-.orders-edit-tests-pill {
-  border-color: rgba(148, 163, 184, 0.25);
-  background: rgba(15, 23, 42, 0.04);
-  color: rgba(15, 23, 42, 0.72);
-}
-
-.orders-edit-tests-pill-warn {
-  border-color: rgba(255, 187, 150, 0.85);
-  background: rgba(255, 242, 232, 0.95);
-  color: #d46b08;
-}
-
-.orders-edit-tests-pill-locked {
-  border-color: rgba(255, 229, 143, 0.9);
-  background: rgba(255, 247, 230, 0.95);
-  color: #ad6800;
+.orders-edit-tests-status-note {
+  font-size: 11px;
+  line-height: 1.2;
+  color: rgba(0, 0, 0, 0.45);
 }
 
 .orders-edit-tests-table-meta {
@@ -908,22 +887,58 @@ html[data-theme='dark'] .order-delivery-preferences {
   line-height: 1.1;
 }
 
-.orders-edit-tests-table-note.ant-typography {
+.orders-edit-tests-table-sequence {
+  border-color: rgba(148, 163, 184, 0.18);
+  background: rgba(148, 163, 184, 0.08);
+  color: rgba(15, 23, 42, 0.72);
+}
+
+.orders-edit-tests-table-price {
+  color: rgba(15, 23, 42, 0.78);
+}
+
+.orders-edit-tests-action-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.orders-edit-tests-action-btn.ant-btn {
+  min-width: 92px;
+  height: 32px;
+  padding-inline: 14px;
+  border-radius: 10px;
+  font-size: 12px;
+  font-weight: 600;
+  box-shadow: none;
+}
+
+.orders-edit-tests-action-btn.ant-btn.ant-btn-dangerous {
+  border-color: rgba(239, 68, 68, 0.35);
+  background: rgba(254, 242, 242, 0.95);
+  color: #dc2626;
+}
+
+.orders-edit-tests-action-btn.ant-btn.ant-btn-dangerous:not(:disabled):hover,
+.orders-edit-tests-action-btn.ant-btn.ant-btn-dangerous:not(:disabled):focus {
+  border-color: rgba(220, 38, 38, 0.55);
+  background: rgba(254, 226, 226, 0.98);
+  color: #b91c1c;
+}
+
+.orders-edit-tests-action-btn.ant-btn:disabled {
+  border-color: rgba(148, 163, 184, 0.2);
+  background: rgba(148, 163, 184, 0.08);
+  color: rgba(100, 116, 139, 0.58);
+}
+
+.orders-edit-tests-action-note.ant-typography {
   margin: 0;
   display: block;
-  font-size: 12px;
-  line-height: 1.55;
-  color: #0958d9;
-}
-
-.orders-edit-tests-table-note.is-blocked.ant-typography {
-  color: #8c5a00;
-}
-
-.orders-edit-tests-meta-pill {
-  border-color: rgba(148, 163, 184, 0.2);
-  background: rgba(15, 23, 42, 0.035);
-  color: rgba(15, 23, 42, 0.7);
+  font-size: 11px;
+  line-height: 1.3;
+  color: rgba(0, 0, 0, 0.45);
 }
 
 .orders-edit-tests-modal-dark .ant-modal-content,
@@ -999,18 +1014,11 @@ html[data-theme='dark'] .order-delivery-preferences {
   color: rgba(255, 255, 255, 0.94);
 }
 
-.orders-edit-tests-modal-dark .orders-edit-tests-table-code-btn.ant-btn:not(:disabled):hover,
-.orders-edit-tests-modal-dark .orders-edit-tests-table-code-btn.ant-btn:not(:disabled):focus {
-  color: #fff;
-  background: linear-gradient(135deg, #60a5fa 0%, #38bdf8 100%);
+.orders-edit-tests-modal-dark .orders-edit-tests-table-code {
+  color: rgba(125, 211, 252, 0.96);
 }
 
-.orders-edit-tests-modal-dark .orders-edit-tests-table-code-btn.ant-btn:disabled {
-  background: linear-gradient(135deg, rgba(71, 85, 105, 0.96) 0%, rgba(100, 116, 139, 0.92) 100%);
-  color: rgba(226, 232, 240, 0.68);
-}
-
-.orders-edit-tests-modal-dark .orders-edit-tests-pill {
+.orders-edit-tests-modal-dark .orders-edit-tests-mini-chip {
   border-color: rgba(148, 163, 184, 0.22);
   background: rgba(148, 163, 184, 0.08);
   color: rgba(226, 232, 240, 0.82);
@@ -1022,12 +1030,33 @@ html[data-theme='dark'] .order-delivery-preferences {
   color: rgba(226, 232, 240, 0.76);
 }
 
-.orders-edit-tests-modal-dark .orders-edit-tests-table-note.ant-typography {
-  color: rgba(191, 219, 254, 0.96);
+.orders-edit-tests-modal-dark .orders-edit-tests-table-sequence,
+.orders-edit-tests-modal-dark .orders-edit-tests-table-price {
+  color: rgba(226, 232, 240, 0.84);
 }
 
-.orders-edit-tests-modal-dark .orders-edit-tests-table-note.is-blocked.ant-typography {
-  color: rgba(253, 230, 138, 0.96);
+.orders-edit-tests-modal-dark .orders-edit-tests-status-note,
+.orders-edit-tests-modal-dark .orders-edit-tests-action-note.ant-typography {
+  color: rgba(226, 232, 240, 0.54);
+}
+
+.orders-edit-tests-modal-dark .orders-edit-tests-action-btn.ant-btn.ant-btn-dangerous {
+  border-color: rgba(248, 113, 113, 0.3);
+  background: rgba(127, 29, 29, 0.34);
+  color: #fecaca;
+}
+
+.orders-edit-tests-modal-dark .orders-edit-tests-action-btn.ant-btn.ant-btn-dangerous:not(:disabled):hover,
+.orders-edit-tests-modal-dark .orders-edit-tests-action-btn.ant-btn.ant-btn-dangerous:not(:disabled):focus {
+  border-color: rgba(252, 165, 165, 0.46);
+  background: rgba(153, 27, 27, 0.5);
+  color: #fff1f2;
+}
+
+.orders-edit-tests-modal-dark .orders-edit-tests-action-btn.ant-btn:disabled {
+  border-color: rgba(148, 163, 184, 0.18);
+  background: rgba(148, 163, 184, 0.1);
+  color: rgba(148, 163, 184, 0.48);
 }
 
 .orders-edit-reason-modal .ant-input {
@@ -1150,12 +1179,7 @@ html[data-theme='dark'] .order-delivery-preferences {
     border-radius: 12px;
   }
 
-  .orders-edit-tests-table-test {
-    gap: 10px;
-  }
-
-  .orders-edit-tests-table-code-btn.ant-btn {
-    min-width: 74px;
-    padding-inline: 10px;
+  .orders-edit-tests-action-btn.ant-btn {
+    min-width: 82px;
   }
 }

@@ -22,7 +22,7 @@ class CloudClient {
         this.timeoutMs = this.parsePositiveInt(process.env.FORWARD_TIMEOUT_MS, 8000);
     }
     async activate(apiBaseUrl, payload) {
-        const res = await this.request(`${apiBaseUrl}/gateway/activate`, {
+        const res = await this.requestGatewayEndpoint(apiBaseUrl, 'activate', {
             method: 'POST',
             headers: this.jsonHeaders(),
             body: JSON.stringify(payload),
@@ -30,7 +30,7 @@ class CloudClient {
         return res.data;
     }
     async refresh(apiBaseUrl, payload) {
-        const res = await this.request(`${apiBaseUrl}/gateway/token/refresh`, {
+        const res = await this.requestGatewayEndpoint(apiBaseUrl, 'token/refresh', {
             method: 'POST',
             headers: this.jsonHeaders(),
             body: JSON.stringify(payload),
@@ -38,7 +38,7 @@ class CloudClient {
         return res.data;
     }
     async getConfig(apiBaseUrl, accessToken, etag) {
-        const response = await this.request(`${apiBaseUrl}/gateway/config`, {
+        const response = await this.requestGatewayEndpoint(apiBaseUrl, 'config', {
             method: 'GET',
             headers: {
                 ...this.jsonHeaders(),
@@ -53,7 +53,7 @@ class CloudClient {
         };
     }
     async postMessage(apiBaseUrl, accessToken, payload) {
-        const res = await this.request(`${apiBaseUrl}/gateway/messages`, {
+        const res = await this.requestGatewayEndpoint(apiBaseUrl, 'messages', {
             method: 'POST',
             headers: {
                 ...this.jsonHeaders(),
@@ -64,7 +64,7 @@ class CloudClient {
         return res.data;
     }
     async postHeartbeat(apiBaseUrl, accessToken, payload) {
-        const res = await this.request(`${apiBaseUrl}/gateway/heartbeat`, {
+        const res = await this.requestGatewayEndpoint(apiBaseUrl, 'heartbeat', {
             method: 'POST',
             headers: {
                 ...this.jsonHeaders(),
@@ -84,6 +84,42 @@ class CloudClient {
         return {
             'Content-Type': 'application/json',
         };
+    }
+    async requestGatewayEndpoint(apiBaseUrl, endpointPath, init, allowedStatuses) {
+        const candidateUrls = this.buildGatewayUrls(apiBaseUrl, endpointPath);
+        let lastNotFoundError = null;
+        for (const url of candidateUrls) {
+            try {
+                return await this.request(url, init, allowedStatuses);
+            }
+            catch (error) {
+                if (error instanceof CloudHttpError && error.status === 404 && candidateUrls.length > 1) {
+                    lastNotFoundError = error;
+                    continue;
+                }
+                throw error;
+            }
+        }
+        if (lastNotFoundError) {
+            throw lastNotFoundError;
+        }
+        throw new Error('Gateway endpoint request failed');
+    }
+    buildGatewayUrls(apiBaseUrl, endpointPath) {
+        const normalized = this.trimTrailingSlash(apiBaseUrl);
+        const basePath = `/gateway/${endpointPath}`;
+        const candidates = [`${normalized}${basePath}`];
+        if (normalized.toLowerCase().endsWith('/api')) {
+            const withoutApi = normalized.slice(0, -4);
+            candidates.push(`${withoutApi}${basePath}`);
+        }
+        else {
+            candidates.push(`${normalized}/api${basePath}`);
+        }
+        return Array.from(new Set(candidates));
+    }
+    trimTrailingSlash(input) {
+        return input.replace(/\/+$/, '');
     }
     async request(url, init, allowedStatuses) {
         const controller = new AbortController();

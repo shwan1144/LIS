@@ -80,6 +80,7 @@ interface SelectedTest {
   testCode: string;
   testName: string;
   tubeType: string;
+  sequenceNumber?: number | null;
   displayLabel?: string;
   sortCategoryKey?: string;
   price?: number | null;
@@ -208,15 +209,18 @@ function getEditTestStatusDisplay(status: string | null | undefined): {
   }
 }
 
-function getEditTestHelperText(test: SelectedTest): string | null {
-  if (test.blockedReason) {
-    return test.blockedReason;
-  }
+function getEditTestActionNote(test: SelectedTest): string | null {
   if (test.adminReasonRequired) {
-    return 'Removing this verified result requires an audit reason.';
+    return 'Reason required';
   }
   if (test.isPanelRoot) {
-    return 'Removing this row deletes the full panel from the order.';
+    return 'Full panel';
+  }
+  if (test.blockedReason?.includes('lab admin')) {
+    return 'Admin only';
+  }
+  if (test.blocked) {
+    return 'Locked';
   }
   return null;
 }
@@ -744,6 +748,7 @@ export function OrdersPage() {
   const getRootOrderTests = (order: OrderDto): SelectedTest[] => {
     const all = (order.samples ?? []).flatMap((sample) => sample.orderTests ?? []);
     const root = all.filter((orderTest) => !orderTest.parentOrderTestId);
+    const sampleById = new Map((order.samples ?? []).map((sample) => [sample.id, sample]));
     const childrenByParent = new Map<string, OrderTestDto[]>();
     all.forEach((orderTest) => {
       if (!orderTest.parentOrderTestId) return;
@@ -797,6 +802,7 @@ export function OrdersPage() {
         testCode: orderTest.test?.code ?? '-',
         testName: orderTest.test?.name ?? 'Unknown',
         tubeType: orderTest.test?.tubeType ?? 'OTHER',
+        sequenceNumber: sampleById.get(orderTest.sampleId)?.sequenceNumber ?? null,
         displayLabel,
         sortCategoryKey,
         price: orderTest.price != null ? Number(orderTest.price) : null,
@@ -984,6 +990,7 @@ export function OrdersPage() {
         testCode: test.code,
         testName: test.name,
         tubeType: test.tubeType,
+        sequenceNumber: null,
         removable: true,
         blocked: false,
         blockedReason: null,
@@ -1005,69 +1012,94 @@ export function OrdersPage() {
 
   const editTestsTableColumns = [
     {
-      title: 'Test',
+      title: 'Test Name',
       key: 'test',
       className: 'orders-edit-tests-col-test',
       render: (_: unknown, test: SelectedTest) => {
-        const status = getEditTestStatusDisplay(test.currentStatus);
         return (
-          <div className="orders-edit-tests-table-test">
-            <Button
-              className="orders-edit-tests-table-code-btn"
-              disabled={!test.removable}
-              onClick={() => handleRemoveEditingTest(test.testId)}
-              title={test.removable ? 'Remove test from order' : 'This test cannot be removed'}
-            >
-              {test.testCode}
-            </Button>
-            <div className="orders-edit-tests-table-test-copy">
-              <Text className="orders-edit-tests-table-name">{test.testName}</Text>
-              <div className="orders-edit-tests-table-tags">
-                <span
-                  className={`orders-edit-tests-status-badge orders-edit-tests-status-${status.tone}`}
-                >
-                  {status.label}
-                </span>
-              </div>
+          <div className="orders-edit-tests-table-name-block">
+            <Text className="orders-edit-tests-table-name">{test.testName}</Text>
+            <div className="orders-edit-tests-table-subline">
+              <span className="orders-edit-tests-table-code">{test.testCode}</span>
+              {test.isPanelRoot ? <span className="orders-edit-tests-mini-chip">Panel</span> : null}
             </div>
           </div>
         );
       },
     },
     {
-      title: 'Sample',
+      title: 'Status',
+      key: 'status',
+      width: 130,
+      className: 'orders-edit-tests-col-status',
+      render: (_: unknown, test: SelectedTest) => {
+        const status = getEditTestStatusDisplay(test.currentStatus);
+        return (
+          <div className="orders-edit-tests-status-cell">
+            <span
+              className={`orders-edit-tests-status-badge orders-edit-tests-status-${status.tone}`}
+            >
+              {status.label}
+            </span>
+            {test.adminReasonRequired ? (
+              <span className="orders-edit-tests-status-note">Need reason</span>
+            ) : null}
+            {test.blocked ? <span className="orders-edit-tests-status-note">Locked</span> : null}
+          </div>
+        );
+      },
+    },
+    {
+      title: 'Tube Type',
       key: 'tubeType',
-      width: 120,
+      width: 130,
       className: 'orders-edit-tests-col-sample',
       render: (_: unknown, test: SelectedTest) => (
         <span className="orders-edit-tests-table-meta">{formatTokenLabel(test.tubeType)}</span>
       ),
     },
     {
+      title: 'Sequence',
+      key: 'sequenceNumber',
+      width: 110,
+      className: 'orders-edit-tests-col-sequence',
+      render: (_: unknown, test: SelectedTest) => (
+        <span className="orders-edit-tests-table-sequence">
+          {test.sequenceNumber != null ? `#${test.sequenceNumber}` : 'Auto'}
+        </span>
+      ),
+    },
+    {
       title: 'Price',
       key: 'price',
-      width: 150,
+      width: 130,
       className: 'orders-edit-tests-col-price',
       render: (_: unknown, test: SelectedTest) => (
-        <span className="orders-edit-tests-table-meta">
+        <span className="orders-edit-tests-table-price">
           {test.price != null ? `${test.price.toLocaleString()} IQD` : 'Current pricing'}
         </span>
       ),
     },
     {
-      title: 'Notes',
-      key: 'notes',
-      width: 250,
-      className: 'orders-edit-tests-col-note',
+      title: 'Action',
+      key: 'action',
+      width: 150,
+      className: 'orders-edit-tests-col-action',
       render: (_: unknown, test: SelectedTest) => {
-        const helperText = getEditTestHelperText(test);
-        if (!helperText) {
-          return <Text type="secondary">Ready to remove</Text>;
-        }
+        const actionNote = getEditTestActionNote(test);
         return (
-          <Text className={`orders-edit-tests-table-note${test.blockedReason ? ' is-blocked' : ''}`}>
-            {helperText}
-          </Text>
+          <div className="orders-edit-tests-action-cell">
+            <Button
+              className="orders-edit-tests-action-btn"
+              icon={<DeleteOutlined />}
+              danger
+              disabled={!test.removable}
+              onClick={() => handleRemoveEditingTest(test.testId)}
+            >
+              Delete
+            </Button>
+            {actionNote ? <Text className="orders-edit-tests-action-note">{actionNote}</Text> : null}
+          </div>
         );
       },
     },
@@ -2497,7 +2529,7 @@ export function OrdersPage() {
           </div>
         }
         open={editTestsModalOpen}
-        width={760}
+        width={900}
         className={`orders-edit-tests-modal${isDark ? ' orders-edit-tests-modal-dark' : ''}`}
         onCancel={() => {
           if (!savingEditedTests) {
@@ -2568,7 +2600,7 @@ export function OrdersPage() {
               pagination={false}
               size="small"
               tableLayout="fixed"
-              scroll={{ y: 360, x: 760 }}
+              scroll={{ y: 360, x: 860 }}
             />
           )}
         </div>
