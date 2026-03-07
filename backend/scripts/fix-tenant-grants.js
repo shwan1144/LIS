@@ -62,6 +62,11 @@ BEGIN
     GRANT SELECT, INSERT, UPDATE ON TABLE "patients" TO app_lab_user;
   END IF;
 
+  IF to_regclass('public.platform_settings') IS NOT NULL THEN
+    GRANT SELECT ON TABLE "platform_settings" TO app_lab_user;
+    GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE "platform_settings" TO app_platform_admin;
+  END IF;
+
   IF to_regclass('public.audit_logs') IS NOT NULL THEN
     GRANT SELECT, INSERT ON TABLE "audit_logs" TO app_lab_user;
     ALTER TABLE "audit_logs" ENABLE ROW LEVEL SECURITY;

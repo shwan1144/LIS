@@ -107,10 +107,7 @@ const CREATE_ORDER_SLOW_FEEDBACK_MS = 1_200;
 const ORDER_STATUS_FILTERS: Array<{ label: string; value: 'ALL' | OrderStatus }> = [
   { label: 'All statuses', value: 'ALL' },
   { label: 'Registered', value: 'REGISTERED' },
-  { label: 'Collected', value: 'COLLECTED' },
-  { label: 'In progress', value: 'IN_PROGRESS' },
   { label: 'Completed', value: 'COMPLETED' },
-  { label: 'Cancelled', value: 'CANCELLED' },
 ];
 const ORDER_STATUS_TAG_COLORS: Record<OrderStatus, string> = {
   REGISTERED: 'blue',
@@ -2083,7 +2080,7 @@ export function OrdersPage() {
             className="orders-right-card orders-workspace-card"
             style={{ height: 'calc(100vh - 252px)', display: 'flex', flexDirection: 'column' }}
             bodyStyle={{
-              overflowY: 'auto',
+              overflow: 'hidden',
               paddingTop: 12,
               paddingInline: 12,
               paddingBottom: 0,
@@ -2148,23 +2145,75 @@ export function OrdersPage() {
                                 }`}
                               >
                                 <div className="order-tests-readonly-grid-header">
-                                  <span className="order-tests-readonly-label">Abbreviations</span>
+                                  <span className="order-tests-readonly-label">Selected tests</span>
                                   <Text type="secondary" className="order-tests-readonly-count">
                                     {orderTests.length} tests
                                   </Text>
                                 </div>
-                                <div className="order-tests-readonly-pills">
-                                  {orderTests.map((orderTest) => (
-                                    <Tag
-                                      key={orderTest.testId}
-                                      className="order-tests-readonly-pill"
-                                      title={`${orderTest.testName} (${orderTest.testCode})`}
-                                      style={{ marginInlineEnd: 0 }}
-                                    >
-                                      {orderTest.displayLabel || '-'}
-                                    </Tag>
-                                  ))}
-                                </div>
+                                <Table
+                                  dataSource={orderTests}
+                                  rowKey="testId"
+                                  pagination={false}
+                                  size="small"
+                                  tableLayout="fixed"
+                                  scroll={{ y: 256 }}
+                                  className="order-tests-readonly-table"
+                                  columns={[
+                                    {
+                                      title: 'Test',
+                                      key: 'displayLabel',
+                                      className: 'order-tests-readonly-col-test',
+                                      render: (_: unknown, orderTest: SelectedTest) => (
+                                        <span
+                                          className="order-tests-readonly-table-abbrev"
+                                          title={`${orderTest.testName} (${orderTest.testCode})`}
+                                        >
+                                          {orderTest.displayLabel || '-'}
+                                        </span>
+                                      ),
+                                    },
+                                    {
+                                      title: 'Status',
+                                      key: 'status',
+                                      width: 112,
+                                      className: 'order-tests-readonly-col-status',
+                                      render: (_: unknown, orderTest: SelectedTest) => {
+                                        const status = getEditTestStatusDisplay(orderTest.currentStatus);
+                                        return (
+                                          <span
+                                            className={`order-tests-readonly-status-badge order-tests-readonly-status-${status.tone}`}
+                                          >
+                                            {status.label}
+                                          </span>
+                                        );
+                                      },
+                                    },
+                                    {
+                                      title: 'Tube Type',
+                                      key: 'tubeType',
+                                      width: 104,
+                                      className: 'order-tests-readonly-col-tube',
+                                      render: (_: unknown, orderTest: SelectedTest) => (
+                                        <span className="order-tests-readonly-table-chip">
+                                          {formatTokenLabel(orderTest.tubeType)}
+                                        </span>
+                                      ),
+                                    },
+                                    {
+                                      title: 'Price',
+                                      key: 'price',
+                                      width: 96,
+                                      className: 'order-tests-readonly-col-price',
+                                      render: (_: unknown, orderTest: SelectedTest) => (
+                                        <span className="order-tests-readonly-table-price">
+                                          {orderTest.price != null
+                                            ? `${orderTest.price.toLocaleString()} IQD`
+                                            : '-'}
+                                        </span>
+                                      ),
+                                    },
+                                  ]}
+                                />
                               </div>
                             )}
                           </Col>
@@ -2258,9 +2307,13 @@ export function OrdersPage() {
             ) : (
               <div className="draft-order-view">
                 <div className="draft-order-content">
-                  <Row gutter={[12, 12]} className="order-composer-grid">
+                  <Row gutter={[12, { xs: 12, xl: 0 }]} className="order-composer-grid">
                     <Col xs={24} xl={16}>
-                      <Card size="small" className="orders-section-card" title="Select tests">
+                      <Card
+                        size="small"
+                        className="orders-section-card order-composer-select-card"
+                        title="Select tests"
+                      >
                         <div className="order-draft-referred-row">
                           <Text strong style={{ display: 'block', marginBottom: 6 }}>
                             Referred by
@@ -2306,65 +2359,68 @@ export function OrdersPage() {
                           <Text type="secondary">{selectedTests.length} selected</Text>
                         </div>
 
-                        {selectedTests.length === 0 ? (
-                          <Empty
-                            image={Empty.PRESENTED_IMAGE_SIMPLE}
-                            description="No tests selected. Use search above or test groups."
-                            style={{ padding: 24 }}
-                          />
-                        ) : (
-                          <Table
-                            dataSource={selectedTests}
-                            rowKey="testId"
-                            pagination={false}
-                            size="small"
-                            scroll={{ y: 280 }}
-                            className="order-selected-tests-table"
-                            tableLayout="fixed"
-                            columns={[
-                              {
-                                title: 'Test',
-                                dataIndex: 'testCode',
-                                key: 'testCode',
-                                className: 'order-selected-col-test',
-                                ellipsis: true,
-                                render: (_, record) => (
-                                  <Text className="order-selected-test-name" title={record.testName}>
-                                    {record.testName}
-                                  </Text>
-                                ),
-                              },
-                              {
-                                title: 'Sample',
-                                dataIndex: 'tubeType',
-                                key: 'tubeType',
-                                className: 'order-selected-col-tube',
-                                render: (tubeType: string) => (
-                                  <Text type="secondary" className="order-selected-test-tube">
-                                    {tubeType || '-'}
-                                  </Text>
-                                ),
-                              },
-                              {
-                                title: '',
-                                key: 'action',
-                                align: 'right',
-                                className: 'order-selected-col-action',
-                                width: 38,
-                                render: (_, record) => (
-                                  <Button
-                                    type="text"
-                                    danger
-                                    icon={<DeleteOutlined />}
-                                    onClick={() => handleRemoveTest(record.testId)}
-                                    size="small"
-                                  />
-                                ),
-                              },
-                            ]}
-                            style={{ border: styles.borderDark, borderRadius: 8 }}
-                          />
-                        )}
+                        <div className="order-selected-tests-panel">
+                          {selectedTests.length === 0 ? (
+                            <Empty
+                              image={Empty.PRESENTED_IMAGE_SIMPLE}
+                              description="No tests selected. Use search above or test groups."
+                              style={{ padding: 24 }}
+                            />
+                          ) : (
+                            <Table
+                              dataSource={selectedTests}
+                              rowKey="testId"
+                              pagination={false}
+                              size="small"
+                              scroll={{ y: '100%' }}
+                              className="order-selected-tests-table"
+                              tableLayout="fixed"
+                              columns={[
+                                {
+                                  title: 'Test',
+                                  dataIndex: 'testCode',
+                                  key: 'testCode',
+                                  className: 'order-selected-col-test',
+                                  ellipsis: true,
+                                  render: (_, record) => (
+                                    <Text className="order-selected-test-name" title={record.testName}>
+                                      {record.testName}
+                                    </Text>
+                                  ),
+                                },
+                                {
+                                  title: 'Sample',
+                                  dataIndex: 'tubeType',
+                                  key: 'tubeType',
+                                  className: 'order-selected-col-tube',
+                                  render: (tubeType: string) => (
+                                    <span className="order-selected-test-tube">
+                                      {tubeType || '-'}
+                                    </span>
+                                  ),
+                                },
+                                {
+                                  title: '',
+                                  key: 'action',
+                                  align: 'right',
+                                  className: 'order-selected-col-action',
+                                  width: 52,
+                                  render: (_, record) => (
+                                    <Button
+                                      type="text"
+                                      danger
+                                      className="order-selected-test-delete-btn"
+                                      icon={<DeleteOutlined />}
+                                      onClick={() => handleRemoveTest(record.testId)}
+                                      size="small"
+                                    />
+                                  ),
+                                },
+                              ]}
+                              style={{ border: styles.borderDark, borderRadius: 8 }}
+                            />
+                          )}
+                        </div>
                       </Card>
                     </Col>
 

@@ -415,6 +415,9 @@ async function ensureTenantRolePrivileges(dataSource) {
         IF to_regclass('public.patients') IS NOT NULL THEN
           GRANT SELECT, INSERT, UPDATE ON TABLE "patients" TO app_lab_user;
         END IF;
+        IF to_regclass('public.platform_settings') IS NOT NULL THEN
+          GRANT SELECT ON TABLE "platform_settings" TO app_lab_user;
+        END IF;
       END $$;
     `,
         `
