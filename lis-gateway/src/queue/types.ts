@@ -37,4 +37,5 @@ export interface OutboxRuntimeConfig {
     retryBaseMs: number;
     retryMaxMs: number;
     retryJitterFactor: number;
+    maxDbBytes?: number | null;
 }

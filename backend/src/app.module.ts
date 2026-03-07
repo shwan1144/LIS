@@ -22,6 +22,7 @@ import { TenantModule } from './tenant/tenant.module';
 import { AdminAuthModule } from './admin-auth/admin-auth.module';
 import { PlatformAdminModule } from './platform-admin/platform-admin.module';
 import { LabApiModule } from './lab-api/lab-api.module';
+import { GatewayModule } from './gateway/gateway.module';
 import { DATABASE_ENTITIES } from './database/entities';
 import { DatabaseSupportModule } from './database/database-support.module';
 
@@ -78,6 +79,7 @@ const typeOrmConfig = useDatabaseUrl
     AdminAuthModule,
     PlatformAdminModule,
     LabApiModule,
+    GatewayModule,
   ],
   controllers: [AppController],
   providers: [

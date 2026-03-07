@@ -1,10 +1,9 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('electronAPI', {
-    getConfig: () => ipcRenderer.invoke('get-config'),
-    saveConfig: (config) => ipcRenderer.invoke('save-config', config),
-    onStatusUpdate: (callback) => ipcRenderer.on('status-update', (event, data) => callback(data)),
-    onLogMessage: (callback) => ipcRenderer.on('log-message', (event, msg) => callback(msg)),
-    getSerialPorts: () => ipcRenderer.invoke('get-serial-ports'),
-    testConnection: (credentials) => ipcRenderer.invoke('test-connection', credentials),
+    getStatus: () => ipcRenderer.invoke('gateway:get-status'),
+    getConfigView: () => ipcRenderer.invoke('gateway:get-config-view'),
+    getLogs: (limit) => ipcRenderer.invoke('gateway:get-logs', limit),
+    activateGateway: (payload) => ipcRenderer.invoke('gateway:activate', payload),
+    syncNow: () => ipcRenderer.invoke('gateway:sync-now'),
 });

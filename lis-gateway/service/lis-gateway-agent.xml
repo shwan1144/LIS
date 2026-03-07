@@ -1,0 +1,15 @@
+<service>
+  <id>LISGatewayAgent</id>
+  <name>LIS Gateway Agent</name>
+  <description>LIS Edge Gateway local service</description>
+  <executable>lis-gateway-agent.exe</executable>
+  <arguments></arguments>
+  <logpath>%ProgramData%\LISGateway\logs</logpath>
+  <log mode="roll-by-size">
+    <sizeThreshold>10240</sizeThreshold>
+    <keepFiles>10</keepFiles>
+  </log>
+  <onfailure action="restart" delay="10 sec" />
+  <onfailure action="restart" delay="20 sec" />
+  <onfailure action="none" />
+</service>

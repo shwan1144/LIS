@@ -1,41 +1,45 @@
-# LIS Gateway Bridge
+# LIS Gateway Agent
 
-A lightweight local application to connect laboratory instruments to a Cloud LIS.
+Windows edge service that:
+- listens for HL7 TCP instrument traffic,
+- commits each message to local SQLite outbox first,
+- forwards to backend `/gateway/messages` asynchronously with retries,
+- exposes local loopback control API for GUI (`127.0.0.1` only).
 
-## Features
-- **TCP Listener**: Connects Ethernet-based instruments (e.g., Medonic M51).
-- **Serial Listener**: Connects RS232-based instruments (e.g., Cobas C111, Cobas E411).
-- **Automatic Forwarding**: Securely pushes data to the Cloud LIS API.
-- **SQLite Offline Queue**: Durably stores incoming messages and retries delivery after connectivity outages.
-- **Local Logging**: Logs all activity for troubleshooting.
+## Runtime Paths
 
-## Requirements
-- [Node.js](https://nodejs.org/) (v18 or higher)
-- Internet connection (to reach the Cloud LIS)
+Default root: `%ProgramData%\LISGateway`
 
-## Setup Instructions
+- Config: `%ProgramData%\LISGateway\config\agent.json`
+- Queue DB: `%ProgramData%\LISGateway\data\gateway-queue.db`
+- Logs: `%ProgramData%\LISGateway\logs\gateway-YYYY-MM-DD.log`
 
-1. **Install Dependencies**:
-   Open a terminal in this folder and run:
-   ```powershell
-   npm install
-   ```
+## Local Control API
 
-2. **Configure Settings**:
-   Open the `.env` file and fill in your Cloud LIS details:
-   - `LIS_API_URL`: Your Cloud LIS API address.
-   - `LIS_API_KEY`: Your unique integration key.
-   - `GATEWAY_ID`: Stable gateway identifier used for idempotent dedup in backend.
-   - `QUEUE_*`: Optional offline queue and retry tuning values.
-   - `PORT`/`ID`: Set the COM ports and Instrument IDs for your specific devices.
+All endpoints require `Authorization: Bearer <localApiToken>` where token is stored in `agent.json`.
 
-3. **Run the Bridge**:
-   ```powershell
-   npm start
-   ```
+- `GET /local/status`
+- `POST /local/activate`
+- `POST /local/sync-now`
+- `GET /local/logs?limit=200`
+- `GET /local/config-view`
 
-## Troubleshooting
-- **Logs**: Check the `logs/` folder for detailed activity reports.
-- **Queue DB**: SQLite queue file defaults to `./data/gateway-queue.db`.
-- **Permissions**: Ensure the user running the app has permissions to access COM ports.
-- **Firewall**: Ensure the TCP port (e.g., 5600) is open for the instrument to connect.
+## Development
+
+```powershell
+npm install
+npm start
+```
+
+## Build Service Binary
+
+```powershell
+npm run build:service
+```
+
+## Install / Uninstall Service (Administrator)
+
+```powershell
+npm run service:install
+npm run service:uninstall
+```

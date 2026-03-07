@@ -8,6 +8,12 @@ import {
 } from '../entities/instrument.entity';
 import { LabOrdersWorklist } from '../entities/lab-orders-worklist.entity';
 import { Lab } from '../entities/lab.entity';
+import {
+  GatewayActivationCode,
+  GatewayDevice,
+  GatewayMessageReceipt,
+  GatewayToken,
+} from '../entities/gateway.entity';
 import { OrderTestResultHistory } from '../entities/order-test-result-history.entity';
 import { OrderTest } from '../entities/order-test.entity';
 import { Order } from '../entities/order.entity';
@@ -52,4 +58,8 @@ export const DATABASE_ENTITIES = [
   OrderTestResultHistory,
   UnmatchedInstrumentResult,
   LabOrdersWorklist,
+  GatewayDevice,
+  GatewayActivationCode,
+  GatewayToken,
+  GatewayMessageReceipt,
 ];

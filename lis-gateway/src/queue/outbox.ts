@@ -82,12 +82,17 @@ export class Outbox {
     }
 
     enqueue(input: OutboxEnqueueInput): string {
+        this.enforceStorageLimitBeforeEnqueue();
         const record = this.store.enqueue(input);
         logger.log(
             `Accepted message ${record.id} from instrument ${record.instrumentId} into local queue`,
             'Outbox',
         );
         return record.id;
+    }
+
+    getStats() {
+        return this.store.getStats(Date.now());
     }
 
     private async dispatchOnce(): Promise<void> {
@@ -156,6 +161,33 @@ export class Outbox {
             );
         } catch (error) {
             logger.error(`Maintenance failed: ${this.getErrorMessage(error)}`, 'Outbox');
+        }
+    }
+
+    private enforceStorageLimitBeforeEnqueue(): void {
+        const maxDbBytes = this.config.maxDbBytes;
+        if (!maxDbBytes || maxDbBytes <= 0) {
+            return;
+        }
+
+        const sizeBefore = this.store.getDatabaseSizeBytes();
+        if (sizeBefore <= maxDbBytes) {
+            return;
+        }
+
+        const deleted = this.store.cleanupDeliveredOlderThan(Date.now() + 1);
+        if (deleted > 0) {
+            logger.warn(
+                `Queue storage exceeded ${maxDbBytes} bytes; removed ${deleted} delivered message(s) to reclaim space`,
+                'Outbox',
+            );
+        }
+
+        const sizeAfter = this.store.getDatabaseSizeBytes();
+        if (sizeAfter > maxDbBytes) {
+            throw new Error(
+                `Queue DB size ${sizeAfter} bytes exceeded configured limit ${maxDbBytes} bytes after cleanup`,
+            );
         }
     }
 

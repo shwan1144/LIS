@@ -31,6 +31,7 @@ const tenant_module_1 = require("./tenant/tenant.module");
 const admin_auth_module_1 = require("./admin-auth/admin-auth.module");
 const platform_admin_module_1 = require("./platform-admin/platform-admin.module");
 const lab_api_module_1 = require("./lab-api/lab-api.module");
+const gateway_module_1 = require("./gateway/gateway.module");
 const entities_1 = require("./database/entities");
 const database_support_module_1 = require("./database/database-support.module");
 const useDatabaseUrl = Boolean(process.env.DATABASE_URL);
@@ -88,6 +89,7 @@ exports.AppModule = AppModule = __decorate([
             admin_auth_module_1.AdminAuthModule,
             platform_admin_module_1.PlatformAdminModule,
             lab_api_module_1.LabApiModule,
+            gateway_module_1.GatewayModule,
         ],
         controllers: [app_controller_1.AppController],
         providers: [

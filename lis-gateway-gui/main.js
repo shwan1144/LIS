@@ -1,166 +1,133 @@
 const { app, BrowserWindow, ipcMain } = require('electron');
 const path = require('path');
-const net = require('net');
-const { SerialPort } = require('serialport');
-const { ReadlineParser } = require('@serialport/parser-readline');
-const axios = require('axios');
 const fs = require('fs');
+const axios = require('axios');
 
 let mainWindow;
 
-function createWindow() {
-    mainWindow = new BrowserWindow({
-        width: 1000,
-        height: 800,
-        webPreferences: {
-            preload: path.join(__dirname, 'preload.js'),
-            nodeIntegration: false,
-            contextIsolation: true,
-        },
-        backgroundColor: '#1a1a1a',
-        autoHideMenuBar: true,
-    });
+const LOCAL_AGENT_BASE_URL = process.env.LOCAL_AGENT_BASE_URL || 'http://127.0.0.1:17880';
+const AGENT_CONFIG_PATH = path.join(
+  process.env.ProgramData || 'C:\\ProgramData',
+  'LISGateway',
+  'config',
+  'agent.json',
+);
 
-    // In development, load from Vite dev server
-    if (process.env.VITE_DEV_SERVER_URL) {
-        mainWindow.loadURL(process.env.VITE_DEV_SERVER_URL);
-    } else {
-        mainWindow.loadFile(path.join(__dirname, 'dist/index.html'));
-    }
+function createWindow() {
+  mainWindow = new BrowserWindow({
+    width: 1100,
+    height: 860,
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+      nodeIntegration: false,
+      contextIsolation: true,
+    },
+    backgroundColor: '#0b1320',
+    autoHideMenuBar: true,
+  });
+
+  if (process.env.VITE_DEV_SERVER_URL) {
+    mainWindow.loadURL(process.env.VITE_DEV_SERVER_URL);
+  } else {
+    mainWindow.loadFile(path.join(__dirname, 'dist/index.html'));
+  }
 }
+
+function loadLocalApiToken() {
+  if (!fs.existsSync(AGENT_CONFIG_PATH)) {
+    return null;
+  }
+  try {
+    const parsed = JSON.parse(fs.readFileSync(AGENT_CONFIG_PATH, 'utf8'));
+    return typeof parsed.localApiToken === 'string' ? parsed.localApiToken : null;
+  } catch {
+    return null;
+  }
+}
+
+function getAgentClient() {
+  const token = loadLocalApiToken();
+  if (!token) {
+    throw new Error(
+      `Cannot read local API token from ${AGENT_CONFIG_PATH}. Install/start Gateway service first.`,
+    );
+  }
+
+  return axios.create({
+    baseURL: LOCAL_AGENT_BASE_URL,
+    timeout: 10000,
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+  });
+}
+
+function normalizeAxiosError(error) {
+  if (axios.isAxiosError(error)) {
+    const status = error.response?.status;
+    const detail = error.response?.data?.error || error.response?.data?.message || error.message;
+    return status ? `HTTP ${status}: ${detail}` : detail;
+  }
+  return error?.message || String(error);
+}
+
+async function localGet(pathname, fallback = null) {
+  try {
+    const client = getAgentClient();
+    const response = await client.get(pathname);
+    return response.data;
+  } catch (error) {
+    if (fallback !== null) return fallback;
+    throw new Error(normalizeAxiosError(error));
+  }
+}
+
+async function localPost(pathname, body = {}) {
+  try {
+    const client = getAgentClient();
+    const response = await client.post(pathname, body);
+    return response.data;
+  } catch (error) {
+    throw new Error(normalizeAxiosError(error));
+  }
+}
+
+ipcMain.handle('gateway:get-status', async () => {
+  return await localGet('/local/status', {
+    activated: false,
+    lastError: 'Service unavailable',
+    listeners: [],
+    queue: null,
+  });
+});
+
+ipcMain.handle('gateway:get-config-view', async () => {
+  return await localGet('/local/config-view', {
+    apiBaseUrl: '',
+    gatewayId: null,
+    token: null,
+    queue: { retentionDays: 7, maxBytes: 2147483648 },
+  });
+});
+
+ipcMain.handle('gateway:get-logs', async (event, limit = 200) => {
+  const data = await localGet(`/local/logs?limit=${Math.max(1, Number(limit) || 200)}`, {
+    items: [],
+  });
+  return Array.isArray(data?.items) ? data.items : [];
+});
+
+ipcMain.handle('gateway:activate', async (event, payload) => {
+  return await localPost('/local/activate', payload || {});
+});
+
+ipcMain.handle('gateway:sync-now', async () => {
+  return await localPost('/local/sync-now', {});
+});
 
 app.whenReady().then(createWindow);
 
 app.on('window-all-closed', () => {
-    if (process.platform !== 'darwin') app.quit();
-});
-
-// Settings management
-const CONFIG_PATH = path.join(app.getPath('userData'), 'config.json');
-
-function loadConfig() {
-    if (fs.existsSync(CONFIG_PATH)) {
-        return JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf8'));
-    }
-    return {
-        lisApiUrl: '',
-        lisApiKey: '',
-        instruments: [
-            { id: 'medonic', name: 'Medonic M51', type: 'TCP', port: 5600, cloudId: '', status: 'OFFLINE' },
-            { id: 'cobas_c111', name: 'Cobas C111', type: 'SERIAL', port: 'COM1', baudRate: 9600, cloudId: '', status: 'OFFLINE' },
-            { id: 'cobas_e411', name: 'Cobas E411', type: 'SERIAL', port: 'COM2', baudRate: 9600, cloudId: '', status: 'OFFLINE' },
-        ]
-    };
-}
-
-ipcMain.handle('get-config', () => loadConfig());
-
-ipcMain.handle('save-config', (event, config) => {
-    fs.writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2));
-    restartListeners(config);
-    return { success: true };
-});
-
-ipcMain.handle('test-connection', async (event, { url, apiKey }) => {
-    try {
-        const response = await axios.get(`${url}/patients?size=1`, {
-            headers: { Authorization: `Bearer ${apiKey}` },
-            timeout: 5000,
-        });
-        return { success: true, message: 'Connected to Cloud LIS successfully!' };
-    } catch (error) {
-        const msg = error.response?.data?.message || error.message;
-        return { success: false, message: `Connection failed: ${msg}` };
-    }
-});
-
-// Listener Management
-let activeListeners = {};
-
-function restartListeners(config) {
-    // Stop existing
-    Object.values(activeListeners).forEach(l => l.stop());
-    activeListeners = {};
-
-    config.instruments.forEach(inst => {
-        if (inst.type === 'TCP') {
-            activeListeners[inst.id] = startTcpListener(inst, config);
-        } else {
-            activeListeners[inst.id] = startSerialListener(inst, config);
-        }
-    });
-}
-
-function startTcpListener(inst, config) {
-    const server = net.createServer((socket) => {
-        updateStatus(inst.id, 'CONNECTED');
-        let buffer = '';
-        socket.on('data', (data) => {
-            buffer += data.toString();
-            // HL7 MLLP
-            const startBlock = '\x0b';
-            const endBlock = '\x1c\x0d';
-            while (true) {
-                const start = buffer.indexOf(startBlock);
-                if (start === -1) break;
-                const end = buffer.indexOf(endBlock, start);
-                if (end === -1) break;
-                const msg = buffer.substring(start + 1, end);
-                forwardToCloud(inst, msg, config);
-                buffer = buffer.substring(end + 2);
-            }
-        });
-        socket.on('close', () => updateStatus(inst.id, 'ONLINE'));
-    });
-
-    server.listen(inst.port, () => updateStatus(inst.id, 'ONLINE'));
-
-    return { stop: () => server.close() };
-}
-
-function startSerialListener(inst, config) {
-    try {
-        const port = new SerialPort({ path: inst.port, baudRate: inst.baudRate, autoOpen: true });
-        updateStatus(inst.id, 'ONLINE');
-
-        port.on('data', (data) => {
-            // Simple accumulation for demo/standard
-            forwardToCloud(inst, data.toString(), config);
-        });
-
-        port.on('error', (err) => {
-            updateStatus(inst.id, 'ERROR');
-            log(`Serial Error (${inst.name}): ${err.message}`);
-        });
-
-        return { stop: () => port.close() };
-    } catch (err) {
-        updateStatus(inst.id, 'ERROR');
-        return { stop: () => { } };
-    }
-}
-
-async function forwardToCloud(inst, msg, config) {
-    if (!config.lisApiUrl || !inst.cloudId) return;
-    try {
-        await axios.post(`${config.lisApiUrl}/instruments/${inst.cloudId}/simulate`,
-            { rawMessage: msg },
-            { headers: { 'Authorization': `Bearer ${config.lisApiKey}` } }
-        );
-        log(`Forwarded message from ${inst.name}`);
-    } catch (err) {
-        log(`Failed to forward from ${inst.name}: ${err.message}`);
-    }
-}
-
-function updateStatus(id, status) {
-    mainWindow.webContents.send('status-update', { id, status });
-}
-
-function log(msg) {
-    mainWindow.webContents.send('log-message', msg);
-}
-
-ipcMain.handle('get-serial-ports', async () => {
-    return await SerialPort.list();
+  if (process.platform !== 'darwin') app.quit();
 });

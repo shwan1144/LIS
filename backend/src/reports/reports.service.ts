@@ -61,6 +61,12 @@ export interface PublicResultStatus {
   tests: PublicResultTestItem[];
 }
 
+export interface PublicResultHistoryItem {
+  orderId: string;
+  orderNumber: string;
+  registeredAt: string;
+}
+
 export type ReportActionKind = 'PDF' | 'PRINT' | 'WHATSAPP' | 'VIBER';
 
 export type ReportActionFlags = {
@@ -1013,6 +1019,87 @@ export class ReportsService implements OnModuleInit, OnModuleDestroy {
       verifiedAt: latestVerifiedAt ? latestVerifiedAt.toISOString() : null,
       tests,
     };
+  }
+
+  async searchPublicResultHistory(input: {
+    labId: string;
+    patientNumber: string;
+    birthYear: number;
+    limit?: number;
+  }): Promise<PublicResultHistoryItem[]> {
+    const labId = String(input.labId || '').trim();
+    const patientNumber = String(input.patientNumber || '').trim();
+    const birthYear = Number(input.birthYear);
+    const maxRows = Number.isFinite(input.limit) ? Math.max(1, Math.min(50, Math.floor(input.limit as number))) : 50;
+    const currentYear = new Date().getFullYear();
+
+    if (!labId || !patientNumber) {
+      return [];
+    }
+    if (!Number.isInteger(birthYear) || birthYear < 1900 || birthYear > currentYear) {
+      return [];
+    }
+
+    const candidateFetchLimit = Math.max(maxRows * 3, 150);
+    const candidateOrders = await this.orderRepo
+      .createQueryBuilder('order')
+      .innerJoinAndSelect('order.patient', 'patient')
+      .where('order.labId = :labId', { labId })
+      .andWhere('order.paymentStatus = :paymentStatus', { paymentStatus: 'paid' })
+      .andWhere('LOWER(patient.patientNumber) = LOWER(:patientNumber)', { patientNumber })
+      .andWhere('patient.dateOfBirth IS NOT NULL')
+      .andWhere('EXTRACT(YEAR FROM patient.dateOfBirth) = :birthYear', { birthYear })
+      .orderBy('order.registeredAt', 'DESC')
+      .limit(candidateFetchLimit)
+      .getMany();
+
+    if (candidateOrders.length === 0) {
+      return [];
+    }
+
+    const candidateOrderIds = candidateOrders.map((order) => order.id);
+    const candidateOrderTests = await this.orderTestRepo
+      .createQueryBuilder('orderTest')
+      .innerJoinAndSelect('orderTest.sample', 'sample')
+      .leftJoinAndSelect('orderTest.test', 'test')
+      .where('sample.orderId IN (:...orderIds)', { orderIds: candidateOrderIds })
+      .getMany();
+
+    const testsByOrderId = new Map<string, OrderTest[]>();
+    for (const orderTest of candidateOrderTests) {
+      const orderId = orderTest.sample?.orderId;
+      if (!orderId) continue;
+      const list = testsByOrderId.get(orderId) ?? [];
+      list.push(orderTest);
+      testsByOrderId.set(orderId, list);
+    }
+
+    const history: PublicResultHistoryItem[] = [];
+    for (const order of candidateOrders) {
+      const orderTests = testsByOrderId.get(order.id) ?? [];
+      const reportableOrderTests = this.getReportableOrderTests(orderTests);
+      if (reportableOrderTests.length === 0) {
+        continue;
+      }
+      const verifiedCount = reportableOrderTests.filter(
+        (ot) => ot.status === 'VERIFIED' || !!ot.verifiedAt,
+      ).length;
+      const ready = verifiedCount === reportableOrderTests.length;
+      if (!ready) {
+        continue;
+      }
+
+      history.push({
+        orderId: order.id,
+        orderNumber: order.orderNumber || order.id.substring(0, 8),
+        registeredAt: order.registeredAt.toISOString(),
+      });
+      if (history.length >= maxRows) {
+        break;
+      }
+    }
+
+    return history;
   }
 
   async generatePublicTestResultsPDF(orderId: string): Promise<Buffer> {

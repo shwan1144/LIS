@@ -4,6 +4,7 @@ import { Department } from '../entities/department.entity';
 import { InstrumentMessage, InstrumentTestMapping } from '../entities/instrument.entity';
 import { LabOrdersWorklist } from '../entities/lab-orders-worklist.entity';
 import { Lab } from '../entities/lab.entity';
+import { GatewayActivationCode, GatewayDevice, GatewayMessageReceipt, GatewayToken } from '../entities/gateway.entity';
 import { OrderTestResultHistory } from '../entities/order-test-result-history.entity';
 import { OrderTest } from '../entities/order-test.entity';
 import { Order } from '../entities/order.entity';
@@ -20,4 +21,4 @@ import { UserDepartmentAssignment } from '../entities/user-department-assignment
 import { UserLabAssignment } from '../entities/user-lab-assignment.entity';
 import { UserShiftAssignment } from '../entities/user-shift-assignment.entity';
 import { User } from '../entities/user.entity';
-export declare const DATABASE_ENTITIES: (typeof UserShiftAssignment | typeof User | typeof Shift | typeof Lab | typeof Department | typeof Patient | typeof Order | typeof Sample | typeof OrderTest | typeof UserLabAssignment | typeof UserDepartmentAssignment | typeof AuditLog | typeof AdminLabPortalToken | typeof InstrumentTestMapping | typeof InstrumentMessage | typeof LabOrdersWorklist | typeof OrderTestResultHistory | typeof Pricing | typeof PlatformUser | typeof RefreshToken | typeof Result | typeof TestComponent | typeof UnmatchedInstrumentResult)[];
+export declare const DATABASE_ENTITIES: (typeof UserShiftAssignment | typeof User | typeof Shift | typeof Lab | typeof Department | typeof Patient | typeof Order | typeof Sample | typeof OrderTest | typeof UserLabAssignment | typeof UserDepartmentAssignment | typeof AuditLog | typeof AdminLabPortalToken | typeof InstrumentTestMapping | typeof InstrumentMessage | typeof LabOrdersWorklist | typeof GatewayDevice | typeof GatewayActivationCode | typeof GatewayToken | typeof GatewayMessageReceipt | typeof OrderTestResultHistory | typeof Pricing | typeof PlatformUser | typeof RefreshToken | typeof Result | typeof TestComponent | typeof UnmatchedInstrumentResult)[];

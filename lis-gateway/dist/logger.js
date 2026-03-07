@@ -36,12 +36,15 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.logger = exports.Logger = void 0;
 const fs = __importStar(require("fs"));
 const path = __importStar(require("path"));
+const runtime_paths_1 = require("./runtime-paths");
 class Logger {
     logFile;
+    recentLines = [];
+    maxRecentLines = 2000;
     constructor() {
-        const logsDir = path.join(process.cwd(), 'logs');
+        const logsDir = process.env.GATEWAY_LOG_DIR || (0, runtime_paths_1.resolveRuntimePaths)().logsDir;
         if (!fs.existsSync(logsDir)) {
-            fs.mkdirSync(logsDir);
+            fs.mkdirSync(logsDir, { recursive: true });
         }
         this.logFile = path.join(logsDir, `gateway-${new Date().toISOString().split('T')[0]}.log`);
     }
@@ -65,11 +68,22 @@ class Logger {
     }
     appendToFile(line) {
         try {
+            this.recentLines.push(line);
+            if (this.recentLines.length > this.maxRecentLines) {
+                this.recentLines.splice(0, this.recentLines.length - this.maxRecentLines);
+            }
             fs.appendFileSync(this.logFile, line + '\n');
         }
         catch (err) {
             console.error('Failed to write to log file:', err);
         }
+    }
+    getRecent(limit = 200) {
+        const safeLimit = Math.max(1, Math.min(limit, this.maxRecentLines));
+        return this.recentLines.slice(-safeLimit);
+    }
+    getLogFilePath() {
+        return this.logFile;
     }
 }
 exports.Logger = Logger;

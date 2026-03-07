@@ -7,6 +7,7 @@ const department_entity_1 = require("../entities/department.entity");
 const instrument_entity_1 = require("../entities/instrument.entity");
 const lab_orders_worklist_entity_1 = require("../entities/lab-orders-worklist.entity");
 const lab_entity_1 = require("../entities/lab.entity");
+const gateway_entity_1 = require("../entities/gateway.entity");
 const order_test_result_history_entity_1 = require("../entities/order-test-result-history.entity");
 const order_test_entity_1 = require("../entities/order-test.entity");
 const order_entity_1 = require("../entities/order.entity");
@@ -50,5 +51,9 @@ exports.DATABASE_ENTITIES = [
     order_test_result_history_entity_1.OrderTestResultHistory,
     unmatched_instrument_result_entity_1.UnmatchedInstrumentResult,
     lab_orders_worklist_entity_1.LabOrdersWorklist,
+    gateway_entity_1.GatewayDevice,
+    gateway_entity_1.GatewayActivationCode,
+    gateway_entity_1.GatewayToken,
+    gateway_entity_1.GatewayMessageReceipt,
 ];
 //# sourceMappingURL=entities.js.map

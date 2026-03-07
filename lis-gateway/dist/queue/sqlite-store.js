@@ -59,6 +59,22 @@ class SQLiteStore {
     getDbPath() {
         return this.resolvedDbPath;
     }
+    getDatabaseSizeBytes() {
+        const sqliteBase = this.resolvedDbPath;
+        const candidates = [sqliteBase, `${sqliteBase}-wal`, `${sqliteBase}-shm`];
+        let total = 0;
+        for (const filePath of candidates) {
+            if (!fs.existsSync(filePath))
+                continue;
+            try {
+                total += fs.statSync(filePath).size;
+            }
+            catch {
+                // Ignore stat race conditions while SQLite rotates WAL files.
+            }
+        }
+        return total;
+    }
     enqueue(input) {
         const now = Date.now();
         const message = {

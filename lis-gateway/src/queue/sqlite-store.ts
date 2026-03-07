@@ -56,6 +56,21 @@ export class SQLiteStore {
         return this.resolvedDbPath;
     }
 
+    getDatabaseSizeBytes(): number {
+        const sqliteBase = this.resolvedDbPath;
+        const candidates = [sqliteBase, `${sqliteBase}-wal`, `${sqliteBase}-shm`];
+        let total = 0;
+        for (const filePath of candidates) {
+            if (!fs.existsSync(filePath)) continue;
+            try {
+                total += fs.statSync(filePath).size;
+            } catch {
+                // Ignore stat race conditions while SQLite rotates WAL files.
+            }
+        }
+        return total;
+    }
+
     enqueue(input: OutboxEnqueueInput): OutboxMessageRecord {
         const now = Date.now();
         const message: OutboxMessageRecord = {

@@ -1,13 +1,16 @@
 import * as fs from 'fs';
 import * as path from 'path';
+import { resolveRuntimePaths } from './runtime-paths';
 
 export class Logger {
-    private logFile: string;
+    private readonly logFile: string;
+    private readonly recentLines: string[] = [];
+    private readonly maxRecentLines = 2000;
 
     constructor() {
-        const logsDir = path.join(process.cwd(), 'logs');
+        const logsDir = process.env.GATEWAY_LOG_DIR || resolveRuntimePaths().logsDir;
         if (!fs.existsSync(logsDir)) {
-            fs.mkdirSync(logsDir);
+            fs.mkdirSync(logsDir, { recursive: true });
         }
         this.logFile = path.join(logsDir, `gateway-${new Date().toISOString().split('T')[0]}.log`);
     }
@@ -35,10 +38,23 @@ export class Logger {
 
     private appendToFile(line: string) {
         try {
+            this.recentLines.push(line);
+            if (this.recentLines.length > this.maxRecentLines) {
+                this.recentLines.splice(0, this.recentLines.length - this.maxRecentLines);
+            }
             fs.appendFileSync(this.logFile, line + '\n');
         } catch (err) {
             console.error('Failed to write to log file:', err);
         }
+    }
+
+    getRecent(limit = 200): string[] {
+        const safeLimit = Math.max(1, Math.min(limit, this.maxRecentLines));
+        return this.recentLines.slice(-safeLimit);
+    }
+
+    getLogFilePath(): string {
+        return this.logFile;
     }
 }
 

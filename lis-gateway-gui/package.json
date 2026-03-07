@@ -5,7 +5,8 @@
   "main": "main.js",
   "scripts": {
     "dev": "concurrently \"vite\" \"wait-on http://localhost:5173 && cross-env VITE_DEV_SERVER_URL=http://localhost:5173 electron .\"",
-    "build": "tsc -b && vite build && electron-builder",
+    "build:agent": "npm --prefix ../lis-gateway run build:service",
+    "build": "npm run build:agent && tsc -b && vite build && electron-builder",
     "lint": "eslint .",
     "preview": "vite preview"
   },
@@ -13,8 +14,7 @@
     "axios": "^1.13.6",
     "dotenv": "^17.3.1",
     "react": "^19.2.0",
-    "react-dom": "^19.2.0",
-    "serialport": "^13.0.0"
+    "react-dom": "^19.2.0"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",
@@ -34,5 +34,50 @@
     "typescript-eslint": "^8.48.0",
     "vite": "^7.3.1",
     "wait-on": "^9.0.4"
+  },
+  "build": {
+    "appId": "com.lis.gateway.gui",
+    "productName": "LIS Gateway",
+    "files": [
+      "dist/**/*",
+      "main.js",
+      "preload.js",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "../lis-gateway/dist/bin/lis-gateway-agent.exe",
+        "to": "agent/lis-gateway-agent.exe"
+      },
+      {
+        "from": "../lis-gateway/service/lis-gateway-agent.xml",
+        "to": "agent/LISGatewayAgent.xml"
+      },
+      {
+        "from": "../lis-gateway/scripts/install-service.ps1",
+        "to": "scripts/install-service.ps1"
+      },
+      {
+        "from": "../lis-gateway/scripts/uninstall-service.ps1",
+        "to": "scripts/uninstall-service.ps1"
+      }
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "perMachine": true,
+      "allowElevation": true,
+      "include": "installer/nsis-installer.nsh"
+    }
   }
 }
