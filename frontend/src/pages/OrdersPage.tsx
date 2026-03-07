@@ -80,7 +80,6 @@ interface SelectedTest {
   testCode: string;
   testName: string;
   tubeType: string;
-  sequenceNumber?: number | null;
   displayLabel?: string;
   sortCategoryKey?: string;
   price?: number | null;
@@ -748,7 +747,6 @@ export function OrdersPage() {
   const getRootOrderTests = (order: OrderDto): SelectedTest[] => {
     const all = (order.samples ?? []).flatMap((sample) => sample.orderTests ?? []);
     const root = all.filter((orderTest) => !orderTest.parentOrderTestId);
-    const sampleById = new Map((order.samples ?? []).map((sample) => [sample.id, sample]));
     const childrenByParent = new Map<string, OrderTestDto[]>();
     all.forEach((orderTest) => {
       if (!orderTest.parentOrderTestId) return;
@@ -802,7 +800,6 @@ export function OrdersPage() {
         testCode: orderTest.test?.code ?? '-',
         testName: orderTest.test?.name ?? 'Unknown',
         tubeType: orderTest.test?.tubeType ?? 'OTHER',
-        sequenceNumber: sampleById.get(orderTest.sampleId)?.sequenceNumber ?? null,
         displayLabel,
         sortCategoryKey,
         price: orderTest.price != null ? Number(orderTest.price) : null,
@@ -990,7 +987,6 @@ export function OrdersPage() {
         testCode: test.code,
         testName: test.name,
         tubeType: test.tubeType,
-        sequenceNumber: null,
         removable: true,
         blocked: false,
         blockedReason: null,
@@ -1052,27 +1048,16 @@ export function OrdersPage() {
     {
       title: 'Tube Type',
       key: 'tubeType',
-      width: 130,
+      width: 128,
       className: 'orders-edit-tests-col-sample',
       render: (_: unknown, test: SelectedTest) => (
         <span className="orders-edit-tests-table-meta">{formatTokenLabel(test.tubeType)}</span>
       ),
     },
     {
-      title: 'Sequence',
-      key: 'sequenceNumber',
-      width: 110,
-      className: 'orders-edit-tests-col-sequence',
-      render: (_: unknown, test: SelectedTest) => (
-        <span className="orders-edit-tests-table-sequence">
-          {test.sequenceNumber != null ? `#${test.sequenceNumber}` : 'Auto'}
-        </span>
-      ),
-    },
-    {
       title: 'Price',
       key: 'price',
-      width: 130,
+      width: 124,
       className: 'orders-edit-tests-col-price',
       render: (_: unknown, test: SelectedTest) => (
         <span className="orders-edit-tests-table-price">
@@ -2600,7 +2585,7 @@ export function OrdersPage() {
               pagination={false}
               size="small"
               tableLayout="fixed"
-              scroll={{ y: 360, x: 860 }}
+              scroll={{ y: 360, x: 760 }}
             />
           )}
         </div>
