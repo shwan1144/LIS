@@ -1437,15 +1437,25 @@ let PlatformAdminService = PlatformAdminService_1 = class PlatformAdminService {
     async logPlatformSensitiveRead(actor, payload, manager) {
         if (!actor?.platformUserId)
             return;
+        const rawEntityId = typeof payload.entityId === 'string' ? payload.entityId.trim() : null;
+        const entityId = rawEntityId && UUID_V4_PATTERN.test(rawEntityId) ? rawEntityId : null;
+        const metadata = rawEntityId && !entityId
+            ? {
+                ...(payload.metadata ?? {}),
+                entityReference: payload.metadata && 'entityReference' in payload.metadata
+                    ? payload.metadata.entityReference
+                    : rawEntityId,
+            }
+            : (payload.metadata ?? null);
         await this.auditService.log({
             actorType: audit_log_entity_2.AuditActorType.PLATFORM_USER,
             actorId: actor.platformUserId,
             labId: payload.labId ?? null,
             action: audit_log_entity_2.AuditAction.PLATFORM_SENSITIVE_READ,
             entityType: payload.entityType,
-            entityId: payload.entityId ?? null,
+            entityId,
             description: payload.description,
-            newValues: payload.metadata ?? null,
+            newValues: metadata,
             ipAddress: actor.ipAddress ?? null,
             userAgent: actor.userAgent ?? null,
         }, manager);

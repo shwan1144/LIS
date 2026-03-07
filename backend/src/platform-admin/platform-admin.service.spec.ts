@@ -165,4 +165,47 @@ describe('PlatformAdminService', () => {
       manager,
     );
   });
+
+  it('logs global announcement reads without sending a non-uuid entityId to audit logs', async () => {
+    const manager = {
+      getRepository: jest.fn().mockReturnValue({
+        findOne: jest.fn().mockResolvedValue(null),
+      }),
+    };
+    const withPlatformAdminContext = jest.fn(async (fn: (manager: unknown) => Promise<unknown>) =>
+      fn(manager),
+    );
+    const auditLog = jest.fn().mockResolvedValue({ id: 'audit-id' });
+
+    const service = new PlatformAdminService(
+      {
+        withPlatformAdminContext,
+      } as never,
+      {} as never,
+      { log: auditLog } as never,
+      {} as never,
+      {} as never,
+      {} as never,
+    );
+
+    await service.getGlobalDashboardAnnouncement({
+      platformUserId: 'fbe7e604-d95d-45eb-8db7-d917fa78efaa',
+      role: 'SUPER_ADMIN',
+      ipAddress: '127.0.0.1',
+      userAgent: 'jest',
+    });
+
+    expect(auditLog).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: AuditAction.PLATFORM_SENSITIVE_READ,
+        entityType: 'platform_setting',
+        entityId: null,
+        newValues: {
+          entityReference: 'dashboard.announcement.all_labs',
+        },
+        description: 'Viewed global dashboard announcement',
+      }),
+      undefined,
+    );
+  });
 });
