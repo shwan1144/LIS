@@ -131,7 +131,7 @@ export function AppLayout() {
   ];
 
   return (
-    <AntLayout style={{ minHeight: '100vh' }}>
+    <AntLayout className="lab-app-shell" style={{ minHeight: '100vh' }}>
       <Header
         style={{
           display: 'flex',
@@ -169,8 +169,14 @@ export function AppLayout() {
         </Space>
       </Header>
       <AntLayout>
-        <Sider width={200} style={{ background: isDark ? '#141414' : '#e5edf7' }} theme={isDark ? 'dark' : 'light'}>
+        <Sider
+          className="lab-app-sider"
+          width={228}
+          style={{ background: isDark ? '#141414' : '#e5edf7' }}
+          theme={isDark ? 'dark' : 'light'}
+        >
           <Menu
+            className="lab-app-menu"
             mode="inline"
             selectedKeys={[
               location.pathname.startsWith('/settings') ? location.pathname :
