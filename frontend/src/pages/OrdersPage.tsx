@@ -178,6 +178,49 @@ function normalizeDeliveryMethods(methods: readonly string[] | null | undefined)
   return DELIVERY_METHODS.filter((method) => selected.has(method));
 }
 
+function formatTokenLabel(value: string | null | undefined): string {
+  const normalized = String(value ?? '').trim();
+  if (!normalized) return '-';
+  return normalized
+    .toLowerCase()
+    .split('_')
+    .map((part) => (part ? `${part[0].toUpperCase()}${part.slice(1)}` : part))
+    .join(' ');
+}
+
+function getEditTestStatusDisplay(status: string | null | undefined): {
+  label: string;
+  tone: 'pending' | 'in-progress' | 'completed' | 'verified' | 'rejected' | 'unknown';
+} {
+  switch (status) {
+    case 'PENDING':
+      return { label: 'Pending', tone: 'pending' };
+    case 'IN_PROGRESS':
+      return { label: 'In progress', tone: 'in-progress' };
+    case 'COMPLETED':
+      return { label: 'Completed', tone: 'completed' };
+    case 'VERIFIED':
+      return { label: 'Verified', tone: 'verified' };
+    case 'REJECTED':
+      return { label: 'Rejected', tone: 'rejected' };
+    default:
+      return { label: 'Selected', tone: 'unknown' };
+  }
+}
+
+function getEditTestHelperText(test: SelectedTest): string | null {
+  if (test.blockedReason) {
+    return test.blockedReason;
+  }
+  if (test.adminReasonRequired) {
+    return 'Removing this verified result requires an audit reason.';
+  }
+  if (test.isPanelRoot) {
+    return 'Removing this row deletes the full panel from the order.';
+  }
+  return null;
+}
+
 function toOrderHistoryItem(order: OrderDto): OrderHistoryItemDto {
   const readyTestsCount = Number(order.readyTestsCount ?? 0) || 0;
   return {
@@ -367,6 +410,8 @@ export function OrdersPage() {
     Boolean(user?.isImpersonation) ||
     user?.role === 'LAB_ADMIN' ||
     user?.role === 'SUPER_ADMIN';
+  const editTestsOrderNumber =
+    selectedCreatedOrder?.orderNumber ?? selectedCreatedOrderSummary?.orderNumber ?? null;
 
   const loadOrderHistory = useCallback(
     async (options?: {
@@ -734,6 +779,8 @@ export function OrdersPage() {
         }
       } else if (orderTest.status === 'REJECTED') {
         removable = true;
+      } else if (orderTest.status === 'COMPLETED') {
+        removable = true;
       } else if (
         orderTest.status === 'PENDING' &&
         childTests.every((child) => child.status === 'PENDING')
@@ -741,7 +788,8 @@ export function OrdersPage() {
         removable = true;
       } else {
         blocked = true;
-        blockedReason = 'Completed or entered tests cannot be removed.';
+        blockedReason =
+          'Only pending, completed, and rejected tests can be removed. In-progress tests stay locked.';
       }
 
       return {
@@ -954,6 +1002,96 @@ export function OrdersPage() {
     }
     setEditingTests((prev) => prev.filter((item) => item.testId !== testId));
   };
+
+  const editTestsTableColumns = [
+    {
+      title: 'Test',
+      key: 'test',
+      className: 'orders-edit-tests-col-test',
+      render: (_: unknown, test: SelectedTest) => {
+        const status = getEditTestStatusDisplay(test.currentStatus);
+        return (
+          <div className="orders-edit-tests-table-test">
+            <span className="orders-edit-tests-table-code">{test.testCode}</span>
+            <div className="orders-edit-tests-table-test-copy">
+              <Text className="orders-edit-tests-table-name">{test.testName}</Text>
+              <div className="orders-edit-tests-table-tags">
+                <span
+                  className={`orders-edit-tests-status-badge orders-edit-tests-status-${status.tone}`}
+                >
+                  {status.label}
+                </span>
+                {test.isPanelRoot ? <span className="orders-edit-tests-pill">Panel</span> : null}
+                {test.adminReasonRequired ? (
+                  <span className="orders-edit-tests-pill orders-edit-tests-pill-warn">
+                    Needs reason
+                  </span>
+                ) : null}
+                {test.blocked ? (
+                  <span className="orders-edit-tests-pill orders-edit-tests-pill-locked">
+                    Locked
+                  </span>
+                ) : null}
+              </div>
+            </div>
+          </div>
+        );
+      },
+    },
+    {
+      title: 'Sample',
+      key: 'tubeType',
+      width: 120,
+      className: 'orders-edit-tests-col-sample',
+      render: (_: unknown, test: SelectedTest) => (
+        <span className="orders-edit-tests-table-meta">{formatTokenLabel(test.tubeType)}</span>
+      ),
+    },
+    {
+      title: 'Price',
+      key: 'price',
+      width: 150,
+      className: 'orders-edit-tests-col-price',
+      render: (_: unknown, test: SelectedTest) => (
+        <span className="orders-edit-tests-table-meta">
+          {test.price != null ? `${test.price.toLocaleString()} IQD` : 'Current pricing'}
+        </span>
+      ),
+    },
+    {
+      title: 'Notes',
+      key: 'notes',
+      width: 250,
+      className: 'orders-edit-tests-col-note',
+      render: (_: unknown, test: SelectedTest) => {
+        const helperText = getEditTestHelperText(test);
+        if (!helperText) {
+          return <Text type="secondary">Ready to remove</Text>;
+        }
+        return (
+          <Text className={`orders-edit-tests-table-note${test.blockedReason ? ' is-blocked' : ''}`}>
+            {helperText}
+          </Text>
+        );
+      },
+    },
+    {
+      title: '',
+      key: 'action',
+      width: 64,
+      align: 'right' as const,
+      className: 'orders-edit-tests-col-action',
+      render: (_: unknown, test: SelectedTest) => (
+        <Button
+          className="orders-edit-tests-delete-btn"
+          icon={<DeleteOutlined />}
+          disabled={!test.removable}
+          onClick={() => handleRemoveEditingTest(test.testId)}
+          title={test.removable ? 'Remove test from order' : 'This test cannot be removed'}
+        />
+      ),
+    },
+  ];
 
   const submitEditedTests = async (payload?: {
     forceRemoveVerified?: boolean;
@@ -2365,8 +2503,22 @@ export function OrdersPage() {
       </Modal>
 
       <Modal
-        title="Edit tests in order"
+        title={
+          <div className="orders-edit-tests-modal-heading">
+            <span className="orders-edit-tests-modal-icon">
+              <LockOutlined />
+            </span>
+            <div className="orders-edit-tests-modal-heading-copy">
+              <span className="orders-edit-tests-modal-title">Edit tests in order</span>
+              <span className="orders-edit-tests-modal-subtitle">
+                {editTestsOrderNumber ? `Locked order #${editTestsOrderNumber}` : 'Locked order editor'}
+              </span>
+            </div>
+          </div>
+        }
         open={editTestsModalOpen}
+        width={760}
+        className={`orders-edit-tests-modal${isDark ? ' orders-edit-tests-modal-dark' : ''}`}
         onCancel={() => {
           if (!savingEditedTests) {
             setEditTestsModalOpen(false);
@@ -2380,91 +2532,72 @@ export function OrdersPage() {
         cancelButtonProps={{ disabled: savingEditedTests }}
         destroyOnClose
       >
-        <Space direction="vertical" style={{ width: '100%' }} size={12}>
-          <Text type="secondary">
-            Remove pending tests and rejected tests here. Removing a panel removes the whole panel. Verified tests require lab-admin override with a reason. Order number and sample sequence numbers stay unchanged.
+        <div className="orders-edit-tests-shell">
+          <Text className="orders-edit-tests-description" type="secondary">
+            Remove pending, completed, and rejected tests here. Removing a panel removes the whole
+            panel. Verified tests require lab-admin override with a reason. Order number and sample
+            sequence numbers stay unchanged.
           </Text>
-          <Select
-            showSearch
-            placeholder="Add test by code or name"
-            value={null}
-            onChange={handleAddEditingTest}
-            optionFilterProp="label"
-            filterOption={(input, option) => {
-              const label = String(option?.label ?? '').toLowerCase();
-              const variants = buildKeyboardSearchVariants(input);
-              if (variants.length === 0) return true;
-              return variants.some((variant) => label.includes(variant));
-            }}
-            options={testOptions.map((test) => ({
-              value: test.id,
-              label: (test as any).abbreviation ? `${test.code} - ${(test as any).abbreviation} - ${test.name} (${test.tubeType})` : `${test.code} - ${test.name} (${test.tubeType})`,
-            }))}
-          />
-          {editingTests.length === 0 ? (
-            <Text type="secondary">No tests selected.</Text>
-          ) : (
-            <div
-              style={{
-                border: styles.border,
-                borderRadius: 8,
-                padding: 12,
-                maxHeight: 260,
-                overflow: 'auto',
-              }}
-            >
-              <Space direction="vertical" style={{ width: '100%' }} size={8}>
-                {editingTests.map((test) => (
-                  <div
-                    key={test.testId}
-                    style={{
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'center',
-                      padding: '8px 12px',
-                      backgroundColor: styles.bgSubtle,
-                      borderRadius: 6,
-                    }}
-                  >
-                    <Space>
-                      <Text strong>{test.testCode}</Text>
-                      <Text>{test.testName}</Text>
-                      <Text type="secondary">({test.tubeType})</Text>
-                      <Text type="secondary">
-                        {test.price != null ? `${test.price.toLocaleString()} IQD` : 'Price from current pricing'}
-                      </Text>
-                      {test.isPanelRoot ? <Tag color="purple">Panel</Tag> : null}
-                      {test.currentStatus === 'REJECTED' && test.removable && !test.adminReasonRequired ? (
-                        <Tag color="error">Rejected</Tag>
-                      ) : null}
-                      {test.adminReasonRequired ? <Tag color="volcano">Admin reason</Tag> : null}
-                      {test.blocked ? <Tag color="gold">Locked</Tag> : null}
-                    </Space>
-                    <Space size={8}>
-                      {test.blockedReason ? (
-                        <Text type="secondary" style={{ fontSize: 12 }}>
-                          {test.blockedReason}
-                        </Text>
-                      ) : null}
-                      <Button
-                        type="text"
-                        danger
-                        icon={<DeleteOutlined />}
-                        disabled={!test.removable}
-                        onClick={() => handleRemoveEditingTest(test.testId)}
-                      />
-                    </Space>
-                  </div>
-                ))}
-              </Space>
+
+          <div className="orders-edit-tests-toolbar">
+            <div className="orders-edit-tests-toolbar-copy">
+              <Text strong>Add another test</Text>
+              <Text type="secondary">Search by code, abbreviation, or test name.</Text>
             </div>
+            <Select
+              showSearch
+              className="orders-edit-tests-select"
+              placeholder="Add test by code or name"
+              value={null}
+              loading={loadingTests}
+              onChange={handleAddEditingTest}
+              optionFilterProp="label"
+              filterOption={(input, option) => {
+                const label = String(option?.label ?? '').toLowerCase();
+                const variants = buildKeyboardSearchVariants(input);
+                if (variants.length === 0) return true;
+                return variants.some((variant) => label.includes(variant));
+              }}
+              options={testOptions.map((test) => ({
+                value: test.id,
+                label: (test as any).abbreviation
+                  ? `${test.code} - ${(test as any).abbreviation} - ${test.name} (${test.tubeType})`
+                  : `${test.code} - ${test.name} (${test.tubeType})`,
+              }))}
+            />
+          </div>
+
+          {editingTests.length === 0 ? (
+            <div className="orders-edit-tests-empty">
+              <Text strong>No tests selected</Text>
+              <Text type="secondary">
+                Keep at least one test in the order, or add new tests from the search field above.
+              </Text>
+            </div>
+          ) : (
+            <Table
+              className="orders-edit-tests-table"
+              dataSource={editingTests}
+              columns={editTestsTableColumns}
+              rowKey="testId"
+              rowClassName={(test) =>
+                `orders-edit-tests-table-row${test.blocked ? ' is-blocked' : ''}${
+                  test.adminReasonRequired ? ' is-admin-review' : ''
+                }`
+              }
+              pagination={false}
+              size="small"
+              tableLayout="fixed"
+              scroll={{ y: 360, x: 760 }}
+            />
           )}
-        </Space>
+        </div>
       </Modal>
 
       <Modal
         title="Reason required"
         open={editTestsRemovalReasonModalOpen}
+        className={`orders-edit-reason-modal${isDark ? ' orders-edit-reason-modal-dark' : ''}`}
         onCancel={() => {
           if (!savingEditedTests) {
             setEditTestsRemovalReasonModalOpen(false);

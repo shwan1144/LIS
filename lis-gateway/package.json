@@ -6,7 +6,8 @@
     "scripts": {
         "start": "ts-node src/index.ts",
         "build": "tsc",
-        "build:service": "npm run build && pkg dist/index.js --targets node18-win-x64 --output dist/bin/lis-gateway-agent.exe",
+        "build:service": "npm run build",
+        "build:service:pkg": "npm run build && pkg dist/index.js --targets node18-win-x64 --output dist/bin/lis-gateway-agent.exe",
         "service:install": "powershell -ExecutionPolicy Bypass -File scripts/install-service.ps1",
         "service:uninstall": "powershell -ExecutionPolicy Bypass -File scripts/uninstall-service.ps1"
     },

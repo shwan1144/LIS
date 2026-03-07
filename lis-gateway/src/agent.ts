@@ -1,9 +1,12 @@
 import { createHash } from 'crypto';
 import * as os from 'os';
-import axios from 'axios';
 import { logger } from './logger';
 import { LocalConfigStore } from './local-config-store';
-import { CloudClient, type GatewayCloudConfigResponse } from './cloud-client';
+import {
+  CloudClient,
+  isCloudHttpError,
+  type GatewayCloudConfigResponse,
+} from './cloud-client';
 import { Forwarder } from './forwarder';
 import { SQLiteStore } from './queue/sqlite-store';
 import { Outbox } from './queue/outbox';
@@ -253,7 +256,7 @@ export class GatewayAgent {
         warning: result.duplicate ? 'Duplicate acknowledged by backend' : undefined,
       };
     } catch (error) {
-      if (axios.isAxiosError(error) && error.response?.status === 401) {
+      if (isCloudHttpError(error) && error.status === 401) {
         accessToken = await this.ensureAccessToken(true);
         const retried = await this.cloudClient.postMessage(config.apiBaseUrl, accessToken, {
           gatewayId: config.gatewayId,
@@ -414,12 +417,18 @@ export class GatewayAgent {
   }
 
   private toErrorMessage(error: unknown): string {
-    if (axios.isAxiosError(error)) {
-      const status = error.response?.status;
-      const responseMessage = error.response?.data?.message;
-      const fallback = error.message || 'Axios request failed';
-      const message = typeof responseMessage === 'string' ? responseMessage : fallback;
-      return status ? `HTTP ${status}: ${message}` : message;
+    if (isCloudHttpError(error)) {
+      const source = error.data && typeof error.data === 'object'
+        ? (error.data as Record<string, unknown>)
+        : null;
+      const responseMessage =
+        source && typeof source.message === 'string'
+          ? source.message
+          : source && typeof source.error === 'string'
+            ? source.error
+            : null;
+      const message = responseMessage || error.message || 'Request failed';
+      return `HTTP ${error.status}: ${message}`;
     }
     if (error instanceof Error) return error.message;
     return String(error);

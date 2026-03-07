@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "concurrently \"vite\" \"wait-on http://localhost:5173 && cross-env VITE_DEV_SERVER_URL=http://localhost:5173 electron .\"",
     "build:agent": "npm --prefix ../lis-gateway run build:service",
-    "build": "npm run build:agent && tsc -b && vite build && electron-builder",
+    "prepare:installer-resources": "node scripts/prepare-installer-resources.mjs",
+    "build": "npm run build:agent && npm run prepare:installer-resources && tsc -b && vite build && electron-builder",
     "lint": "eslint .",
     "preview": "vite preview"
   },
@@ -46,23 +47,19 @@
     ],
     "extraResources": [
       {
-        "from": "../lis-gateway/dist/bin/lis-gateway-agent.exe",
-        "to": "agent/lis-gateway-agent.exe"
+        "from": "installer/resources/agent",
+        "to": "agent",
+        "filter": [
+          "**/*"
+        ]
       },
       {
-        "from": "../lis-gateway/service/lis-gateway-agent.xml",
-        "to": "agent/LISGatewayAgent.xml"
-      },
-      {
-        "from": "../lis-gateway/scripts/install-service.ps1",
-        "to": "scripts/install-service.ps1"
-      },
-      {
-        "from": "../lis-gateway/scripts/uninstall-service.ps1",
-        "to": "scripts/uninstall-service.ps1"
+        "from": "installer/resources/scripts",
+        "to": "scripts"
       }
     ],
     "win": {
+      "signAndEditExecutable": false,
       "target": [
         {
           "target": "nsis",
@@ -73,8 +70,8 @@
       ]
     },
     "nsis": {
-      "oneClick": false,
-      "allowToChangeInstallationDirectory": true,
+      "oneClick": true,
+      "allowToChangeInstallationDirectory": false,
       "perMachine": true,
       "allowElevation": true,
       "include": "installer/nsis-installer.nsh"

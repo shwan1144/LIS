@@ -486,7 +486,10 @@ let OrdersService = OrdersService_1 = class OrdersService {
                 const labels = blockedRemovals
                     .map(({ orderTest }) => this.getOrderTestLabel(orderTest))
                     .join(', ');
-                throw new common_1.BadRequestException(`Cannot remove completed/entered tests: ${labels}. You can remove only pending or rejected tests.`);
+                const reasons = Array.from(new Set(blockedRemovals
+                    .map(({ access }) => access.blockedReason?.trim())
+                    .filter((reason) => Boolean(reason)))).join(' ');
+                throw new common_1.BadRequestException(`Cannot remove tests: ${labels}.${reasons ? ` ${reasons}` : ''}`);
             }
             const verifiedOverrideRemovals = rootsToRemove.filter(({ access }) => access.requiresVerifiedOverride);
             if (verifiedOverrideRemovals.length > 0) {
@@ -848,6 +851,13 @@ let OrdersService = OrdersService_1 = class OrdersService {
                 blockedReason: null,
             };
         }
+        if (rootOrderTest.status === order_test_entity_1.OrderTestStatus.COMPLETED) {
+            return {
+                removable: true,
+                requiresVerifiedOverride: false,
+                blockedReason: null,
+            };
+        }
         if (rootOrderTest.status === order_test_entity_1.OrderTestStatus.PENDING &&
             childOrderTests.every((orderTest) => orderTest.status === order_test_entity_1.OrderTestStatus.PENDING)) {
             return {
@@ -859,7 +869,7 @@ let OrdersService = OrdersService_1 = class OrdersService {
         return {
             removable: false,
             requiresVerifiedOverride: false,
-            blockedReason: 'Completed or entered tests cannot be removed.',
+            blockedReason: 'Only pending, completed, and rejected tests can be removed. In-progress tests stay locked.',
         };
     }
     buildRootOrderTestAuditItem(rootOrderTest, childOrderTests, requiresVerifiedOverride) {

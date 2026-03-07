@@ -36,7 +36,7 @@ export function encryptSecret(rawValue: string): string {
   try {
     const encrypted = runPowershell(
       '$bytes = [Text.Encoding]::UTF8.GetBytes($env:LIS_GATEWAY_SECRET); ' +
-      '$enc = [Security.Cryptography.ProtectedData]::Protect($bytes, $null, [Security.Cryptography.DataProtectionScope]::LocalMachine); ' +
+      '$enc = [System.Security.Cryptography.ProtectedData]::Protect($bytes, $null, [System.Security.Cryptography.DataProtectionScope]::LocalMachine); ' +
       '[Convert]::ToBase64String($enc)',
       { LIS_GATEWAY_SECRET: rawValue },
     );
@@ -62,7 +62,7 @@ export function decryptSecret(storedValue: string): string {
     try {
       return runPowershell(
         '$enc = [Convert]::FromBase64String($env:LIS_GATEWAY_SECRET); ' +
-        '$dec = [Security.Cryptography.ProtectedData]::Unprotect($enc, $null, [Security.Cryptography.DataProtectionScope]::LocalMachine); ' +
+        '$dec = [System.Security.Cryptography.ProtectedData]::Unprotect($enc, $null, [System.Security.Cryptography.DataProtectionScope]::LocalMachine); ' +
         '[Text.Encoding]::UTF8.GetString($dec)',
         { LIS_GATEWAY_SECRET: encrypted },
       );

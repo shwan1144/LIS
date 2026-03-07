@@ -698,8 +698,15 @@ export class OrdersService {
         const labels = blockedRemovals
           .map(({ orderTest }) => this.getOrderTestLabel(orderTest))
           .join(', ');
+        const reasons = Array.from(
+          new Set(
+            blockedRemovals
+              .map(({ access }) => access.blockedReason?.trim())
+              .filter((reason): reason is string => Boolean(reason)),
+          ),
+        ).join(' ');
         throw new BadRequestException(
-          `Cannot remove completed/entered tests: ${labels}. You can remove only pending or rejected tests.`,
+          `Cannot remove tests: ${labels}.${reasons ? ` ${reasons}` : ''}`,
         );
       }
 
@@ -1201,6 +1208,14 @@ export class OrdersService {
       };
     }
 
+    if (rootOrderTest.status === OrderTestStatus.COMPLETED) {
+      return {
+        removable: true,
+        requiresVerifiedOverride: false,
+        blockedReason: null,
+      };
+    }
+
     if (
       rootOrderTest.status === OrderTestStatus.PENDING &&
       childOrderTests.every((orderTest) => orderTest.status === OrderTestStatus.PENDING)
@@ -1215,7 +1230,7 @@ export class OrdersService {
     return {
       removable: false,
       requiresVerifiedOverride: false,
-      blockedReason: 'Completed or entered tests cannot be removed.',
+      blockedReason: 'Only pending, completed, and rejected tests can be removed. In-progress tests stay locked.',
     };
   }
 

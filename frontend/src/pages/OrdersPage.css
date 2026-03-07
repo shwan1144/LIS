@@ -582,6 +582,480 @@ html[data-theme='dark'] .order-delivery-preferences {
   user-select: none;
 }
 
+.orders-edit-tests-modal .ant-modal-content,
+.orders-edit-reason-modal .ant-modal-content {
+  border-radius: 20px;
+  border: 1px solid rgba(22, 119, 255, 0.14);
+  background:
+    radial-gradient(circle at top right, rgba(105, 177, 255, 0.14), transparent 32%),
+    linear-gradient(180deg, #ffffff 0%, #f7fbff 100%);
+  box-shadow: 0 24px 60px rgba(15, 23, 42, 0.18);
+  overflow: hidden;
+}
+
+.orders-edit-tests-modal .ant-modal-header,
+.orders-edit-reason-modal .ant-modal-header {
+  background: transparent;
+  padding: 22px 24px 0;
+  margin-bottom: 0;
+}
+
+.orders-edit-tests-modal .ant-modal-body,
+.orders-edit-reason-modal .ant-modal-body {
+  padding: 16px 24px 20px;
+}
+
+.orders-edit-tests-modal .ant-modal-footer,
+.orders-edit-reason-modal .ant-modal-footer {
+  padding: 0 24px 24px;
+  margin-top: 18px;
+}
+
+.orders-edit-tests-modal .ant-modal-close,
+.orders-edit-reason-modal .ant-modal-close {
+  top: 18px;
+  inset-inline-end: 18px;
+  width: 38px;
+  height: 38px;
+  border-radius: 12px;
+  border: 1px solid rgba(22, 119, 255, 0.18);
+  background: rgba(22, 119, 255, 0.06);
+  color: rgba(15, 23, 42, 0.72);
+}
+
+.orders-edit-tests-modal .ant-modal-close:hover,
+.orders-edit-reason-modal .ant-modal-close:hover {
+  color: #1677ff;
+  background: rgba(22, 119, 255, 0.12);
+  border-color: rgba(22, 119, 255, 0.28);
+}
+
+.orders-edit-tests-modal-heading {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.orders-edit-tests-modal-icon {
+  width: 42px;
+  height: 42px;
+  border-radius: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #1677ff 0%, #69b1ff 100%);
+  color: #fff;
+  box-shadow: 0 10px 22px rgba(22, 119, 255, 0.24);
+  font-size: 18px;
+}
+
+.orders-edit-tests-modal-heading-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.orders-edit-tests-modal-title {
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1.15;
+  color: rgba(0, 0, 0, 0.88);
+}
+
+.orders-edit-tests-modal-subtitle {
+  font-size: 12.5px;
+  line-height: 1.4;
+  color: rgba(0, 0, 0, 0.45);
+}
+
+.orders-edit-tests-shell {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.orders-edit-tests-description.ant-typography {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.65;
+}
+
+.orders-edit-tests-toolbar {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.orders-edit-tests-toolbar-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.orders-edit-tests-select .ant-select-selector {
+  min-height: 46px !important;
+  padding: 6px 12px !important;
+  border-radius: 14px !important;
+  border-color: rgba(22, 119, 255, 0.18) !important;
+  box-shadow: none !important;
+}
+
+.orders-edit-tests-select.ant-select-focused .ant-select-selector,
+.orders-edit-tests-select .ant-select-selector:hover {
+  border-color: rgba(22, 119, 255, 0.42) !important;
+}
+
+.orders-edit-tests-empty {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 34px 18px;
+  border-radius: 18px;
+  border: 1px dashed rgba(22, 119, 255, 0.26);
+  background: rgba(22, 119, 255, 0.035);
+}
+
+.orders-edit-tests-table {
+  border: 1px solid rgba(22, 119, 255, 0.14);
+  border-radius: 18px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.orders-edit-tests-table .ant-table {
+  background: transparent;
+}
+
+.orders-edit-tests-table .ant-table-container {
+  border-inline-start: 0 !important;
+}
+
+.orders-edit-tests-table .ant-table-thead > tr > th {
+  padding: 12px 14px;
+  border-bottom: 1px solid rgba(22, 119, 255, 0.14);
+  background: rgba(22, 119, 255, 0.08);
+  color: rgba(0, 0, 0, 0.5);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.orders-edit-tests-table .ant-table-tbody > tr > td {
+  padding: 14px;
+  vertical-align: top;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.16);
+  background: rgba(255, 255, 255, 0.88);
+}
+
+.orders-edit-tests-table .ant-table-tbody > tr:last-child > td {
+  border-bottom: none;
+}
+
+.orders-edit-tests-table-row.is-blocked > td {
+  background: rgba(255, 247, 230, 0.9) !important;
+}
+
+.orders-edit-tests-table-row.is-admin-review > td {
+  border-bottom-color: rgba(250, 140, 22, 0.2);
+}
+
+.orders-edit-tests-table-test {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  min-width: 0;
+}
+
+.orders-edit-tests-table-code {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 64px;
+  height: 34px;
+  padding: 0 12px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #1677ff 0%, #69b1ff 100%);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  box-shadow: 0 10px 20px rgba(22, 119, 255, 0.2);
+}
+
+.orders-edit-tests-table-test-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.orders-edit-tests-table-name.ant-typography {
+  margin: 0;
+  display: block;
+  font-size: 15px;
+  line-height: 1.4;
+  color: rgba(0, 0, 0, 0.88);
+}
+
+.orders-edit-tests-table-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.orders-edit-tests-status-badge,
+.orders-edit-tests-pill,
+.orders-edit-tests-meta-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 28px;
+  padding: 0 10px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  font-size: 11.5px;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.orders-edit-tests-status-badge {
+  border-color: rgba(22, 119, 255, 0.14);
+  background: rgba(22, 119, 255, 0.08);
+  color: #0958d9;
+}
+
+.orders-edit-tests-status-pending {
+  background: rgba(214, 231, 255, 0.72);
+  border-color: rgba(145, 202, 255, 0.8);
+  color: #0958d9;
+}
+
+.orders-edit-tests-status-in-progress {
+  background: rgba(230, 247, 255, 0.82);
+  border-color: rgba(145, 213, 255, 0.8);
+  color: #08979c;
+}
+
+.orders-edit-tests-status-completed {
+  background: rgba(246, 255, 237, 0.9);
+  border-color: rgba(183, 235, 143, 0.9);
+  color: #389e0d;
+}
+
+.orders-edit-tests-status-verified {
+  background: rgba(246, 255, 237, 0.95);
+  border-color: rgba(149, 222, 100, 0.92);
+  color: #237804;
+}
+
+.orders-edit-tests-status-rejected {
+  background: rgba(255, 241, 240, 0.95);
+  border-color: rgba(255, 163, 158, 0.92);
+  color: #cf1322;
+}
+
+.orders-edit-tests-status-unknown {
+  background: rgba(245, 245, 245, 0.9);
+  border-color: rgba(217, 217, 217, 0.9);
+  color: rgba(0, 0, 0, 0.65);
+}
+
+.orders-edit-tests-pill {
+  border-color: rgba(148, 163, 184, 0.25);
+  background: rgba(15, 23, 42, 0.04);
+  color: rgba(15, 23, 42, 0.72);
+}
+
+.orders-edit-tests-pill-warn {
+  border-color: rgba(255, 187, 150, 0.85);
+  background: rgba(255, 242, 232, 0.95);
+  color: #d46b08;
+}
+
+.orders-edit-tests-pill-locked {
+  border-color: rgba(255, 229, 143, 0.9);
+  background: rgba(255, 247, 230, 0.95);
+  color: #ad6800;
+}
+
+.orders-edit-tests-table-meta {
+  display: inline-flex;
+  align-items: center;
+  min-height: 30px;
+  padding: 0 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  background: rgba(15, 23, 42, 0.035);
+  color: rgba(15, 23, 42, 0.7);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.1;
+}
+
+.orders-edit-tests-table-note.ant-typography {
+  margin: 0;
+  display: block;
+  font-size: 12px;
+  line-height: 1.55;
+  color: #0958d9;
+}
+
+.orders-edit-tests-table-note.is-blocked.ant-typography {
+  color: #8c5a00;
+}
+
+.orders-edit-tests-meta-pill {
+  border-color: rgba(148, 163, 184, 0.2);
+  background: rgba(15, 23, 42, 0.035);
+  color: rgba(15, 23, 42, 0.7);
+}
+
+.orders-edit-tests-delete-btn.ant-btn {
+  width: 42px;
+  min-width: 42px;
+  height: 42px;
+  border-radius: 14px;
+  border-color: rgba(248, 113, 113, 0.18);
+  background: rgba(255, 255, 255, 0.72);
+  color: rgba(220, 38, 38, 0.72);
+  box-shadow: none;
+}
+
+.orders-edit-tests-delete-btn.ant-btn:not(:disabled):hover,
+.orders-edit-tests-delete-btn.ant-btn:not(:disabled):focus {
+  border-color: rgba(239, 68, 68, 0.34);
+  background: rgba(254, 242, 242, 0.95);
+  color: #dc2626;
+}
+
+.orders-edit-tests-delete-btn.ant-btn:disabled {
+  border-color: rgba(148, 163, 184, 0.16);
+  background: rgba(148, 163, 184, 0.08);
+  color: rgba(100, 116, 139, 0.44);
+}
+
+.orders-edit-tests-modal-dark .ant-modal-content,
+.orders-edit-reason-modal-dark .ant-modal-content {
+  border-color: rgba(96, 165, 250, 0.22);
+  background:
+    radial-gradient(circle at top right, rgba(59, 130, 246, 0.18), transparent 36%),
+    linear-gradient(180deg, rgba(15, 23, 42, 0.96) 0%, rgba(17, 24, 39, 0.985) 100%);
+  box-shadow: 0 28px 72px rgba(0, 0, 0, 0.48);
+}
+
+.orders-edit-tests-modal-dark .ant-modal-close,
+.orders-edit-reason-modal-dark .ant-modal-close {
+  border-color: rgba(96, 165, 250, 0.24);
+  background: rgba(59, 130, 246, 0.12);
+  color: rgba(255, 255, 255, 0.82);
+}
+
+.orders-edit-tests-modal-dark .ant-modal-close:hover,
+.orders-edit-reason-modal-dark .ant-modal-close:hover {
+  border-color: rgba(125, 211, 252, 0.34);
+  background: rgba(59, 130, 246, 0.18);
+  color: #fff;
+}
+
+.orders-edit-tests-modal-dark .orders-edit-tests-modal-title {
+  color: rgba(255, 255, 255, 0.94);
+}
+
+.orders-edit-tests-modal-dark .orders-edit-tests-modal-subtitle {
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.orders-edit-tests-modal-dark .orders-edit-tests-select .ant-select-selector,
+.orders-edit-reason-modal-dark .ant-input,
+.orders-edit-reason-modal-dark .ant-input:focus,
+.orders-edit-reason-modal-dark .ant-input-focused {
+  color: rgba(255, 255, 255, 0.94) !important;
+  background: rgba(15, 23, 42, 0.82) !important;
+  border-color: rgba(148, 163, 184, 0.22) !important;
+}
+
+.orders-edit-tests-modal-dark .orders-edit-tests-select .ant-select-selection-placeholder {
+  color: rgba(226, 232, 240, 0.42);
+}
+
+.orders-edit-tests-modal-dark .orders-edit-tests-empty {
+  border-color: rgba(96, 165, 250, 0.24);
+  background: rgba(59, 130, 246, 0.08);
+}
+
+.orders-edit-tests-modal-dark .orders-edit-tests-table {
+  border-color: rgba(96, 165, 250, 0.2);
+  background: rgba(15, 23, 42, 0.6);
+}
+
+.orders-edit-tests-modal-dark .orders-edit-tests-table .ant-table-thead > tr > th {
+  border-bottom-color: rgba(96, 165, 250, 0.18);
+  background: rgba(59, 130, 246, 0.14);
+  color: rgba(226, 232, 240, 0.6);
+}
+
+.orders-edit-tests-modal-dark .orders-edit-tests-table .ant-table-tbody > tr > td {
+  border-bottom-color: rgba(148, 163, 184, 0.14);
+  background: rgba(15, 23, 42, 0.88);
+}
+
+.orders-edit-tests-modal-dark .orders-edit-tests-table-row.is-blocked > td {
+  background: rgba(66, 46, 11, 0.76) !important;
+}
+
+.orders-edit-tests-modal-dark .orders-edit-tests-table-name.ant-typography {
+  color: rgba(255, 255, 255, 0.94);
+}
+
+.orders-edit-tests-modal-dark .orders-edit-tests-pill {
+  border-color: rgba(148, 163, 184, 0.22);
+  background: rgba(148, 163, 184, 0.08);
+  color: rgba(226, 232, 240, 0.82);
+}
+
+.orders-edit-tests-modal-dark .orders-edit-tests-table-meta {
+  border-color: rgba(148, 163, 184, 0.18);
+  background: rgba(148, 163, 184, 0.08);
+  color: rgba(226, 232, 240, 0.76);
+}
+
+.orders-edit-tests-modal-dark .orders-edit-tests-table-note.ant-typography {
+  color: rgba(191, 219, 254, 0.96);
+}
+
+.orders-edit-tests-modal-dark .orders-edit-tests-table-note.is-blocked.ant-typography {
+  color: rgba(253, 230, 138, 0.96);
+}
+
+.orders-edit-tests-modal-dark .orders-edit-tests-delete-btn.ant-btn {
+  border-color: rgba(248, 113, 113, 0.16);
+  background: rgba(15, 23, 42, 0.68);
+  color: rgba(252, 165, 165, 0.84);
+}
+
+.orders-edit-tests-modal-dark .orders-edit-tests-delete-btn.ant-btn:not(:disabled):hover,
+.orders-edit-tests-modal-dark .orders-edit-tests-delete-btn.ant-btn:not(:disabled):focus {
+  border-color: rgba(248, 113, 113, 0.32);
+  background: rgba(127, 29, 29, 0.34);
+  color: #fecaca;
+}
+
+.orders-edit-tests-modal-dark .orders-edit-tests-delete-btn.ant-btn:disabled {
+  border-color: rgba(148, 163, 184, 0.14);
+  background: rgba(148, 163, 184, 0.08);
+  color: rgba(148, 163, 184, 0.38);
+}
+
+.orders-edit-reason-modal .ant-input {
+  border-radius: 14px;
+}
+
 @media (max-width: 992px) {
   .orders-page-header-row {
     flex-direction: column;
@@ -665,6 +1139,41 @@ html[data-theme='dark'] .order-delivery-preferences {
 
   .order-dock-action-row .ant-btn {
     flex: 1 1 100%;
+    min-width: 0;
+  }
+
+  .orders-edit-tests-modal .ant-modal-content,
+  .orders-edit-reason-modal .ant-modal-content {
+    border-radius: 16px;
+  }
+
+  .orders-edit-tests-modal .ant-modal-header,
+  .orders-edit-reason-modal .ant-modal-header {
+    padding: 18px 18px 0;
+  }
+
+  .orders-edit-tests-modal .ant-modal-body,
+  .orders-edit-reason-modal .ant-modal-body {
+    padding: 14px 18px 18px;
+  }
+
+  .orders-edit-tests-modal .ant-modal-footer,
+  .orders-edit-reason-modal .ant-modal-footer {
+    padding: 0 18px 18px;
+  }
+
+  .orders-edit-tests-modal-heading {
+    gap: 12px;
+  }
+
+  .orders-edit-tests-modal-icon {
+    width: 38px;
+    height: 38px;
+    border-radius: 12px;
+  }
+
+  .orders-edit-tests-delete-btn.ant-btn {
+    width: 100%;
     min-width: 0;
   }
 }
