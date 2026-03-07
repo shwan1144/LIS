@@ -548,6 +548,17 @@ html[data-theme='dark'] .order-delivery-preferences {
 
 .order-tests-readonly-wrapper {
   overflow: hidden;
+  padding: 12px;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 10px;
+  background: linear-gradient(180deg, rgba(248, 250, 252, 0.96) 0%, rgba(255, 255, 255, 0.9) 100%);
+}
+
+.order-tests-readonly-wrapper-dark {
+  border-color: rgba(148, 163, 184, 0.16);
+  background:
+    linear-gradient(180deg, rgba(15, 23, 42, 0.88) 0%, rgba(17, 24, 39, 0.94) 100%);
+  box-shadow: inset 0 1px 0 rgba(148, 163, 184, 0.08);
 }
 
 .order-tests-readonly-grid-header {
@@ -558,6 +569,14 @@ html[data-theme='dark'] .order-delivery-preferences {
   font-weight: 600;
   color: rgba(0, 0, 0, 0.88);
   margin-bottom: 10px;
+}
+
+.order-tests-readonly-label {
+  color: inherit;
+}
+
+.order-tests-readonly-count.ant-typography {
+  margin: 0;
 }
 
 .order-tests-readonly-pills {
@@ -580,6 +599,71 @@ html[data-theme='dark'] .order-delivery-preferences {
   font-size: 11.5px;
   font-weight: 600;
   user-select: none;
+}
+
+.order-tests-readonly-wrapper-dark .order-tests-readonly-grid-header {
+  color: rgba(248, 250, 252, 0.94);
+}
+
+.order-tests-readonly-wrapper-dark .order-tests-readonly-count.ant-typography {
+  color: rgba(148, 163, 184, 0.86);
+}
+
+.order-tests-readonly-wrapper-dark .order-tests-readonly-pill.ant-tag {
+  border-color: rgba(96, 165, 250, 0.26);
+  background: rgba(30, 41, 59, 0.92);
+  color: rgba(226, 232, 240, 0.94);
+}
+
+.order-composer-tubes-summary {
+  padding: 8px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  background: linear-gradient(180deg, rgba(248, 250, 252, 0.96) 0%, rgba(255, 255, 255, 0.9) 100%);
+}
+
+.order-composer-tubes-summary-spaced {
+  margin-top: 12px;
+}
+
+.order-composer-tubes-title.ant-typography,
+.order-composer-tubes-empty.ant-typography {
+  margin: 0;
+  font-size: 13px;
+}
+
+.order-composer-tubes-count.ant-typography {
+  margin: 0;
+  font-size: 14px;
+}
+
+.order-composer-tubes-label.ant-typography {
+  margin: 0;
+  font-size: 10px;
+  line-height: 1;
+}
+
+.order-composer-tubes-hint.ant-typography {
+  margin-top: 4px;
+  font-size: 11px;
+}
+
+.order-composer-tubes-summary-dark {
+  border-color: rgba(148, 163, 184, 0.16);
+  background:
+    linear-gradient(180deg, rgba(15, 23, 42, 0.88) 0%, rgba(17, 24, 39, 0.94) 100%);
+  box-shadow: inset 0 1px 0 rgba(148, 163, 184, 0.08);
+}
+
+.order-composer-tubes-summary-dark .order-composer-tubes-title.ant-typography,
+.order-composer-tubes-summary-dark .order-composer-tubes-count.ant-typography {
+  color: rgba(248, 250, 252, 0.94);
+}
+
+.order-composer-tubes-summary-dark .order-composer-tubes-empty.ant-typography,
+.order-composer-tubes-summary-dark .order-composer-tubes-label.ant-typography,
+.order-composer-tubes-summary-dark .order-composer-tubes-hint.ant-typography {
+  color: rgba(148, 163, 184, 0.84);
 }
 
 .orders-edit-tests-modal .ant-modal-content,

@@ -2143,17 +2143,15 @@ export function OrdersPage() {
                               <Text type="secondary">No tests in this order.</Text>
                             ) : (
                               <div
-                                className="order-tests-readonly-wrapper"
-                                style={{
-                                  border: styles.border,
-                                  borderRadius: 8,
-                                  padding: 12,
-                                  backgroundColor: styles.bgSubtle,
-                                }}
+                                className={`order-tests-readonly-wrapper${
+                                  isDark ? ' order-tests-readonly-wrapper-dark' : ''
+                                }`}
                               >
                                 <div className="order-tests-readonly-grid-header">
-                                  <span>Abbreviations</span>
-                                  <Text type="secondary">{orderTests.length} tests</Text>
+                                  <span className="order-tests-readonly-label">Abbreviations</span>
+                                  <Text type="secondary" className="order-tests-readonly-count">
+                                    {orderTests.length} tests
+                                  </Text>
                                 </div>
                                 <div className="order-tests-readonly-pills">
                                   {orderTests.map((orderTest) => (
@@ -2171,19 +2169,32 @@ export function OrdersPage() {
                             )}
                           </Col>
                           <Col span={6}>
-                            <div className="order-composer-tubes-summary" style={{ padding: '8px 12px', backgroundColor: styles.bgSubtle, borderRadius: 8, border: styles.border }}>
+                            <div
+                              className={`order-composer-tubes-summary${
+                                isDark ? ' order-composer-tubes-summary-dark' : ''
+                              }`}
+                            >
                               <Space direction="vertical" size={6} style={{ width: '100%' }}>
-                                <Text strong style={{ fontSize: 13 }}>Tubes required:</Text>
+                                <Text strong className="order-composer-tubes-title">
+                                  Tubes required:
+                                </Text>
                                 {lockedTubesRequired.length === 0 ? (
-                                  <Text type="secondary" style={{ fontSize: 13 }}>0 tubes</Text>
+                                  <Text type="secondary" className="order-composer-tubes-empty">
+                                    0 tubes
+                                  </Text>
                                 ) : (
                                   <Space size={14} wrap>
                                     {lockedTubesRequired.map((tr) => (
                                       <Space key={tr.tubeType} size={6} align="center">
                                         <TubeIcon color={tr.color} />
                                         <Space size={2} direction="vertical" align="start" style={{ lineHeight: 1.2 }}>
-                                          <Text strong style={{ fontSize: 14 }}>{tr.count}</Text>
-                                          <Text type="secondary" style={{ fontSize: 10, lineHeight: 1 }}>
+                                          <Text strong className="order-composer-tubes-count">
+                                            {tr.count}
+                                          </Text>
+                                          <Text
+                                            type="secondary"
+                                            className="order-composer-tubes-label"
+                                          >
                                             {tr.tubeType?.replace(/_/g, ' ').toLowerCase() || 'tube'}
                                           </Text>
                                         </Space>
@@ -2384,19 +2395,32 @@ export function OrdersPage() {
                         )}
                       </Card>
 
-                      <div className="order-composer-tubes-summary" style={{ marginTop: 12, padding: '8px 12px', backgroundColor: styles.bgSubtle, borderRadius: 8, border: styles.border }}>
+                      <div
+                        className={`order-composer-tubes-summary order-composer-tubes-summary-spaced${
+                          isDark ? ' order-composer-tubes-summary-dark' : ''
+                        }`}
+                      >
                         <Space direction="vertical" size={6} style={{ width: '100%' }}>
-                          <Text strong style={{ fontSize: 13 }}>Tubes required by type:</Text>
+                          <Text strong className="order-composer-tubes-title">
+                            Tubes required by type:
+                          </Text>
                           {tubesRequired.length === 0 ? (
-                            <Text type="secondary" style={{ fontSize: 13 }}>0 tubes</Text>
+                            <Text type="secondary" className="order-composer-tubes-empty">
+                              0 tubes
+                            </Text>
                           ) : (
                             <Space size={14} wrap>
                               {tubesRequired.map((tr) => (
                                 <Space key={tr.tubeType} size={6} align="center">
                                   <TubeIcon color={tr.color} />
                                   <Space size={2} direction="vertical" align="start" style={{ lineHeight: 1.2 }}>
-                                    <Text strong style={{ fontSize: 14 }}>{tr.count}</Text>
-                                    <Text type="secondary" style={{ fontSize: 10, lineHeight: 1 }}>
+                                    <Text strong className="order-composer-tubes-count">
+                                      {tr.count}
+                                    </Text>
+                                    <Text
+                                      type="secondary"
+                                      className="order-composer-tubes-label"
+                                    >
                                       {tr.tubeType?.replace(/_/g, ' ').toLowerCase() || 'tube'}
                                     </Text>
                                   </Space>
@@ -2404,7 +2428,7 @@ export function OrdersPage() {
                               ))}
                             </Space>
                           )}
-                          <Text type="secondary" style={{ fontSize: 11, marginTop: 4 }}>
+                          <Text type="secondary" className="order-composer-tubes-hint">
                             Grouped by {printLabelSequenceBy === 'department' ? 'department' : 'tube type'}
                           </Text>
                         </Space>

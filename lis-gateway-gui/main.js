@@ -66,7 +66,7 @@ function getAgentClient() {
 function normalizeAxiosError(error) {
   if (axios.isAxiosError(error)) {
     if (error.code === 'ECONNREFUSED') {
-      return 'Local agent is offline (127.0.0.1:17880). Start the "LIS Gateway Agent" Windows service or reinstall the latest setup EXE as Administrator.';
+      return `Local agent is offline (${LOCAL_AGENT_BASE_URL}). Start the "LIS Gateway Agent" Windows service or reinstall the latest setup EXE as Administrator.`;
     }
     const status = error.response?.status;
     const detail = error.response?.data?.error || error.response?.data?.message || error.message;
