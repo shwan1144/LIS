@@ -95,6 +95,10 @@ export class Lab {
   @Column({ type: 'jsonb', default: () => "'[]'::jsonb" })
   referringDoctors: string[];
 
+  /** Optional dashboard announcement shown in the lab panel dashboard. */
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  dashboardAnnouncementText: string | null;
+
   @CreateDateColumn()
   createdAt: Date;
 

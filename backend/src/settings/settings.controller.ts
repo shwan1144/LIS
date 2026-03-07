@@ -67,6 +67,7 @@ export class SettingsController {
       reportStyle?: ReportStyleConfig | null;
       uiTestGroups?: { id: string; name: string; testIds: string[] }[] | null;
       referringDoctors?: string[] | null;
+      dashboardAnnouncementText?: string | null;
     },
   ) {
     const labId = req.user?.labId;
@@ -78,10 +79,11 @@ export class SettingsController {
       body.onlineResultWatermarkDataUrl !== undefined ||
       body.onlineResultWatermarkText !== undefined ||
       body.reportBranding !== undefined ||
-      body.reportStyle !== undefined
+      body.reportStyle !== undefined ||
+      body.dashboardAnnouncementText !== undefined
     ) {
       throw new ForbiddenException(
-        'Online result and report design settings moved to admin panel.',
+        'Online result, report design, and dashboard announcement settings moved to admin panel.',
       );
     }
 

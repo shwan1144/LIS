@@ -82,6 +82,7 @@ export declare class PlatformAdminController {
             testIds: string[];
         }[];
         referringDoctors: string[];
+        dashboardAnnouncementText: string | null;
     }>;
     updateLabSettings(labId: string, body: {
         labelSequenceBy?: string;
@@ -103,6 +104,7 @@ export declare class PlatformAdminController {
         };
         reportStyle?: ReportStyleConfig | null;
         referringDoctors?: string[] | null;
+        dashboardAnnouncementText?: string | null;
     }): Promise<{
         id: string;
         code: string;
@@ -132,6 +134,7 @@ export declare class PlatformAdminController {
             testIds: string[];
         }[];
         referringDoctors: string[];
+        dashboardAnnouncementText: string | null;
     }>;
     getLabUsers(req: RequestWithPlatformUser, labId: string): Promise<import("../entities/user.entity").User[]>;
     getLabUser(req: RequestWithPlatformUser, labId: string, id: string): Promise<{

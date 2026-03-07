@@ -1486,6 +1486,7 @@ export class PlatformAdminService {
       };
       reportStyle?: ReportStyleConfig | null;
       referringDoctors?: string[] | null;
+      dashboardAnnouncementText?: string | null;
     },
   ) {
     const settings = await this.settingsService.updateLabSettings(labId, data);

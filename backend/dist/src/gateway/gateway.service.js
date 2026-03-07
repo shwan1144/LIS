@@ -21,10 +21,11 @@ const jwt_1 = require("@nestjs/jwt");
 const instrument_entity_1 = require("../entities/instrument.entity");
 const lab_entity_1 = require("../entities/lab.entity");
 const gateway_entity_1 = require("../entities/gateway.entity");
+const auth_service_1 = require("../auth/auth.service");
 const password_util_1 = require("../auth/password.util");
 const instruments_service_1 = require("../instruments/instruments.service");
 let GatewayService = class GatewayService {
-    constructor(gatewayRepo, activationCodeRepo, gatewayTokenRepo, receiptRepo, instrumentRepo, labRepo, jwtService, instrumentsService) {
+    constructor(gatewayRepo, activationCodeRepo, gatewayTokenRepo, receiptRepo, instrumentRepo, labRepo, jwtService, authService, instrumentsService) {
         this.gatewayRepo = gatewayRepo;
         this.activationCodeRepo = activationCodeRepo;
         this.gatewayTokenRepo = gatewayTokenRepo;
@@ -32,7 +33,35 @@ let GatewayService = class GatewayService {
         this.instrumentRepo = instrumentRepo;
         this.labRepo = labRepo;
         this.jwtService = jwtService;
+        this.authService = authService;
         this.instrumentsService = instrumentsService;
+    }
+    async gatewayUiLogin(dto, meta) {
+        const labCode = dto.labCode.trim().toUpperCase();
+        const lab = await this.labRepo.findOne({
+            where: {
+                code: labCode,
+                isActive: true,
+            },
+        });
+        if (!lab) {
+            throw new common_1.UnauthorizedException('Invalid lab code or credentials');
+        }
+        return this.authService.login({
+            username: dto.username.trim(),
+            password: dto.password,
+        }, {
+            resolvedLabId: lab.id,
+            ipAddress: meta?.ipAddress ?? null,
+            userAgent: meta?.userAgent ?? null,
+        });
+    }
+    async gatewayUiRefresh(dto, meta) {
+        return this.authService.refreshLabToken(dto.refreshToken, {
+            resolvedLabId: null,
+            ipAddress: meta?.ipAddress ?? null,
+            userAgent: meta?.userAgent ?? null,
+        });
     }
     async createActivationCode(dto) {
         const lab = await this.labRepo.findOne({ where: { id: dto.labId } });
@@ -384,6 +413,7 @@ exports.GatewayService = GatewayService = __decorate([
         typeorm_2.Repository,
         typeorm_2.Repository,
         jwt_1.JwtService,
+        auth_service_1.AuthService,
         instruments_service_1.InstrumentsService])
 ], GatewayService);
 //# sourceMappingURL=gateway.service.js.map

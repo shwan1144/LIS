@@ -124,6 +124,28 @@ class LocalApiServer {
                     sendJson(res, 200, this.facade.getConfigView());
                     return;
                 }
+                if (req.method === 'GET' && url.pathname === '/local/serial/ports') {
+                    sendJson(res, 200, await this.facade.listSerialPorts());
+                    return;
+                }
+                if (req.method === 'POST' && url.pathname === '/local/serial/test-open') {
+                    const body = await parseJsonBody(req);
+                    const serialPort = String(body.serialPort || '').trim();
+                    if (!serialPort) {
+                        sendJson(res, 400, { error: 'serialPort is required' });
+                        return;
+                    }
+                    const result = await this.facade.testSerialOpen({
+                        serialPort,
+                        baudRate: Number(body.baudRate) || undefined,
+                        dataBits: body.dataBits ? String(body.dataBits) : undefined,
+                        parity: body.parity ? String(body.parity) : undefined,
+                        stopBits: body.stopBits ? String(body.stopBits) : undefined,
+                        timeoutMs: Number(body.timeoutMs) || undefined,
+                    });
+                    sendJson(res, 200, result);
+                    return;
+                }
                 sendJson(res, 404, { error: 'Endpoint not found' });
             }
             catch (error) {

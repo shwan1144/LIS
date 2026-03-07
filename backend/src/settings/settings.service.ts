@@ -29,6 +29,7 @@ const MAX_ONLINE_WATERMARK_TEXT_LENGTH = 120;
 const MAX_PRINTER_NAME_LENGTH = 128;
 const MAX_REFERRING_DOCTOR_NAME_LENGTH = 80;
 const MAX_REFERRING_DOCTORS_COUNT = 500;
+const MAX_DASHBOARD_ANNOUNCEMENT_TEXT_LENGTH = 255;
 
 type ReportBrandingUpdate = {
   bannerDataUrl?: string | null;
@@ -104,6 +105,9 @@ export class SettingsService {
       reportDesignFingerprint,
       uiTestGroups: lab.uiTestGroups ?? [],
       referringDoctors: this.normalizeReferringDoctorsForRead(lab.referringDoctors),
+      dashboardAnnouncementText: this.normalizeDashboardAnnouncementText(
+        lab.dashboardAnnouncementText,
+      ),
     };
   }
 
@@ -120,6 +124,7 @@ export class SettingsService {
       reportStyle?: ReportStyleConfig | null;
       uiTestGroups?: UiTestGroup[] | null;
       referringDoctors?: string[] | null;
+      dashboardAnnouncementText?: string | null;
     },
   ) {
     const shouldVerifyReportDesignPersistence =
@@ -247,6 +252,11 @@ export class SettingsService {
     }
     if (data.referringDoctors !== undefined) {
       lab.referringDoctors = this.normalizeReferringDoctors(data.referringDoctors);
+    }
+    if (data.dashboardAnnouncementText !== undefined) {
+      lab.dashboardAnnouncementText = this.normalizeDashboardAnnouncementText(
+        data.dashboardAnnouncementText,
+      );
     }
     await this.labRepo.save(lab);
     const settings = await this.getLabSettings(labId);
@@ -389,6 +399,21 @@ export class SettingsService {
       if (normalized.length >= MAX_REFERRING_DOCTORS_COUNT) break;
     }
     return normalized;
+  }
+
+  private normalizeDashboardAnnouncementText(value: unknown): string | null {
+    if (value === null || value === undefined) return null;
+    if (typeof value !== 'string') {
+      throw new BadRequestException('dashboardAnnouncementText must be a string or null');
+    }
+    const trimmed = value.trim();
+    if (!trimmed) return null;
+    if (trimmed.length > MAX_DASHBOARD_ANNOUNCEMENT_TEXT_LENGTH) {
+      throw new BadRequestException(
+        `dashboardAnnouncementText must be at most ${MAX_DASHBOARD_ANNOUNCEMENT_TEXT_LENGTH} characters`,
+      );
+    }
+    return trimmed;
   }
 
   async getUsersForLab(labId: string): Promise<User[]> {

@@ -190,6 +190,7 @@ export class PlatformAdminController {
       };
       reportStyle?: ReportStyleConfig | null;
       referringDoctors?: string[] | null;
+      dashboardAnnouncementText?: string | null;
     },
   ) {
     return this.platformAdminService.updateLabSettings(labId, body);

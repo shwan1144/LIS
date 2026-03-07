@@ -39,8 +39,9 @@ let SettingsController = class SettingsController {
             body.onlineResultWatermarkDataUrl !== undefined ||
             body.onlineResultWatermarkText !== undefined ||
             body.reportBranding !== undefined ||
-            body.reportStyle !== undefined) {
-            throw new common_1.ForbiddenException('Online result and report design settings moved to admin panel.');
+            body.reportStyle !== undefined ||
+            body.dashboardAnnouncementText !== undefined) {
+            throw new common_1.ForbiddenException('Online result, report design, and dashboard announcement settings moved to admin panel.');
         }
         if (Object.keys(body).length === 0) {
             throw new common_1.BadRequestException('No settings provided');

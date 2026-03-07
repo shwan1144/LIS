@@ -107,6 +107,10 @@ __decorate([
     __metadata("design:type", Array)
 ], Lab.prototype, "referringDoctors", void 0);
 __decorate([
+    (0, typeorm_1.Column)({ type: 'varchar', length: 255, nullable: true }),
+    __metadata("design:type", Object)
+], Lab.prototype, "dashboardAnnouncementText", void 0);
+__decorate([
     (0, typeorm_1.CreateDateColumn)(),
     __metadata("design:type", Date)
 ], Lab.prototype, "createdAt", void 0);

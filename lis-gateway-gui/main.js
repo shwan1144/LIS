@@ -12,6 +12,13 @@ const AGENT_CONFIG_PATH = path.join(
   'config',
   'agent.json',
 );
+let managementSession = {
+  apiBaseUrl: '',
+  accessToken: '',
+  refreshToken: '',
+  user: null,
+  lab: null,
+};
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -75,6 +82,117 @@ function normalizeAxiosError(error) {
   return error?.message || String(error);
 }
 
+function normalizeApiBaseUrl(value) {
+  return String(value || '').trim().replace(/\/+$/, '');
+}
+
+function buildApiCandidateUrls(apiBaseUrl, endpointPath) {
+  const normalized = normalizeApiBaseUrl(apiBaseUrl);
+  const cleanPath = String(endpointPath || '').replace(/^\/+/, '');
+  const directUrl = `${normalized}/${cleanPath}`;
+  if (normalized.toLowerCase().endsWith('/api')) {
+    const withoutApi = normalized.slice(0, -4);
+    return Array.from(new Set([directUrl, `${withoutApi}/${cleanPath}`]));
+  }
+  return Array.from(new Set([directUrl, `${normalized}/api/${cleanPath}`]));
+}
+
+async function requestCloudApi(options) {
+  const {
+    apiBaseUrl,
+    endpointPath,
+    method,
+    data,
+    accessToken,
+    timeout = 12000,
+  } = options;
+  const candidates = buildApiCandidateUrls(apiBaseUrl, endpointPath);
+  let lastError = null;
+
+  for (const url of candidates) {
+    try {
+      const response = await axios.request({
+        method,
+        url,
+        data,
+        timeout,
+        headers: {
+          'Content-Type': 'application/json',
+          ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+        },
+      });
+      return response.data;
+    } catch (error) {
+      if (axios.isAxiosError(error) && error.response?.status === 404 && candidates.length > 1) {
+        lastError = error;
+        continue;
+      }
+      throw error;
+    }
+  }
+
+  if (lastError) throw lastError;
+  throw new Error('Cloud API request failed');
+}
+
+function resetManagementSession() {
+  managementSession = {
+    apiBaseUrl: '',
+    accessToken: '',
+    refreshToken: '',
+    user: null,
+    lab: null,
+  };
+}
+
+function assertManagementSession() {
+  if (!managementSession.apiBaseUrl || !managementSession.accessToken || !managementSession.refreshToken) {
+    throw new Error('Management login required');
+  }
+}
+
+async function refreshManagementSession() {
+  assertManagementSession();
+  const refreshed = await requestCloudApi({
+    apiBaseUrl: managementSession.apiBaseUrl,
+    endpointPath: 'gateway/ui/refresh',
+    method: 'post',
+    data: { refreshToken: managementSession.refreshToken },
+  });
+  managementSession = {
+    ...managementSession,
+    accessToken: refreshed.accessToken || '',
+    refreshToken: refreshed.refreshToken || managementSession.refreshToken,
+    user: refreshed.user || managementSession.user,
+    lab: refreshed.lab || managementSession.lab,
+  };
+}
+
+async function requestCloudWithManagementAuth(endpointPath, method, data) {
+  assertManagementSession();
+  try {
+    return await requestCloudApi({
+      apiBaseUrl: managementSession.apiBaseUrl,
+      endpointPath,
+      method,
+      data,
+      accessToken: managementSession.accessToken,
+    });
+  } catch (error) {
+    if (axios.isAxiosError(error) && error.response?.status === 401) {
+      await refreshManagementSession();
+      return await requestCloudApi({
+        apiBaseUrl: managementSession.apiBaseUrl,
+        endpointPath,
+        method,
+        data,
+        accessToken: managementSession.accessToken,
+      });
+    }
+    throw error;
+  }
+}
+
 async function localGet(pathname, fallback = null) {
   try {
     const client = getAgentClient();
@@ -127,6 +245,139 @@ ipcMain.handle('gateway:activate', async (event, payload) => {
 
 ipcMain.handle('gateway:sync-now', async () => {
   return await localPost('/local/sync-now', {});
+});
+
+ipcMain.handle('gateway:serial:list-ports', async () => {
+  return await localGet('/local/serial/ports', { ports: [] });
+});
+
+ipcMain.handle('gateway:serial:test-port', async (event, payload) => {
+  return await localPost('/local/serial/test-open', payload || {});
+});
+
+ipcMain.handle('gateway:management-status', async () => {
+  return {
+    loggedIn: Boolean(
+      managementSession.apiBaseUrl &&
+      managementSession.accessToken &&
+      managementSession.refreshToken,
+    ),
+    apiBaseUrl: managementSession.apiBaseUrl || null,
+    user: managementSession.user || null,
+    lab: managementSession.lab || null,
+  };
+});
+
+ipcMain.handle('gateway:management-login', async (event, payload) => {
+  try {
+    const apiBaseUrl = normalizeApiBaseUrl(payload?.apiBaseUrl || '');
+    const labCode = String(payload?.labCode || '').trim();
+    const username = String(payload?.username || '').trim();
+    const password = String(payload?.password || '');
+
+    if (!apiBaseUrl) {
+      throw new Error('Cloud API Base URL is required');
+    }
+    if (!labCode || !username || !password) {
+      throw new Error('labCode, username, and password are required');
+    }
+
+    const loginResult = await requestCloudApi({
+      apiBaseUrl,
+      endpointPath: 'gateway/ui/login',
+      method: 'post',
+      data: { labCode, username, password },
+    });
+
+    managementSession = {
+      apiBaseUrl,
+      accessToken: loginResult.accessToken || '',
+      refreshToken: loginResult.refreshToken || '',
+      user: loginResult.user || null,
+      lab: loginResult.lab || null,
+    };
+
+    if (!managementSession.accessToken || !managementSession.refreshToken) {
+      resetManagementSession();
+      throw new Error('Cloud login response is missing tokens');
+    }
+
+    return {
+      loggedIn: true,
+      user: managementSession.user,
+      lab: managementSession.lab,
+      apiBaseUrl: managementSession.apiBaseUrl,
+    };
+  } catch (error) {
+    resetManagementSession();
+    throw new Error(normalizeAxiosError(error));
+  }
+});
+
+ipcMain.handle('gateway:management-refresh', async () => {
+  try {
+    await refreshManagementSession();
+    return {
+      loggedIn: true,
+      user: managementSession.user,
+      lab: managementSession.lab,
+      apiBaseUrl: managementSession.apiBaseUrl,
+    };
+  } catch (error) {
+    resetManagementSession();
+    throw new Error(normalizeAxiosError(error));
+  }
+});
+
+ipcMain.handle('gateway:management-logout', async () => {
+  resetManagementSession();
+  return { ok: true };
+});
+
+ipcMain.handle('gateway:instruments:list', async () => {
+  try {
+    return await requestCloudWithManagementAuth('instruments', 'get');
+  } catch (error) {
+    throw new Error(normalizeAxiosError(error));
+  }
+});
+
+ipcMain.handle('gateway:instruments:create', async (event, payload) => {
+  try {
+    return await requestCloudWithManagementAuth('instruments', 'post', payload || {});
+  } catch (error) {
+    throw new Error(normalizeAxiosError(error));
+  }
+});
+
+ipcMain.handle('gateway:instruments:update', async (event, payload) => {
+  try {
+    const id = String(payload?.id || '').trim();
+    if (!id) throw new Error('Instrument ID is required');
+    return await requestCloudWithManagementAuth(`instruments/${id}`, 'patch', payload?.data || {});
+  } catch (error) {
+    throw new Error(normalizeAxiosError(error));
+  }
+});
+
+ipcMain.handle('gateway:instruments:delete', async (event, payload) => {
+  try {
+    const id = String(payload?.id || '').trim();
+    if (!id) throw new Error('Instrument ID is required');
+    return await requestCloudWithManagementAuth(`instruments/${id}`, 'delete');
+  } catch (error) {
+    throw new Error(normalizeAxiosError(error));
+  }
+});
+
+ipcMain.handle('gateway:instruments:toggle', async (event, payload) => {
+  try {
+    const id = String(payload?.id || '').trim();
+    if (!id) throw new Error('Instrument ID is required');
+    return await requestCloudWithManagementAuth(`instruments/${id}/toggle-active`, 'patch');
+  } catch (error) {
+    throw new Error(normalizeAxiosError(error));
+  }
 });
 
 app.whenReady().then(createWindow);

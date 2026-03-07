@@ -22,13 +22,17 @@ import {
   GatewayMessageReceipt,
   GatewayToken,
 } from '../entities/gateway.entity';
+import { AuthService } from '../auth/auth.service';
 import { hashPassword, verifyPassword } from '../auth/password.util';
 import { InstrumentsService } from '../instruments/instruments.service';
+import type { LoginResponseDto } from '../auth/dto/login-response.dto';
 import type { ActivateGatewayDto } from './dto/activate-gateway.dto';
 import type { RefreshGatewayTokenDto } from './dto/refresh-gateway-token.dto';
 import type { GatewayMessageDto } from './dto/gateway-message.dto';
 import type { GatewayHeartbeatDto } from './dto/gateway-heartbeat.dto';
 import type { CreateGatewayActivationCodeDto } from './dto/create-gateway-activation-code.dto';
+import type { GatewayUiLoginDto } from './dto/gateway-ui-login.dto';
+import type { GatewayUiRefreshDto } from './dto/gateway-ui-refresh.dto';
 
 interface GatewayAuthContext {
   gatewayId: string;
@@ -83,8 +87,49 @@ export class GatewayService {
     @InjectRepository(Lab)
     private readonly labRepo: Repository<Lab>,
     private readonly jwtService: JwtService,
+    private readonly authService: AuthService,
     private readonly instrumentsService: InstrumentsService,
   ) {}
+
+  async gatewayUiLogin(
+    dto: GatewayUiLoginDto,
+    meta?: { ipAddress?: string | null; userAgent?: string | null },
+  ): Promise<LoginResponseDto> {
+    const labCode = dto.labCode.trim().toUpperCase();
+    const lab = await this.labRepo.findOne({
+      where: {
+        code: labCode,
+        isActive: true,
+      },
+    });
+
+    if (!lab) {
+      throw new UnauthorizedException('Invalid lab code or credentials');
+    }
+
+    return this.authService.login(
+      {
+        username: dto.username.trim(),
+        password: dto.password,
+      },
+      {
+        resolvedLabId: lab.id,
+        ipAddress: meta?.ipAddress ?? null,
+        userAgent: meta?.userAgent ?? null,
+      },
+    );
+  }
+
+  async gatewayUiRefresh(
+    dto: GatewayUiRefreshDto,
+    meta?: { ipAddress?: string | null; userAgent?: string | null },
+  ): Promise<LoginResponseDto> {
+    return this.authService.refreshLabToken(dto.refreshToken, {
+      resolvedLabId: null,
+      ipAddress: meta?.ipAddress ?? null,
+      userAgent: meta?.userAgent ?? null,
+    });
+  }
 
   async createActivationCode(dto: CreateGatewayActivationCodeDto): Promise<{
     activationCode: string;

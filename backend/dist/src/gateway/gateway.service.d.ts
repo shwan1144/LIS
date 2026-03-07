@@ -3,12 +3,16 @@ import { JwtService } from '@nestjs/jwt';
 import { ConnectionType, Instrument, InstrumentProtocol } from '../entities/instrument.entity';
 import { Lab } from '../entities/lab.entity';
 import { GatewayActivationCode, GatewayDevice, GatewayMessageReceipt, GatewayToken } from '../entities/gateway.entity';
+import { AuthService } from '../auth/auth.service';
 import { InstrumentsService } from '../instruments/instruments.service';
+import type { LoginResponseDto } from '../auth/dto/login-response.dto';
 import type { ActivateGatewayDto } from './dto/activate-gateway.dto';
 import type { RefreshGatewayTokenDto } from './dto/refresh-gateway-token.dto';
 import type { GatewayMessageDto } from './dto/gateway-message.dto';
 import type { GatewayHeartbeatDto } from './dto/gateway-heartbeat.dto';
 import type { CreateGatewayActivationCodeDto } from './dto/create-gateway-activation-code.dto';
+import type { GatewayUiLoginDto } from './dto/gateway-ui-login.dto';
+import type { GatewayUiRefreshDto } from './dto/gateway-ui-refresh.dto';
 interface GatewayAuthContext {
     gatewayId: string;
     labId: string;
@@ -50,8 +54,17 @@ export declare class GatewayService {
     private readonly instrumentRepo;
     private readonly labRepo;
     private readonly jwtService;
+    private readonly authService;
     private readonly instrumentsService;
-    constructor(gatewayRepo: Repository<GatewayDevice>, activationCodeRepo: Repository<GatewayActivationCode>, gatewayTokenRepo: Repository<GatewayToken>, receiptRepo: Repository<GatewayMessageReceipt>, instrumentRepo: Repository<Instrument>, labRepo: Repository<Lab>, jwtService: JwtService, instrumentsService: InstrumentsService);
+    constructor(gatewayRepo: Repository<GatewayDevice>, activationCodeRepo: Repository<GatewayActivationCode>, gatewayTokenRepo: Repository<GatewayToken>, receiptRepo: Repository<GatewayMessageReceipt>, instrumentRepo: Repository<Instrument>, labRepo: Repository<Lab>, jwtService: JwtService, authService: AuthService, instrumentsService: InstrumentsService);
+    gatewayUiLogin(dto: GatewayUiLoginDto, meta?: {
+        ipAddress?: string | null;
+        userAgent?: string | null;
+    }): Promise<LoginResponseDto>;
+    gatewayUiRefresh(dto: GatewayUiRefreshDto, meta?: {
+        ipAddress?: string | null;
+        userAgent?: string | null;
+    }): Promise<LoginResponseDto>;
     createActivationCode(dto: CreateGatewayActivationCodeDto): Promise<{
         activationCode: string;
         expiresAt: string;

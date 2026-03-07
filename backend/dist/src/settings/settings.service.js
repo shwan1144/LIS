@@ -33,6 +33,7 @@ const MAX_ONLINE_WATERMARK_TEXT_LENGTH = 120;
 const MAX_PRINTER_NAME_LENGTH = 128;
 const MAX_REFERRING_DOCTOR_NAME_LENGTH = 80;
 const MAX_REFERRING_DOCTORS_COUNT = 500;
+const MAX_DASHBOARD_ANNOUNCEMENT_TEXT_LENGTH = 255;
 let SettingsService = class SettingsService {
     constructor(userRepo, labAssignmentRepo, shiftAssignmentRepo, userDeptRepo, departmentRepo, labRepo, shiftRepo) {
         this.userRepo = userRepo;
@@ -81,6 +82,7 @@ let SettingsService = class SettingsService {
             reportDesignFingerprint,
             uiTestGroups: lab.uiTestGroups ?? [],
             referringDoctors: this.normalizeReferringDoctorsForRead(lab.referringDoctors),
+            dashboardAnnouncementText: this.normalizeDashboardAnnouncementText(lab.dashboardAnnouncementText),
         };
     }
     async updateLabSettings(labId, data) {
@@ -184,6 +186,9 @@ let SettingsService = class SettingsService {
         }
         if (data.referringDoctors !== undefined) {
             lab.referringDoctors = this.normalizeReferringDoctors(data.referringDoctors);
+        }
+        if (data.dashboardAnnouncementText !== undefined) {
+            lab.dashboardAnnouncementText = this.normalizeDashboardAnnouncementText(data.dashboardAnnouncementText);
         }
         await this.labRepo.save(lab);
         const settings = await this.getLabSettings(labId);
@@ -310,6 +315,20 @@ let SettingsService = class SettingsService {
                 break;
         }
         return normalized;
+    }
+    normalizeDashboardAnnouncementText(value) {
+        if (value === null || value === undefined)
+            return null;
+        if (typeof value !== 'string') {
+            throw new common_1.BadRequestException('dashboardAnnouncementText must be a string or null');
+        }
+        const trimmed = value.trim();
+        if (!trimmed)
+            return null;
+        if (trimmed.length > MAX_DASHBOARD_ANNOUNCEMENT_TEXT_LENGTH) {
+            throw new common_1.BadRequestException(`dashboardAnnouncementText must be at most ${MAX_DASHBOARD_ANNOUNCEMENT_TEXT_LENGTH} characters`);
+        }
+        return trimmed;
     }
     async getUsersForLab(labId) {
         const assignments = await this.labAssignmentRepo.find({

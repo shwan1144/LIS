@@ -50,6 +50,9 @@ type SerialManagedInstrumentListenerConfig = Extract<
 export interface ListenerStatusView {
   instrumentId: string;
   state: 'OFFLINE' | 'ONLINE' | 'ERROR';
+  listenerState: 'RUNNING' | 'ERROR' | 'STOPPED';
+  linkState: 'CONNECTED' | 'WAITING' | 'IDLE' | 'DISCONNECTED';
+  instrumentConnected: boolean;
   name: string;
   transport: 'TCP' | 'SERIAL';
   endpoint: string;
@@ -57,17 +60,24 @@ export interface ListenerStatusView {
   port?: number;
   protocol: string;
   connectionType: string;
+  lastMessageAt: string | null;
+  messagesReceived: number;
+  activeConnections?: number;
 }
 
 interface BaseListenerRuntime<TConfig extends ManagedInstrumentListenerConfig> {
   config: TConfig;
   state: ListenerStatusView['state'];
   lastError: string | null;
+  messagesReceived: number;
+  lastMessageAtMs: number | null;
+  lastByteAtMs: number | null;
 }
 
 interface TcpRuntime extends BaseListenerRuntime<TcpManagedInstrumentListenerConfig> {
   kind: 'TCP';
   server: net.Server;
+  activeConnections: number;
 }
 
 interface SerialAstmState {
@@ -199,6 +209,7 @@ function parityToShortCode(parity: string): string {
 
 export class ListenerManager {
   private readonly listeners = new Map<string, ListenerRuntime>();
+  private readonly blockedStatuses = new Map<string, ListenerStatusView>();
 
   constructor(
     private readonly onMessage: (input: {
@@ -216,15 +227,48 @@ export class ListenerManager {
       if (!cfg.enabled) continue;
       nextMap.set(cfg.instrumentId, cfg);
     }
+    const conflicts = this.detectConfigConflicts(Array.from(nextMap.values()));
 
     for (const [instrumentId, runtime] of this.listeners.entries()) {
       const next = nextMap.get(instrumentId);
-      if (!next || !this.isSameBinding(runtime.config, next)) {
+      if (!next || conflicts.has(instrumentId) || !this.isSameBinding(runtime.config, next)) {
         this.stopListener(instrumentId, runtime);
       }
     }
 
+    this.blockedStatuses.clear();
+    for (const [instrumentId, message] of conflicts.entries()) {
+      const cfg = nextMap.get(instrumentId);
+      if (!cfg) continue;
+      const endpoint =
+        cfg.connectionType === 'TCP_SERVER'
+          ? `TCP:${cfg.port}`
+          : `SERIAL ${cfg.serialPort}@${cfg.baudRate},${cfg.dataBits}${parityToShortCode(cfg.parity)}${cfg.stopBits}`;
+      this.blockedStatuses.set(instrumentId, {
+        instrumentId,
+        state: 'ERROR',
+        listenerState: 'ERROR',
+        linkState: 'DISCONNECTED',
+        instrumentConnected: false,
+        name: cfg.name,
+        transport: cfg.connectionType === 'TCP_SERVER' ? 'TCP' : 'SERIAL',
+        endpoint,
+        lastError: message,
+        port: cfg.connectionType === 'TCP_SERVER' ? cfg.port : undefined,
+        protocol: cfg.protocol,
+        connectionType: cfg.connectionType,
+        lastMessageAt: null,
+        messagesReceived: 0,
+        activeConnections: cfg.connectionType === 'TCP_SERVER' ? 0 : undefined,
+      });
+      logger.error(
+        `Listener config rejected for ${cfg.name} (${instrumentId}): ${message}`,
+        'Listener',
+      );
+    }
+
     for (const [instrumentId, cfg] of nextMap.entries()) {
+      if (conflicts.has(instrumentId)) continue;
       if (this.listeners.has(instrumentId)) continue;
       this.startListener(cfg);
     }
@@ -234,14 +278,20 @@ export class ListenerManager {
     for (const [instrumentId, runtime] of this.listeners.entries()) {
       this.stopListener(instrumentId, runtime);
     }
+    this.blockedStatuses.clear();
   }
 
   getStatus(): ListenerStatusView[] {
-    return Array.from(this.listeners.values()).map((runtime) => {
+    const runtimeStatuses = Array.from(this.listeners.values()).map<ListenerStatusView>((runtime) => {
+      const listenerState = this.toListenerState(runtime);
+      const linkState = this.toLinkState(runtime);
       if (runtime.kind === 'TCP') {
         return {
           instrumentId: runtime.config.instrumentId,
           state: runtime.state,
+          listenerState,
+          linkState,
+          instrumentConnected: linkState === 'CONNECTED',
           name: runtime.config.name,
           transport: 'TCP',
           endpoint: `TCP:${runtime.config.port}`,
@@ -249,20 +299,31 @@ export class ListenerManager {
           lastError: runtime.lastError,
           protocol: runtime.config.protocol,
           connectionType: runtime.config.connectionType,
+          lastMessageAt: runtime.lastMessageAtMs ? new Date(runtime.lastMessageAtMs).toISOString() : null,
+          messagesReceived: runtime.messagesReceived,
+          activeConnections: runtime.activeConnections,
         };
       }
 
       return {
         instrumentId: runtime.config.instrumentId,
         state: runtime.state,
+        listenerState,
+        linkState,
+        instrumentConnected: linkState === 'CONNECTED',
         name: runtime.config.name,
         transport: 'SERIAL',
         endpoint: `SERIAL ${runtime.config.serialPort}@${runtime.config.baudRate},${runtime.config.dataBits}${parityToShortCode(runtime.config.parity)}${runtime.config.stopBits}`,
         lastError: runtime.lastError,
         protocol: runtime.config.protocol,
         connectionType: runtime.config.connectionType,
+        lastMessageAt: runtime.lastMessageAtMs ? new Date(runtime.lastMessageAtMs).toISOString() : null,
+        messagesReceived: runtime.messagesReceived,
       };
     });
+
+    const blocked = Array.from(this.blockedStatuses.values());
+    return [...runtimeStatuses, ...blocked].sort((a, b) => a.name.localeCompare(b.name));
   }
 
   private startListener(config: ManagedInstrumentListenerConfig): void {
@@ -280,11 +341,16 @@ export class ListenerManager {
       server: net.createServer(),
       state: 'OFFLINE',
       lastError: null,
+      messagesReceived: 0,
+      lastMessageAtMs: null,
+      lastByteAtMs: null,
+      activeConnections: 0,
     };
 
     runtime.server.on('connection', (socket) => {
       runtime.state = 'ONLINE';
       runtime.lastError = null;
+      runtime.activeConnections += 1;
       logger.log(
         `Instrument ${config.name} connected from ${socket.remoteAddress || 'unknown'}`,
         `TCP:${config.port}`,
@@ -292,11 +358,13 @@ export class ListenerManager {
 
       let buffer = '';
       socket.on('data', (chunk) => {
+        this.markByteReceived(runtime);
         buffer += chunk.toString();
         const framed = parseHl7FramedMessages(buffer, config.hl7StartBlock, config.hl7EndBlock);
         buffer = framed.remaining;
 
         for (const message of framed.messages) {
+          this.markMessageReceived(runtime);
           this.onMessage({
             instrumentId: config.instrumentId,
             rawMessage: message,
@@ -315,6 +383,18 @@ export class ListenerManager {
           `TCP:${config.port}`,
         );
       });
+
+      let closed = false;
+      const markClosed = () => {
+        if (closed) return;
+        closed = true;
+        runtime.activeConnections = Math.max(0, runtime.activeConnections - 1);
+        if (runtime.activeConnections === 0 && runtime.state !== 'ERROR') {
+          runtime.state = 'ONLINE';
+        }
+      };
+      socket.on('close', markClosed);
+      socket.on('end', markClosed);
     });
 
     runtime.server.on('error', (error) => {
@@ -361,6 +441,9 @@ export class ListenerManager {
       stopping: false,
       state: 'OFFLINE',
       lastError: null,
+      messagesReceived: 0,
+      lastMessageAtMs: null,
+      lastByteAtMs: null,
       astm: {
         inFrame: false,
         frameBytes: [],
@@ -414,6 +497,7 @@ export class ListenerManager {
   }
 
   private consumeSerialChunk(runtime: SerialRuntime, chunk: Buffer): void {
+    this.markByteReceived(runtime);
     for (const byte of chunk.values()) {
       if (byte === ASTM_ENQ) {
         runtime.astm.inFrame = false;
@@ -506,6 +590,7 @@ export class ListenerManager {
   }
 
   private emitAstmMessage(runtime: SerialRuntime, message: string): void {
+    this.markMessageReceived(runtime);
     logger.log(
       `Received ASTM message (${message.length} bytes) from ${runtime.config.name} on ${runtime.config.serialPort}`,
       'Serial',
@@ -565,6 +650,88 @@ export class ListenerManager {
       `Stopped listener for ${runtime.config.name} (${instrumentId})`,
       'Listener',
     );
+  }
+
+  private markByteReceived(runtime: ListenerRuntime): void {
+    runtime.lastByteAtMs = Date.now();
+  }
+
+  private markMessageReceived(runtime: ListenerRuntime): void {
+    const now = Date.now();
+    runtime.lastByteAtMs = now;
+    runtime.lastMessageAtMs = now;
+    runtime.messagesReceived += 1;
+  }
+
+  private toListenerState(runtime: ListenerRuntime): ListenerStatusView['listenerState'] {
+    if (runtime.state === 'ERROR') return 'ERROR';
+    if (runtime.state === 'ONLINE') return 'RUNNING';
+    return 'STOPPED';
+  }
+
+  private toLinkState(runtime: ListenerRuntime): ListenerStatusView['linkState'] {
+    if (runtime.state === 'ERROR') return 'DISCONNECTED';
+    if (runtime.state !== 'ONLINE') return 'DISCONNECTED';
+
+    if (runtime.kind === 'TCP') {
+      if (runtime.activeConnections > 0) return 'CONNECTED';
+      if (runtime.messagesReceived === 0) return 'WAITING';
+      return 'IDLE';
+    }
+
+    if (!runtime.serial.isOpen) return 'DISCONNECTED';
+    const now = Date.now();
+    if (runtime.lastByteAtMs && now - runtime.lastByteAtMs <= 30000) {
+      return 'CONNECTED';
+    }
+    if (runtime.messagesReceived === 0) {
+      return 'WAITING';
+    }
+    return 'IDLE';
+  }
+
+  private detectConfigConflicts(
+    configs: ManagedInstrumentListenerConfig[],
+  ): Map<string, string> {
+    const conflicts = new Map<string, string>();
+    const tcpByPort = new Map<number, string[]>();
+    const serialByPort = new Map<string, string[]>();
+
+    for (const cfg of configs) {
+      if (cfg.connectionType === 'TCP_SERVER') {
+        const list = tcpByPort.get(cfg.port) || [];
+        list.push(cfg.instrumentId);
+        tcpByPort.set(cfg.port, list);
+        continue;
+      }
+
+      const serialKey = cfg.serialPort.trim().toUpperCase();
+      const list = serialByPort.get(serialKey) || [];
+      list.push(cfg.instrumentId);
+      serialByPort.set(serialKey, list);
+    }
+
+    for (const [port, instrumentIds] of tcpByPort.entries()) {
+      if (instrumentIds.length <= 1) continue;
+      for (const instrumentId of instrumentIds) {
+        conflicts.set(
+          instrumentId,
+          `Configuration conflict: TCP port ${port} is assigned to multiple instruments`,
+        );
+      }
+    }
+
+    for (const [serialPort, instrumentIds] of serialByPort.entries()) {
+      if (instrumentIds.length <= 1) continue;
+      for (const instrumentId of instrumentIds) {
+        conflicts.set(
+          instrumentId,
+          `Configuration conflict: serial port ${serialPort} is assigned to multiple instruments`,
+        );
+      }
+    }
+
+    return conflicts;
   }
 
   private isSameBinding(

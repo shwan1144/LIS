@@ -62,6 +62,14 @@ let InstrumentsService = class InstrumentsService {
             parity: normalizedDto.parity ?? null,
             stopBits: normalizedDto.stopBits ?? null,
         });
+        await this.assertNoConnectionConflict({
+            labId,
+            instrumentIdToIgnore: null,
+            connectionType: normalizedDto.connectionType ?? instrument_entity_1.ConnectionType.TCP_SERVER,
+            isActive: normalizedDto.isActive !== false,
+            port: normalizedDto.port ?? null,
+            serialPort: normalizedDto.serialPort ?? null,
+        });
         const existing = await this.instrumentRepo.findOne({
             where: { labId, code: normalizedCode },
         });
@@ -106,6 +114,16 @@ let InstrumentsService = class InstrumentsService {
             dataBits: normalizedDto.dataBits !== undefined ? normalizedDto.dataBits : instrument.dataBits,
             parity: normalizedDto.parity !== undefined ? normalizedDto.parity : instrument.parity,
             stopBits: normalizedDto.stopBits !== undefined ? normalizedDto.stopBits : instrument.stopBits,
+        });
+        await this.assertNoConnectionConflict({
+            labId,
+            instrumentIdToIgnore: instrument.id,
+            connectionType: (normalizedDto.connectionType ?? instrument.connectionType),
+            isActive: (normalizedDto.isActive ?? instrument.isActive) !== false,
+            port: normalizedDto.port !== undefined ? normalizedDto.port ?? null : instrument.port,
+            serialPort: normalizedDto.serialPort !== undefined
+                ? normalizedDto.serialPort ?? null
+                : instrument.serialPort,
         });
         Object.assign(instrument, normalizedDto);
         const saved = await this.instrumentRepo.save(instrument);
@@ -350,6 +368,51 @@ let InstrumentsService = class InstrumentsService {
         const stopBits = (input.stopBits || '').trim();
         if (!['1', '2'].includes(stopBits)) {
             throw new common_1.BadRequestException('stopBits must be 1 or 2 for ASTM serial instruments');
+        }
+    }
+    async assertNoConnectionConflict(input) {
+        if (!input.isActive)
+            return;
+        if (input.connectionType === instrument_entity_1.ConnectionType.TCP_SERVER &&
+            Number.isFinite(input.port ?? NaN) &&
+            input.port != null) {
+            const query = this.instrumentRepo
+                .createQueryBuilder('instrument')
+                .where('instrument.labId = :labId', { labId: input.labId })
+                .andWhere('instrument.isActive = true')
+                .andWhere('instrument.connectionType = :connectionType', {
+                connectionType: instrument_entity_1.ConnectionType.TCP_SERVER,
+            })
+                .andWhere('instrument.port = :port', { port: input.port });
+            if (input.instrumentIdToIgnore) {
+                query.andWhere('instrument.id != :instrumentIdToIgnore', {
+                    instrumentIdToIgnore: input.instrumentIdToIgnore,
+                });
+            }
+            const existing = await query.getOne();
+            if (existing) {
+                throw new common_1.BadRequestException(`TCP port ${input.port} is already assigned to active instrument ${existing.code}`);
+            }
+        }
+        const serialPort = input.serialPort?.trim();
+        if (input.connectionType === instrument_entity_1.ConnectionType.SERIAL && serialPort) {
+            const query = this.instrumentRepo
+                .createQueryBuilder('instrument')
+                .where('instrument.labId = :labId', { labId: input.labId })
+                .andWhere('instrument.isActive = true')
+                .andWhere('instrument.connectionType = :connectionType', {
+                connectionType: instrument_entity_1.ConnectionType.SERIAL,
+            })
+                .andWhere('LOWER(instrument.serialPort) = LOWER(:serialPort)', { serialPort });
+            if (input.instrumentIdToIgnore) {
+                query.andWhere('instrument.id != :instrumentIdToIgnore', {
+                    instrumentIdToIgnore: input.instrumentIdToIgnore,
+                });
+            }
+            const existing = await query.getOne();
+            if (existing) {
+                throw new common_1.BadRequestException(`Serial port ${serialPort} is already assigned to active instrument ${existing.code}`);
+            }
         }
     }
 };

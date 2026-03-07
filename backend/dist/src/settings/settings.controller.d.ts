@@ -41,6 +41,7 @@ export declare class SettingsController {
             testIds: string[];
         }[];
         referringDoctors: string[];
+        dashboardAnnouncementText: string | null;
     }>;
     updateLabSettings(req: RequestWithUser, body: {
         labelSequenceBy?: string;
@@ -67,6 +68,7 @@ export declare class SettingsController {
             testIds: string[];
         }[] | null;
         referringDoctors?: string[] | null;
+        dashboardAnnouncementText?: string | null;
     }): Promise<{
         id: string;
         code: string;
@@ -96,6 +98,7 @@ export declare class SettingsController {
             testIds: string[];
         }[];
         referringDoctors: string[];
+        dashboardAnnouncementText: string | null;
     }>;
     getUsers(req: RequestWithUser): Promise<void>;
     getUser(req: RequestWithUser, id: string): Promise<void>;

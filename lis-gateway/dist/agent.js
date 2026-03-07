@@ -44,6 +44,7 @@ const sqlite_store_1 = require("./queue/sqlite-store");
 const outbox_1 = require("./queue/outbox");
 const listener_manager_1 = require("./listener-manager");
 const local_api_server_1 = require("./local-api-server");
+const serialport_1 = require("serialport");
 class GatewayAgent {
     configStore = new local_config_store_1.LocalConfigStore();
     cloudClient = new cloud_client_1.CloudClient();
@@ -59,6 +60,12 @@ class GatewayAgent {
     lastSyncAt = null;
     lastError = null;
     activeCloudConfig = null;
+    configPollIntervalMs = 60000;
+    heartbeatIntervalMs = 30000;
+    lastConfigSyncAt = null;
+    lastConfigError = null;
+    lastHeartbeatAt = null;
+    lastHeartbeatError = null;
     start() {
         const paths = this.configStore.getPaths();
         const config = this.configStore.getConfig();
@@ -143,7 +150,10 @@ class GatewayAgent {
                 }
             }
             if (response.status === 304) {
-                this.lastSyncAt = new Date().toISOString();
+                const now = new Date().toISOString();
+                this.lastSyncAt = now;
+                this.lastConfigSyncAt = now;
+                this.lastConfigError = null;
                 return {
                     success: true,
                     unchanged: true,
@@ -208,7 +218,10 @@ class GatewayAgent {
             if (response.data.heartbeatIntervalSec) {
                 this.scheduleHeartbeat(Math.max(10, response.data.heartbeatIntervalSec) * 1000);
             }
-            this.lastSyncAt = new Date().toISOString();
+            const now = new Date().toISOString();
+            this.lastSyncAt = now;
+            this.lastConfigSyncAt = now;
+            this.lastConfigError = null;
             this.lastError = null;
             logger_1.logger.log(`Applied cloud config with ${response.data.instruments.length} instrument listener(s)`, 'Config');
             return {
@@ -220,6 +233,7 @@ class GatewayAgent {
         catch (error) {
             const message = this.toErrorMessage(error);
             this.lastError = message;
+            this.lastConfigError = message;
             logger_1.logger.error(`Cloud config sync failed: ${message}`, 'Config');
             return { success: false, error: message };
         }
@@ -230,14 +244,22 @@ class GatewayAgent {
     async getStatus() {
         const config = this.configStore.getConfig();
         const stats = this.outbox?.getStats();
+        const activated = Boolean(config.gatewayId && config.refreshToken);
         return {
-            activated: Boolean(config.gatewayId && config.refreshToken),
+            activated,
             apiBaseUrl: config.apiBaseUrl,
             gatewayId: config.gatewayId,
             queue: stats || null,
             listeners: this.listenerManager?.getStatus() || [],
-            lastSyncAt: this.lastSyncAt,
+            lastSyncAt: this.lastConfigSyncAt || this.lastSyncAt,
             lastError: this.lastError,
+            apiConnectivity: this.resolveApiConnectivity(activated),
+            apiDetail: {
+                lastConfigSyncAt: this.lastConfigSyncAt,
+                lastHeartbeatAt: this.lastHeartbeatAt,
+                lastConfigError: this.lastConfigError,
+                lastHeartbeatError: this.lastHeartbeatError,
+            },
             version: this.resolveGatewayVersion(),
             logFile: logger_1.logger.getLogFilePath(),
         };
@@ -270,6 +292,106 @@ class GatewayAgent {
                 }
                 : null,
         };
+    }
+    async listSerialPorts() {
+        const ports = await serialport_1.SerialPort.list();
+        return {
+            ports: ports.map((item) => ({
+                path: item.path,
+                manufacturer: item.manufacturer || null,
+                serialNumber: item.serialNumber || null,
+                vendorId: item.vendorId || null,
+                productId: item.productId || null,
+            })),
+        };
+    }
+    async testSerialOpen(input) {
+        const serialPort = input.serialPort.trim();
+        if (!serialPort) {
+            return {
+                ok: false,
+                error: 'serialPort is required',
+                openedAt: null,
+                closedAt: null,
+            };
+        }
+        const baudRate = Number.isFinite(input.baudRate) && (input.baudRate || 0) > 0
+            ? Math.floor(input.baudRate)
+            : 9600;
+        const dataBitsRaw = (input.dataBits || '8').trim();
+        const stopBitsRaw = (input.stopBits || '1').trim();
+        const parityRaw = (input.parity || 'NONE').trim().toUpperCase();
+        const timeoutMs = Math.max(500, Math.min(15000, Math.floor(input.timeoutMs || 3000)));
+        const dataBits = dataBitsRaw === '7' ? 7 : 8;
+        const stopBits = stopBitsRaw === '2' ? 2 : 1;
+        const parity = parityRaw === 'EVEN' ? 'even' : parityRaw === 'ODD' ? 'odd' : 'none';
+        return new Promise((resolve) => {
+            const serial = new serialport_1.SerialPort({
+                path: serialPort,
+                baudRate,
+                dataBits,
+                stopBits,
+                parity,
+                autoOpen: false,
+            });
+            let finished = false;
+            const finish = (payload) => {
+                if (finished)
+                    return;
+                finished = true;
+                if (serial.isOpen) {
+                    serial.close(() => {
+                        resolve({
+                            ...payload,
+                            closedAt: payload.closedAt || new Date().toISOString(),
+                        });
+                    });
+                    return;
+                }
+                resolve(payload);
+            };
+            serial.once('error', (error) => {
+                finish({
+                    ok: false,
+                    error: error.message,
+                    openedAt: null,
+                    closedAt: new Date().toISOString(),
+                });
+            });
+            serial.open((error) => {
+                if (error) {
+                    finish({
+                        ok: false,
+                        error: error.message,
+                        openedAt: null,
+                        closedAt: new Date().toISOString(),
+                    });
+                    return;
+                }
+                const openedAt = new Date().toISOString();
+                setTimeout(() => {
+                    serial.close((closeError) => {
+                        finish({
+                            ok: !closeError,
+                            error: closeError ? closeError.message : null,
+                            openedAt,
+                            closedAt: new Date().toISOString(),
+                        });
+                    });
+                }, timeoutMs);
+            });
+            setTimeout(() => {
+                if (!finished) {
+                    finish({
+                        ok: false,
+                        error: `Serial test timed out after ${timeoutMs}ms`,
+                        openedAt: null,
+                        closedAt: new Date().toISOString(),
+                    });
+                }
+            }, timeoutMs + 500);
+            logger_1.logger.log(`Serial open test started for ${serialPort} @ ${baudRate} (${dataBitsRaw}${parityRaw[0] || 'N'}${stopBitsRaw})`, 'LocalAPI');
+        });
     }
     async deliverOutboxMessage(message) {
         const config = this.configStore.getConfig();
@@ -346,6 +468,11 @@ class GatewayAgent {
                     queueDepth,
                     listeners,
                 });
+                this.lastHeartbeatAt = new Date().toISOString();
+                this.lastHeartbeatError = null;
+                if (!this.lastConfigError) {
+                    this.lastError = null;
+                }
             }
             catch (error) {
                 if ((0, cloud_client_1.isCloudHttpError)(error) && error.status === 401) {
@@ -356,6 +483,11 @@ class GatewayAgent {
                         queueDepth,
                         listeners,
                     });
+                    this.lastHeartbeatAt = new Date().toISOString();
+                    this.lastHeartbeatError = null;
+                    if (!this.lastConfigError) {
+                        this.lastError = null;
+                    }
                 }
                 else {
                     throw error;
@@ -363,7 +495,12 @@ class GatewayAgent {
             }
         }
         catch (error) {
-            logger_1.logger.warn(`Heartbeat failed: ${this.toErrorMessage(error)}`, 'Heartbeat');
+            const message = this.toErrorMessage(error);
+            this.lastHeartbeatError = message;
+            if (!this.lastConfigError) {
+                this.lastError = message;
+            }
+            logger_1.logger.warn(`Heartbeat failed: ${message}`, 'Heartbeat');
         }
         finally {
             this.heartbeatInProgress = false;
@@ -415,9 +552,31 @@ class GatewayAgent {
             return fallback;
         return parsed;
     }
+    resolveApiConnectivity(activated) {
+        if (!activated)
+            return 'DISCONNECTED';
+        const configHealthy = this.isSignalHealthy(this.lastConfigSyncAt, this.lastConfigError, this.configPollIntervalMs);
+        const heartbeatHealthy = this.isSignalHealthy(this.lastHeartbeatAt, this.lastHeartbeatError, this.heartbeatIntervalMs);
+        if (configHealthy && heartbeatHealthy)
+            return 'CONNECTED';
+        if (!configHealthy && !heartbeatHealthy)
+            return 'DISCONNECTED';
+        return 'DEGRADED';
+    }
+    isSignalHealthy(timestampIso, lastError, intervalMs) {
+        if (lastError)
+            return false;
+        if (!timestampIso)
+            return false;
+        const parsed = Date.parse(timestampIso);
+        if (!Number.isFinite(parsed))
+            return false;
+        return Date.now() - parsed <= intervalMs * 2;
+    }
     scheduleConfigPoll(intervalMs) {
         if (this.configTimer)
             clearInterval(this.configTimer);
+        this.configPollIntervalMs = intervalMs;
         this.configTimer = setInterval(() => {
             void this.syncNow();
         }, intervalMs);
@@ -426,6 +585,7 @@ class GatewayAgent {
     scheduleHeartbeat(intervalMs) {
         if (this.heartbeatTimer)
             clearInterval(this.heartbeatTimer);
+        this.heartbeatIntervalMs = intervalMs;
         this.heartbeatTimer = setInterval(() => {
             void this.sendHeartbeat();
         }, intervalMs);

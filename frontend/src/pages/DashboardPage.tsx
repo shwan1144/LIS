@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Card, Row, Col, Typography, Statistic, Table, Spin, message } from 'antd';
+import { Card, Row, Col, Typography, Statistic, Table, Spin, message, Space } from 'antd';
 import {
   FileTextOutlined,
   ClockCircleOutlined,
@@ -7,27 +7,37 @@ import {
   ThunderboltOutlined,
   TeamOutlined,
   BarChartOutlined,
+  NotificationOutlined,
 } from '@ant-design/icons';
-import { getDashboardKpis, getOrdersTrend, type DashboardKpis as KpisType } from '../api/client';
+import {
+  getDashboardKpis,
+  getLabSettings,
+  getOrdersTrend,
+  type DashboardKpis as KpisType,
+} from '../api/client';
+import './DashboardPage.css';
 
-const { Title } = Typography;
+const { Title, Text } = Typography;
 
 export function DashboardPage() {
   const [kpis, setKpis] = useState<KpisType | null>(null);
   const [trend, setTrend] = useState<{ date: string; count: number }[]>([]);
+  const [dashboardAnnouncement, setDashboardAnnouncement] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let cancelled = false;
     async function load() {
       try {
-        const [kpisRes, trendRes] = await Promise.all([
+        const [kpisRes, trendRes, settingsRes] = await Promise.all([
           getDashboardKpis(),
           getOrdersTrend(7),
+          getLabSettings().catch(() => null),
         ]);
         if (!cancelled) {
           setKpis(kpisRes);
           setTrend(trendRes);
+          setDashboardAnnouncement(settingsRes?.dashboardAnnouncementText?.trim() || null);
         }
       } catch {
         if (!cancelled) message.error('Failed to load dashboard');
@@ -56,7 +66,20 @@ export function DashboardPage() {
   };
 
   return (
-    <div>
+    <div className="dashboard-page">
+      {dashboardAnnouncement ? (
+        <div className="dashboard-announcement-banner">
+          <Space align="start" size={12}>
+            <div className="dashboard-announcement-icon">
+              <NotificationOutlined />
+            </div>
+            <div className="dashboard-announcement-copy">
+              <Text className="dashboard-announcement-label">System announcement</Text>
+              <Text className="dashboard-announcement-text">{dashboardAnnouncement}</Text>
+            </div>
+          </Space>
+        </div>
+      ) : null}
       <Title level={4}>Dashboard</Title>
 
       <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>

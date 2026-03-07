@@ -94,4 +94,5 @@ export declare class InstrumentsService {
     private buildGatewayDedupKey;
     private normalizeInstrumentInput;
     private assertInstrumentTransportPolicy;
+    private assertNoConnectionConflict;
 }

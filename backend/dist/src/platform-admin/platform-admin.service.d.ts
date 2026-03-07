@@ -311,6 +311,7 @@ export declare class PlatformAdminService {
             testIds: string[];
         }[];
         referringDoctors: string[];
+        dashboardAnnouncementText: string | null;
     }>;
     updateLabSettings(labId: string, data: {
         labelSequenceBy?: string;
@@ -332,6 +333,7 @@ export declare class PlatformAdminService {
         };
         reportStyle?: ReportStyleConfig | null;
         referringDoctors?: string[] | null;
+        dashboardAnnouncementText?: string | null;
     }): Promise<{
         id: string;
         code: string;
@@ -361,6 +363,7 @@ export declare class PlatformAdminService {
             testIds: string[];
         }[];
         referringDoctors: string[];
+        dashboardAnnouncementText: string | null;
     }>;
     getLabUsers(labId: string, actor?: PlatformActorContext): Promise<User[]>;
     getLabUser(userId: string, labId: string, actor?: PlatformActorContext): Promise<{

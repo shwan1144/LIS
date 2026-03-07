@@ -694,6 +694,7 @@ export async function getAdminLabSettings(labId: string): Promise<LabSettingsDto
 export async function updateAdminLabSettings(
   labId: string,
   data: {
+    dashboardAnnouncementText?: string | null;
     labelSequenceBy?: 'tube_type' | 'department';
     sequenceResetBy?: 'day' | 'shift';
     enableOnlineResults?: boolean;
@@ -1979,6 +1980,7 @@ export interface LabSettingsDto {
   code: string;
   name: string;
   reportDesignFingerprint: string;
+  dashboardAnnouncementText: string | null;
   labelSequenceBy: 'tube_type' | 'department';
   sequenceResetBy: 'day' | 'shift';
   enableOnlineResults: boolean;

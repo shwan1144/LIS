@@ -3,12 +3,18 @@ import { ActivateGatewayDto } from './dto/activate-gateway.dto';
 import { RefreshGatewayTokenDto } from './dto/refresh-gateway-token.dto';
 import { GatewayMessageDto } from './dto/gateway-message.dto';
 import { GatewayHeartbeatDto } from './dto/gateway-heartbeat.dto';
+import { GatewayUiLoginDto } from './dto/gateway-ui-login.dto';
+import { GatewayUiRefreshDto } from './dto/gateway-ui-refresh.dto';
 interface RequestWithGatewayAuth {
     user: {
         gatewayId: string;
         labId: string;
         scope: string[];
     };
+}
+interface RequestWithMeta {
+    ip?: string | null;
+    headers: Record<string, string | string[] | undefined>;
 }
 export declare class GatewayController {
     private readonly gatewayService;
@@ -24,6 +30,8 @@ export declare class GatewayController {
         refreshToken: string;
         expiresInSec: number;
     }>;
+    gatewayUiLogin(req: RequestWithMeta, dto: GatewayUiLoginDto): Promise<import("../auth/dto/login-response.dto").LoginResponseDto>;
+    gatewayUiRefresh(req: RequestWithMeta, dto: GatewayUiRefreshDto): Promise<import("../auth/dto/login-response.dto").LoginResponseDto>;
     getConfig(req: RequestWithGatewayAuth): Promise<{
         gatewayId: string;
         pollIntervalSec: number;

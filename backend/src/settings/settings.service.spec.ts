@@ -39,6 +39,7 @@ function createLab(overrides: Partial<Lab> = {}): Lab {
     reportStyle: null,
     uiTestGroups: [],
     referringDoctors: [],
+    dashboardAnnouncementText: null,
     ...overrides,
   } as Lab;
 }
@@ -115,6 +116,63 @@ describe('SettingsService referringDoctors', () => {
     const result = await service.getLabSettings('lab-id');
 
     expect(result.referringDoctors).toEqual(['Dr Noor']);
+  });
+
+  it('reads dashboard announcement text when present', async () => {
+    const lab = createLab({
+      dashboardAnnouncementText: 'System maintenance at 8 PM',
+    });
+    const service = createService({
+      findOne: jest.fn().mockResolvedValue(lab),
+      save: jest.fn().mockResolvedValue(lab),
+    });
+
+    const result = await service.getLabSettings('lab-id');
+
+    expect(result.dashboardAnnouncementText).toBe('System maintenance at 8 PM');
+  });
+
+  it('trims dashboard announcement text when saving', async () => {
+    const lab = createLab();
+    const findOne = jest.fn().mockResolvedValue(lab);
+    const save = jest.fn().mockImplementation(async (entity: Lab) => entity);
+    const service = createService({ findOne, save });
+
+    const result = await service.updateLabSettings('lab-id', {
+      dashboardAnnouncementText: '  System maintenance at 8 PM  ',
+    });
+
+    expect(save).toHaveBeenCalled();
+    expect(result.dashboardAnnouncementText).toBe('System maintenance at 8 PM');
+  });
+
+  it('clears dashboard announcement text when blank string is saved', async () => {
+    const lab = createLab({
+      dashboardAnnouncementText: 'Old message',
+    });
+    const findOne = jest.fn().mockResolvedValue(lab);
+    const save = jest.fn().mockImplementation(async (entity: Lab) => entity);
+    const service = createService({ findOne, save });
+
+    const result = await service.updateLabSettings('lab-id', {
+      dashboardAnnouncementText: '   ',
+    });
+
+    expect(result.dashboardAnnouncementText).toBeNull();
+  });
+
+  it('rejects overlong dashboard announcement text', async () => {
+    const lab = createLab();
+    const service = createService({
+      findOne: jest.fn().mockResolvedValue(lab),
+      save: jest.fn().mockResolvedValue(lab),
+    });
+
+    await expect(
+      service.updateLabSettings('lab-id', {
+        dashboardAnnouncementText: 'A'.repeat(256),
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
   });
 
   it('saves validated reportStyle config', async () => {

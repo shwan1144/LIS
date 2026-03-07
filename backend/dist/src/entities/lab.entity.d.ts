@@ -29,6 +29,7 @@ export declare class Lab {
         testIds: string[];
     }[] | null;
     referringDoctors: string[];
+    dashboardAnnouncementText: string | null;
     createdAt: Date;
     updatedAt: Date;
     userAssignments: UserLabAssignment[];

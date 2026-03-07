@@ -31,6 +31,7 @@ import {
   getAdminOrderResultsPdf,
   getAdminOrders,
   getAdminSummary,
+  updateAdminLabSettings,
   type AdminLabDto,
   type AdminOrderListItem,
   type AdminSummaryDto,
@@ -68,6 +69,8 @@ export function AdminLabDetailsPage() {
   const [settings, setSettings] = useState<LabSettingsDto | null>(null);
   const [loadingSettings, setLoadingSettings] = useState(false);
   const [settingsLoaded, setSettingsLoaded] = useState(false);
+  const [dashboardAnnouncementDraft, setDashboardAnnouncementDraft] = useState('');
+  const [savingDashboardAnnouncement, setSavingDashboardAnnouncement] = useState(false);
 
   const [orders, setOrders] = useState<AdminOrderListItem[]>([]);
   const [ordersLoading, setOrdersLoading] = useState(false);
@@ -156,6 +159,7 @@ export function AdminLabDetailsPage() {
       try {
         const data = await getAdminLabSettings(labId);
         setSettings(data);
+        setDashboardAnnouncementDraft(data.dashboardAnnouncementText ?? '');
         setSettingsLoaded(true);
       } catch (error) {
         message.error(getErrorMessage(error) || 'Failed to load lab settings');
@@ -342,6 +346,35 @@ export function AdminLabDetailsPage() {
       message.error(blobMessage || getErrorMessage(error) || 'Failed to open results PDF');
     } finally {
       setDownloadingOrderId(null);
+    }
+  };
+
+  const currentDashboardAnnouncement = settings?.dashboardAnnouncementText ?? '';
+  const normalizedDashboardAnnouncementDraft = dashboardAnnouncementDraft.trim();
+  const hasDashboardAnnouncementChanges =
+    normalizedDashboardAnnouncementDraft !== currentDashboardAnnouncement;
+
+  const handleSaveDashboardAnnouncement = async (value: string | null) => {
+    if (!labId || !canMutate) {
+      if (!canMutate) {
+        message.warning('Only SUPER_ADMIN can update the dashboard announcement.');
+      }
+      return;
+    }
+    setSavingDashboardAnnouncement(true);
+    try {
+      const updated = await updateAdminLabSettings(labId, {
+        dashboardAnnouncementText: value,
+      });
+      setSettings(updated);
+      setDashboardAnnouncementDraft(updated.dashboardAnnouncementText ?? '');
+      message.success(
+        updated.dashboardAnnouncementText ? 'Dashboard announcement saved' : 'Dashboard announcement cleared',
+      );
+    } catch (error) {
+      message.error(getErrorMessage(error) || 'Failed to save dashboard announcement');
+    } finally {
+      setSavingDashboardAnnouncement(false);
     }
   };
 
@@ -561,6 +594,9 @@ export function AdminLabDetailsPage() {
                     <Descriptions.Item label="Sequence Reset">
                       {settings?.sequenceResetBy || '-'}
                     </Descriptions.Item>
+                    <Descriptions.Item label="Dashboard Announcement">
+                      {settings?.dashboardAnnouncementText || '-'}
+                    </Descriptions.Item>
                     <Descriptions.Item label="Report Banner">
                       {settings?.reportBranding?.bannerDataUrl ? 'Uploaded' : 'Default'}
                     </Descriptions.Item>
@@ -574,6 +610,59 @@ export function AdminLabDetailsPage() {
                       {settings?.reportBranding?.watermarkDataUrl ? 'Uploaded' : 'Default'}
                     </Descriptions.Item>
                   </Descriptions>
+
+                  <Card
+                    size="small"
+                    title="Dashboard Announcement"
+                    loading={loadingSettings}
+                  >
+                    <Space direction="vertical" size={12} style={{ width: '100%' }}>
+                      <Text type="secondary">
+                        This message appears only on the lab dashboard. Leave it empty to hide the banner.
+                      </Text>
+                      <Input
+                        maxLength={255}
+                        showCount
+                        value={dashboardAnnouncementDraft}
+                        onChange={(event) => setDashboardAnnouncementDraft(event.target.value)}
+                        placeholder="Enter announcement text"
+                        disabled={loadingSettings || savingDashboardAnnouncement || !canMutate}
+                      />
+                      {!canMutate ? (
+                        <Tag color="orange">Read-only mode</Tag>
+                      ) : null}
+                      <Space wrap>
+                        <Button
+                          type="primary"
+                          onClick={() =>
+                            void handleSaveDashboardAnnouncement(
+                              normalizedDashboardAnnouncementDraft || null,
+                            )
+                          }
+                          loading={savingDashboardAnnouncement}
+                          disabled={
+                            loadingSettings ||
+                            savingDashboardAnnouncement ||
+                            !canMutate ||
+                            !hasDashboardAnnouncementChanges
+                          }
+                        >
+                          Save Announcement
+                        </Button>
+                        <Button
+                          onClick={() => void handleSaveDashboardAnnouncement(null)}
+                          disabled={
+                            loadingSettings ||
+                            savingDashboardAnnouncement ||
+                            !canMutate ||
+                            (!currentDashboardAnnouncement && !normalizedDashboardAnnouncementDraft)
+                          }
+                        >
+                          Clear
+                        </Button>
+                      </Space>
+                    </Space>
+                  </Card>
 
                   <Space wrap>
                     <Button

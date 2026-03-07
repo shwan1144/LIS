@@ -20,6 +20,8 @@ const activate_gateway_dto_1 = require("./dto/activate-gateway.dto");
 const refresh_gateway_token_dto_1 = require("./dto/refresh-gateway-token.dto");
 const gateway_message_dto_1 = require("./dto/gateway-message.dto");
 const gateway_heartbeat_dto_1 = require("./dto/gateway-heartbeat.dto");
+const gateway_ui_login_dto_1 = require("./dto/gateway-ui-login.dto");
+const gateway_ui_refresh_dto_1 = require("./dto/gateway-ui-refresh.dto");
 let GatewayController = class GatewayController {
     constructor(gatewayService) {
         this.gatewayService = gatewayService;
@@ -29,6 +31,18 @@ let GatewayController = class GatewayController {
     }
     async refreshToken(dto) {
         return this.gatewayService.refreshGatewayToken(dto);
+    }
+    async gatewayUiLogin(req, dto) {
+        return this.gatewayService.gatewayUiLogin(dto, {
+            ipAddress: req.ip ?? null,
+            userAgent: typeof req.headers['user-agent'] === 'string' ? req.headers['user-agent'] : null,
+        });
+    }
+    async gatewayUiRefresh(req, dto) {
+        return this.gatewayService.gatewayUiRefresh(dto, {
+            ipAddress: req.ip ?? null,
+            userAgent: typeof req.headers['user-agent'] === 'string' ? req.headers['user-agent'] : null,
+        });
     }
     async getConfig(req) {
         return this.gatewayService.getGatewayConfig(req.user);
@@ -57,6 +71,24 @@ __decorate([
     __metadata("design:paramtypes", [refresh_gateway_token_dto_1.RefreshGatewayTokenDto]),
     __metadata("design:returntype", Promise)
 ], GatewayController.prototype, "refreshToken", null);
+__decorate([
+    (0, common_1.Post)('ui/login'),
+    (0, common_1.UsePipes)(new common_1.ValidationPipe({ whitelist: true })),
+    __param(0, (0, common_1.Req)()),
+    __param(1, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, gateway_ui_login_dto_1.GatewayUiLoginDto]),
+    __metadata("design:returntype", Promise)
+], GatewayController.prototype, "gatewayUiLogin", null);
+__decorate([
+    (0, common_1.Post)('ui/refresh'),
+    (0, common_1.UsePipes)(new common_1.ValidationPipe({ whitelist: true })),
+    __param(0, (0, common_1.Req)()),
+    __param(1, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, gateway_ui_refresh_dto_1.GatewayUiRefreshDto]),
+    __metadata("design:returntype", Promise)
+], GatewayController.prototype, "gatewayUiRefresh", null);
 __decorate([
     (0, common_1.Get)('config'),
     (0, common_1.UseGuards)(gateway_auth_guard_1.GatewayAuthGuard),
