@@ -30,6 +30,7 @@ import {
 } from '../../api/client';
 import { useAuth } from '../../contexts/AuthContext';
 import { useAdminLabSelection } from './useAdminLabSelection';
+import './AdminLabReportDesignPage.css';
 
 const { Title, Text } = Typography;
 const MAX_BANNER_FOOTER_BYTES = Math.floor(2.75 * 1024 * 1024);
@@ -700,14 +701,33 @@ export function AdminLabReportDesignPage() {
   };
 
   return (
-    <div>
-      <Title level={4} style={{ marginTop: 0 }}>
-        Report Design
-      </Title>
-      <Text type="secondary">Manage report branding and style per lab from admin panel.</Text>
+    <div className="admin-report-design-page">
+      <div className="admin-report-design-hero">
+        <div>
+          <Title level={3} className="admin-report-design-title">
+            Report Design Studio
+          </Title>
+          <Text className="admin-report-design-subtitle">
+            Configure report branding, styling, and live previews for each laboratory.
+          </Text>
+        </div>
+        <Space wrap className="admin-report-design-hero-tags">
+          <Tag color={canMutate ? 'geekblue' : 'orange'}>
+            {canMutate ? 'Edit mode' : 'Read-only mode'}
+          </Tag>
+          {selectedLab ? (
+            <Tag color="cyan">{selectedLab.code}</Tag>
+          ) : (
+            <Tag>Select a lab</Tag>
+          )}
+          <Tag color={hasChanges ? 'gold' : 'green'}>
+            {hasChanges ? 'Unsaved changes' : 'All changes saved'}
+          </Tag>
+        </Space>
+      </div>
 
-      <Card style={{ marginTop: 16 }}>
-        <div style={{ maxWidth: 420 }}>
+      <Card className="admin-report-design-lab-card">
+        <div className="admin-report-design-lab-picker">
           <Text strong>Select lab</Text>
           <Select
             style={{ width: '100%', marginTop: 8 }}
@@ -724,7 +744,7 @@ export function AdminLabReportDesignPage() {
       </Card>
 
       {!selectedLab ? (
-        <Card style={{ marginTop: 16 }}>
+        <Card className="admin-report-design-empty-card">
           <Empty description="No lab selected" />
         </Card>
       ) : (
@@ -732,7 +752,7 @@ export function AdminLabReportDesignPage() {
           <Alert
             type="info"
             showIcon
-            style={{ marginTop: 16 }}
+            className="admin-report-design-selected-alert"
             message={`${selectedLab.name} (${selectedLab.code})`}
             description={
               canMutate
@@ -742,7 +762,7 @@ export function AdminLabReportDesignPage() {
           />
 
           <Tabs
-            style={{ marginTop: 16 }}
+            className="admin-report-design-tabs"
             defaultActiveKey="pdf-design"
             activeKey={activeTabKey}
             onChange={setActiveTabKey}
@@ -756,27 +776,16 @@ export function AdminLabReportDesignPage() {
                       const currentImage = branding[item.key];
                       return (
                         <Col key={item.key} xs={24} lg={12}>
-                          <Card title={item.title} loading={loading}>
-                            <Text type="secondary" style={{ display: 'block', marginBottom: 4 }}>
-                              Recommended size: {item.recommendedSize}
-                            </Text>
+                          <Card title={item.title} loading={loading} className="admin-report-design-image-card">
+                            <Space size={8} wrap style={{ marginBottom: 8 }}>
+                              <Tag color="blue">Recommended: {item.recommendedSize}</Tag>
+                              <Tag>Max: {formatMegabytes(item.maxBytes)} MB</Tag>
+                            </Space>
                             <Text type="secondary" style={{ display: 'block', marginBottom: 12 }}>
                               {item.note}
                             </Text>
 
-                            <div
-                              style={{
-                                border: '1px dashed #d9d9d9',
-                                borderRadius: 8,
-                                minHeight: 120,
-                                padding: 8,
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                marginBottom: 12,
-                                background: '#fafafa',
-                              }}
-                            >
+                            <div className="admin-report-design-image-preview">
                               {currentImage ? (
                                 <img
                                   src={currentImage}
@@ -826,7 +835,7 @@ export function AdminLabReportDesignPage() {
                 children: (
                   <Row gutter={[16, 16]}>
                     <Col xs={24} xl={14}>
-                      <Card title="Style Controls" loading={loading}>
+                      <Card title="Style Controls" loading={loading} className="admin-report-design-style-controls">
                         <Row gutter={[16, 16]}>
                           <Col xs={24}>
                             <Card size="small" title="Patient Information">
@@ -1218,9 +1227,9 @@ export function AdminLabReportDesignPage() {
                       </Card>
                     </Col>
                     <Col xs={24} xl={10}>
-                      <div style={{ position: 'sticky', top: 16 }}>
+                      <div className="admin-report-design-live-pane">
                         <div ref={previewCardRef}>
-                          <Card title="Live Preview" loading={loading}>
+                          <Card title="Live Preview" loading={loading} className="admin-report-design-live-card">
                             <div
                               style={{
                                 border: `1px solid ${reportStyle.patientInfo.borderColor}`,
@@ -1404,7 +1413,7 @@ export function AdminLabReportDesignPage() {
                             </div>
                           </Card>
                         </div>
-                        <Card title="Full Report Preview" style={{ marginTop: 12 }} loading={loading}>
+                        <Card title="Full Report Preview" className="admin-report-design-full-preview-card" loading={loading}>
                           <Text type="secondary" style={{ display: 'block', marginBottom: 8 }}>
                             Select a real order from this lab, then refresh to render a full PDF with unsaved draft design.
                           </Text>
@@ -1457,13 +1466,7 @@ export function AdminLabReportDesignPage() {
                             <iframe
                               title="Full report PDF preview"
                               src={fullPreviewPdfUrl}
-                              style={{
-                                marginTop: 12,
-                                width: '100%',
-                                minHeight: 720,
-                                border: '1px solid #d9d9d9',
-                                borderRadius: 8,
-                              }}
+                              className="admin-report-design-full-preview-frame"
                             />
                           ) : null}
                         </Card>
@@ -1476,23 +1479,11 @@ export function AdminLabReportDesignPage() {
                 key: 'online-watermark',
                 label: 'Online Result Watermark',
                 children: (
-                  <Card title="Online Result Watermark" loading={loading}>
+                  <Card title="Online Result Watermark" loading={loading} className="admin-report-design-online-card">
                     <Text type="secondary" style={{ display: 'block', marginBottom: 12 }}>
                       Optional image/text watermark for patient online result page.
                     </Text>
-                    <div
-                      style={{
-                        border: '1px dashed #d9d9d9',
-                        borderRadius: 8,
-                        minHeight: 140,
-                        padding: 10,
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        marginBottom: 12,
-                        background: '#fafafa',
-                      }}
-                    >
+                    <div className="admin-report-design-online-preview">
                       {onlineResultWatermarkDataUrl ? (
                         <img
                           src={onlineResultWatermarkDataUrl}
@@ -1544,8 +1535,8 @@ export function AdminLabReportDesignPage() {
             ]}
           />
 
-          <div style={{ marginTop: 16 }}>
-            <Space>
+          <div className="admin-report-design-action-bar">
+            <Space wrap>
               <Button
                 type="primary"
                 onClick={() => void handleSave()}
