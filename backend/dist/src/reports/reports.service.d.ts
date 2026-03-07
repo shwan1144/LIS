@@ -35,11 +35,6 @@ export interface PublicResultStatus {
     verifiedAt: string | null;
     tests: PublicResultTestItem[];
 }
-export interface PublicResultHistoryItem {
-    orderId: string;
-    orderNumber: string;
-    registeredAt: string;
-}
 export type ReportActionKind = 'PDF' | 'PRINT' | 'WHATSAPP' | 'VIBER';
 export type ReportActionFlags = {
     pdf: boolean;
@@ -100,12 +95,6 @@ export declare class ReportsService implements OnModuleInit, OnModuleDestroy {
     private assertAllResultsEnteredForReport;
     private loadOrderResultsSnapshot;
     getPublicResultStatus(orderId: string): Promise<PublicResultStatus>;
-    searchPublicResultHistory(input: {
-        labId: string;
-        patientNumber: string;
-        birthYear: number;
-        limit?: number;
-    }): Promise<PublicResultHistoryItem[]>;
     generatePublicTestResultsPDF(orderId: string): Promise<Buffer>;
     generateDraftTestResultsPreviewPDF(input: {
         orderId: string;
