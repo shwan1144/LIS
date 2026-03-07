@@ -28,11 +28,13 @@ const test_entity_1 = require("../entities/test.entity");
 const pricing_entity_1 = require("../entities/pricing.entity");
 const test_component_entity_1 = require("../entities/test-component.entity");
 const lab_orders_worklist_entity_1 = require("../entities/lab-orders-worklist.entity");
+const audit_log_entity_1 = require("../entities/audit-log.entity");
 const create_order_response_dto_1 = require("./dto/create-order-response.dto");
+const audit_service_1 = require("../audit/audit.service");
 const lab_counter_util_1 = require("../database/lab-counter.util");
 const lab_timezone_util_1 = require("../database/lab-timezone.util");
 let OrdersService = OrdersService_1 = class OrdersService {
-    constructor(orderRepo, patientRepo, labRepo, shiftRepo, testRepo, pricingRepo, testComponentRepo, worklistRepo) {
+    constructor(orderRepo, patientRepo, labRepo, shiftRepo, testRepo, pricingRepo, testComponentRepo, worklistRepo, auditService) {
         this.orderRepo = orderRepo;
         this.patientRepo = patientRepo;
         this.labRepo = labRepo;
@@ -41,6 +43,7 @@ let OrdersService = OrdersService_1 = class OrdersService {
         this.pricingRepo = pricingRepo;
         this.testComponentRepo = testComponentRepo;
         this.worklistRepo = worklistRepo;
+        this.auditService = auditService;
         this.logger = new common_1.Logger(OrdersService_1.name);
         this.createPerfLogThresholdMs = this.resolveCreatePerfLogThresholdMs();
         this.orderHistoryPerfLogThresholdMs = this.resolveOrderHistoryPerfLogThresholdMs();
@@ -431,12 +434,16 @@ let OrdersService = OrdersService_1 = class OrdersService {
         await this.orderRepo.save(order);
         return this.findOne(id, labId);
     }
-    async updateOrderTests(id, labId, testIds) {
+    async updateOrderTests(id, labId, testIds, actor, actorRole, options) {
         const uniqueTestIds = [...new Set((testIds ?? []).map((testId) => testId?.trim()).filter(Boolean))];
         if (uniqueTestIds.length === 0) {
             throw new common_1.BadRequestException('At least one test is required');
         }
-        const updatedOrderId = await this.orderRepo.manager.transaction(async (manager) => {
+        const desiredSet = new Set(uniqueTestIds);
+        const requestedRemovalReason = options?.removalReason?.trim() || null;
+        const forceRemoveVerified = options?.forceRemoveVerified === true;
+        const canForceRemoveVerified = this.canForceRemoveVerified(actor, actorRole);
+        const updateResult = await this.orderRepo.manager.transaction(async (manager) => {
             const orderRepo = manager.getRepository(order_entity_1.Order);
             const sampleRepo = manager.getRepository(sample_entity_1.Sample);
             const orderTestRepo = manager.getRepository(order_test_entity_1.OrderTest);
@@ -454,6 +461,7 @@ let OrdersService = OrdersService_1 = class OrdersService {
             const allOrderTests = order.samples.flatMap((sample) => sample.orderTests ?? []);
             const rootOrderTests = allOrderTests.filter((orderTest) => !orderTest.parentOrderTestId);
             const existingRootTestIdSet = new Set(rootOrderTests.map((orderTest) => orderTest.testId));
+            const existingRootByTestId = new Map(rootOrderTests.map((orderTest) => [orderTest.testId, orderTest]));
             const childOrderTestsByParent = new Map();
             for (const orderTest of allOrderTests) {
                 if (!orderTest.parentOrderTestId)
@@ -462,21 +470,35 @@ let OrdersService = OrdersService_1 = class OrdersService {
                 list.push(orderTest);
                 childOrderTestsByParent.set(orderTest.parentOrderTestId, list);
             }
-            const lockedRootIds = new Set();
-            for (const rootOrderTest of rootOrderTests) {
-                const childOrderTests = childOrderTestsByParent.get(rootOrderTest.id) ?? [];
-                const isLocked = this.isOrderTestProcessed(rootOrderTest) ||
-                    childOrderTests.some((childOrderTest) => this.isOrderTestProcessed(childOrderTest));
-                if (isLocked) {
-                    lockedRootIds.add(rootOrderTest.id);
-                }
-            }
-            const removedLockedRoots = rootOrderTests.filter((orderTest) => lockedRootIds.has(orderTest.id) && !new Set(uniqueTestIds).has(orderTest.testId));
-            if (removedLockedRoots.length > 0) {
-                const labels = removedLockedRoots
-                    .map((orderTest) => orderTest.test?.code || orderTest.test?.name || orderTest.testId)
+            const rootsToRemove = rootOrderTests
+                .filter((orderTest) => !desiredSet.has(orderTest.testId))
+                .map((orderTest) => {
+                const childOrderTests = childOrderTestsByParent.get(orderTest.id) ?? [];
+                const access = this.getRootOrderTestRemovalAccess(orderTest, childOrderTests);
+                return {
+                    orderTest,
+                    childOrderTests,
+                    access,
+                };
+            });
+            const blockedRemovals = rootsToRemove.filter(({ access }) => !access.removable);
+            if (blockedRemovals.length > 0) {
+                const labels = blockedRemovals
+                    .map(({ orderTest }) => this.getOrderTestLabel(orderTest))
                     .join(', ');
-                throw new common_1.BadRequestException(`Cannot remove completed/entered tests: ${labels}. You can remove only pending tests.`);
+                throw new common_1.BadRequestException(`Cannot remove completed/entered tests: ${labels}. You can remove only pending or rejected tests.`);
+            }
+            const verifiedOverrideRemovals = rootsToRemove.filter(({ access }) => access.requiresVerifiedOverride);
+            if (verifiedOverrideRemovals.length > 0) {
+                const labels = verifiedOverrideRemovals
+                    .map(({ orderTest }) => this.getOrderTestLabel(orderTest))
+                    .join(', ');
+                if (!canForceRemoveVerified || !forceRemoveVerified) {
+                    throw new common_1.BadRequestException(`Admin override is required to remove verified tests: ${labels}.`);
+                }
+                if (!requestedRemovalReason) {
+                    throw new common_1.BadRequestException('Removal reason is required when removing verified tests.');
+                }
             }
             const tests = await testRepo.find({
                 where: uniqueTestIds.map((testId) => ({ id: testId, labId })),
@@ -489,11 +511,7 @@ let OrdersService = OrdersService_1 = class OrdersService {
                 throw new common_1.BadRequestException('Cannot add inactive tests to an existing order');
             }
             const testMap = new Map(tests.map((test) => [test.id, test]));
-            const existingRootByTestId = new Map(rootOrderTests.map((orderTest) => [orderTest.testId, orderTest]));
-            const desiredSet = new Set(uniqueTestIds);
-            const rootIdsToRemove = rootOrderTests
-                .filter((orderTest) => !desiredSet.has(orderTest.testId) && !lockedRootIds.has(orderTest.id))
-                .map((orderTest) => orderTest.id);
+            const rootIdsToRemove = rootsToRemove.map(({ orderTest }) => orderTest.id);
             if (rootIdsToRemove.length > 0) {
                 await orderTestRepo.delete(rootIdsToRemove);
             }
@@ -579,15 +597,76 @@ let OrdersService = OrdersService_1 = class OrdersService {
             order.totalAmount = Math.round(subtotal * 100) / 100;
             order.finalAmount =
                 Math.round(order.totalAmount * (1 - normalizedDiscount / 100) * 100) / 100;
-            order.status = order_entity_1.OrderStatus.REGISTERED;
+            const normalizedPaymentStatus = this.normalizePaymentStatus(order.paymentStatus);
+            const nextPaidAmount = this.resolveUpdatedPaidAmount(normalizedPaymentStatus, order.paidAmount != null ? Number(order.paidAmount) : null, order.finalAmount);
+            const addedRootTests = uniqueTestIds.filter((testId) => !existingRootByTestId.has(testId));
+            const remainingRootStatuses = [
+                ...rootOrderTests
+                    .filter((orderTest) => !rootIdsToRemove.includes(orderTest.id))
+                    .map((orderTest) => orderTest.status),
+                ...addedRootTests.map(() => order_test_entity_1.OrderTestStatus.PENDING),
+            ];
+            order.status = remainingRootStatuses.some((status) => status === order_test_entity_1.OrderTestStatus.PENDING || status === order_test_entity_1.OrderTestStatus.IN_PROGRESS)
+                ? order_entity_1.OrderStatus.REGISTERED
+                : order_entity_1.OrderStatus.COMPLETED;
             await orderRepo.update({ id: order.id, labId }, {
                 totalAmount: order.totalAmount,
                 finalAmount: order.finalAmount,
+                paidAmount: nextPaidAmount,
                 status: order.status,
             });
-            return order.id;
+            return {
+                orderId: order.id,
+                originalRootTests: rootOrderTests.map((orderTest) => this.buildRootOrderTestAuditItem(orderTest, childOrderTestsByParent.get(orderTest.id) ?? [], false)),
+                removedRootTests: rootsToRemove.map(({ orderTest, childOrderTests, access }) => this.buildRootOrderTestAuditItem(orderTest, childOrderTests, access.requiresVerifiedOverride)),
+                addedTests: addedRootTests
+                    .map((testId) => testMap.get(testId))
+                    .filter((test) => Boolean(test))
+                    .map((test) => ({
+                    id: test.id,
+                    code: test.code,
+                    name: test.name,
+                })),
+                verifiedRemovalOverrideUsed: verifiedOverrideRemovals.length > 0,
+                removalReason: verifiedOverrideRemovals.length > 0 ? requestedRemovalReason : null,
+            };
         });
-        return this.findOne(updatedOrderId, labId);
+        if (updateResult.removedRootTests.length > 0 || updateResult.addedTests.length > 0) {
+            const removedLabels = updateResult.removedRootTests
+                .map((item) => item.code || item.name || item.testId)
+                .join(', ');
+            const addedLabels = updateResult.addedTests
+                .map((item) => item.code || item.name || item.id)
+                .join(', ');
+            const descriptionParts = ['Updated order tests'];
+            if (removedLabels) {
+                descriptionParts.push(`removed ${removedLabels}`);
+            }
+            if (addedLabels) {
+                descriptionParts.push(`added ${addedLabels}`);
+            }
+            await this.auditService.log({
+                actorType: actor.actorType,
+                actorId: actor.actorId,
+                labId,
+                userId: actor.userId,
+                action: audit_log_entity_1.AuditAction.ORDER_UPDATE,
+                entityType: 'order',
+                entityId: updateResult.orderId,
+                oldValues: {
+                    rootTests: updateResult.originalRootTests,
+                },
+                newValues: {
+                    testIds: uniqueTestIds,
+                    removedRootTests: updateResult.removedRootTests,
+                    addedTests: updateResult.addedTests,
+                    verifiedRemovalOverrideUsed: updateResult.verifiedRemovalOverrideUsed,
+                    removalReason: updateResult.removalReason,
+                },
+                description: descriptionParts.join('; '),
+            });
+        }
+        return this.findOne(updateResult.orderId, labId);
     }
     splitSamplesForDepartmentLabels(samples, testMap) {
         const groupedSamples = new Map();
@@ -747,13 +826,67 @@ let OrdersService = OrdersService_1 = class OrdersService {
             return `${prefix}-${String(fallbackSeq).padStart(2, '0')}`;
         };
     }
-    isOrderTestProcessed(orderTest) {
-        return (orderTest.status !== order_test_entity_1.OrderTestStatus.PENDING ||
-            orderTest.resultValue !== null ||
-            (orderTest.resultText?.trim()?.length ?? 0) > 0 ||
-            (orderTest.resultParameters != null && Object.keys(orderTest.resultParameters).length > 0) ||
-            orderTest.resultedAt !== null ||
-            orderTest.verifiedAt !== null);
+    canForceRemoveVerified(actor, actorRole) {
+        return (actor.isImpersonation ||
+            actorRole === 'LAB_ADMIN' ||
+            actorRole === 'SUPER_ADMIN');
+    }
+    getRootOrderTestRemovalAccess(rootOrderTest, childOrderTests) {
+        const subtree = [rootOrderTest, ...childOrderTests];
+        const hasVerified = subtree.some((orderTest) => orderTest.status === order_test_entity_1.OrderTestStatus.VERIFIED);
+        if (hasVerified) {
+            return {
+                removable: true,
+                requiresVerifiedOverride: true,
+                blockedReason: null,
+            };
+        }
+        if (rootOrderTest.status === order_test_entity_1.OrderTestStatus.REJECTED) {
+            return {
+                removable: true,
+                requiresVerifiedOverride: false,
+                blockedReason: null,
+            };
+        }
+        if (rootOrderTest.status === order_test_entity_1.OrderTestStatus.PENDING &&
+            childOrderTests.every((orderTest) => orderTest.status === order_test_entity_1.OrderTestStatus.PENDING)) {
+            return {
+                removable: true,
+                requiresVerifiedOverride: false,
+                blockedReason: null,
+            };
+        }
+        return {
+            removable: false,
+            requiresVerifiedOverride: false,
+            blockedReason: 'Completed or entered tests cannot be removed.',
+        };
+    }
+    buildRootOrderTestAuditItem(rootOrderTest, childOrderTests, requiresVerifiedOverride) {
+        return {
+            id: rootOrderTest.id,
+            testId: rootOrderTest.testId,
+            code: rootOrderTest.test?.code ?? '',
+            name: rootOrderTest.test?.name ?? '',
+            status: rootOrderTest.status,
+            requiresVerifiedOverride,
+            isPanel: childOrderTests.length > 0,
+        };
+    }
+    getOrderTestLabel(orderTest) {
+        return orderTest.test?.code || orderTest.test?.name || orderTest.testId;
+    }
+    resolveUpdatedPaidAmount(paymentStatus, currentPaidAmount, finalAmount) {
+        if (paymentStatus === 'unpaid') {
+            return null;
+        }
+        if (paymentStatus === 'paid') {
+            return finalAmount;
+        }
+        if (currentPaidAmount == null) {
+            return null;
+        }
+        return Math.min(Number(currentPaidAmount), finalAmount);
     }
     async findPricing(labId, testId, shiftId, patientType) {
         const baseQb = this.pricingRepo
@@ -1400,6 +1533,7 @@ exports.OrdersService = OrdersService = OrdersService_1 = __decorate([
         typeorm_2.Repository,
         typeorm_2.Repository,
         typeorm_2.Repository,
-        typeorm_2.Repository])
+        typeorm_2.Repository,
+        audit_service_1.AuditService])
 ], OrdersService);
 //# sourceMappingURL=orders.service.js.map

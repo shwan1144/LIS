@@ -9,6 +9,8 @@ import { TestComponent } from '../entities/test-component.entity';
 import { LabOrdersWorklist } from '../entities/lab-orders-worklist.entity';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { CreateOrderSummaryDto, CreateOrderView, OrderDetailView, OrderResultStatus } from './dto/create-order-response.dto';
+import { AuditService } from '../audit/audit.service';
+import { LabActorContext } from '../types/lab-actor-context';
 export interface WorklistItemStored {
     rowId: string;
     patientId: string;
@@ -59,11 +61,12 @@ export declare class OrdersService {
     private readonly pricingRepo;
     private readonly testComponentRepo;
     private readonly worklistRepo;
+    private readonly auditService;
     private readonly logger;
     private readonly createPerfLogThresholdMs;
     private readonly orderHistoryPerfLogThresholdMs;
     private readonly orderTestInsertChunkSize;
-    constructor(orderRepo: Repository<Order>, patientRepo: Repository<Patient>, labRepo: Repository<Lab>, shiftRepo: Repository<Shift>, testRepo: Repository<Test>, pricingRepo: Repository<Pricing>, testComponentRepo: Repository<TestComponent>, worklistRepo: Repository<LabOrdersWorklist>);
+    constructor(orderRepo: Repository<Order>, patientRepo: Repository<Patient>, labRepo: Repository<Lab>, shiftRepo: Repository<Shift>, testRepo: Repository<Test>, pricingRepo: Repository<Pricing>, testComponentRepo: Repository<TestComponent>, worklistRepo: Repository<LabOrdersWorklist>, auditService: AuditService);
     create(labId: string, dto: CreateOrderDto, view?: CreateOrderView): Promise<Order | CreateOrderSummaryDto>;
     findAll(labId: string, params: OrderListQueryParams): Promise<{
         items: Order[];
@@ -86,13 +89,20 @@ export declare class OrdersService {
     }): Promise<Order>;
     updateDiscount(id: string, labId: string, discountPercent: number): Promise<Order>;
     updateDeliveryMethods(id: string, labId: string, deliveryMethods?: unknown[]): Promise<Order>;
-    updateOrderTests(id: string, labId: string, testIds: string[]): Promise<Order>;
+    updateOrderTests(id: string, labId: string, testIds: string[], actor: LabActorContext, actorRole?: string, options?: {
+        forceRemoveVerified?: boolean;
+        removalReason?: string | null;
+    }): Promise<Order>;
     private splitSamplesForDepartmentLabels;
     private resolveSampleDepartmentScope;
     private buildSampleGroupingKey;
     private bulkCreateOrderTests;
     private createOrderSampleBarcodeAllocator;
-    private isOrderTestProcessed;
+    private canForceRemoveVerified;
+    private getRootOrderTestRemovalAccess;
+    private buildRootOrderTestAuditItem;
+    private getOrderTestLabel;
+    private resolveUpdatedPaidAmount;
     private findPricing;
     getNextOrderNumber(labId: string, shiftId: string | null): Promise<string>;
     private generateOrderNumber;

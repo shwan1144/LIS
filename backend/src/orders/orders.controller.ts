@@ -27,9 +27,17 @@ import {
 } from './dto/create-order-response.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { OrderStatus } from '../entities/order.entity';
+import { buildLabActorContext } from '../types/lab-actor-context';
 
 interface RequestWithUser {
-  user: { userId: string; username: string; labId: string };
+  user: {
+    userId?: string | null;
+    platformUserId?: string | null;
+    isImpersonation?: boolean;
+    username: string;
+    labId: string;
+    role?: string;
+  };
 }
 
 @Controller('orders')
@@ -236,10 +244,14 @@ export class OrdersController {
     @Body() dto: UpdateOrderTestsDto,
   ) {
     const labId = req.user?.labId;
+    const actor = buildLabActorContext(req.user);
     if (!labId) {
       throw new Error('Lab ID not found in token');
     }
-    return this.ordersService.updateOrderTests(id, labId, dto.testIds);
+    return this.ordersService.updateOrderTests(id, labId, dto.testIds, actor, req.user?.role, {
+      forceRemoveVerified: dto.forceRemoveVerified,
+      removalReason: dto.removalReason,
+    });
   }
 
   @Patch(':id/delivery-methods')

@@ -38,6 +38,8 @@ function App() {
   const [deviceName, setDeviceName] = useState('');
   const [apiBaseUrl, setApiBaseUrl] = useState('');
   const logRef = useRef<HTMLDivElement>(null);
+  const deviceNameTouchedRef = useRef(false);
+  const apiBaseUrlTouchedRef = useRef(false);
 
   const isActivated = Boolean(status?.activated);
 
@@ -55,13 +57,19 @@ function App() {
     setStatus(nextStatus);
     setConfig(nextConfig);
     setLogs(nextLogs);
-    if (!deviceName) {
-      const defaultName = `${navigator.platform || 'Windows'}-${Date.now().toString().slice(-4)}`;
-      setDeviceName(defaultName);
-    }
-    if (!apiBaseUrl && nextConfig?.apiBaseUrl) {
-      setApiBaseUrl(nextConfig.apiBaseUrl);
-    }
+
+    setDeviceName((prev) => {
+      if (prev || deviceNameTouchedRef.current) return prev;
+      return `${navigator.platform || 'Windows'}-${Date.now().toString().slice(-4)}`;
+    });
+
+    setApiBaseUrl((prev) => {
+      if (prev || apiBaseUrlTouchedRef.current) return prev;
+      if (typeof nextConfig?.apiBaseUrl === 'string' && nextConfig.apiBaseUrl.trim()) {
+        return nextConfig.apiBaseUrl;
+      }
+      return prev;
+    });
   };
 
   useEffect(() => {
@@ -136,14 +144,20 @@ function App() {
           <label>Cloud API Base URL</label>
           <input
             value={apiBaseUrl}
-            onChange={(e) => setApiBaseUrl(e.target.value)}
+            onChange={(e) => {
+              apiBaseUrlTouchedRef.current = true;
+              setApiBaseUrl(e.target.value);
+            }}
             placeholder="https://api.example.com"
           />
 
           <label>Device Name</label>
           <input
             value={deviceName}
-            onChange={(e) => setDeviceName(e.target.value)}
+            onChange={(e) => {
+              deviceNameTouchedRef.current = true;
+              setDeviceName(e.target.value);
+            }}
             placeholder="LAB-PC-01"
           />
 

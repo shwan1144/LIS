@@ -53,6 +53,7 @@ import {
   type DeliveryMethod,
   type PatientDto,
   type TestDto,
+  type OrderTestDto,
   type OrderDto,
   type OrderCreateSummaryDto,
   type OrderHistoryItemDto,
@@ -82,7 +83,12 @@ interface SelectedTest {
   displayLabel?: string;
   sortCategoryKey?: string;
   price?: number | null;
-  locked?: boolean;
+  removable?: boolean;
+  blocked?: boolean;
+  blockedReason?: string | null;
+  adminReasonRequired?: boolean;
+  currentStatus?: string | null;
+  isPanelRoot?: boolean;
 }
 
 function getPatientName(p: PatientDto) {
@@ -245,7 +251,7 @@ export function OrdersPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const { isDark } = useTheme();
-  const { lab, currentShiftId, currentShiftLabel } = useAuth();
+  const { user, lab, currentShiftId, currentShiftLabel } = useAuth();
   const [submitting, setSubmitting] = useState(false);
 
   const styles = useMemo(
@@ -309,6 +315,8 @@ export function OrdersPage() {
   const [editTestsModalOpen, setEditTestsModalOpen] = useState(false);
   const [editingTests, setEditingTests] = useState<SelectedTest[]>([]);
   const [savingEditedTests, setSavingEditedTests] = useState(false);
+  const [editTestsRemovalReasonModalOpen, setEditTestsRemovalReasonModalOpen] = useState(false);
+  const [editTestsRemovalReason, setEditTestsRemovalReason] = useState('');
   const [orderDetailsCache, setOrderDetailsCache] = useState<Record<string, OrderDto>>({});
   const [orderDetailsLoadingId, setOrderDetailsLoadingId] = useState<string | null>(null);
   const [orderDetailsErrors, setOrderDetailsErrors] = useState<Record<string, string>>({});
@@ -355,6 +363,10 @@ export function OrdersPage() {
       : !selectedCreatedOrder
         ? 'Order details are still loading.'
         : undefined;
+  const canAdminRemoveVerifiedTests =
+    Boolean(user?.isImpersonation) ||
+    user?.role === 'LAB_ADMIN' ||
+    user?.role === 'SUPER_ADMIN';
 
   const loadOrderHistory = useCallback(
     async (options?: {
@@ -687,7 +699,7 @@ export function OrdersPage() {
   const getRootOrderTests = (order: OrderDto): SelectedTest[] => {
     const all = (order.samples ?? []).flatMap((sample) => sample.orderTests ?? []);
     const root = all.filter((orderTest) => !orderTest.parentOrderTestId);
-    const childrenByParent = new Map<string, typeof all>();
+    const childrenByParent = new Map<string, OrderTestDto[]>();
     all.forEach((orderTest) => {
       if (!orderTest.parentOrderTestId) return;
       const current = childrenByParent.get(orderTest.parentOrderTestId) ?? [];
@@ -704,9 +716,35 @@ export function OrdersPage() {
         '-';
       const sortCategoryKey = normalizeSortToken(testMeta?.category, '~');
       const childTests = childrenByParent.get(orderTest.id) ?? [];
-      const hasProcessedChild = childTests.some((child) => child.status !== 'PENDING');
+      const subtreeHasVerified = [orderTest, ...childTests].some(
+        (candidate) => candidate.status === 'VERIFIED',
+      );
+      let removable = false;
+      let blocked = false;
+      let blockedReason: string | null = null;
+      let adminReasonRequired = false;
+
+      if (subtreeHasVerified) {
+        if (canAdminRemoveVerifiedTests) {
+          removable = true;
+          adminReasonRequired = true;
+        } else {
+          blocked = true;
+          blockedReason = 'Verified tests can be removed only by a lab admin with a reason.';
+        }
+      } else if (orderTest.status === 'REJECTED') {
+        removable = true;
+      } else if (
+        orderTest.status === 'PENDING' &&
+        childTests.every((child) => child.status === 'PENDING')
+      ) {
+        removable = true;
+      } else {
+        blocked = true;
+        blockedReason = 'Completed or entered tests cannot be removed.';
+      }
+
       return {
-        locked: orderTest.status !== 'PENDING' || hasProcessedChild,
         testId: orderTest.testId,
         testCode: orderTest.test?.code ?? '-',
         testName: orderTest.test?.name ?? 'Unknown',
@@ -714,6 +752,12 @@ export function OrdersPage() {
         displayLabel,
         sortCategoryKey,
         price: orderTest.price != null ? Number(orderTest.price) : null,
+        removable,
+        blocked,
+        blockedReason,
+        adminReasonRequired,
+        currentStatus: orderTest.status,
+        isPanelRoot: childTests.length > 0,
       };
     });
   };
@@ -873,6 +917,8 @@ export function OrdersPage() {
     if (!selectedCreatedOrder) return;
     const currentRootTests = getRootOrderTests(selectedCreatedOrder);
     setEditingTests(currentRootTests);
+    setEditTestsRemovalReason('');
+    setEditTestsRemovalReasonModalOpen(false);
     setEditTestsModalOpen(true);
   };
 
@@ -890,20 +936,29 @@ export function OrdersPage() {
         testCode: test.code,
         testName: test.name,
         tubeType: test.tubeType,
+        removable: true,
+        blocked: false,
+        blockedReason: null,
+        adminReasonRequired: false,
+        currentStatus: 'PENDING',
+        isPanelRoot: false,
       },
     ]);
   };
 
   const handleRemoveEditingTest = (testId: string) => {
     const target = editingTests.find((item) => item.testId === testId);
-    if (target?.locked) {
-      message.warning('Completed/entered test is locked and cannot be removed.');
+    if (target && !target.removable) {
+      message.warning(target.blockedReason || 'This test cannot be removed.');
       return;
     }
     setEditingTests((prev) => prev.filter((item) => item.testId !== testId));
   };
 
-  const handleSaveEditedTests = async () => {
+  const submitEditedTests = async (payload?: {
+    forceRemoveVerified?: boolean;
+    removalReason?: string;
+  }) => {
     if (!selectedCreatedOrder?.id) return;
     if (editingTests.length === 0) {
       message.error('At least one test is required');
@@ -914,9 +969,13 @@ export function OrdersPage() {
     try {
       const updated = await updateOrderTests(selectedCreatedOrder.id, {
         testIds: editingTests.map((test) => test.testId),
+        forceRemoveVerified: payload?.forceRemoveVerified,
+        removalReason: payload?.removalReason,
       });
       applyUpdatedOrderToList(updated);
       setEditTestsModalOpen(false);
+      setEditTestsRemovalReason('');
+      setEditTestsRemovalReasonModalOpen(false);
       message.success('Order tests updated. Order number and sequence stay unchanged.');
     } catch (error: unknown) {
       const msg =
@@ -927,6 +986,40 @@ export function OrdersPage() {
     } finally {
       setSavingEditedTests(false);
     }
+  };
+
+  const handleSaveEditedTests = async () => {
+    if (!selectedCreatedOrder?.id) return;
+    if (editingTests.length === 0) {
+      message.error('At least one test is required');
+      return;
+    }
+
+    const originalRootTests = getRootOrderTests(selectedCreatedOrder);
+    const selectedTestIds = new Set(editingTests.map((test) => test.testId));
+    const removedTests = originalRootTests.filter((test) => !selectedTestIds.has(test.testId));
+    const blockedRemovedTest = removedTests.find((test) => !test.removable);
+    if (blockedRemovedTest) {
+      message.error(blockedRemovedTest.blockedReason || 'This test cannot be removed.');
+      return;
+    }
+
+    const requiresVerifiedOverride = removedTests.some((test) => test.adminReasonRequired);
+    if (requiresVerifiedOverride) {
+      if (!canAdminRemoveVerifiedTests) {
+        message.error('Verified tests can be removed only by a lab admin with a reason.');
+        return;
+      }
+      if (!editTestsRemovalReason.trim()) {
+        setEditTestsRemovalReasonModalOpen(true);
+        return;
+      }
+    }
+
+    await submitEditedTests({
+      forceRemoveVerified: requiresVerifiedOverride || undefined,
+      removalReason: requiresVerifiedOverride ? editTestsRemovalReason.trim() : undefined,
+    });
   };
 
   const handleSubmit = async () => {
@@ -2277,6 +2370,8 @@ export function OrdersPage() {
         onCancel={() => {
           if (!savingEditedTests) {
             setEditTestsModalOpen(false);
+            setEditTestsRemovalReasonModalOpen(false);
+            setEditTestsRemovalReason('');
           }
         }}
         onOk={handleSaveEditedTests}
@@ -2287,7 +2382,7 @@ export function OrdersPage() {
       >
         <Space direction="vertical" style={{ width: '100%' }} size={12}>
           <Text type="secondary">
-            Add/remove pending tests only. Completed or entered tests stay locked. Order number and sample sequence numbers stay unchanged.
+            Remove pending tests and rejected tests here. Removing a panel removes the whole panel. Verified tests require lab-admin override with a reason. Order number and sample sequence numbers stay unchanged.
           </Text>
           <Select
             showSearch
@@ -2338,20 +2433,66 @@ export function OrdersPage() {
                       <Text type="secondary">
                         {test.price != null ? `${test.price.toLocaleString()} IQD` : 'Price from current pricing'}
                       </Text>
-                      {test.locked ? <Tag color="gold">Locked</Tag> : null}
+                      {test.isPanelRoot ? <Tag color="purple">Panel</Tag> : null}
+                      {test.currentStatus === 'REJECTED' && test.removable && !test.adminReasonRequired ? (
+                        <Tag color="error">Rejected</Tag>
+                      ) : null}
+                      {test.adminReasonRequired ? <Tag color="volcano">Admin reason</Tag> : null}
+                      {test.blocked ? <Tag color="gold">Locked</Tag> : null}
                     </Space>
-                    <Button
-                      type="text"
-                      danger
-                      icon={<DeleteOutlined />}
-                      disabled={test.locked}
-                      onClick={() => handleRemoveEditingTest(test.testId)}
-                    />
+                    <Space size={8}>
+                      {test.blockedReason ? (
+                        <Text type="secondary" style={{ fontSize: 12 }}>
+                          {test.blockedReason}
+                        </Text>
+                      ) : null}
+                      <Button
+                        type="text"
+                        danger
+                        icon={<DeleteOutlined />}
+                        disabled={!test.removable}
+                        onClick={() => handleRemoveEditingTest(test.testId)}
+                      />
+                    </Space>
                   </div>
                 ))}
               </Space>
             </div>
           )}
+        </Space>
+      </Modal>
+
+      <Modal
+        title="Reason required"
+        open={editTestsRemovalReasonModalOpen}
+        onCancel={() => {
+          if (!savingEditedTests) {
+            setEditTestsRemovalReasonModalOpen(false);
+            setEditTestsRemovalReason('');
+          }
+        }}
+        onOk={() => {
+          void handleSaveEditedTests();
+        }}
+        okText="Save tests"
+        okButtonProps={{
+          loading: savingEditedTests,
+          disabled: !editTestsRemovalReason.trim(),
+        }}
+        cancelButtonProps={{ disabled: savingEditedTests }}
+        destroyOnClose
+      >
+        <Space direction="vertical" style={{ width: '100%' }} size={12}>
+          <Text type="secondary">
+            Verified test removal requires a reason. This will be saved in the audit log.
+          </Text>
+          <Input.TextArea
+            rows={4}
+            maxLength={300}
+            value={editTestsRemovalReason}
+            onChange={(event) => setEditTestsRemovalReason(event.target.value)}
+            placeholder="Enter removal reason"
+          />
         </Space>
       </Modal>
 

@@ -235,6 +235,12 @@ export interface SetAdminLabStatusRequest {
   reason: string;
 }
 
+export interface AdminGatewayActivationCodeResponse {
+  activationCode: string;
+  expiresAt: string;
+  labId: string;
+}
+
 export interface AdminSummaryDto {
   labsCount: number;
   activeLabsCount: number;
@@ -658,6 +664,20 @@ export async function setAdminLabStatus(
   const res = await api.post<AdminLabDto>(`/admin/api/labs/${labId}/status`, data, {
     timeout: ADMIN_WRITE_TIMEOUT_MS,
   });
+  return res.data;
+}
+
+export async function createAdminGatewayActivationCode(data: {
+  labId: string;
+  expiresInMinutes?: number;
+}): Promise<AdminGatewayActivationCodeResponse> {
+  const res = await api.post<AdminGatewayActivationCodeResponse>(
+    '/admin/api/gateway/activation-codes',
+    data,
+    {
+      timeout: ADMIN_WRITE_TIMEOUT_MS,
+    },
+  );
   return res.data;
 }
 
@@ -1319,7 +1339,11 @@ export async function updateOrderDiscount(
 
 export async function updateOrderTests(
   orderId: string,
-  data: { testIds: string[] },
+  data: {
+    testIds: string[];
+    forceRemoveVerified?: boolean;
+    removalReason?: string;
+  },
 ): Promise<OrderDto> {
   const res = await api.patch<OrderDto>(`/orders/${orderId}/tests`, data);
   return res.data;

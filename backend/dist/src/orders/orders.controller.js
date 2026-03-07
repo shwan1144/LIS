@@ -23,6 +23,7 @@ const update_order_discount_dto_1 = require("./dto/update-order-discount.dto");
 const update_order_delivery_methods_dto_1 = require("./dto/update-order-delivery-methods.dto");
 const create_order_response_dto_1 = require("./dto/create-order-response.dto");
 const jwt_auth_guard_1 = require("../auth/jwt-auth.guard");
+const lab_actor_context_1 = require("../types/lab-actor-context");
 let OrdersController = OrdersController_1 = class OrdersController {
     constructor(ordersService) {
         this.ordersService = ordersService;
@@ -146,10 +147,14 @@ let OrdersController = OrdersController_1 = class OrdersController {
     }
     async updateOrderTests(req, id, dto) {
         const labId = req.user?.labId;
+        const actor = (0, lab_actor_context_1.buildLabActorContext)(req.user);
         if (!labId) {
             throw new Error('Lab ID not found in token');
         }
-        return this.ordersService.updateOrderTests(id, labId, dto.testIds);
+        return this.ordersService.updateOrderTests(id, labId, dto.testIds, actor, req.user?.role, {
+            forceRemoveVerified: dto.forceRemoveVerified,
+            removalReason: dto.removalReason,
+        });
     }
     async updateOrderDeliveryMethods(req, id, dto) {
         const labId = req.user?.labId;

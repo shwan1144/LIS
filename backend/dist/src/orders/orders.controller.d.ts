@@ -7,9 +7,12 @@ import { UpdateOrderDeliveryMethodsDto } from './dto/update-order-delivery-metho
 import { CreateOrderView, OrderDetailView, OrderResultStatus } from './dto/create-order-response.dto';
 interface RequestWithUser {
     user: {
-        userId: string;
+        userId?: string | null;
+        platformUserId?: string | null;
+        isImpersonation?: boolean;
         username: string;
         labId: string;
+        role?: string;
     };
 }
 export declare class OrdersController {

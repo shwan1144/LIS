@@ -6,6 +6,7 @@ import {
   Card,
   Form,
   Input,
+  InputNumber,
   Modal,
   Select,
   Space,
@@ -20,16 +21,19 @@ import type { ColumnsType } from 'antd/es/table';
 import {
   EditOutlined,
   EyeOutlined,
+  KeyOutlined,
   LinkOutlined,
   PlusOutlined,
   PoweroffOutlined,
   ReloadOutlined,
 } from '@ant-design/icons';
 import {
+  createAdminGatewayActivationCode,
   createAdminLab,
   getAdminLabsPage,
   setAdminLabStatus,
   updateAdminLab,
+  type AdminGatewayActivationCodeResponse,
   type AdminLabDto,
 } from '../../api/client';
 import { useAuth } from '../../contexts/AuthContext';
@@ -74,6 +78,13 @@ export function AdminLabsPage() {
   const [statusTarget, setStatusTarget] = useState<AdminLabDto | null>(null);
   const [nextStatusActive, setNextStatusActive] = useState<boolean>(true);
   const [savingStatus, setSavingStatus] = useState(false);
+
+  const [activationModalOpen, setActivationModalOpen] = useState(false);
+  const [activationLabId, setActivationLabId] = useState<string>('');
+  const [activationExpiresInMinutes, setActivationExpiresInMinutes] = useState<number>(1440);
+  const [activationSubmitting, setActivationSubmitting] = useState(false);
+  const [generatedActivation, setGeneratedActivation] =
+    useState<AdminGatewayActivationCodeResponse | null>(null);
 
   const activeFilterTags = useMemo(() => {
     const tags: string[] = [];
@@ -219,6 +230,49 @@ export function AdminLabsPage() {
     setSize(DEFAULT_PAGE_SIZE);
   };
 
+  const openActivationModal = (lab?: AdminLabDto) => {
+    const fallbackLabId = labs[0]?.id || '';
+    setActivationLabId(lab?.id || fallbackLabId);
+    setActivationExpiresInMinutes(1440);
+    setGeneratedActivation(null);
+    setActivationModalOpen(true);
+  };
+
+  const handleCreateActivationCode = async () => {
+    if (!canMutate) {
+      message.warning('You do not have permission to create activation codes.');
+      return;
+    }
+    if (!activationLabId) {
+      message.error('Select a lab first.');
+      return;
+    }
+
+    setActivationSubmitting(true);
+    try {
+      const response = await createAdminGatewayActivationCode({
+        labId: activationLabId,
+        expiresInMinutes: activationExpiresInMinutes,
+      });
+      setGeneratedActivation(response);
+      message.success('Activation code generated');
+    } catch (error) {
+      message.error(getErrorMessage(error) || 'Failed to generate activation code');
+    } finally {
+      setActivationSubmitting(false);
+    }
+  };
+
+  const copyActivationCode = async () => {
+    if (!generatedActivation?.activationCode) return;
+    try {
+      await navigator.clipboard.writeText(generatedActivation.activationCode);
+      message.success('Activation code copied');
+    } catch {
+      message.warning('Could not copy automatically. Please copy manually.');
+    }
+  };
+
   const columns: ColumnsType<AdminLabDto> = [
     {
       title: 'Lab Name',
@@ -305,6 +359,11 @@ export function AdminLabsPage() {
             </Button>
           ) : null}
           {canMutate ? (
+            <Button size="small" icon={<KeyOutlined />} onClick={() => openActivationModal(row)}>
+              Gateway Code
+            </Button>
+          ) : null}
+          {canMutate ? (
             <Button
               size="small"
               danger={row.isActive}
@@ -361,6 +420,11 @@ export function AdminLabsPage() {
               <Button icon={<ReloadOutlined />} onClick={() => void loadLabs()}>
                 Retry
               </Button>
+              {canMutate ? (
+                <Button icon={<KeyOutlined />} onClick={() => openActivationModal()}>
+                  Gateway Activation
+                </Button>
+              ) : null}
               {canMutate ? (
                 <Button type="primary" icon={<PlusOutlined />} onClick={openCreateLab}>
                   Create Lab
@@ -495,6 +559,67 @@ export function AdminLabsPage() {
             maxLength={300}
             showCount
           />
+        </Space>
+      </Modal>
+
+      <Modal
+        title="Generate Gateway Activation Code"
+        open={activationModalOpen}
+        onCancel={() => setActivationModalOpen(false)}
+        onOk={() => void handleCreateActivationCode()}
+        okText="Generate Code"
+        confirmLoading={activationSubmitting}
+        destroyOnClose
+      >
+        <Space direction="vertical" size={12} style={{ width: '100%' }}>
+          <Text type="secondary">
+            Select lab by name and generate one-time code for LIS Gateway activation.
+          </Text>
+
+          <div>
+            <Text strong>Lab</Text>
+            <Select
+              style={{ width: '100%', marginTop: 6 }}
+              showSearch
+              optionFilterProp="label"
+              value={activationLabId || undefined}
+              onChange={(value) => setActivationLabId(value)}
+              options={labs.map((lab) => ({
+                value: lab.id,
+                label: `${lab.name} (${lab.code})`,
+              }))}
+            />
+          </div>
+
+          <div>
+            <Text strong>Expires In (minutes)</Text>
+            <InputNumber
+              style={{ width: '100%', marginTop: 6 }}
+              min={5}
+              max={43200}
+              value={activationExpiresInMinutes}
+              onChange={(value) => setActivationExpiresInMinutes(Number(value) || 1440)}
+            />
+          </div>
+
+          {generatedActivation ? (
+            <Alert
+              type="success"
+              showIcon
+              message="Activation code generated"
+              description={
+                <Space direction="vertical" style={{ width: '100%' }}>
+                  <Text>
+                    Code: <Text code>{generatedActivation.activationCode}</Text>
+                  </Text>
+                  <Text>Expires at: {formatDate(generatedActivation.expiresAt)}</Text>
+                  <Button size="small" icon={<LinkOutlined />} onClick={() => void copyActivationCode()}>
+                    Copy Code
+                  </Button>
+                </Space>
+              }
+            />
+          ) : null}
         </Space>
       </Modal>
     </div>
