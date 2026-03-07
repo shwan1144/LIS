@@ -33,21 +33,22 @@
 .orders-header-context {
   display: flex;
   flex-direction: column;
-  align-items: flex-end;
+  align-items: stretch;
   gap: 4px;
-  width: 100%;
+  width: min(100%, 760px);
+  margin-left: auto;
   min-width: 0;
 }
 
 .orders-header-context-row {
   display: flex;
   align-items: center;
-  justify-content: flex-end;
+  justify-content: space-between;
   gap: 8px;
   row-gap: 6px;
   width: 100%;
   min-width: 0;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
 }
 
 .orders-header-context-top {
@@ -60,14 +61,49 @@
 
 .orders-header-patient-name {
   display: inline-block;
-  flex: 0 1 260px;
+  flex: 1 1 auto;
   min-width: 0;
-  max-width: 260px;
   font-size: 15px;
   line-height: 1.2;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.orders-header-top-main,
+.orders-header-top-side,
+.orders-header-bottom-main,
+.orders-header-bottom-side {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.orders-header-top-main {
+  flex: 1 1 auto;
+  justify-content: flex-start;
+  gap: 8px;
+  min-width: 0;
+}
+
+.orders-header-top-side {
+  flex: 0 0 auto;
+  justify-content: flex-end;
+  margin-left: 12px;
+}
+
+.orders-header-bottom-main {
+  flex: 1 1 auto;
+  justify-content: flex-start;
+  gap: 12px;
+  min-width: 0;
+  flex-wrap: nowrap;
+}
+
+.orders-header-bottom-side {
+  flex: 0 0 auto;
+  justify-content: flex-end;
+  margin-left: 12px;
 }
 
 .orders-header-context-item {
@@ -76,7 +112,7 @@
   gap: 4px;
   line-height: 1.2;
   min-width: 0;
-  max-width: 100%;
+  flex: 0 0 auto;
 }
 
 .orders-header-lock-tag.ant-tag {
@@ -88,12 +124,14 @@
 }
 
 .orders-header-referred-item {
-  flex: 0 1 300px;
+  flex: 1 1 320px;
+  max-width: 360px;
 }
 
 .orders-header-referred-value {
   display: inline-block;
   min-width: 0;
+  flex: 1 1 auto;
   max-width: 100%;
   white-space: nowrap;
   overflow: hidden;
@@ -1534,13 +1572,33 @@ html[data-theme='dark'] .order-delivery-preferences {
 
   .orders-header-context {
     align-items: stretch;
+    width: 100%;
+    margin-left: 0;
   }
 
   .orders-header-context-row {
     justify-content: flex-start;
+    flex-wrap: wrap;
   }
 
   .orders-header-patient-name {
+    max-width: 100%;
+  }
+
+  .orders-header-top-main,
+  .orders-header-top-side,
+  .orders-header-bottom-main,
+  .orders-header-bottom-side {
+    justify-content: flex-start;
+    width: 100%;
+  }
+
+  .orders-header-top-main,
+  .orders-header-bottom-main {
+    flex-wrap: wrap;
+  }
+
+  .orders-header-referred-item {
     max-width: 100%;
   }
 

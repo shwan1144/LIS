@@ -1760,60 +1760,70 @@ export function OrdersPage() {
             {selectedPatient ? (
               <div className="orders-header-context">
                 <div className="orders-header-context-row orders-header-context-top">
-                  <Tag color={isSelectedLocked ? 'success' : 'processing'} style={{ margin: 0 }}>
-                    {isSelectedLocked ? 'Locked order' : 'Draft order'}
-                  </Tag>
-                  <Text strong className="orders-header-patient-name" title={getPatientName(selectedPatient)}>
-                    {getPatientName(selectedPatient)}
-                  </Text>
-                  {selectedCreatedOrderSummary ? (
-                    <Tag color="blue" style={{ margin: 0 }}>
-                      Order #{selectedCreatedOrderSummary.orderNumber || selectedCreatedOrderSummary.id.substring(0, 8)}
+                  <div className="orders-header-top-main">
+                    <Tag color={isSelectedLocked ? 'success' : 'processing'} style={{ margin: 0 }}>
+                      {isSelectedLocked ? 'Locked order' : 'Draft order'}
                     </Tag>
-                  ) : nextOrderNumber ? (
-                    <Tag color="gold" style={{ margin: 0 }}>Next #{nextOrderNumber}</Tag>
-                  ) : null}
+                    <Text strong className="orders-header-patient-name" title={getPatientName(selectedPatient)}>
+                      {getPatientName(selectedPatient)}
+                    </Text>
+                  </div>
+                  <div className="orders-header-top-side">
+                    {selectedCreatedOrderSummary ? (
+                      <Tag color="blue" style={{ margin: 0 }}>
+                        Order #{selectedCreatedOrderSummary.orderNumber || selectedCreatedOrderSummary.id.substring(0, 8)}
+                      </Tag>
+                    ) : nextOrderNumber ? (
+                      <Tag color="gold" style={{ margin: 0 }}>Next #{nextOrderNumber}</Tag>
+                    ) : null}
+                  </div>
                 </div>
                 <div className="orders-header-context-row orders-header-context-bottom">
                   {isSelectedLocked && selectedCreatedOrderSummary ? (
                     <>
-                      <span className="orders-header-context-item">
-                        <Text type="secondary">Shift:</Text>
-                        <Text strong>
-                          {selectedCreatedOrderSummary.shift?.name ||
-                            selectedCreatedOrderSummary.shift?.code ||
-                            currentShiftLabel ||
-                            '-'}
-                        </Text>
-                      </span>
-                      <span className="orders-header-context-item">
-                        <Text type="secondary">Time:</Text>
-                        <Text strong>{dayjs(selectedCreatedOrderSummary.registeredAt).format('YYYY-MM-DD HH:mm')}</Text>
-                      </span>
-                      <span className="orders-header-context-item orders-header-referred-item">
-                        <Text type="secondary">Referred by:</Text>
-                        <Text
-                          strong
-                          className="orders-header-referred-value"
-                          title={selectedCreatedOrder?.notes?.trim() || '-'}
+                      <div className="orders-header-bottom-main">
+                        <span className="orders-header-context-item">
+                          <Text type="secondary">Shift:</Text>
+                          <Text strong>
+                            {selectedCreatedOrderSummary.shift?.name ||
+                              selectedCreatedOrderSummary.shift?.code ||
+                              currentShiftLabel ||
+                              '-'}
+                          </Text>
+                        </span>
+                        <span className="orders-header-context-item">
+                          <Text type="secondary">Time:</Text>
+                          <Text strong>{dayjs(selectedCreatedOrderSummary.registeredAt).format('YYYY-MM-DD HH:mm')}</Text>
+                        </span>
+                        <span className="orders-header-context-item orders-header-referred-item">
+                          <Text type="secondary">Referred by:</Text>
+                          <Text
+                            strong
+                            className="orders-header-referred-value"
+                            title={selectedCreatedOrder?.notes?.trim() || '-'}
+                          >
+                            {selectedCreatedOrder?.notes?.trim() || '-'}
+                          </Text>
+                        </span>
+                      </div>
+                      <div className="orders-header-bottom-side">
+                        <Tag
+                          color="success"
+                          icon={<LockOutlined />}
+                          className="orders-header-lock-tag"
+                          style={{ margin: 0 }}
                         >
-                          {selectedCreatedOrder?.notes?.trim() || '-'}
-                        </Text>
-                      </span>
-                      <Tag
-                        color="success"
-                        icon={<LockOutlined />}
-                        className="orders-header-lock-tag"
-                        style={{ margin: 0 }}
-                      >
-                        Locked for delete - test list can still be edited
-                      </Tag>
+                          Locked for delete - test list can still be edited
+                        </Tag>
+                      </div>
                     </>
                   ) : (
-                    <span className="orders-header-context-item">
-                      <Text type="secondary">Shift:</Text>
-                      <Text strong>{currentShiftLabel || '-'}</Text>
-                    </span>
+                    <div className="orders-header-bottom-main">
+                      <span className="orders-header-context-item">
+                        <Text type="secondary">Shift:</Text>
+                        <Text strong>{currentShiftLabel || '-'}</Text>
+                      </span>
+                    </div>
                   )}
                 </div>
               </div>
