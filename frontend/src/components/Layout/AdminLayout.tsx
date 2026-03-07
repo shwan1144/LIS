@@ -24,6 +24,7 @@ import {
   GlobalOutlined,
   LinkOutlined,
   LogoutOutlined,
+  NotificationOutlined,
   UnorderedListOutlined,
   QrcodeOutlined,
   TeamOutlined,
@@ -116,6 +117,7 @@ export function AdminLayout() {
     if (location.pathname.startsWith('/labs/users')) return '/labs/users';
     if (location.pathname.startsWith('/labs/online-results')) return '/labs/online-results';
     if (location.pathname.startsWith('/labs/report-design')) return '/labs/report-design';
+    if (location.pathname.startsWith('/announcements')) return '/announcements';
     if (location.pathname.startsWith('/settings')) return '/settings';
     if (location.pathname.startsWith('/labs/')) return '/labs';
     return '/';
@@ -438,6 +440,7 @@ export function AdminLayout() {
               { key: '/labs/users', icon: <TeamOutlined />, label: 'Lab Users' },
               { key: '/labs/online-results', icon: <QrcodeOutlined />, label: 'Online Results QR' },
               { key: '/labs/report-design', icon: <FileTextOutlined />, label: 'Report Design' },
+              { key: '/announcements', icon: <NotificationOutlined />, label: 'Announcements' },
               { key: '/settings', icon: <SettingOutlined />, label: 'Settings' },
             ]}
             onClick={({ key }) => navigate(key)}

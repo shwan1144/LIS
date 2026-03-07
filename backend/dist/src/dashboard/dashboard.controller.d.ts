@@ -1,4 +1,4 @@
-import { DashboardService, DashboardKpis, OrdersTrendPoint, StatisticsDto } from './dashboard.service';
+import { DashboardService, DashboardKpis, OrdersTrendPoint, StatisticsDto, DashboardAnnouncementDto } from './dashboard.service';
 import { StatisticsQueryDto } from './dto/statistics-query.dto';
 import { Response } from 'express';
 import { AuditService } from '../audit/audit.service';
@@ -22,6 +22,7 @@ export declare class DashboardController {
     getOrdersTrend(req: RequestWithUser, days?: string): Promise<{
         data: OrdersTrendPoint[];
     }>;
+    getAnnouncement(req: RequestWithUser): Promise<DashboardAnnouncementDto>;
     getStatistics(req: RequestWithUser, query: StatisticsQueryDto): Promise<StatisticsDto>;
     getStatisticsPdf(req: RequestWithUser, query: StatisticsQueryDto, res: Response): Promise<Response<any, Record<string, any>>>;
     private emptyStatistics;

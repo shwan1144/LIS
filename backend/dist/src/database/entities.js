@@ -14,6 +14,7 @@ const order_entity_1 = require("../entities/order.entity");
 const patient_entity_1 = require("../entities/patient.entity");
 const pricing_entity_1 = require("../entities/pricing.entity");
 const platform_user_entity_1 = require("../entities/platform-user.entity");
+const platform_setting_entity_1 = require("../entities/platform-setting.entity");
 const refresh_token_entity_1 = require("../entities/refresh-token.entity");
 const result_entity_1 = require("../entities/result.entity");
 const sample_entity_1 = require("../entities/sample.entity");
@@ -41,6 +42,7 @@ exports.DATABASE_ENTITIES = [
     test_entity_1.Test,
     pricing_entity_1.Pricing,
     platform_user_entity_1.PlatformUser,
+    platform_setting_entity_1.PlatformSetting,
     refresh_token_entity_1.RefreshToken,
     result_entity_1.Result,
     audit_log_entity_1.AuditLog,

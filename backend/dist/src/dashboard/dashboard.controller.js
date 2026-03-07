@@ -49,6 +49,13 @@ let DashboardController = class DashboardController {
             : [];
         return { data };
     }
+    async getAnnouncement(req) {
+        const labId = req.user?.labId;
+        if (!labId) {
+            return { text: null, source: 'NONE' };
+        }
+        return this.dashboardService.getAnnouncement(labId);
+    }
     async getStatistics(req, query) {
         const labId = req.user?.labId;
         if (!labId) {
@@ -176,6 +183,13 @@ __decorate([
     __metadata("design:paramtypes", [Object, String]),
     __metadata("design:returntype", Promise)
 ], DashboardController.prototype, "getOrdersTrend", null);
+__decorate([
+    (0, common_1.Get)('announcement'),
+    __param(0, (0, common_1.Req)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object]),
+    __metadata("design:returntype", Promise)
+], DashboardController.prototype, "getAnnouncement", null);
 __decorate([
     (0, common_1.Get)('statistics'),
     (0, common_1.UseGuards)(roles_guard_1.RolesGuard),

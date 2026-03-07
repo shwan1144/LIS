@@ -3,6 +3,7 @@ import { Patient } from '../entities/patient.entity';
 import { OrderTest } from '../entities/order-test.entity';
 import { Order } from '../entities/order.entity';
 import { Lab } from '../entities/lab.entity';
+import { PlatformSetting } from '../entities/platform-setting.entity';
 import { Shift } from '../entities/shift.entity';
 import { Department } from '../entities/department.entity';
 import { OrdersService } from '../orders/orders.service';
@@ -13,6 +14,10 @@ export interface DashboardKpis {
     criticalAlerts: number;
     avgTatHours: number | null;
     totalPatients: number;
+}
+export interface DashboardAnnouncementDto {
+    text: string | null;
+    source: 'LAB' | 'GLOBAL' | 'NONE';
 }
 export interface OrdersTrendPoint {
     date: string;
@@ -83,13 +88,15 @@ export declare class DashboardService {
     private readonly orderTestRepo;
     private readonly orderRepo;
     private readonly labRepo;
+    private readonly platformSettingRepo;
     private readonly shiftRepo;
     private readonly departmentRepo;
     private readonly ordersService;
     private readonly unmatchedService;
-    constructor(patientRepo: Repository<Patient>, orderTestRepo: Repository<OrderTest>, orderRepo: Repository<Order>, labRepo: Repository<Lab>, shiftRepo: Repository<Shift>, departmentRepo: Repository<Department>, ordersService: OrdersService, unmatchedService: UnmatchedResultsService);
+    constructor(patientRepo: Repository<Patient>, orderTestRepo: Repository<OrderTest>, orderRepo: Repository<Order>, labRepo: Repository<Lab>, platformSettingRepo: Repository<PlatformSetting>, shiftRepo: Repository<Shift>, departmentRepo: Repository<Department>, ordersService: OrdersService, unmatchedService: UnmatchedResultsService);
     getKpis(labId: string): Promise<DashboardKpis>;
     getLabTimeZone(labId: string): Promise<string>;
+    getAnnouncement(labId: string): Promise<DashboardAnnouncementDto>;
     getOrdersTrend(labId: string, days: number): Promise<OrdersTrendPoint[]>;
     getStatistics(labId: string, startDate: Date, endDate: Date, filters?: StatisticsFilterOptions): Promise<StatisticsDto>;
     generateStatisticsPdf(labId: string, startDate: Date, endDate: Date, filters?: StatisticsFilterOptions): Promise<Buffer>;
@@ -104,4 +111,5 @@ export declare class DashboardService {
     private getTestsStatsForPeriod;
     private getTatForPeriod;
     private getQualityForPeriod;
+    private normalizeAnnouncementText;
 }

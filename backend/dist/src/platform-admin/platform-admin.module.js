@@ -12,6 +12,7 @@ const typeorm_1 = require("@nestjs/typeorm");
 const lab_entity_1 = require("../entities/lab.entity");
 const order_entity_1 = require("../entities/order.entity");
 const audit_log_entity_1 = require("../entities/audit-log.entity");
+const platform_setting_entity_1 = require("../entities/platform-setting.entity");
 const database_support_module_1 = require("../database/database-support.module");
 const settings_module_1 = require("../settings/settings.module");
 const reports_module_1 = require("../reports/reports.module");
@@ -25,7 +26,7 @@ exports.PlatformAdminModule = PlatformAdminModule;
 exports.PlatformAdminModule = PlatformAdminModule = __decorate([
     (0, common_1.Module)({
         imports: [
-            typeorm_1.TypeOrmModule.forFeature([lab_entity_1.Lab, order_entity_1.Order, audit_log_entity_1.AuditLog]),
+            typeorm_1.TypeOrmModule.forFeature([lab_entity_1.Lab, order_entity_1.Order, audit_log_entity_1.AuditLog, platform_setting_entity_1.PlatformSetting]),
             database_support_module_1.DatabaseSupportModule,
             settings_module_1.SettingsModule,
             reports_module_1.ReportsModule,

@@ -16,6 +16,7 @@ import { Patient } from '../entities/patient.entity';
 import { ReportsService } from '../reports/reports.service';
 import type { ReportBrandingOverride } from '../reports/reports.service';
 import { type ReportStyleConfig, validateAndNormalizeReportStyleConfig } from '../reports/report-style.config';
+import { PlatformSetting } from '../entities/platform-setting.entity';
 import { EntityManager, In, SelectQueryBuilder } from 'typeorm';
 import { AdminAuthService } from '../admin-auth/admin-auth.service';
 import { AuthService } from '../auth/auth.service';
@@ -24,6 +25,8 @@ const MAX_REPORT_IMAGE_DATA_URL_LENGTH = 4 * 1024 * 1024;
 const REPORT_IMAGE_DATA_URL_PATTERN = /^data:image\/(png|jpeg|jpg|webp);base64,[a-zA-Z0-9+/=]+$/;
 const UUID_V4_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const MAX_DASHBOARD_ANNOUNCEMENT_TEXT_LENGTH = 255;
+const GLOBAL_DASHBOARD_ANNOUNCEMENT_KEY = 'dashboard.announcement.all_labs';
 
 export interface PlatformActorContext {
   platformUserId: string;
@@ -64,6 +67,10 @@ export interface AdminPlatformSettingsOverview {
     enabledAccounts: number;
     totalAccounts: number;
   };
+}
+
+export interface AdminGlobalDashboardAnnouncement {
+  dashboardAnnouncementText: string | null;
 }
 
 export interface AdminOrderListItem {
@@ -1453,6 +1460,59 @@ export class PlatformAdminService {
     return this.settingsService.getRoles();
   }
 
+  async getGlobalDashboardAnnouncement(
+    actor?: PlatformActorContext,
+  ): Promise<AdminGlobalDashboardAnnouncement> {
+    const setting = await this.rlsSessionService.withPlatformAdminContext(async (manager) =>
+      manager.getRepository(PlatformSetting).findOne({
+        where: { key: GLOBAL_DASHBOARD_ANNOUNCEMENT_KEY },
+      }),
+    );
+
+    await this.logPlatformSensitiveRead(actor, {
+      labId: null,
+      entityType: 'platform_setting',
+      entityId: GLOBAL_DASHBOARD_ANNOUNCEMENT_KEY,
+      description: 'Viewed global dashboard announcement',
+    });
+
+    return {
+      dashboardAnnouncementText: this.normalizeDashboardAnnouncementText(setting?.valueText),
+    };
+  }
+
+  async updateGlobalDashboardAnnouncement(
+    data: { dashboardAnnouncementText?: string | null },
+  ): Promise<AdminGlobalDashboardAnnouncement> {
+    const normalized = this.normalizeDashboardAnnouncementText(data.dashboardAnnouncementText);
+
+    await this.rlsSessionService.withPlatformAdminContext(async (manager) => {
+      const repo = manager.getRepository(PlatformSetting);
+      let setting = await repo.findOne({
+        where: { key: GLOBAL_DASHBOARD_ANNOUNCEMENT_KEY },
+      });
+      if (!setting) {
+        setting = repo.create({
+          key: GLOBAL_DASHBOARD_ANNOUNCEMENT_KEY,
+        });
+      }
+      setting.valueText = normalized;
+      await repo.save(setting);
+    });
+
+    this.logger.log(
+      JSON.stringify({
+        event: 'admin.platform_announcement.update',
+        key: GLOBAL_DASHBOARD_ANNOUNCEMENT_KEY,
+        hasText: Boolean(normalized),
+      }),
+    );
+
+    return {
+      dashboardAnnouncementText: normalized,
+    };
+  }
+
   async getLabSettings(labId: string, actor?: PlatformActorContext) {
     const settings = await this.settingsService.getLabSettings(labId);
     await this.logPlatformSensitiveRead(actor, {
@@ -1946,6 +2006,21 @@ export class PlatformAdminService {
     if (!REPORT_IMAGE_DATA_URL_PATTERN.test(trimmed)) {
       throw new BadRequestException(
         `${fieldName} must be a valid image data URL (png, jpg/jpeg, or webp)`,
+      );
+    }
+    return trimmed;
+  }
+
+  private normalizeDashboardAnnouncementText(value: unknown): string | null {
+    if (value === null || value === undefined) return null;
+    if (typeof value !== 'string') {
+      throw new BadRequestException('dashboardAnnouncementText must be a string or null');
+    }
+    const trimmed = value.trim();
+    if (!trimmed) return null;
+    if (trimmed.length > MAX_DASHBOARD_ANNOUNCEMENT_TEXT_LENGTH) {
+      throw new BadRequestException(
+        `dashboardAnnouncementText must be at most ${MAX_DASHBOARD_ANNOUNCEMENT_TEXT_LENGTH} characters`,
       );
     }
     return trimmed;

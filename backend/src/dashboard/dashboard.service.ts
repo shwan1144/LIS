@@ -5,6 +5,7 @@ import { Patient } from '../entities/patient.entity';
 import { OrderTest, OrderTestStatus, ResultFlag } from '../entities/order-test.entity';
 import { OrderStatus, Order } from '../entities/order.entity';
 import { Lab } from '../entities/lab.entity';
+import { PlatformSetting } from '../entities/platform-setting.entity';
 import { Shift } from '../entities/shift.entity';
 import { Department } from '../entities/department.entity';
 import { OrdersService } from '../orders/orders.service';
@@ -24,6 +25,13 @@ export interface DashboardKpis {
   avgTatHours: number | null;
   totalPatients: number;
 }
+
+export interface DashboardAnnouncementDto {
+  text: string | null;
+  source: 'LAB' | 'GLOBAL' | 'NONE';
+}
+
+const GLOBAL_DASHBOARD_ANNOUNCEMENT_KEY = 'dashboard.announcement.all_labs';
 
 export interface OrdersTrendPoint {
   date: string;
@@ -84,6 +92,8 @@ export class DashboardService {
     private readonly orderRepo: Repository<Order>,
     @InjectRepository(Lab)
     private readonly labRepo: Repository<Lab>,
+    @InjectRepository(PlatformSetting)
+    private readonly platformSettingRepo: Repository<PlatformSetting>,
     @InjectRepository(Shift)
     private readonly shiftRepo: Repository<Shift>,
     @InjectRepository(Department)
@@ -130,6 +140,33 @@ export class DashboardService {
   async getLabTimeZone(labId: string): Promise<string> {
     const lab = await this.labRepo.findOne({ where: { id: labId } });
     return normalizeLabTimeZone(lab?.timezone);
+  }
+
+  async getAnnouncement(labId: string): Promise<DashboardAnnouncementDto> {
+    const [lab, globalSetting] = await Promise.all([
+      this.labRepo.findOne({
+        where: { id: labId },
+        select: {
+          id: true,
+          dashboardAnnouncementText: true,
+        },
+      }),
+      this.platformSettingRepo.findOne({
+        where: { key: GLOBAL_DASHBOARD_ANNOUNCEMENT_KEY },
+      }),
+    ]);
+
+    const labText = this.normalizeAnnouncementText(lab?.dashboardAnnouncementText);
+    if (labText) {
+      return { text: labText, source: 'LAB' };
+    }
+
+    const globalText = this.normalizeAnnouncementText(globalSetting?.valueText);
+    if (globalText) {
+      return { text: globalText, source: 'GLOBAL' };
+    }
+
+    return { text: null, source: 'NONE' };
   }
 
   async getOrdersTrend(labId: string, days: number): Promise<OrdersTrendPoint[]> {
@@ -645,5 +682,10 @@ export class DashboardService {
     ]);
 
     return { abnormalCount, criticalCount, totalVerified };
+  }
+
+  private normalizeAnnouncementText(value: string | null | undefined): string | null {
+    const trimmed = String(value ?? '').trim();
+    return trimmed || null;
   }
 }

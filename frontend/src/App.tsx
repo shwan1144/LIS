@@ -33,6 +33,7 @@ import { AdminLabOnlineResultsPage } from './pages/admin/AdminLabOnlineResultsPa
 import { AdminLabReportDesignPage } from './pages/admin/AdminLabReportDesignPage';
 import { AdminSettingsPage } from './pages/admin/AdminSettingsPage';
 import { AdminLabDetailsPage } from './pages/admin/AdminLabDetailsPage';
+import { AdminAnnouncementsPage } from './pages/admin/AdminAnnouncementsPage';
 import { Outlet } from 'react-router-dom';
 import { getCurrentAuthScope } from './utils/tenant-scope';
 import { InstallAppButton } from './components/InstallAppButton';
@@ -112,6 +113,7 @@ function AppContent() {
                 <Route path="labs/users" element={<AdminLabUsersPage />} />
                 <Route path="labs/online-results" element={<AdminLabOnlineResultsPage />} />
                 <Route path="labs/report-design" element={<AdminLabReportDesignPage />} />
+                <Route path="announcements" element={<AdminAnnouncementsPage />} />
                 <Route path="settings" element={<AdminSettingsPage />} />
               </Route>
             ) : (

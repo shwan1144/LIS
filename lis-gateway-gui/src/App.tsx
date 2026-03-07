@@ -61,6 +61,13 @@ interface ManagementStatus {
   lab: { code?: string; name?: string } | null;
 }
 
+interface DesktopSettings {
+  launchAtStartup: boolean;
+  openMaximized: boolean;
+  startupSupported: boolean;
+  startupReason: string | null;
+}
+
 interface SerialPortInfo {
   path: string;
   manufacturer: string | null;
@@ -130,6 +137,8 @@ declare global {
       managementLogin: (payload: { apiBaseUrl: string; labCode: string; username: string; password: string }) => Promise<ManagementStatus>;
       managementRefresh: () => Promise<ManagementStatus>;
       managementLogout: () => Promise<{ ok: boolean }>;
+      getDesktopSettings: () => Promise<DesktopSettings>;
+      updateDesktopSettings: (payload: Partial<Pick<DesktopSettings, 'launchAtStartup' | 'openMaximized'>>) => Promise<DesktopSettings>;
       listInstruments: () => Promise<InstrumentDto[]>;
       createInstrument: (payload: Record<string, unknown>) => Promise<InstrumentDto>;
       updateInstrument: (id: string, data: Record<string, unknown>) => Promise<InstrumentDto>;
@@ -316,6 +325,8 @@ function App() {
   const [serialTestResult, setSerialTestResult] = useState('');
 
   const [statusMessage, setStatusMessage] = useState('');
+  const [desktopSettings, setDesktopSettings] = useState<DesktopSettings | null>(null);
+  const [desktopSettingsBusy, setDesktopSettingsBusy] = useState(false);
 
   const logRef = useRef<HTMLDivElement>(null);
   const deviceNameTouchedRef = useRef(false);
@@ -374,6 +385,11 @@ function App() {
     }
   };
 
+  const refreshDesktopSettings = async () => {
+    const next = await window.electronAPI.getDesktopSettings();
+    setDesktopSettings(next);
+  };
+
   const refreshInstruments = async () => {
     if (!management.loggedIn) return;
     setLoadingInstruments(true);
@@ -388,7 +404,7 @@ function App() {
   };
 
   const refreshAll = async () => {
-    await Promise.all([refreshOverview(), refreshManagement()]);
+    await Promise.all([refreshOverview(), refreshManagement(), refreshDesktopSettings()]);
   };
 
   useEffect(() => {
@@ -647,6 +663,33 @@ function App() {
     }
   };
 
+  const handleDesktopSettingUpdate = async (
+    patch: Partial<Pick<DesktopSettings, 'launchAtStartup' | 'openMaximized'>>,
+  ) => {
+    setDesktopSettingsBusy(true);
+    try {
+      const next = await window.electronAPI.updateDesktopSettings(patch);
+      setDesktopSettings(next);
+      if (Object.prototype.hasOwnProperty.call(patch, 'launchAtStartup')) {
+        setStatusMessage(
+          next.launchAtStartup
+            ? 'Windows startup enabled.'
+            : 'Windows startup disabled.',
+        );
+      } else if (Object.prototype.hasOwnProperty.call(patch, 'openMaximized')) {
+        setStatusMessage(
+          next.openMaximized
+            ? 'Window will open maximized.'
+            : 'Window will open in normal size.',
+        );
+      }
+    } catch (error) {
+      alert(error instanceof Error ? error.message : String(error));
+    } finally {
+      setDesktopSettingsBusy(false);
+    }
+  };
+
   if (!status || !config) return <div className="loading">Loading gateway dashboard...</div>;
 
   return (
@@ -661,7 +704,7 @@ function App() {
 
       {statusMessage ? <div className="flash">{statusMessage}</div> : null}
 
-      <section className="panel grid-2">
+      <section className="panel grid-3">
         <div className="card">
           <h2>Activation</h2>
           <label>Cloud API Base URL</label>
@@ -709,6 +752,49 @@ function App() {
           <div className="kv"><span>Last Heartbeat</span><span>{formatIso(status.apiDetail?.lastHeartbeatAt || null)}</span></div>
           <div className="kv"><span>Last Error</span><span className="error">{status.lastError || status.apiDetail?.lastConfigError || status.apiDetail?.lastHeartbeatError || '-'}</span></div>
           <div className="button-row"><button className="ghost" onClick={handleCopyDiagnostics}>Copy Diagnostics</button></div>
+        </div>
+
+        <div className="card">
+          <h2>Desktop Settings</h2>
+          <div className="settings-stack">
+            <label className="toggle-row">
+              <span>
+                <strong>Run at Windows startup</strong>
+                <small>
+                  {desktopSettings?.startupSupported
+                    ? 'Launch this GUI automatically when Windows starts.'
+                    : desktopSettings?.startupReason || 'Startup option is unavailable in this mode.'}
+                </small>
+              </span>
+              <input
+                type="checkbox"
+                checked={Boolean(desktopSettings?.launchAtStartup)}
+                disabled={!desktopSettings?.startupSupported || desktopSettingsBusy}
+                onChange={(event) => {
+                  void handleDesktopSettingUpdate({
+                    launchAtStartup: event.target.checked,
+                  });
+                }}
+              />
+            </label>
+
+            <label className="toggle-row">
+              <span>
+                <strong>Open maximized</strong>
+                <small>Use the full screen area when this app opens.</small>
+              </span>
+              <input
+                type="checkbox"
+                checked={desktopSettings?.openMaximized !== false}
+                disabled={desktopSettingsBusy}
+                onChange={(event) => {
+                  void handleDesktopSettingUpdate({
+                    openMaximized: event.target.checked,
+                  });
+                }}
+              />
+            </label>
+          </div>
         </div>
       </section>
       <section className="panel grid-2">

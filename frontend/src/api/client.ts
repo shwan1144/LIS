@@ -460,6 +460,10 @@ export interface AdminPlatformSettingsOverviewDto {
   };
 }
 
+export interface AdminGlobalDashboardAnnouncementDto {
+  dashboardAnnouncementText: string | null;
+}
+
 export interface AdminImpersonationStatusDto {
   active: boolean;
   labId: string | null;
@@ -624,6 +628,21 @@ export async function getAdminSystemHealth(): Promise<AdminSystemHealthDto> {
 
 export async function getAdminPlatformSettingsOverview(): Promise<AdminPlatformSettingsOverviewDto> {
   const res = await api.get<AdminPlatformSettingsOverviewDto>('/admin/api/settings/platform');
+  return res.data;
+}
+
+export async function getAdminGlobalDashboardAnnouncement(): Promise<AdminGlobalDashboardAnnouncementDto> {
+  const res = await api.get<AdminGlobalDashboardAnnouncementDto>('/admin/api/announcements/dashboard');
+  return res.data;
+}
+
+export async function updateAdminGlobalDashboardAnnouncement(
+  data: { dashboardAnnouncementText?: string | null },
+): Promise<AdminGlobalDashboardAnnouncementDto> {
+  const res = await api.patch<AdminGlobalDashboardAnnouncementDto>(
+    '/admin/api/announcements/dashboard',
+    data,
+  );
   return res.data;
 }
 
@@ -920,6 +939,11 @@ export interface DashboardKpis {
   totalPatients: number;
 }
 
+export interface DashboardAnnouncementDto {
+  text: string | null;
+  source: 'LAB' | 'GLOBAL' | 'NONE';
+}
+
 export interface OrdersTrendPoint {
   date: string;
   count: number;
@@ -937,6 +961,14 @@ export async function getDashboardKpis(): Promise<DashboardKpis> {
         ? null
         : Number(raw.avgTatHours),
     totalPatients: Number(raw.totalPatients ?? 0),
+  };
+}
+
+export async function getDashboardAnnouncement(): Promise<DashboardAnnouncementDto> {
+  const res = await api.get<DashboardAnnouncementDto>('/dashboard/announcement');
+  return {
+    text: res.data?.text?.trim() || null,
+    source: res.data?.source ?? 'NONE',
   };
 }
 

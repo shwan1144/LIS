@@ -24,12 +24,15 @@ const order_test_entity_1 = require("../entities/order-test.entity");
 const patient_entity_1 = require("../entities/patient.entity");
 const reports_service_1 = require("../reports/reports.service");
 const report_style_config_1 = require("../reports/report-style.config");
+const platform_setting_entity_1 = require("../entities/platform-setting.entity");
 const typeorm_1 = require("typeorm");
 const admin_auth_service_1 = require("../admin-auth/admin-auth.service");
 const auth_service_1 = require("../auth/auth.service");
 const MAX_REPORT_IMAGE_DATA_URL_LENGTH = 4 * 1024 * 1024;
 const REPORT_IMAGE_DATA_URL_PATTERN = /^data:image\/(png|jpeg|jpg|webp);base64,[a-zA-Z0-9+/=]+$/;
 const UUID_V4_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const MAX_DASHBOARD_ANNOUNCEMENT_TEXT_LENGTH = 255;
+const GLOBAL_DASHBOARD_ANNOUNCEMENT_KEY = 'dashboard.announcement.all_labs';
 let PlatformAdminService = PlatformAdminService_1 = class PlatformAdminService {
     constructor(rlsSessionService, settingsService, auditService, reportsService, adminAuthService, authService) {
         this.rlsSessionService = rlsSessionService;
@@ -1017,6 +1020,44 @@ let PlatformAdminService = PlatformAdminService_1 = class PlatformAdminService {
     async getSettingsRoles() {
         return this.settingsService.getRoles();
     }
+    async getGlobalDashboardAnnouncement(actor) {
+        const setting = await this.rlsSessionService.withPlatformAdminContext(async (manager) => manager.getRepository(platform_setting_entity_1.PlatformSetting).findOne({
+            where: { key: GLOBAL_DASHBOARD_ANNOUNCEMENT_KEY },
+        }));
+        await this.logPlatformSensitiveRead(actor, {
+            labId: null,
+            entityType: 'platform_setting',
+            entityId: GLOBAL_DASHBOARD_ANNOUNCEMENT_KEY,
+            description: 'Viewed global dashboard announcement',
+        });
+        return {
+            dashboardAnnouncementText: this.normalizeDashboardAnnouncementText(setting?.valueText),
+        };
+    }
+    async updateGlobalDashboardAnnouncement(data) {
+        const normalized = this.normalizeDashboardAnnouncementText(data.dashboardAnnouncementText);
+        await this.rlsSessionService.withPlatformAdminContext(async (manager) => {
+            const repo = manager.getRepository(platform_setting_entity_1.PlatformSetting);
+            let setting = await repo.findOne({
+                where: { key: GLOBAL_DASHBOARD_ANNOUNCEMENT_KEY },
+            });
+            if (!setting) {
+                setting = repo.create({
+                    key: GLOBAL_DASHBOARD_ANNOUNCEMENT_KEY,
+                });
+            }
+            setting.valueText = normalized;
+            await repo.save(setting);
+        });
+        this.logger.log(JSON.stringify({
+            event: 'admin.platform_announcement.update',
+            key: GLOBAL_DASHBOARD_ANNOUNCEMENT_KEY,
+            hasText: Boolean(normalized),
+        }));
+        return {
+            dashboardAnnouncementText: normalized,
+        };
+    }
     async getLabSettings(labId, actor) {
         const settings = await this.settingsService.getLabSettings(labId);
         await this.logPlatformSensitiveRead(actor, {
@@ -1347,6 +1388,20 @@ let PlatformAdminService = PlatformAdminService_1 = class PlatformAdminService {
         }
         if (!REPORT_IMAGE_DATA_URL_PATTERN.test(trimmed)) {
             throw new common_1.BadRequestException(`${fieldName} must be a valid image data URL (png, jpg/jpeg, or webp)`);
+        }
+        return trimmed;
+    }
+    normalizeDashboardAnnouncementText(value) {
+        if (value === null || value === undefined)
+            return null;
+        if (typeof value !== 'string') {
+            throw new common_1.BadRequestException('dashboardAnnouncementText must be a string or null');
+        }
+        const trimmed = value.trim();
+        if (!trimmed)
+            return null;
+        if (trimmed.length > MAX_DASHBOARD_ANNOUNCEMENT_TEXT_LENGTH) {
+            throw new common_1.BadRequestException(`dashboardAnnouncementText must be at most ${MAX_DASHBOARD_ANNOUNCEMENT_TEXT_LENGTH} characters`);
         }
         return trimmed;
     }

@@ -49,6 +49,9 @@ export interface AdminPlatformSettingsOverview {
         totalAccounts: number;
     };
 }
+export interface AdminGlobalDashboardAnnouncement {
+    dashboardAnnouncementText: string | null;
+}
 export interface AdminOrderListItem {
     id: string;
     labId: string;
@@ -282,6 +285,10 @@ export declare class PlatformAdminService {
     getSystemHealth(): Promise<AdminSystemHealth>;
     getPlatformSettingsOverview(): Promise<AdminPlatformSettingsOverview>;
     getSettingsRoles(): Promise<string[]>;
+    getGlobalDashboardAnnouncement(actor?: PlatformActorContext): Promise<AdminGlobalDashboardAnnouncement>;
+    updateGlobalDashboardAnnouncement(data: {
+        dashboardAnnouncementText?: string | null;
+    }): Promise<AdminGlobalDashboardAnnouncement>;
     getLabSettings(labId: string, actor?: PlatformActorContext): Promise<{
         id: string;
         code: string;
@@ -455,6 +462,7 @@ export declare class PlatformAdminService {
     private toAdminOrderListItem;
     private normalizeUuidV4;
     private normalizeReportImageDataUrl;
+    private normalizeDashboardAnnouncementText;
     private normalizePreviewReportBranding;
     private normalizePreviewReportStyle;
     private logPlatformSensitiveRead;

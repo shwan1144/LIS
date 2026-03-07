@@ -20,6 +20,7 @@ import { Order } from '../entities/order.entity';
 import { Patient } from '../entities/patient.entity';
 import { Pricing } from '../entities/pricing.entity';
 import { PlatformUser } from '../entities/platform-user.entity';
+import { PlatformSetting } from '../entities/platform-setting.entity';
 import { RefreshToken } from '../entities/refresh-token.entity';
 import { Result } from '../entities/result.entity';
 import { Sample } from '../entities/sample.entity';
@@ -48,6 +49,7 @@ export const DATABASE_ENTITIES = [
   Test,
   Pricing,
   PlatformUser,
+  PlatformSetting,
   RefreshToken,
   Result,
   AuditLog,

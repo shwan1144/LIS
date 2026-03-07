@@ -208,6 +208,12 @@ let PlatformAdminController = class PlatformAdminController {
     async getPlatformSettingsOverview() {
         return this.platformAdminService.getPlatformSettingsOverview();
     }
+    async getGlobalDashboardAnnouncement(req) {
+        return this.platformAdminService.getGlobalDashboardAnnouncement(this.getActorContext(req));
+    }
+    async updateGlobalDashboardAnnouncement(body) {
+        return this.platformAdminService.updateGlobalDashboardAnnouncement(body);
+    }
     getActorContext(req) {
         const forwardedFor = req.headers['x-forwarded-for'];
         const ipAddress = Array.isArray(forwardedFor)
@@ -512,6 +518,21 @@ __decorate([
     __metadata("design:paramtypes", []),
     __metadata("design:returntype", Promise)
 ], PlatformAdminController.prototype, "getPlatformSettingsOverview", null);
+__decorate([
+    (0, common_1.Get)('announcements/dashboard'),
+    __param(0, (0, common_1.Req)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object]),
+    __metadata("design:returntype", Promise)
+], PlatformAdminController.prototype, "getGlobalDashboardAnnouncement", null);
+__decorate([
+    (0, common_1.Patch)('announcements/dashboard'),
+    (0, roles_decorator_1.Roles)('SUPER_ADMIN'),
+    __param(0, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object]),
+    __metadata("design:returntype", Promise)
+], PlatformAdminController.prototype, "updateGlobalDashboardAnnouncement", null);
 exports.PlatformAdminController = PlatformAdminController = __decorate([
     (0, common_1.Controller)('admin/api'),
     (0, common_1.UseGuards)(admin_host_guard_1.AdminHostGuard, admin_jwt_auth_guard_1.AdminJwtAuthGuard, roles_guard_1.RolesGuard),

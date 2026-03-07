@@ -28,6 +28,10 @@ body {
     linear-gradient(180deg, var(--bg-soft) 0%, var(--bg) 70%);
 }
 
+#root {
+  min-height: 100vh;
+}
+
 .loading {
   min-height: 100vh;
   display: flex;
@@ -41,7 +45,7 @@ body {
   display: flex;
   flex-direction: column;
   gap: 16px;
-  padding: 18px;
+  padding: clamp(16px, 2vw, 28px);
 }
 
 .header {
@@ -104,6 +108,12 @@ body {
 .grid-2 {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.grid-3 {
+  display: grid;
+  grid-template-columns: 1.05fr 1fr 0.9fr;
   gap: 14px;
 }
 
@@ -217,6 +227,41 @@ button:disabled {
   display: flex;
   flex-direction: column;
   gap: 5px;
+}
+
+.settings-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.toggle-row {
+  margin: 0;
+  padding: 12px;
+  border: 1px solid rgba(40, 69, 101, 0.65);
+  border-radius: 10px;
+  background: rgba(7, 16, 28, 0.58);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.toggle-row span {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.toggle-row small {
+  color: var(--muted);
+  line-height: 1.35;
+}
+
+.toggle-row input[type='checkbox'] {
+  width: 18px;
+  height: 18px;
+  margin: 0;
 }
 
 .listeners {
@@ -415,6 +460,10 @@ button:disabled {
 
 @media (max-width: 1080px) {
   .grid-2 {
+    grid-template-columns: 1fr;
+  }
+
+  .grid-3 {
     grid-template-columns: 1fr;
   }
 

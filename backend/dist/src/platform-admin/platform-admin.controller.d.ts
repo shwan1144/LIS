@@ -225,6 +225,10 @@ export declare class PlatformAdminController {
     getAuditEntityTypes(labId?: string): Promise<string[]>;
     getSystemHealth(): Promise<import("./platform-admin.service").AdminSystemHealth>;
     getPlatformSettingsOverview(): Promise<import("./platform-admin.service").AdminPlatformSettingsOverview>;
+    getGlobalDashboardAnnouncement(req: RequestWithPlatformUser): Promise<import("./platform-admin.service").AdminGlobalDashboardAnnouncement>;
+    updateGlobalDashboardAnnouncement(body: {
+        dashboardAnnouncementText?: string | null;
+    }): Promise<import("./platform-admin.service").AdminGlobalDashboardAnnouncement>;
     private getActorContext;
 }
 export {};

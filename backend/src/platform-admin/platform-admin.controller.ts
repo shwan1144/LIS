@@ -463,6 +463,22 @@ export class PlatformAdminController {
     return this.platformAdminService.getPlatformSettingsOverview();
   }
 
+  @Get('announcements/dashboard')
+  async getGlobalDashboardAnnouncement(@Req() req: RequestWithPlatformUser) {
+    return this.platformAdminService.getGlobalDashboardAnnouncement(this.getActorContext(req));
+  }
+
+  @Patch('announcements/dashboard')
+  @Roles('SUPER_ADMIN')
+  async updateGlobalDashboardAnnouncement(
+    @Body()
+    body: {
+      dashboardAnnouncementText?: string | null;
+    },
+  ) {
+    return this.platformAdminService.updateGlobalDashboardAnnouncement(body);
+  }
+
   private getActorContext(req: RequestWithPlatformUser) {
     const forwardedFor = req.headers['x-forwarded-for'];
     const ipAddress = Array.isArray(forwardedFor)

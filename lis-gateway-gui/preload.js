@@ -12,6 +12,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     managementLogin: (payload) => ipcRenderer.invoke('gateway:management-login', payload),
     managementRefresh: () => ipcRenderer.invoke('gateway:management-refresh'),
     managementLogout: () => ipcRenderer.invoke('gateway:management-logout'),
+    getDesktopSettings: () => ipcRenderer.invoke('gateway:desktop-settings:get'),
+    updateDesktopSettings: (payload) => ipcRenderer.invoke('gateway:desktop-settings:update', payload),
     listInstruments: () => ipcRenderer.invoke('gateway:instruments:list'),
     createInstrument: (payload) => ipcRenderer.invoke('gateway:instruments:create', payload),
     updateInstrument: (id, data) => ipcRenderer.invoke('gateway:instruments:update', { id, data }),

@@ -7,7 +7,13 @@ import {
   Req,
   Res,
 } from '@nestjs/common';
-import { DashboardService, DashboardKpis, OrdersTrendPoint, StatisticsDto } from './dashboard.service';
+import {
+  DashboardService,
+  DashboardKpis,
+  OrdersTrendPoint,
+  StatisticsDto,
+  DashboardAnnouncementDto,
+} from './dashboard.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
@@ -69,6 +75,15 @@ export class DashboardController {
       ? await this.dashboardService.getOrdersTrend(labId, numDays)
       : [];
     return { data };
+  }
+
+  @Get('announcement')
+  async getAnnouncement(@Req() req: RequestWithUser): Promise<DashboardAnnouncementDto> {
+    const labId = req.user?.labId;
+    if (!labId) {
+      return { text: null, source: 'NONE' };
+    }
+    return this.dashboardService.getAnnouncement(labId);
   }
 
   @Get('statistics')

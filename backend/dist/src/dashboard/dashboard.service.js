@@ -20,19 +20,22 @@ const patient_entity_1 = require("../entities/patient.entity");
 const order_test_entity_1 = require("../entities/order-test.entity");
 const order_entity_1 = require("../entities/order.entity");
 const lab_entity_1 = require("../entities/lab.entity");
+const platform_setting_entity_1 = require("../entities/platform-setting.entity");
 const shift_entity_1 = require("../entities/shift.entity");
 const department_entity_1 = require("../entities/department.entity");
 const orders_service_1 = require("../orders/orders.service");
 const unmatched_results_service_1 = require("../unmatched/unmatched-results.service");
 const lab_timezone_util_1 = require("../database/lab-timezone.util");
 const PDFDocument = require('pdfkit');
+const GLOBAL_DASHBOARD_ANNOUNCEMENT_KEY = 'dashboard.announcement.all_labs';
 const TAT_TARGET_MINUTES = 60;
 let DashboardService = class DashboardService {
-    constructor(patientRepo, orderTestRepo, orderRepo, labRepo, shiftRepo, departmentRepo, ordersService, unmatchedService) {
+    constructor(patientRepo, orderTestRepo, orderRepo, labRepo, platformSettingRepo, shiftRepo, departmentRepo, ordersService, unmatchedService) {
         this.patientRepo = patientRepo;
         this.orderTestRepo = orderTestRepo;
         this.orderRepo = orderRepo;
         this.labRepo = labRepo;
+        this.platformSettingRepo = platformSettingRepo;
         this.shiftRepo = shiftRepo;
         this.departmentRepo = departmentRepo;
         this.ordersService = ordersService;
@@ -69,6 +72,29 @@ let DashboardService = class DashboardService {
     async getLabTimeZone(labId) {
         const lab = await this.labRepo.findOne({ where: { id: labId } });
         return (0, lab_timezone_util_1.normalizeLabTimeZone)(lab?.timezone);
+    }
+    async getAnnouncement(labId) {
+        const [lab, globalSetting] = await Promise.all([
+            this.labRepo.findOne({
+                where: { id: labId },
+                select: {
+                    id: true,
+                    dashboardAnnouncementText: true,
+                },
+            }),
+            this.platformSettingRepo.findOne({
+                where: { key: GLOBAL_DASHBOARD_ANNOUNCEMENT_KEY },
+            }),
+        ]);
+        const labText = this.normalizeAnnouncementText(lab?.dashboardAnnouncementText);
+        if (labText) {
+            return { text: labText, source: 'LAB' };
+        }
+        const globalText = this.normalizeAnnouncementText(globalSetting?.valueText);
+        if (globalText) {
+            return { text: globalText, source: 'GLOBAL' };
+        }
+        return { text: null, source: 'NONE' };
     }
     async getOrdersTrend(labId, days) {
         return this.ordersService.getOrdersTrend(labId, days);
@@ -461,6 +487,10 @@ let DashboardService = class DashboardService {
         ]);
         return { abnormalCount, criticalCount, totalVerified };
     }
+    normalizeAnnouncementText(value) {
+        const trimmed = String(value ?? '').trim();
+        return trimmed || null;
+    }
 };
 exports.DashboardService = DashboardService;
 exports.DashboardService = DashboardService = __decorate([
@@ -469,9 +499,11 @@ exports.DashboardService = DashboardService = __decorate([
     __param(1, (0, typeorm_1.InjectRepository)(order_test_entity_1.OrderTest)),
     __param(2, (0, typeorm_1.InjectRepository)(order_entity_1.Order)),
     __param(3, (0, typeorm_1.InjectRepository)(lab_entity_1.Lab)),
-    __param(4, (0, typeorm_1.InjectRepository)(shift_entity_1.Shift)),
-    __param(5, (0, typeorm_1.InjectRepository)(department_entity_1.Department)),
+    __param(4, (0, typeorm_1.InjectRepository)(platform_setting_entity_1.PlatformSetting)),
+    __param(5, (0, typeorm_1.InjectRepository)(shift_entity_1.Shift)),
+    __param(6, (0, typeorm_1.InjectRepository)(department_entity_1.Department)),
     __metadata("design:paramtypes", [typeorm_2.Repository,
+        typeorm_2.Repository,
         typeorm_2.Repository,
         typeorm_2.Repository,
         typeorm_2.Repository,

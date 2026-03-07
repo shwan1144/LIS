@@ -11,7 +11,7 @@ import {
 } from '@ant-design/icons';
 import {
   getDashboardKpis,
-  getLabSettings,
+  getDashboardAnnouncement,
   getOrdersTrend,
   type DashboardKpis as KpisType,
 } from '../api/client';
@@ -29,15 +29,15 @@ export function DashboardPage() {
     let cancelled = false;
     async function load() {
       try {
-        const [kpisRes, trendRes, settingsRes] = await Promise.all([
+        const [kpisRes, trendRes, announcementRes] = await Promise.all([
           getDashboardKpis(),
           getOrdersTrend(7),
-          getLabSettings().catch(() => null),
+          getDashboardAnnouncement().catch(() => ({ text: null, source: 'NONE' as const })),
         ]);
         if (!cancelled) {
           setKpis(kpisRes);
           setTrend(trendRes);
-          setDashboardAnnouncement(settingsRes?.dashboardAnnouncementText?.trim() || null);
+          setDashboardAnnouncement(announcementRes.text ?? null);
         }
       } catch {
         if (!cancelled) message.error('Failed to load dashboard');

@@ -12,6 +12,10 @@ const AGENT_CONFIG_PATH = path.join(
   'config',
   'agent.json',
 );
+const DEFAULT_DESKTOP_SETTINGS = {
+  launchAtStartup: false,
+  openMaximized: true,
+};
 let managementSession = {
   apiBaseUrl: '',
   accessToken: '',
@@ -21,9 +25,13 @@ let managementSession = {
 };
 
 function createWindow() {
+  const desktopSettings = loadDesktopSettings();
   mainWindow = new BrowserWindow({
-    width: 1100,
-    height: 860,
+    width: 1440,
+    height: 960,
+    minWidth: 1200,
+    minHeight: 760,
+    show: false,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       nodeIntegration: false,
@@ -33,11 +41,97 @@ function createWindow() {
     autoHideMenuBar: true,
   });
 
+  mainWindow.once('ready-to-show', () => {
+    if (desktopSettings.openMaximized !== false) {
+      mainWindow.maximize();
+    }
+    mainWindow.show();
+  });
+
   if (process.env.VITE_DEV_SERVER_URL) {
     mainWindow.loadURL(process.env.VITE_DEV_SERVER_URL);
   } else {
     mainWindow.loadFile(path.join(__dirname, 'dist/index.html'));
   }
+}
+
+function getDesktopSettingsPath() {
+  return path.join(app.getPath('userData'), 'desktop-settings.json');
+}
+
+function loadDesktopSettings() {
+  try {
+    const filePath = getDesktopSettingsPath();
+    if (!fs.existsSync(filePath)) {
+      return { ...DEFAULT_DESKTOP_SETTINGS };
+    }
+    const parsed = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+    return {
+      ...DEFAULT_DESKTOP_SETTINGS,
+      ...(parsed && typeof parsed === 'object' ? parsed : {}),
+    };
+  } catch {
+    return { ...DEFAULT_DESKTOP_SETTINGS };
+  }
+}
+
+function saveDesktopSettings(nextSettings) {
+  const filePath = getDesktopSettingsPath();
+  fs.mkdirSync(path.dirname(filePath), { recursive: true });
+  fs.writeFileSync(filePath, JSON.stringify(nextSettings, null, 2), 'utf8');
+}
+
+function getStartupCapability() {
+  if (process.platform !== 'win32') {
+    return {
+      startupSupported: false,
+      startupReason: 'Windows startup registration is supported on Windows only.',
+    };
+  }
+
+  if (!app.isPackaged) {
+    return {
+      startupSupported: false,
+      startupReason: 'Startup registration works after installing the packaged EXE.',
+    };
+  }
+
+  return {
+    startupSupported: true,
+    startupReason: null,
+  };
+}
+
+function readDesktopSettingsState() {
+  const persisted = loadDesktopSettings();
+  const capability = getStartupCapability();
+  const launchAtStartup = capability.startupSupported
+    ? app.getLoginItemSettings({
+        path: process.execPath,
+      }).openAtLogin
+    : false;
+
+  return {
+    launchAtStartup,
+    openMaximized: persisted.openMaximized !== false,
+    startupSupported: capability.startupSupported,
+    startupReason: capability.startupReason,
+  };
+}
+
+function applyLaunchAtStartup(enabled) {
+  const capability = getStartupCapability();
+  if (!capability.startupSupported) {
+    if (enabled) {
+      throw new Error(capability.startupReason || 'Startup registration is not available.');
+    }
+    return;
+  }
+
+  app.setLoginItemSettings({
+    openAtLogin: enabled,
+    path: process.execPath,
+  });
 }
 
 function loadLocalApiToken() {
@@ -380,7 +474,47 @@ ipcMain.handle('gateway:instruments:toggle', async (event, payload) => {
   }
 });
 
-app.whenReady().then(createWindow);
+ipcMain.handle('gateway:desktop-settings:get', async () => {
+  return readDesktopSettingsState();
+});
+
+ipcMain.handle('gateway:desktop-settings:update', async (event, payload) => {
+  const nextSettings = {
+    ...loadDesktopSettings(),
+  };
+
+  if (payload && Object.prototype.hasOwnProperty.call(payload, 'openMaximized')) {
+    nextSettings.openMaximized = payload.openMaximized !== false;
+  }
+
+  if (payload && Object.prototype.hasOwnProperty.call(payload, 'launchAtStartup')) {
+    nextSettings.launchAtStartup = Boolean(payload.launchAtStartup);
+    applyLaunchAtStartup(nextSettings.launchAtStartup);
+  }
+
+  saveDesktopSettings(nextSettings);
+
+  const window = BrowserWindow.fromWebContents(event.sender);
+  if (window && payload && Object.prototype.hasOwnProperty.call(payload, 'openMaximized')) {
+    if (nextSettings.openMaximized) {
+      window.maximize();
+    } else if (window.isMaximized()) {
+      window.unmaximize();
+    }
+  }
+
+  return readDesktopSettingsState();
+});
+
+app.whenReady().then(() => {
+  const desktopSettings = loadDesktopSettings();
+  try {
+    applyLaunchAtStartup(Boolean(desktopSettings.launchAtStartup));
+  } catch {
+    // Ignore unsupported startup registration in development mode.
+  }
+  createWindow();
+});
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
