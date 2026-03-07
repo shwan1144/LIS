@@ -1481,11 +1481,18 @@ export function ReportsPage() {
       return disabled ? 'preferred-action preferred-action--muted' : 'preferred-action';
     };
 
+    const actionButtonClassName = (preferred: boolean, disabled: boolean) => {
+      const preferredClass = preferredClassName(preferred, disabled);
+      return preferredClass
+        ? `reports-order-action-btn ${preferredClass}`
+        : 'reports-order-action-btn';
+    };
+
     const withTick = (label: string, done: boolean, color?: string) => (
-      <Space size={4}>
+      <span className="reports-order-action-label">
         <span>{label}</span>
         {done ? <CheckOutlined style={{ color: color ?? '#52c41a', fontSize: 11 }} /> : null}
-      </Space>
+      </span>
     );
 
     const menuItems = [
@@ -1542,17 +1549,16 @@ export function ReportsPage() {
     }
 
     return (
-      <Space
+      <div
+        className="reports-order-actions"
         onClick={(event) => event.stopPropagation()}
-        size={4}
-        wrap={false}
-        style={{ width: '100%', justifyContent: 'flex-end', whiteSpace: 'nowrap' }}
       >
         <Tooltip title={!reportReady ? notReadyTooltip : paymentTooltip || 'Download results PDF'}>
           <Button
             type="link"
             size="small"
             icon={<FilePdfOutlined />}
+            className="reports-order-action-btn"
             disabled={!reportReady}
             loading={downloading === `results-${record.id}`}
             onClick={() => handleDownloadResults(record.id, record)}
@@ -1565,7 +1571,7 @@ export function ReportsPage() {
             type="link"
             size="small"
             icon={<PrinterOutlined />}
-            className={preferredClassName(printPreferred, !reportReady)}
+            className={actionButtonClassName(printPreferred, !reportReady)}
             disabled={!reportReady}
             loading={downloading === `print-${record.id}`}
             onClick={() => handlePrintResults(record.id, record)}
@@ -1580,7 +1586,7 @@ export function ReportsPage() {
             type="link"
             size="small"
             icon={<WhatsAppOutlined />}
-            className={preferredClassName(whatsappPreferred, !hasPhone || !reportReady)}
+            className={actionButtonClassName(whatsappPreferred, !hasPhone || !reportReady)}
             disabled={!hasPhone || !reportReady}
             onClick={() => handleSendWhatsApp(record)}
             style={{ color: hasPhone ? '#25D366' : undefined }}
@@ -1595,7 +1601,7 @@ export function ReportsPage() {
             type="link"
             size="small"
             icon={<MessageOutlined />}
-            className={preferredClassName(viberPreferred, !hasPhone || !reportReady)}
+            className={actionButtonClassName(viberPreferred, !hasPhone || !reportReady)}
             disabled={!hasPhone || !reportReady}
             onClick={() => handleSendViber(record)}
             style={{ color: hasPhone ? '#7360F2' : undefined }}
@@ -1603,7 +1609,7 @@ export function ReportsPage() {
             {withTick('Viber', viberDone, '#7360F2')}
           </Button>
         </Tooltip>
-      </Space>
+      </div>
     );
   };
 
@@ -1674,9 +1680,9 @@ export function ReportsPage() {
     {
       title: 'Actions',
       key: 'actions',
-      width: isCompactActions ? 80 : 360,
+      width: isCompactActions ? 80 : 392,
       render: (_: unknown, record: OrderHistoryItemDto) => (
-        <div style={{ minWidth: 0, display: 'flex', justifyContent: 'flex-end' }}>
+        <div className="reports-order-actions-cell">
           {renderOrderActions(record)}
         </div>
       ),
@@ -1810,6 +1816,50 @@ export function ReportsPage() {
           border: 1px solid #91caff !important;
           background: rgba(22, 119, 255, 0.12) !important;
         }
+        .reports-order-actions-cell {
+          min-width: 0;
+          display: flex;
+          align-items: center;
+          justify-content: flex-end;
+        }
+        .reports-order-actions {
+          display: grid;
+          grid-template-columns: repeat(4, minmax(0, 1fr));
+          align-items: center;
+          gap: 6px;
+          width: min(100%, 380px);
+          margin-left: auto;
+        }
+        .reports-order-action-btn.ant-btn.ant-btn-link {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          width: 100%;
+          min-width: 0;
+          height: 32px;
+          margin: 0;
+          padding-inline: 10px;
+          border: 1px solid transparent;
+          border-radius: 999px;
+          white-space: nowrap;
+        }
+        .reports-order-action-btn.ant-btn.ant-btn-link:not(:disabled):hover,
+        .reports-order-action-btn.ant-btn.ant-btn-link:not(:disabled):focus {
+          background: rgba(22, 119, 255, 0.08);
+        }
+        .reports-order-action-btn.ant-btn.ant-btn-link > .anticon,
+        .reports-order-action-btn.ant-btn.ant-btn-link .ant-btn-loading-icon {
+          font-size: 13px;
+          margin-inline-end: 6px;
+        }
+        .reports-order-action-label {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          gap: 5px;
+          min-width: 0;
+          white-space: nowrap;
+        }
         .preferred-action--muted {
           border-color: rgba(0, 0, 0, 0.18) !important;
           background: rgba(0, 0, 0, 0.06) !important;
@@ -1817,6 +1867,10 @@ export function ReportsPage() {
         html[data-theme='dark'] .preferred-action {
           border-color: rgba(145, 202, 255, 0.7) !important;
           background: rgba(22, 119, 255, 0.25) !important;
+        }
+        html[data-theme='dark'] .reports-order-action-btn.ant-btn.ant-btn-link:not(:disabled):hover,
+        html[data-theme='dark'] .reports-order-action-btn.ant-btn.ant-btn-link:not(:disabled):focus {
+          background: rgba(96, 165, 250, 0.12);
         }
         html[data-theme='dark'] .preferred-action--muted {
           border-color: rgba(255, 255, 255, 0.26) !important;

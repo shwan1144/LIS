@@ -70,6 +70,63 @@ function createOrderTest(
   } as unknown as OrderTest;
 }
 
+function buildRegularResultsHtml(
+  resultsTableOverrides: Partial<typeof DEFAULT_REPORT_STYLE_V1.resultsTable> = {},
+): string {
+  const order = createOrder({
+    lab: {
+      ...createOrder().lab,
+      reportStyle: {
+        ...DEFAULT_REPORT_STYLE_V1,
+        resultsTable: {
+          ...DEFAULT_REPORT_STYLE_V1.resultsTable,
+          ...resultsTableOverrides,
+        },
+      },
+    } as Order['lab'],
+  });
+  const hormoneTsh = createOrderTest('regular-tsh', {
+    name: 'TSH',
+    code: 'TSH',
+    abbreviation: 'TSH',
+    resultValue: 2.2,
+    unit: 'uIU/mL',
+    departmentName: 'Hormone',
+    category: 'Thyroid',
+    sortOrder: 1,
+  });
+  const hormoneT3 = createOrderTest('regular-t3', {
+    name: 'T3',
+    code: 'T3',
+    abbreviation: 'T3',
+    resultValue: 1.1,
+    unit: 'ng/mL',
+    departmentName: 'Hormone',
+    category: 'Thyroid',
+    sortOrder: 2,
+  });
+  const chemistryUrea = createOrderTest('regular-urea', {
+    name: 'Urea',
+    code: 'UREA',
+    abbreviation: 'UREA',
+    resultValue: 25,
+    unit: 'mg/dL',
+    departmentName: 'Chemistry',
+    category: 'Renal',
+    sortOrder: 3,
+  });
+
+  return buildResultsReportHtml({
+    order,
+    orderTests: [hormoneTsh, hormoneT3, chemistryUrea],
+    reportableCount: 3,
+    verifiedCount: 3,
+    verifiers: ['Verifier'],
+    latestVerifiedAt: new Date('2026-02-26T11:00:00.000Z'),
+    comments: [],
+  });
+}
+
 describe('buildResultsReportHtml panel page isolation', () => {
   it('keeps panel children out of regular section and renders them on panel-only pages', () => {
     const order = createOrder();
@@ -224,47 +281,7 @@ describe('buildResultsReportHtml panel page isolation', () => {
   });
 
   it('renders regular results with one table header and department tbody blocks', () => {
-    const order = createOrder();
-    const hormoneTsh = createOrderTest('regular-tsh', {
-      name: 'TSH',
-      code: 'TSH',
-      abbreviation: 'TSH',
-      resultValue: 2.2,
-      unit: 'uIU/mL',
-      departmentName: 'Hormone',
-      category: 'Thyroid',
-      sortOrder: 1,
-    });
-    const hormoneT3 = createOrderTest('regular-t3', {
-      name: 'T3',
-      code: 'T3',
-      abbreviation: 'T3',
-      resultValue: 1.1,
-      unit: 'ng/mL',
-      departmentName: 'Hormone',
-      category: 'Thyroid',
-      sortOrder: 2,
-    });
-    const chemistryUrea = createOrderTest('regular-urea', {
-      name: 'Urea',
-      code: 'UREA',
-      abbreviation: 'UREA',
-      resultValue: 25,
-      unit: 'mg/dL',
-      departmentName: 'Chemistry',
-      category: 'Renal',
-      sortOrder: 3,
-    });
-
-    const html = buildResultsReportHtml({
-      order,
-      orderTests: [hormoneTsh, hormoneT3, chemistryUrea],
-      reportableCount: 3,
-      verifiedCount: 3,
-      verifiers: ['Verifier'],
-      latestVerifiedAt: new Date('2026-02-26T11:00:00.000Z'),
-      comments: [],
-    });
+    const html = buildRegularResultsHtml();
 
     const regularHeaderRow =
       '<thead><tr><th style="width:28%;">Test</th><th style="width:14%;">Result</th><th style="width:14%;">Unit</th><th style="width:14%;">Status</th><th style="width:30%;">Reference Value</th></tr></thead>';
@@ -274,6 +291,32 @@ describe('buildResultsReportHtml panel page isolation', () => {
     expect(countMatches(html, 'class="regular-dept-block"')).toBe(2);
     expect(html).toContain('class="dept-row"');
     expect(html).toContain('class="cat-row"');
+  });
+
+  it('renders only category rows when department rows are hidden', () => {
+    const html = buildRegularResultsHtml({ showDepartmentRow: false, showCategoryRow: true });
+
+    expect(html).not.toContain('class="dept-row"');
+    expect(html).toContain('class="cat-row"');
+    expect(countMatches(html, 'class="regular-dept-block"')).toBe(2);
+  });
+
+  it('renders only department rows when category rows are hidden', () => {
+    const html = buildRegularResultsHtml({ showDepartmentRow: true, showCategoryRow: false });
+
+    expect(html).toContain('class="dept-row"');
+    expect(html).not.toContain('class="cat-row"');
+    expect(countMatches(html, 'class="regular-dept-block"')).toBe(2);
+  });
+
+  it('renders only test rows when both department and category rows are hidden', () => {
+    const html = buildRegularResultsHtml({ showDepartmentRow: false, showCategoryRow: false });
+
+    expect(html).not.toContain('class="dept-row"');
+    expect(html).not.toContain('class="cat-row"');
+    expect(html).toContain('TSH');
+    expect(html).toContain('UREA');
+    expect(countMatches(html, 'class="regular-dept-block"')).toBe(2);
   });
 
   it('does not duplicate the regular header row in the regular page markup chunk', () => {

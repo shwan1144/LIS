@@ -155,10 +155,12 @@ function defaultReportStyle(): ReportStyleDto {
       rowStripeColor: '#F9FBFF',
       abnormalRowBackgroundColor: '#FFF5F5',
       referenceValueColor: '#333333',
+      showDepartmentRow: true,
       departmentRowBackgroundColor: '#222222',
       departmentRowTextColor: '#FFFFFF',
       departmentRowFontSizePx: 12,
       departmentRowTextAlign: 'left',
+      showCategoryRow: true,
       categoryRowBackgroundColor: '#F2F2F2',
       categoryRowTextColor: '#555555',
       categoryRowFontSizePx: 12,
@@ -696,6 +698,8 @@ export function AdminLabReportDesignPage() {
   const stripedRowBg = reportStyle.resultsTable.rowStripeEnabled
     ? reportStyle.resultsTable.rowStripeColor
     : 'transparent';
+  const showDepartmentRow = reportStyle.resultsTable.showDepartmentRow;
+  const showCategoryRow = reportStyle.resultsTable.showCategoryRow;
   const scrollToPreview = () => {
     previewCardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
@@ -1050,28 +1054,44 @@ export function AdminLabReportDesignPage() {
                                   disabled={!canMutate}
                                   onChange={(value) => updateResultsStyle('referenceValueColor', value)}
                                 />
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                  <Text>Show Department Row</Text>
+                                  <Switch
+                                    checked={showDepartmentRow}
+                                    onChange={(value) => updateResultsStyle('showDepartmentRow', value)}
+                                    disabled={!canMutate}
+                                  />
+                                </div>
                                 <StyleColorControl
                                   label="Department Row Bg"
                                   value={reportStyle.resultsTable.departmentRowBackgroundColor}
-                                  disabled={!canMutate}
+                                  disabled={!canMutate || !showDepartmentRow}
                                   onChange={(value) => updateResultsStyle('departmentRowBackgroundColor', value)}
                                 />
                                 <StyleColorControl
                                   label="Department Row Text"
                                   value={reportStyle.resultsTable.departmentRowTextColor}
-                                  disabled={!canMutate}
+                                  disabled={!canMutate || !showDepartmentRow}
                                   onChange={(value) => updateResultsStyle('departmentRowTextColor', value)}
                                 />
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                  <Text>Show Category Row</Text>
+                                  <Switch
+                                    checked={showCategoryRow}
+                                    onChange={(value) => updateResultsStyle('showCategoryRow', value)}
+                                    disabled={!canMutate}
+                                  />
+                                </div>
                                 <StyleColorControl
                                   label="Category Row Bg"
                                   value={reportStyle.resultsTable.categoryRowBackgroundColor}
-                                  disabled={!canMutate}
+                                  disabled={!canMutate || !showCategoryRow}
                                   onChange={(value) => updateResultsStyle('categoryRowBackgroundColor', value)}
                                 />
                                 <StyleColorControl
                                   label="Category Row Text"
                                   value={reportStyle.resultsTable.categoryRowTextColor}
-                                  disabled={!canMutate}
+                                  disabled={!canMutate || !showCategoryRow}
                                   onChange={(value) => updateResultsStyle('categoryRowTextColor', value)}
                                 />
                                 <StyleColorControl
@@ -1119,7 +1139,7 @@ export function AdminLabReportDesignPage() {
                                     max={16}
                                     value={reportStyle.resultsTable.departmentRowFontSizePx}
                                     onChange={(value) => updateResultsStyle('departmentRowFontSizePx', Number(value ?? 12))}
-                                    disabled={!canMutate}
+                                    disabled={!canMutate || !showDepartmentRow}
                                   />
                                 </div>
                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -1129,7 +1149,7 @@ export function AdminLabReportDesignPage() {
                                     max={16}
                                     value={reportStyle.resultsTable.categoryRowFontSizePx}
                                     onChange={(value) => updateResultsStyle('categoryRowFontSizePx', Number(value ?? 12))}
-                                    disabled={!canMutate}
+                                    disabled={!canMutate || !showCategoryRow}
                                   />
                                 </div>
                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -1159,7 +1179,7 @@ export function AdminLabReportDesignPage() {
                                     value={reportStyle.resultsTable.departmentRowTextAlign}
                                     options={ALIGN_OPTIONS as unknown as { label: string; value: string }[]}
                                     onChange={(value) => updateResultsStyle('departmentRowTextAlign', value)}
-                                    disabled={!canMutate}
+                                    disabled={!canMutate || !showDepartmentRow}
                                   />
                                 </div>
                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -1169,7 +1189,7 @@ export function AdminLabReportDesignPage() {
                                     value={reportStyle.resultsTable.categoryRowTextAlign}
                                     options={ALIGN_OPTIONS as unknown as { label: string; value: string }[]}
                                     onChange={(value) => updateResultsStyle('categoryRowTextAlign', value)}
-                                    disabled={!canMutate}
+                                    disabled={!canMutate || !showCategoryRow}
                                   />
                                 </div>
                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -1292,36 +1312,40 @@ export function AdminLabReportDesignPage() {
                                   </tr>
                                 </thead>
                                 <tbody>
-                                  <tr>
-                                    <td
-                                      colSpan={5}
-                                      style={{
-                                        ...previewBodyCellStyle,
-                                        background: reportStyle.resultsTable.departmentRowBackgroundColor,
-                                        color: reportStyle.resultsTable.departmentRowTextColor,
-                                        textAlign: reportStyle.resultsTable.departmentRowTextAlign,
-                                        fontSize: reportStyle.resultsTable.departmentRowFontSizePx,
-                                        fontWeight: 800,
-                                      }}
-                                    >
-                                      Chemistry
-                                    </td>
-                                  </tr>
-                                  <tr>
-                                    <td
-                                      colSpan={5}
-                                      style={{
-                                        ...previewBodyCellStyle,
-                                        background: reportStyle.resultsTable.categoryRowBackgroundColor,
-                                        color: reportStyle.resultsTable.categoryRowTextColor,
-                                        textAlign: reportStyle.resultsTable.categoryRowTextAlign,
-                                        fontSize: reportStyle.resultsTable.categoryRowFontSizePx,
-                                        fontWeight: 700,
-                                      }}
-                                    >
-                                      Routine
-                                    </td>
-                                  </tr>
+                                  {showDepartmentRow ? (
+                                    <tr>
+                                      <td
+                                        colSpan={5}
+                                        style={{
+                                          ...previewBodyCellStyle,
+                                          background: reportStyle.resultsTable.departmentRowBackgroundColor,
+                                          color: reportStyle.resultsTable.departmentRowTextColor,
+                                          textAlign: reportStyle.resultsTable.departmentRowTextAlign,
+                                          fontSize: reportStyle.resultsTable.departmentRowFontSizePx,
+                                          fontWeight: 800,
+                                        }}
+                                      >
+                                        Chemistry
+                                      </td>
+                                    </tr>
+                                  ) : null}
+                                  {showCategoryRow ? (
+                                    <tr>
+                                      <td
+                                        colSpan={5}
+                                        style={{
+                                          ...previewBodyCellStyle,
+                                          background: reportStyle.resultsTable.categoryRowBackgroundColor,
+                                          color: reportStyle.resultsTable.categoryRowTextColor,
+                                          textAlign: reportStyle.resultsTable.categoryRowTextAlign,
+                                          fontSize: reportStyle.resultsTable.categoryRowFontSizePx,
+                                          fontWeight: 700,
+                                        }}
+                                      >
+                                        Routine
+                                      </td>
+                                    </tr>
+                                  ) : null}
                                   <tr>
                                     <td style={{ ...previewBodyCellStyle, background: stripedRowBg }}>Glucose</td>
                                     <td style={{ ...previewBodyCellStyle, background: stripedRowBg }}>110</td>

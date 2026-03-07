@@ -27,10 +27,12 @@ export interface ReportResultsTableStyle {
   rowStripeColor: string;
   abnormalRowBackgroundColor: string;
   referenceValueColor: string;
+  showDepartmentRow: boolean;
   departmentRowBackgroundColor: string;
   departmentRowTextColor: string;
   departmentRowFontSizePx: number;
   departmentRowTextAlign: ReportTextAlign;
+  showCategoryRow: boolean;
   categoryRowBackgroundColor: string;
   categoryRowTextColor: string;
   categoryRowFontSizePx: number;
@@ -87,10 +89,12 @@ export const DEFAULT_REPORT_STYLE_V1: ReportStyleConfig = {
     rowStripeColor: '#F9FBFF',
     abnormalRowBackgroundColor: '#FFF5F5',
     referenceValueColor: '#333333',
+    showDepartmentRow: true,
     departmentRowBackgroundColor: '#222222',
     departmentRowTextColor: '#FFFFFF',
     departmentRowFontSizePx: 12,
     departmentRowTextAlign: 'left',
+    showCategoryRow: true,
     categoryRowBackgroundColor: '#F2F2F2',
     categoryRowTextColor: '#555555',
     categoryRowFontSizePx: 12,
@@ -141,10 +145,12 @@ const RESULTS_TABLE_KEYS: Array<keyof ReportResultsTableStyle> = [
   'rowStripeColor',
   'abnormalRowBackgroundColor',
   'referenceValueColor',
+  'showDepartmentRow',
   'departmentRowBackgroundColor',
   'departmentRowTextColor',
   'departmentRowFontSizePx',
   'departmentRowTextAlign',
+  'showCategoryRow',
   'categoryRowBackgroundColor',
   'categoryRowTextColor',
   'categoryRowFontSizePx',
@@ -308,6 +314,10 @@ export function validateAndNormalizeReportStyleConfig(
       resultsObj.referenceValueColor,
       `${fieldName}.resultsTable.referenceValueColor`,
     ),
+    showDepartmentRow: assertBoolean(
+      resultsObj.showDepartmentRow,
+      `${fieldName}.resultsTable.showDepartmentRow`,
+    ),
     departmentRowBackgroundColor: assertColor(
       resultsObj.departmentRowBackgroundColor,
       `${fieldName}.resultsTable.departmentRowBackgroundColor`,
@@ -326,6 +336,10 @@ export function validateAndNormalizeReportStyleConfig(
       resultsObj.departmentRowTextAlign,
       TEXT_ALIGN_SET,
       `${fieldName}.resultsTable.departmentRowTextAlign`,
+    ),
+    showCategoryRow: assertBoolean(
+      resultsObj.showCategoryRow,
+      `${fieldName}.resultsTable.showCategoryRow`,
     ),
     categoryRowBackgroundColor: assertColor(
       resultsObj.categoryRowBackgroundColor,

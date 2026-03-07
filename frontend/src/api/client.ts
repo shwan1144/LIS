@@ -106,10 +106,12 @@ export interface ReportResultsTableStyleDto {
   rowStripeColor: string;
   abnormalRowBackgroundColor: string;
   referenceValueColor: string;
+  showDepartmentRow: boolean;
   departmentRowBackgroundColor: string;
   departmentRowTextColor: string;
   departmentRowFontSizePx: number;
   departmentRowTextAlign: ReportTextAlign;
+  showCategoryRow: boolean;
   categoryRowBackgroundColor: string;
   categoryRowTextColor: string;
   categoryRowFontSizePx: number;

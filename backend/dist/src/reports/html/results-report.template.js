@@ -370,9 +370,11 @@ function buildResultsReportHtml(input) {
     if (regularTests.length > 0) {
         let deptBodiesHtml = '';
         for (const [dept, catMap] of deptCatMap) {
-            let deptRowsHtml = `<tr class="dept-row"><td colspan="5">${escapeHtml(dept)}</td></tr>`;
+            let deptRowsHtml = reportStyle.resultsTable.showDepartmentRow
+                ? `<tr class="dept-row"><td colspan="5">${escapeHtml(dept)}</td></tr>`
+                : '';
             for (const [cat, tests] of catMap) {
-                if (cat) {
+                if (cat && reportStyle.resultsTable.showCategoryRow) {
                     deptRowsHtml += `<tr class="cat-row"><td colspan="5">${escapeHtml(cat)}</td></tr>`;
                 }
                 deptRowsHtml += tests
