@@ -1012,7 +1012,14 @@ export function OrdersPage() {
         const status = getEditTestStatusDisplay(test.currentStatus);
         return (
           <div className="orders-edit-tests-table-test">
-            <span className="orders-edit-tests-table-code">{test.testCode}</span>
+            <Button
+              className="orders-edit-tests-table-code-btn"
+              disabled={!test.removable}
+              onClick={() => handleRemoveEditingTest(test.testId)}
+              title={test.removable ? 'Remove test from order' : 'This test cannot be removed'}
+            >
+              {test.testCode}
+            </Button>
             <div className="orders-edit-tests-table-test-copy">
               <Text className="orders-edit-tests-table-name">{test.testName}</Text>
               <div className="orders-edit-tests-table-tags">
@@ -1021,17 +1028,6 @@ export function OrdersPage() {
                 >
                   {status.label}
                 </span>
-                {test.isPanelRoot ? <span className="orders-edit-tests-pill">Panel</span> : null}
-                {test.adminReasonRequired ? (
-                  <span className="orders-edit-tests-pill orders-edit-tests-pill-warn">
-                    Needs reason
-                  </span>
-                ) : null}
-                {test.blocked ? (
-                  <span className="orders-edit-tests-pill orders-edit-tests-pill-locked">
-                    Locked
-                  </span>
-                ) : null}
               </div>
             </div>
           </div>
@@ -1074,22 +1070,6 @@ export function OrdersPage() {
           </Text>
         );
       },
-    },
-    {
-      title: '',
-      key: 'action',
-      width: 64,
-      align: 'right' as const,
-      className: 'orders-edit-tests-col-action',
-      render: (_: unknown, test: SelectedTest) => (
-        <Button
-          className="orders-edit-tests-delete-btn"
-          icon={<DeleteOutlined />}
-          disabled={!test.removable}
-          onClick={() => handleRemoveEditingTest(test.testId)}
-          title={test.removable ? 'Remove test from order' : 'This test cannot be removed'}
-        />
-      ),
     },
   ];
 

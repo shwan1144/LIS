@@ -771,13 +771,11 @@ html[data-theme='dark'] .order-delivery-preferences {
   min-width: 0;
 }
 
-.orders-edit-tests-table-code {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 64px;
-  height: 34px;
-  padding: 0 12px;
+.orders-edit-tests-table-code-btn.ant-btn {
+  min-width: 82px;
+  height: 30px;
+  padding: 0 14px;
+  border: none;
   border-radius: 12px;
   background: linear-gradient(135deg, #1677ff 0%, #69b1ff 100%);
   color: #fff;
@@ -785,6 +783,18 @@ html[data-theme='dark'] .order-delivery-preferences {
   font-weight: 700;
   letter-spacing: 0.04em;
   box-shadow: 0 10px 20px rgba(22, 119, 255, 0.2);
+}
+
+.orders-edit-tests-table-code-btn.ant-btn:not(:disabled):hover,
+.orders-edit-tests-table-code-btn.ant-btn:not(:disabled):focus {
+  color: #fff;
+  background: linear-gradient(135deg, #4096ff 0%, #69b1ff 100%);
+}
+
+.orders-edit-tests-table-code-btn.ant-btn:disabled {
+  background: linear-gradient(135deg, rgba(148, 163, 184, 0.86) 0%, rgba(203, 213, 225, 0.9) 100%);
+  color: rgba(255, 255, 255, 0.86);
+  box-shadow: none;
 }
 
 .orders-edit-tests-table-test-copy {
@@ -916,30 +926,6 @@ html[data-theme='dark'] .order-delivery-preferences {
   color: rgba(15, 23, 42, 0.7);
 }
 
-.orders-edit-tests-delete-btn.ant-btn {
-  width: 42px;
-  min-width: 42px;
-  height: 42px;
-  border-radius: 14px;
-  border-color: rgba(248, 113, 113, 0.18);
-  background: rgba(255, 255, 255, 0.72);
-  color: rgba(220, 38, 38, 0.72);
-  box-shadow: none;
-}
-
-.orders-edit-tests-delete-btn.ant-btn:not(:disabled):hover,
-.orders-edit-tests-delete-btn.ant-btn:not(:disabled):focus {
-  border-color: rgba(239, 68, 68, 0.34);
-  background: rgba(254, 242, 242, 0.95);
-  color: #dc2626;
-}
-
-.orders-edit-tests-delete-btn.ant-btn:disabled {
-  border-color: rgba(148, 163, 184, 0.16);
-  background: rgba(148, 163, 184, 0.08);
-  color: rgba(100, 116, 139, 0.44);
-}
-
 .orders-edit-tests-modal-dark .ant-modal-content,
 .orders-edit-reason-modal-dark .ant-modal-content {
   border-color: rgba(96, 165, 250, 0.22);
@@ -1013,6 +999,17 @@ html[data-theme='dark'] .order-delivery-preferences {
   color: rgba(255, 255, 255, 0.94);
 }
 
+.orders-edit-tests-modal-dark .orders-edit-tests-table-code-btn.ant-btn:not(:disabled):hover,
+.orders-edit-tests-modal-dark .orders-edit-tests-table-code-btn.ant-btn:not(:disabled):focus {
+  color: #fff;
+  background: linear-gradient(135deg, #60a5fa 0%, #38bdf8 100%);
+}
+
+.orders-edit-tests-modal-dark .orders-edit-tests-table-code-btn.ant-btn:disabled {
+  background: linear-gradient(135deg, rgba(71, 85, 105, 0.96) 0%, rgba(100, 116, 139, 0.92) 100%);
+  color: rgba(226, 232, 240, 0.68);
+}
+
 .orders-edit-tests-modal-dark .orders-edit-tests-pill {
   border-color: rgba(148, 163, 184, 0.22);
   background: rgba(148, 163, 184, 0.08);
@@ -1031,25 +1028,6 @@ html[data-theme='dark'] .order-delivery-preferences {
 
 .orders-edit-tests-modal-dark .orders-edit-tests-table-note.is-blocked.ant-typography {
   color: rgba(253, 230, 138, 0.96);
-}
-
-.orders-edit-tests-modal-dark .orders-edit-tests-delete-btn.ant-btn {
-  border-color: rgba(248, 113, 113, 0.16);
-  background: rgba(15, 23, 42, 0.68);
-  color: rgba(252, 165, 165, 0.84);
-}
-
-.orders-edit-tests-modal-dark .orders-edit-tests-delete-btn.ant-btn:not(:disabled):hover,
-.orders-edit-tests-modal-dark .orders-edit-tests-delete-btn.ant-btn:not(:disabled):focus {
-  border-color: rgba(248, 113, 113, 0.32);
-  background: rgba(127, 29, 29, 0.34);
-  color: #fecaca;
-}
-
-.orders-edit-tests-modal-dark .orders-edit-tests-delete-btn.ant-btn:disabled {
-  border-color: rgba(148, 163, 184, 0.14);
-  background: rgba(148, 163, 184, 0.08);
-  color: rgba(148, 163, 184, 0.38);
 }
 
 .orders-edit-reason-modal .ant-input {
@@ -1172,8 +1150,12 @@ html[data-theme='dark'] .order-delivery-preferences {
     border-radius: 12px;
   }
 
-  .orders-edit-tests-delete-btn.ant-btn {
-    width: 100%;
-    min-width: 0;
+  .orders-edit-tests-table-test {
+    gap: 10px;
+  }
+
+  .orders-edit-tests-table-code-btn.ant-btn {
+    min-width: 74px;
+    padding-inline: 10px;
   }
 }

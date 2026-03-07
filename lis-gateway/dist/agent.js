@@ -128,8 +128,20 @@ class GatewayAgent {
             if (!config.apiBaseUrl || !config.gatewayId) {
                 return { success: false, reason: 'gateway not activated' };
             }
-            const token = await this.ensureAccessToken();
-            const response = await this.cloudClient.getConfig(config.apiBaseUrl, token, config.lastConfigEtag);
+            let token = await this.ensureAccessToken();
+            let response;
+            try {
+                response = await this.cloudClient.getConfig(config.apiBaseUrl, token, config.lastConfigEtag);
+            }
+            catch (error) {
+                if ((0, cloud_client_1.isCloudHttpError)(error) && error.status === 401) {
+                    token = await this.ensureAccessToken(true);
+                    response = await this.cloudClient.getConfig(config.apiBaseUrl, token, config.lastConfigEtag);
+                }
+                else {
+                    throw error;
+                }
+            }
             if (response.status === 304) {
                 this.lastSyncAt = new Date().toISOString();
                 return {
@@ -278,19 +290,35 @@ class GatewayAgent {
             if (!config.apiBaseUrl || !config.gatewayId || !config.refreshToken) {
                 return;
             }
-            const accessToken = await this.ensureAccessToken();
+            let accessToken = await this.ensureAccessToken();
             const listeners = this.listenerManager?.getStatus().map((item) => ({
                 instrumentId: item.instrumentId,
                 state: item.state,
                 lastError: item.lastError,
             })) || [];
             const queueDepth = this.outbox?.getStats().queueDepth || 0;
-            await this.cloudClient.postHeartbeat(config.apiBaseUrl, accessToken, {
-                gatewayId: config.gatewayId,
-                version: this.resolveGatewayVersion(),
-                queueDepth,
-                listeners,
-            });
+            try {
+                await this.cloudClient.postHeartbeat(config.apiBaseUrl, accessToken, {
+                    gatewayId: config.gatewayId,
+                    version: this.resolveGatewayVersion(),
+                    queueDepth,
+                    listeners,
+                });
+            }
+            catch (error) {
+                if ((0, cloud_client_1.isCloudHttpError)(error) && error.status === 401) {
+                    accessToken = await this.ensureAccessToken(true);
+                    await this.cloudClient.postHeartbeat(config.apiBaseUrl, accessToken, {
+                        gatewayId: config.gatewayId,
+                        version: this.resolveGatewayVersion(),
+                        queueDepth,
+                        listeners,
+                    });
+                }
+                else {
+                    throw error;
+                }
+            }
         }
         catch (error) {
             logger_1.logger.warn(`Heartbeat failed: ${this.toErrorMessage(error)}`, 'Heartbeat');
