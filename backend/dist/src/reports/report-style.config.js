@@ -1,8 +1,40 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.DEFAULT_REPORT_STYLE_V1 = void 0;
+exports.DEFAULT_REPORT_STYLE_V1 = exports.REPORT_FONT_FAMILY_VALUES = exports.DEFAULT_REPORT_FONT_FAMILY = void 0;
+exports.resolveReportFontStack = resolveReportFontStack;
+exports.resolveReportFontStackWithArabicFallback = resolveReportFontStackWithArabicFallback;
+exports.resolveReportRtlFontStack = resolveReportRtlFontStack;
 exports.validateAndNormalizeReportStyleConfig = validateAndNormalizeReportStyleConfig;
 exports.resolveReportStyleConfig = resolveReportStyleConfig;
+exports.DEFAULT_REPORT_FONT_FAMILY = 'system-sans';
+exports.REPORT_FONT_FAMILY_VALUES = [
+    'system-sans',
+    'arial',
+    'tahoma',
+    'verdana',
+    'georgia',
+    'times-new-roman',
+    'courier-new',
+];
+const REPORT_FONT_STACKS = {
+    'system-sans': "'Segoe UI', Tahoma, Arial, sans-serif",
+    arial: "Arial, 'Helvetica Neue', Helvetica, sans-serif",
+    tahoma: "Tahoma, 'Segoe UI', Arial, sans-serif",
+    verdana: "Verdana, 'Segoe UI', Arial, sans-serif",
+    georgia: "Georgia, 'Times New Roman', serif",
+    'times-new-roman': "'Times New Roman', Times, serif",
+    'courier-new': "'Courier New', Courier, monospace",
+};
+const REPORT_ARABIC_FONT_STACK = "'KurdishReportFont', 'Noto Naskh Arabic', 'Noto Sans Arabic'";
+function resolveReportFontStack(fontFamily) {
+    return REPORT_FONT_STACKS[fontFamily];
+}
+function resolveReportFontStackWithArabicFallback(fontFamily) {
+    return `${resolveReportFontStack(fontFamily)}, ${REPORT_ARABIC_FONT_STACK}`;
+}
+function resolveReportRtlFontStack(fontFamily) {
+    return `${REPORT_ARABIC_FONT_STACK}, ${resolveReportFontStack(fontFamily)}`;
+}
 exports.DEFAULT_REPORT_STYLE_V1 = {
     version: 1,
     patientInfo: {
@@ -11,6 +43,7 @@ exports.DEFAULT_REPORT_STYLE_V1 = {
         textColor: '#333333',
         labelColor: '#333333',
         fontSizePx: 13,
+        fontFamily: exports.DEFAULT_REPORT_FONT_FAMILY,
         labelFontWeight: 700,
         valueFontWeight: 400,
         textAlign: 'left',
@@ -25,6 +58,7 @@ exports.DEFAULT_REPORT_STYLE_V1 = {
         headerTextAlign: 'left',
         bodyTextColor: '#333333',
         bodyFontSizePx: 12,
+        fontFamily: exports.DEFAULT_REPORT_FONT_FAMILY,
         cellTextAlign: 'left',
         borderColor: '#EEEEEE',
         rowStripeEnabled: false,
@@ -60,12 +94,14 @@ exports.DEFAULT_REPORT_STYLE_V1 = {
 const HEX_COLOR_REGEX = /^#(?:[0-9A-Fa-f]{6}|[0-9A-Fa-f]{8})$/;
 const TEXT_ALIGN_SET = new Set(['left', 'center', 'right']);
 const BREAK_BEHAVIOR_SET = new Set(['auto', 'avoid']);
+const REPORT_FONT_FAMILY_SET = new Set(exports.REPORT_FONT_FAMILY_VALUES);
 const PATIENT_INFO_KEYS = [
     'backgroundColor',
     'borderColor',
     'textColor',
     'labelColor',
     'fontSizePx',
+    'fontFamily',
     'labelFontWeight',
     'valueFontWeight',
     'textAlign',
@@ -80,6 +116,7 @@ const RESULTS_TABLE_KEYS = [
     'headerTextAlign',
     'bodyTextColor',
     'bodyFontSizePx',
+    'fontFamily',
     'cellTextAlign',
     'borderColor',
     'rowStripeEnabled',
@@ -169,6 +206,7 @@ function validateAndNormalizeReportStyleConfig(value, fieldName = 'reportStyle')
         textColor: assertColor(patientInfoObj.textColor, `${fieldName}.patientInfo.textColor`),
         labelColor: assertColor(patientInfoObj.labelColor, `${fieldName}.patientInfo.labelColor`),
         fontSizePx: assertIntRange(patientInfoObj.fontSizePx, 10, 18, `${fieldName}.patientInfo.fontSizePx`),
+        fontFamily: assertFromSet(patientInfoObj.fontFamily, REPORT_FONT_FAMILY_SET, `${fieldName}.patientInfo.fontFamily`),
         labelFontWeight: assertIntRange(patientInfoObj.labelFontWeight, 600, 800, `${fieldName}.patientInfo.labelFontWeight`),
         valueFontWeight: assertIntRange(patientInfoObj.valueFontWeight, 400, 700, `${fieldName}.patientInfo.valueFontWeight`),
         textAlign: assertFromSet(patientInfoObj.textAlign, TEXT_ALIGN_SET, `${fieldName}.patientInfo.textAlign`),
@@ -191,6 +229,7 @@ function validateAndNormalizeReportStyleConfig(value, fieldName = 'reportStyle')
         headerTextAlign: assertFromSet(resultsObj.headerTextAlign, TEXT_ALIGN_SET, `${fieldName}.resultsTable.headerTextAlign`),
         bodyTextColor: assertColor(resultsObj.bodyTextColor, `${fieldName}.resultsTable.bodyTextColor`),
         bodyFontSizePx: assertIntRange(resultsObj.bodyFontSizePx, 9, 14, `${fieldName}.resultsTable.bodyFontSizePx`),
+        fontFamily: assertFromSet(resultsObj.fontFamily, REPORT_FONT_FAMILY_SET, `${fieldName}.resultsTable.fontFamily`),
         cellTextAlign: assertFromSet(resultsObj.cellTextAlign, TEXT_ALIGN_SET, `${fieldName}.resultsTable.cellTextAlign`),
         borderColor: assertColor(resultsObj.borderColor, `${fieldName}.resultsTable.borderColor`),
         rowStripeEnabled: assertBoolean(resultsObj.rowStripeEnabled, `${fieldName}.resultsTable.rowStripeEnabled`),

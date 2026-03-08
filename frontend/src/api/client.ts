@@ -106,6 +106,14 @@ export interface ReportBrandingDto {
 }
 
 export type ReportTextAlign = 'left' | 'center' | 'right';
+export type ReportFontFamilyDto =
+  | 'system-sans'
+  | 'arial'
+  | 'tahoma'
+  | 'verdana'
+  | 'georgia'
+  | 'times-new-roman'
+  | 'courier-new';
 
 export interface ReportPatientInfoStyleDto {
   backgroundColor: string;
@@ -113,6 +121,7 @@ export interface ReportPatientInfoStyleDto {
   textColor: string;
   labelColor: string;
   fontSizePx: number;
+  fontFamily: ReportFontFamilyDto;
   labelFontWeight: 600 | 700 | 800;
   valueFontWeight: 400 | 500 | 600 | 700;
   textAlign: ReportTextAlign;
@@ -128,6 +137,7 @@ export interface ReportResultsTableStyleDto {
   headerTextAlign: ReportTextAlign;
   bodyTextColor: string;
   bodyFontSizePx: number;
+  fontFamily: ReportFontFamilyDto;
   cellTextAlign: ReportTextAlign;
   borderColor: string;
   rowStripeEnabled: boolean;
@@ -297,6 +307,12 @@ export interface AdminLabSettingsSummaryDto {
   hasReportWatermark: boolean;
   uiTestGroups?: { id: string; name: string; testIds: string[] }[];
   referringDoctors?: string[];
+}
+
+export interface AdminLabSettingsUpdateDto extends AdminLabSettingsSummaryDto {
+  reportBranding: ReportBrandingDto;
+  reportStyle: ReportStyleDto | null;
+  onlineResultWatermarkDataUrl: string | null;
 }
 
 export interface AdminLabReportDesignDto {
@@ -810,8 +826,8 @@ export async function updateAdminLabSettings(
     uiTestGroups?: { id: string; name: string; testIds: string[] }[] | null;
     referringDoctors?: string[] | null;
   },
-): Promise<AdminLabSettingsSummaryDto> {
-  const res = await api.patch<AdminLabSettingsSummaryDto>(`/admin/api/labs/${labId}/settings`, data);
+): Promise<AdminLabSettingsUpdateDto> {
+  const res = await api.patch<AdminLabSettingsUpdateDto>(`/admin/api/labs/${labId}/settings`, data);
   return res.data;
 }
 

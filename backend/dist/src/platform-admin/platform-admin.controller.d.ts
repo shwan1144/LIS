@@ -79,7 +79,7 @@ export declare class PlatformAdminController {
         reportStyle?: ReportStyleConfig | null;
         referringDoctors?: string[] | null;
         dashboardAnnouncementText?: string | null;
-    }): Promise<import("./platform-admin.service").AdminLabSettingsSummary>;
+    }): Promise<import("./platform-admin.service").AdminLabSettingsUpdateResponse>;
     getLabUsers(req: RequestWithPlatformUser, labId: string): Promise<import("../entities/user.entity").User[]>;
     getLabUser(req: RequestWithPlatformUser, labId: string, id: string): Promise<{
         user: import("../entities/user.entity").User;

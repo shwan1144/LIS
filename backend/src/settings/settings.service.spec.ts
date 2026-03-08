@@ -222,10 +222,14 @@ describe('SettingsService referringDoctors', () => {
     const {
       showDepartmentRow: _showDepartmentRow,
       showCategoryRow: _showCategoryRow,
+      fontFamily: _resultsFontFamily,
       ...legacyResultsTable
     } = DEFAULT_REPORT_STYLE_V1.resultsTable;
+    const { fontFamily: _patientFontFamily, ...legacyPatientInfo } =
+      DEFAULT_REPORT_STYLE_V1.patientInfo;
     const legacyStyle = {
       ...DEFAULT_REPORT_STYLE_V1,
+      patientInfo: legacyPatientInfo,
       resultsTable: legacyResultsTable,
     };
     const lab = createLab({
@@ -239,6 +243,12 @@ describe('SettingsService referringDoctors', () => {
     const result = await service.getLabSettings('lab-id');
 
     expect(result.reportStyle).toEqual(DEFAULT_REPORT_STYLE_V1);
+    expect(result.reportStyle?.patientInfo.fontFamily).toBe(
+      DEFAULT_REPORT_STYLE_V1.patientInfo.fontFamily,
+    );
+    expect(result.reportStyle?.resultsTable.fontFamily).toBe(
+      DEFAULT_REPORT_STYLE_V1.resultsTable.fontFamily,
+    );
     expect(result.reportStyle?.resultsTable.showDepartmentRow).toBe(true);
     expect(result.reportStyle?.resultsTable.showCategoryRow).toBe(true);
   });

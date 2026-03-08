@@ -1090,7 +1090,7 @@ let PlatformAdminService = PlatformAdminService_1 = class PlatformAdminService {
             labId,
             reportDesignFingerprint: settings.reportDesignFingerprint ?? null,
         }));
-        return this.toAdminLabSettingsSummary(settings);
+        return this.toAdminLabSettingsUpdateResponse(settings);
     }
     async getLabUsers(labId, actor) {
         const users = await this.settingsService.getUsersForLab(labId);
@@ -1338,6 +1338,14 @@ let PlatformAdminService = PlatformAdminService_1 = class PlatformAdminService {
             hasReportWatermark: Boolean(settings.reportBranding?.watermarkDataUrl),
             uiTestGroups: settings.uiTestGroups ?? [],
             referringDoctors: settings.referringDoctors ?? [],
+        };
+    }
+    toAdminLabSettingsUpdateResponse(settings) {
+        return {
+            ...this.toAdminLabSettingsSummary(settings),
+            reportBranding: settings.reportBranding,
+            reportStyle: settings.reportStyle,
+            onlineResultWatermarkDataUrl: settings.onlineResultWatermarkDataUrl,
         };
     }
     toAdminLabReportDesign(settings) {

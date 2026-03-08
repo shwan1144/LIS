@@ -1,7 +1,11 @@
 import type { Order } from '../../entities/order.entity';
 import type { OrderTest } from '../../entities/order-test.entity';
 import { TestType } from '../../entities/test.entity';
-import { resolveReportStyleConfig } from '../report-style.config';
+import {
+  resolveReportFontStackWithArabicFallback,
+  resolveReportRtlFontStack,
+  resolveReportStyleConfig,
+} from '../report-style.config';
 import { resolveNormalText, resolveNumericRange } from '../../tests/normal-range.util';
 
 // Fallback logo (from provided template)
@@ -170,6 +174,13 @@ export function buildResultsReportHtml(input: {
   const pageMarginBottomMm = reportStyle.pageLayout.pageMarginBottomMm;
   const pageMarginLeftMm = reportStyle.pageLayout.pageMarginLeftMm;
   const contentMarginXMm = reportStyle.pageLayout.contentMarginXMm;
+  const patientInfoFontFamily = resolveReportFontStackWithArabicFallback(
+    reportStyle.patientInfo.fontFamily,
+  );
+  const patientInfoRtlFontFamily = resolveReportRtlFontStack(reportStyle.patientInfo.fontFamily);
+  const resultsFontFamily = resolveReportFontStackWithArabicFallback(
+    reportStyle.resultsTable.fontFamily,
+  );
   const bannerSrc: string = (labAny?.reportBannerDataUrl as string) || '';
   const footerSrc: string = (labAny?.reportFooterDataUrl as string) || '';
   const logoSrc: string = (labAny?.reportLogoDataUrl as string) || '';
@@ -521,12 +532,15 @@ export function buildResultsReportHtml(input: {
       --patient-info-radius: ${reportStyle.patientInfo.borderRadiusPx}px;
       --patient-info-padding-y: ${reportStyle.patientInfo.paddingYpx}px;
       --patient-info-padding-x: ${reportStyle.patientInfo.paddingXpx}px;
+      --patient-info-font-family: ${patientInfoFontFamily};
+      --patient-info-rtl-font-family: ${patientInfoRtlFontFamily};
       --results-header-bg: ${reportStyle.resultsTable.headerBackgroundColor};
       --results-header-text-color: ${reportStyle.resultsTable.headerTextColor};
       --results-header-font-size: ${reportStyle.resultsTable.headerFontSizePx}px;
       --results-header-align: ${reportStyle.resultsTable.headerTextAlign};
       --results-body-text-color: ${reportStyle.resultsTable.bodyTextColor};
       --results-body-font-size: ${reportStyle.resultsTable.bodyFontSizePx}px;
+      --results-font-family: ${resultsFontFamily};
       --results-cell-align: ${reportStyle.resultsTable.cellTextAlign};
       --results-border-color: ${reportStyle.resultsTable.borderColor};
       --results-abnormal-row-bg: ${reportStyle.resultsTable.abnormalRowBackgroundColor};
@@ -611,6 +625,7 @@ export function buildResultsReportHtml(input: {
       background: var(--patient-info-bg);
       color: var(--patient-info-text-color);
       text-align: var(--patient-info-align);
+      font-family: var(--patient-info-font-family);
     }
     .patient-info.has-order-qr {
       grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 66px;
@@ -655,14 +670,14 @@ export function buildResultsReportHtml(input: {
     .rtl-text {
       direction: rtl;
       unicode-bidi: isolate;
-      font-family: 'KurdishReportFont', 'Noto Naskh Arabic', 'Noto Sans Arabic', 'Segoe UI', Tahoma, Arial, sans-serif;
+      font-family: var(--patient-info-rtl-font-family);
       letter-spacing: 0;
       word-spacing: 0;
       font-feature-settings: "liga" 1, "calt" 1, "kern" 1;
     }
     .content { padding: 0; }
-    table { width: 100%; border-collapse: collapse; margin-bottom: 8px; }
-    th, td { border: 1px solid var(--results-border-color); padding: 6px 8px; }
+    table { width: 100%; border-collapse: collapse; margin-bottom: 8px; font-family: var(--results-font-family); }
+    th, td { border: 1px solid var(--results-border-color); padding: 6px 8px; font-family: var(--results-font-family); }
     th {
       background: var(--results-header-bg);
       color: var(--results-header-text-color);

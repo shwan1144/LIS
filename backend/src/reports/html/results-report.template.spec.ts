@@ -1,7 +1,11 @@
 import type { Order } from '../../entities/order.entity';
 import type { OrderTest } from '../../entities/order-test.entity';
 import { TestType } from '../../entities/test.entity';
-import { DEFAULT_REPORT_STYLE_V1 } from '../report-style.config';
+import {
+  DEFAULT_REPORT_STYLE_V1,
+  resolveReportFontStackWithArabicFallback,
+  resolveReportRtlFontStack,
+} from '../report-style.config';
 import { buildResultsReportHtml } from './results-report.template';
 
 function countMatches(haystack: string, needle: string): number {
@@ -406,7 +410,19 @@ describe('buildResultsReportHtml panel page isolation', () => {
 
     expect(html).toContain(`--patient-info-bg: ${DEFAULT_REPORT_STYLE_V1.patientInfo.backgroundColor};`);
     expect(html).toContain(`--results-header-bg: ${DEFAULT_REPORT_STYLE_V1.resultsTable.headerBackgroundColor};`);
+    expect(html).toContain(
+      `--patient-info-font-family: ${resolveReportFontStackWithArabicFallback(
+        DEFAULT_REPORT_STYLE_V1.patientInfo.fontFamily,
+      )};`,
+    );
+    expect(html).toContain(
+      `--results-font-family: ${resolveReportFontStackWithArabicFallback(
+        DEFAULT_REPORT_STYLE_V1.resultsTable.fontFamily,
+      )};`,
+    );
     expect(html).toContain('font-weight: var(--patient-info-value-weight);');
+    expect(html).toContain('font-family: var(--patient-info-font-family);');
+    expect(html).toContain('font-family: var(--results-font-family);');
     expect(html).toContain(
       '.reference-value { color: var(--results-reference-color); white-space: pre-wrap; word-break: break-word; }',
     );
@@ -430,15 +446,17 @@ describe('buildResultsReportHtml panel page isolation', () => {
   });
 
   it('uses lab reportStyle values when provided', () => {
-    const customStyle = {
+    const customStyle: typeof DEFAULT_REPORT_STYLE_V1 = {
       ...DEFAULT_REPORT_STYLE_V1,
       patientInfo: {
         ...DEFAULT_REPORT_STYLE_V1.patientInfo,
         backgroundColor: '#101010',
+        fontFamily: 'georgia',
       },
       resultsTable: {
         ...DEFAULT_REPORT_STYLE_V1.resultsTable,
         statusHighColor: '#AA0000',
+        fontFamily: 'courier-new',
       },
     };
     const order = createOrder({
@@ -460,6 +478,14 @@ describe('buildResultsReportHtml panel page isolation', () => {
 
     expect(html).toContain('--patient-info-bg: #101010;');
     expect(html).toContain('--results-status-high-color: #AA0000;');
+    expect(html).toContain(
+      `--patient-info-rtl-font-family: ${resolveReportRtlFontStack(customStyle.patientInfo.fontFamily)};`,
+    );
+    expect(html).toContain(
+      `--results-font-family: ${resolveReportFontStackWithArabicFallback(
+        customStyle.resultsTable.fontFamily,
+      )};`,
+    );
   });
 
   it('prefers order notes for Referred By over patient address fallback', () => {

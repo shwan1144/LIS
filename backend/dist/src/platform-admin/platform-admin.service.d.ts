@@ -57,6 +57,16 @@ export interface AdminLabSettingsSummary {
     }[];
     referringDoctors: string[];
 }
+export interface AdminLabSettingsUpdateResponse extends AdminLabSettingsSummary {
+    reportBranding: {
+        bannerDataUrl: string | null;
+        footerDataUrl: string | null;
+        logoDataUrl: string | null;
+        watermarkDataUrl: string | null;
+    };
+    reportStyle: ReportStyleConfig | null;
+    onlineResultWatermarkDataUrl: string | null;
+}
 export interface AdminLabReportDesign {
     id: string;
     code: string;
@@ -364,7 +374,7 @@ export declare class PlatformAdminService {
         reportStyle?: ReportStyleConfig | null;
         referringDoctors?: string[] | null;
         dashboardAnnouncementText?: string | null;
-    }): Promise<AdminLabSettingsSummary>;
+    }): Promise<AdminLabSettingsUpdateResponse>;
     getLabUsers(labId: string, actor?: PlatformActorContext): Promise<User[]>;
     getLabUser(userId: string, labId: string, actor?: PlatformActorContext): Promise<{
         user: User;
@@ -453,6 +463,7 @@ export declare class PlatformAdminService {
     getLabDepartments(labId: string): Promise<Department[]>;
     private toAdminLabListItems;
     private toAdminLabSettingsSummary;
+    private toAdminLabSettingsUpdateResponse;
     private toAdminLabReportDesign;
     private resolveDashboardDateRange;
     private getTodayRange;

@@ -346,7 +346,7 @@ describe('PlatformAdminService', () => {
     expect(Object.prototype.hasOwnProperty.call(result, 'reportStyle')).toBe(false);
   });
 
-  it('returns compact admin settings summary with asset flags and no data URLs', async () => {
+  it('returns compact admin settings summary from GET and full design payload from PATCH', async () => {
     const fullSettings = {
       id: 'lab-id',
       code: 'LAB01',
@@ -403,10 +403,20 @@ describe('PlatformAdminService', () => {
         hasReportWatermark: false,
       }),
     );
-    expect(updated).toEqual(summary);
+    expect(updated).toEqual(
+      expect.objectContaining({
+        ...summary,
+        reportBranding: fullSettings.reportBranding,
+        reportStyle: fullSettings.reportStyle,
+        onlineResultWatermarkDataUrl: fullSettings.onlineResultWatermarkDataUrl,
+      }),
+    );
     expect(Object.prototype.hasOwnProperty.call(summary, 'onlineResultWatermarkDataUrl')).toBe(false);
     expect(Object.prototype.hasOwnProperty.call(summary, 'reportBranding')).toBe(false);
     expect(Object.prototype.hasOwnProperty.call(summary, 'reportStyle')).toBe(false);
+    expect(updated.onlineResultWatermarkDataUrl).toBe(fullSettings.onlineResultWatermarkDataUrl);
+    expect(updated.reportBranding).toEqual(fullSettings.reportBranding);
+    expect(updated.reportStyle).toEqual(fullSettings.reportStyle);
   });
 
   it('returns full report design payload from the dedicated endpoint', async () => {

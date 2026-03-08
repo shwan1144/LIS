@@ -25,6 +25,7 @@ import {
   previewAdminLabReportPdf,
   updateAdminLabSettings,
   type AdminOrderListItem,
+  type ReportFontFamilyDto,
   type ReportStyleDto,
   type ReportBrandingDto,
 } from '../../api/client';
@@ -103,6 +104,31 @@ const BREAK_OPTIONS = [
   { label: 'Avoid break', value: 'avoid' },
   { label: 'Auto', value: 'auto' },
 ] as const;
+const FONT_OPTIONS: Array<{ label: string; value: ReportFontFamilyDto }> = [
+  { label: 'System Sans', value: 'system-sans' },
+  { label: 'Arial', value: 'arial' },
+  { label: 'Tahoma', value: 'tahoma' },
+  { label: 'Verdana', value: 'verdana' },
+  { label: 'Georgia', value: 'georgia' },
+  { label: 'Times New Roman', value: 'times-new-roman' },
+  { label: 'Courier New', value: 'courier-new' },
+];
+
+const REPORT_FONT_STACKS: Record<ReportFontFamilyDto, string> = {
+  'system-sans': "'Segoe UI', Tahoma, Arial, sans-serif",
+  arial: "Arial, 'Helvetica Neue', Helvetica, sans-serif",
+  tahoma: "Tahoma, 'Segoe UI', Arial, sans-serif",
+  verdana: "Verdana, 'Segoe UI', Arial, sans-serif",
+  georgia: "Georgia, 'Times New Roman', serif",
+  'times-new-roman': "'Times New Roman', Times, serif",
+  'courier-new': "'Courier New', Courier, monospace",
+};
+
+const REPORT_ARABIC_FALLBACK_STACK = "'Noto Naskh Arabic', 'Noto Sans Arabic'";
+
+function resolvePreviewFontStack(fontFamily: ReportFontFamilyDto): string {
+  return `${REPORT_FONT_STACKS[fontFamily]}, ${REPORT_ARABIC_FALLBACK_STACK}`;
+}
 
 function emptyBranding(): ReportBrandingDto {
   return {
@@ -135,6 +161,7 @@ function defaultReportStyle(): ReportStyleDto {
       textColor: '#333333',
       labelColor: '#333333',
       fontSizePx: 13,
+      fontFamily: 'system-sans',
       labelFontWeight: 700,
       valueFontWeight: 400,
       textAlign: 'left',
@@ -149,6 +176,7 @@ function defaultReportStyle(): ReportStyleDto {
       headerTextAlign: 'left',
       bodyTextColor: '#333333',
       bodyFontSizePx: 12,
+      fontFamily: 'system-sans',
       cellTextAlign: 'left',
       borderColor: '#EEEEEE',
       rowStripeEnabled: false,
@@ -630,22 +658,45 @@ export function AdminLabReportDesignPage() {
           ? expectedWatermarkText || null
           : undefined,
       });
+      const nextBranding = updated.reportBranding || emptyBranding();
+      const nextReportStyle = updated.reportStyle || defaultReportStyle();
+      const nextWatermarkDataUrl = updated.onlineResultWatermarkDataUrl || null;
       const nextWatermarkText = updated.onlineResultWatermarkText || '';
-      setBranding(expectedBranding);
-      setReportStyle(cloneReportStyle(expectedReportStyle));
-      setOnlineResultWatermarkDataUrl(expectedWatermarkDataUrl);
+      setBranding(nextBranding);
+      setReportStyle(cloneReportStyle(nextReportStyle));
+      setOnlineResultWatermarkDataUrl(nextWatermarkDataUrl);
       setOnlineResultWatermarkText(nextWatermarkText);
       setSavedSnapshot({
-        branding: expectedBranding,
-        reportStyle: cloneReportStyle(expectedReportStyle),
-        onlineResultWatermarkDataUrl: expectedWatermarkDataUrl,
+        branding: nextBranding,
+        reportStyle: cloneReportStyle(nextReportStyle),
+        onlineResultWatermarkDataUrl: nextWatermarkDataUrl,
         onlineResultWatermarkText: nextWatermarkText,
         reportDesignFingerprint: updated.reportDesignFingerprint,
       });
-      const labLabel = selectedLab
-        ? `${selectedLab.name} (${selectedLab.code})`
-        : selectedLabId;
-      message.success(`Report design saved for ${labLabel}`);
+      const mismatchFields: string[] = [];
+      if (JSON.stringify(nextBranding) !== JSON.stringify(expectedBranding)) {
+        mismatchFields.push('reportBranding');
+      }
+      if (JSON.stringify(nextReportStyle) !== JSON.stringify(expectedReportStyle)) {
+        mismatchFields.push('reportStyle');
+      }
+      if (nextWatermarkDataUrl !== expectedWatermarkDataUrl) {
+        mismatchFields.push('onlineResultWatermarkDataUrl');
+      }
+      if (nextWatermarkText !== expectedWatermarkText) {
+        mismatchFields.push('onlineResultWatermarkText');
+      }
+
+      if (mismatchFields.length > 0) {
+        message.error(
+          `Server did not persist report design (${mismatchFields.join(', ')}); settings reloaded from server.`,
+        );
+      } else {
+        const labLabel = selectedLab
+          ? `${selectedLab.name} (${selectedLab.code})`
+          : selectedLabId;
+        message.success(`Report design saved for ${labLabel}`);
+      }
     } catch (error) {
       message.error(getErrorMessage(error) || 'Failed to save report design settings');
     } finally {
@@ -660,6 +711,7 @@ export function AdminLabReportDesignPage() {
     color: reportStyle.resultsTable.headerTextColor,
     fontSize: reportStyle.resultsTable.headerFontSizePx,
     fontWeight: 700,
+    fontFamily: resolvePreviewFontStack(reportStyle.resultsTable.fontFamily),
     textAlign: reportStyle.resultsTable.headerTextAlign,
   };
   const previewBodyCellStyle = {
@@ -667,6 +719,7 @@ export function AdminLabReportDesignPage() {
     padding: '6px 8px',
     color: reportStyle.resultsTable.bodyTextColor,
     fontSize: reportStyle.resultsTable.bodyFontSizePx,
+    fontFamily: resolvePreviewFontStack(reportStyle.resultsTable.fontFamily),
     textAlign: reportStyle.resultsTable.cellTextAlign,
   };
   const stripedRowBg = reportStyle.resultsTable.rowStripeEnabled
@@ -849,6 +902,16 @@ export function AdminLabReportDesignPage() {
                                     max={18}
                                     value={reportStyle.patientInfo.fontSizePx}
                                     onChange={(value) => updatePatientStyle('fontSizePx', Number(value ?? 13))}
+                                    disabled={!canMutate}
+                                  />
+                                </div>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                  <Text>Font Family</Text>
+                                  <Select
+                                    style={{ width: 180 }}
+                                    value={reportStyle.patientInfo.fontFamily}
+                                    options={FONT_OPTIONS}
+                                    onChange={(value) => updatePatientStyle('fontFamily', value)}
                                     disabled={!canMutate}
                                   />
                                 </div>
@@ -1107,6 +1170,16 @@ export function AdminLabReportDesignPage() {
                                   />
                                 </div>
                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                  <Text>Table Font</Text>
+                                  <Select
+                                    style={{ width: 180 }}
+                                    value={reportStyle.resultsTable.fontFamily}
+                                    options={FONT_OPTIONS}
+                                    onChange={(value) => updateResultsStyle('fontFamily', value)}
+                                    disabled={!canMutate}
+                                  />
+                                </div>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                   <Text>Department Font Size</Text>
                                   <InputNumber
                                     min={10}
@@ -1231,6 +1304,7 @@ export function AdminLabReportDesignPage() {
                                 background: reportStyle.patientInfo.backgroundColor,
                                 color: reportStyle.patientInfo.textColor,
                                 fontSize: reportStyle.patientInfo.fontSizePx,
+                                fontFamily: resolvePreviewFontStack(reportStyle.patientInfo.fontFamily),
                                 textAlign: reportStyle.patientInfo.textAlign,
                                 padding: `${reportStyle.patientInfo.paddingYpx}px ${reportStyle.patientInfo.paddingXpx}px`,
                                 marginBottom: 12,
@@ -1275,7 +1349,13 @@ export function AdminLabReportDesignPage() {
                             </div>
 
                             <div style={{ overflowX: 'auto' }}>
-                              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                              <table
+                                style={{
+                                  width: '100%',
+                                  borderCollapse: 'collapse',
+                                  fontFamily: resolvePreviewFontStack(reportStyle.resultsTable.fontFamily),
+                                }}
+                              >
                                 <thead>
                                   <tr>
                                     <th style={previewHeaderCellStyle}>Test</th>

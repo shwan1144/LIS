@@ -78,6 +78,17 @@ export interface AdminLabSettingsSummary {
   referringDoctors: string[];
 }
 
+export interface AdminLabSettingsUpdateResponse extends AdminLabSettingsSummary {
+  reportBranding: {
+    bannerDataUrl: string | null;
+    footerDataUrl: string | null;
+    logoDataUrl: string | null;
+    watermarkDataUrl: string | null;
+  };
+  reportStyle: ReportStyleConfig | null;
+  onlineResultWatermarkDataUrl: string | null;
+}
+
 export interface AdminLabReportDesign {
   id: string;
   code: string;
@@ -1628,7 +1639,7 @@ export class PlatformAdminService {
       referringDoctors?: string[] | null;
       dashboardAnnouncementText?: string | null;
     },
-  ): Promise<AdminLabSettingsSummary> {
+  ): Promise<AdminLabSettingsUpdateResponse> {
     const settings = await this.settingsService.updateLabSettings(labId, data);
     this.logger.log(
       JSON.stringify({
@@ -1638,7 +1649,7 @@ export class PlatformAdminService {
           (settings as { reportDesignFingerprint?: string }).reportDesignFingerprint ?? null,
       }),
     );
-    return this.toAdminLabSettingsSummary(settings);
+    return this.toAdminLabSettingsUpdateResponse(settings);
   }
 
   async getLabUsers(labId: string, actor?: PlatformActorContext): Promise<User[]> {
@@ -2005,6 +2016,17 @@ export class PlatformAdminService {
       hasReportWatermark: Boolean(settings.reportBranding?.watermarkDataUrl),
       uiTestGroups: settings.uiTestGroups ?? [],
       referringDoctors: settings.referringDoctors ?? [],
+    };
+  }
+
+  private toAdminLabSettingsUpdateResponse(
+    settings: LabSettingsPayload,
+  ): AdminLabSettingsUpdateResponse {
+    return {
+      ...this.toAdminLabSettingsSummary(settings),
+      reportBranding: settings.reportBranding,
+      reportStyle: settings.reportStyle,
+      onlineResultWatermarkDataUrl: settings.onlineResultWatermarkDataUrl,
     };
   }
 

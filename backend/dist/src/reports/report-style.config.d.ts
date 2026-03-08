@@ -1,10 +1,17 @@
 export type ReportTextAlign = 'left' | 'center' | 'right';
+export type ReportFontFamily = 'system-sans' | 'arial' | 'tahoma' | 'verdana' | 'georgia' | 'times-new-roman' | 'courier-new';
+export declare const DEFAULT_REPORT_FONT_FAMILY: ReportFontFamily;
+export declare const REPORT_FONT_FAMILY_VALUES: readonly ReportFontFamily[];
+export declare function resolveReportFontStack(fontFamily: ReportFontFamily): string;
+export declare function resolveReportFontStackWithArabicFallback(fontFamily: ReportFontFamily): string;
+export declare function resolveReportRtlFontStack(fontFamily: ReportFontFamily): string;
 export interface ReportPatientInfoStyle {
     backgroundColor: string;
     borderColor: string;
     textColor: string;
     labelColor: string;
     fontSizePx: number;
+    fontFamily: ReportFontFamily;
     labelFontWeight: 600 | 700 | 800;
     valueFontWeight: 400 | 500 | 600 | 700;
     textAlign: ReportTextAlign;
@@ -19,6 +26,7 @@ export interface ReportResultsTableStyle {
     headerTextAlign: ReportTextAlign;
     bodyTextColor: string;
     bodyFontSizePx: number;
+    fontFamily: ReportFontFamily;
     cellTextAlign: ReportTextAlign;
     borderColor: string;
     rowStripeEnabled: boolean;

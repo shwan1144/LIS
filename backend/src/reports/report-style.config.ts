@@ -1,4 +1,47 @@
 export type ReportTextAlign = 'left' | 'center' | 'right';
+export type ReportFontFamily =
+  | 'system-sans'
+  | 'arial'
+  | 'tahoma'
+  | 'verdana'
+  | 'georgia'
+  | 'times-new-roman'
+  | 'courier-new';
+
+export const DEFAULT_REPORT_FONT_FAMILY: ReportFontFamily = 'system-sans';
+export const REPORT_FONT_FAMILY_VALUES: readonly ReportFontFamily[] = [
+  'system-sans',
+  'arial',
+  'tahoma',
+  'verdana',
+  'georgia',
+  'times-new-roman',
+  'courier-new',
+] as const;
+
+const REPORT_FONT_STACKS: Record<ReportFontFamily, string> = {
+  'system-sans': "'Segoe UI', Tahoma, Arial, sans-serif",
+  arial: "Arial, 'Helvetica Neue', Helvetica, sans-serif",
+  tahoma: "Tahoma, 'Segoe UI', Arial, sans-serif",
+  verdana: "Verdana, 'Segoe UI', Arial, sans-serif",
+  georgia: "Georgia, 'Times New Roman', serif",
+  'times-new-roman': "'Times New Roman', Times, serif",
+  'courier-new': "'Courier New', Courier, monospace",
+};
+
+const REPORT_ARABIC_FONT_STACK = "'KurdishReportFont', 'Noto Naskh Arabic', 'Noto Sans Arabic'";
+
+export function resolveReportFontStack(fontFamily: ReportFontFamily): string {
+  return REPORT_FONT_STACKS[fontFamily];
+}
+
+export function resolveReportFontStackWithArabicFallback(fontFamily: ReportFontFamily): string {
+  return `${resolveReportFontStack(fontFamily)}, ${REPORT_ARABIC_FONT_STACK}`;
+}
+
+export function resolveReportRtlFontStack(fontFamily: ReportFontFamily): string {
+  return `${REPORT_ARABIC_FONT_STACK}, ${resolveReportFontStack(fontFamily)}`;
+}
 
 export interface ReportPatientInfoStyle {
   backgroundColor: string;
@@ -6,6 +49,7 @@ export interface ReportPatientInfoStyle {
   textColor: string;
   labelColor: string;
   fontSizePx: number;
+  fontFamily: ReportFontFamily;
   labelFontWeight: 600 | 700 | 800;
   valueFontWeight: 400 | 500 | 600 | 700;
   textAlign: ReportTextAlign;
@@ -21,6 +65,7 @@ export interface ReportResultsTableStyle {
   headerTextAlign: ReportTextAlign;
   bodyTextColor: string;
   bodyFontSizePx: number;
+  fontFamily: ReportFontFamily;
   cellTextAlign: ReportTextAlign;
   borderColor: string;
   rowStripeEnabled: boolean;
@@ -69,6 +114,7 @@ export const DEFAULT_REPORT_STYLE_V1: ReportStyleConfig = {
     textColor: '#333333',
     labelColor: '#333333',
     fontSizePx: 13,
+    fontFamily: DEFAULT_REPORT_FONT_FAMILY,
     labelFontWeight: 700,
     valueFontWeight: 400,
     textAlign: 'left',
@@ -83,6 +129,7 @@ export const DEFAULT_REPORT_STYLE_V1: ReportStyleConfig = {
     headerTextAlign: 'left',
     bodyTextColor: '#333333',
     bodyFontSizePx: 12,
+    fontFamily: DEFAULT_REPORT_FONT_FAMILY,
     cellTextAlign: 'left',
     borderColor: '#EEEEEE',
     rowStripeEnabled: false,
@@ -119,12 +166,14 @@ export const DEFAULT_REPORT_STYLE_V1: ReportStyleConfig = {
 const HEX_COLOR_REGEX = /^#(?:[0-9A-Fa-f]{6}|[0-9A-Fa-f]{8})$/;
 const TEXT_ALIGN_SET = new Set<ReportTextAlign>(['left', 'center', 'right']);
 const BREAK_BEHAVIOR_SET = new Set<'auto' | 'avoid'>(['auto', 'avoid']);
+const REPORT_FONT_FAMILY_SET = new Set<ReportFontFamily>(REPORT_FONT_FAMILY_VALUES);
 const PATIENT_INFO_KEYS: Array<keyof ReportPatientInfoStyle> = [
   'backgroundColor',
   'borderColor',
   'textColor',
   'labelColor',
   'fontSizePx',
+  'fontFamily',
   'labelFontWeight',
   'valueFontWeight',
   'textAlign',
@@ -139,6 +188,7 @@ const RESULTS_TABLE_KEYS: Array<keyof ReportResultsTableStyle> = [
   'headerTextAlign',
   'bodyTextColor',
   'bodyFontSizePx',
+  'fontFamily',
   'cellTextAlign',
   'borderColor',
   'rowStripeEnabled',
@@ -244,6 +294,11 @@ export function validateAndNormalizeReportStyleConfig(
     textColor: assertColor(patientInfoObj.textColor, `${fieldName}.patientInfo.textColor`),
     labelColor: assertColor(patientInfoObj.labelColor, `${fieldName}.patientInfo.labelColor`),
     fontSizePx: assertIntRange(patientInfoObj.fontSizePx, 10, 18, `${fieldName}.patientInfo.fontSizePx`),
+    fontFamily: assertFromSet(
+      patientInfoObj.fontFamily,
+      REPORT_FONT_FAMILY_SET,
+      `${fieldName}.patientInfo.fontFamily`,
+    ),
     labelFontWeight: assertIntRange(
       patientInfoObj.labelFontWeight,
       600,
@@ -298,6 +353,11 @@ export function validateAndNormalizeReportStyleConfig(
     ),
     bodyTextColor: assertColor(resultsObj.bodyTextColor, `${fieldName}.resultsTable.bodyTextColor`),
     bodyFontSizePx: assertIntRange(resultsObj.bodyFontSizePx, 9, 14, `${fieldName}.resultsTable.bodyFontSizePx`),
+    fontFamily: assertFromSet(
+      resultsObj.fontFamily,
+      REPORT_FONT_FAMILY_SET,
+      `${fieldName}.resultsTable.fontFamily`,
+    ),
     cellTextAlign: assertFromSet(
       resultsObj.cellTextAlign,
       TEXT_ALIGN_SET,
