@@ -20,6 +20,10 @@ import { PlatformSetting } from '../entities/platform-setting.entity';
 import { EntityManager, In, SelectQueryBuilder } from 'typeorm';
 import { AdminAuthService } from '../admin-auth/admin-auth.service';
 import { AuthService } from '../auth/auth.service';
+import {
+  PLATFORM_ACCESS_TOKEN_TTL_MINUTES,
+  REFRESH_TOKEN_TTL_DAYS,
+} from '../config/auth-session.config';
 
 const MAX_REPORT_IMAGE_DATA_URL_LENGTH = 4 * 1024 * 1024;
 const REPORT_IMAGE_DATA_URL_PATTERN = /^data:image\/(png|jpeg|jpg|webp);base64,[a-zA-Z0-9+/=]+$/;
@@ -35,10 +39,60 @@ export interface PlatformActorContext {
   userAgent?: string | null;
 }
 
-export type AdminLabListItem = Lab & {
+type LabSettingsPayload = Awaited<ReturnType<SettingsService['getLabSettings']>>;
+
+export interface AdminLabListItem {
+  id: string;
+  code: string;
+  subdomain: string | null;
+  name: string;
+  timezone: string;
+  isActive: boolean;
+  createdAt: Date;
   usersCount: number;
   orders30dCount: number;
-};
+}
+
+export interface AdminLabSettingsSummary {
+  id: string;
+  code: string;
+  name: string;
+  reportDesignFingerprint: string;
+  dashboardAnnouncementText: string | null;
+  labelSequenceBy: 'tube_type' | 'department';
+  sequenceResetBy: 'day' | 'shift';
+  enableOnlineResults: boolean;
+  hasOnlineResultWatermarkImage: boolean;
+  onlineResultWatermarkText: string | null;
+  printing: {
+    mode: 'browser' | 'direct_qz';
+    receiptPrinterName: string | null;
+    labelsPrinterName: string | null;
+    reportPrinterName: string | null;
+  };
+  hasReportBanner: boolean;
+  hasReportFooter: boolean;
+  hasReportLogo: boolean;
+  hasReportWatermark: boolean;
+  uiTestGroups: { id: string; name: string; testIds: string[] }[];
+  referringDoctors: string[];
+}
+
+export interface AdminLabReportDesign {
+  id: string;
+  code: string;
+  name: string;
+  reportDesignFingerprint: string;
+  reportBranding: {
+    bannerDataUrl: string | null;
+    footerDataUrl: string | null;
+    logoDataUrl: string | null;
+    watermarkDataUrl: string | null;
+  };
+  reportStyle: ReportStyleConfig | null;
+  onlineResultWatermarkDataUrl: string | null;
+  onlineResultWatermarkText: string | null;
+}
 
 export interface AdminSystemHealth {
   status: 'ok' | 'degraded';
@@ -59,6 +113,8 @@ export interface AdminPlatformSettingsOverview {
   };
   securityPolicy: {
     sessionTimeoutMinutes: number;
+    accessTokenLifetimeMinutes: number;
+    refreshTokenLifetimeDays: number;
     passwordMinLength: number;
     requireStrongPassword: boolean;
   };
@@ -261,18 +317,23 @@ export class PlatformAdminService {
   }
 
   async getLab(labId: string, actor?: PlatformActorContext): Promise<AdminLabListItem> {
-    const labs = await this.listLabs();
-    const lab = labs.find((item) => item.id === labId);
-    if (!lab) {
-      throw new NotFoundException('Lab not found');
-    }
-    await this.logPlatformSensitiveRead(actor, {
-      labId,
-      entityType: 'lab',
-      entityId: labId,
-      description: `Viewed lab details for ${lab.name} (${lab.code})`,
+    return this.rlsSessionService.withPlatformAdminContext(async (manager) => {
+      const lab = await manager.getRepository(Lab).findOne({ where: { id: labId } });
+      if (!lab) {
+        throw new NotFoundException('Lab not found');
+      }
+
+      const [item] = await this.toAdminLabListItems(manager, [lab]);
+
+      await this.logPlatformSensitiveRead(actor, {
+        labId,
+        entityType: 'lab',
+        entityId: labId,
+        description: `Viewed lab details for ${item.name} (${item.code})`,
+      }, manager);
+
+      return item;
     });
-    return lab;
   }
 
   async createLab(dto: CreateLabDto, actor?: PlatformActorContext): Promise<Lab> {
@@ -1444,7 +1505,9 @@ export class PlatformAdminService {
         themeColor: '#1677ff',
       },
       securityPolicy: {
-        sessionTimeoutMinutes: Number(process.env.PLATFORM_SESSION_TIMEOUT_MINUTES || 30),
+        sessionTimeoutMinutes: PLATFORM_ACCESS_TOKEN_TTL_MINUTES,
+        accessTokenLifetimeMinutes: PLATFORM_ACCESS_TOKEN_TTL_MINUTES,
+        refreshTokenLifetimeDays: REFRESH_TOKEN_TTL_DAYS,
         passwordMinLength: Number(process.env.PLATFORM_PASSWORD_MIN_LENGTH || 8),
         requireStrongPassword: process.env.PLATFORM_REQUIRE_STRONG_PASSWORD !== 'false',
       },
@@ -1513,7 +1576,10 @@ export class PlatformAdminService {
     };
   }
 
-  async getLabSettings(labId: string, actor?: PlatformActorContext) {
+  async getLabSettings(
+    labId: string,
+    actor?: PlatformActorContext,
+  ): Promise<AdminLabSettingsSummary> {
     const settings = await this.settingsService.getLabSettings(labId);
     await this.logPlatformSensitiveRead(actor, {
       labId,
@@ -1521,7 +1587,21 @@ export class PlatformAdminService {
       entityId: labId,
       description: `Viewed lab settings for ${settings.name} (${settings.code})`,
     });
-    return settings;
+    return this.toAdminLabSettingsSummary(settings);
+  }
+
+  async getLabReportDesign(
+    labId: string,
+    actor?: PlatformActorContext,
+  ): Promise<AdminLabReportDesign> {
+    const settings = await this.settingsService.getLabSettings(labId);
+    await this.logPlatformSensitiveRead(actor, {
+      labId,
+      entityType: 'lab_report_design',
+      entityId: labId,
+      description: `Viewed report design for ${settings.name} (${settings.code})`,
+    });
+    return this.toAdminLabReportDesign(settings);
   }
 
   async updateLabSettings(
@@ -1548,7 +1628,7 @@ export class PlatformAdminService {
       referringDoctors?: string[] | null;
       dashboardAnnouncementText?: string | null;
     },
-  ) {
+  ): Promise<AdminLabSettingsSummary> {
     const settings = await this.settingsService.updateLabSettings(labId, data);
     this.logger.log(
       JSON.stringify({
@@ -1558,7 +1638,7 @@ export class PlatformAdminService {
           (settings as { reportDesignFingerprint?: string }).reportDesignFingerprint ?? null,
       }),
     );
-    return settings;
+    return this.toAdminLabSettingsSummary(settings);
   }
 
   async getLabUsers(labId: string, actor?: PlatformActorContext): Promise<User[]> {
@@ -1695,7 +1775,7 @@ export class PlatformAdminService {
   }
 
   async startImpersonation(
-    data: { labId: string; reason: string },
+    data: { labId: string; reason: string; refreshToken: string },
     actor: {
       platformUserId: string;
       role: string;
@@ -1703,7 +1783,7 @@ export class PlatformAdminService {
       ipAddress?: string | null;
       userAgent?: string | null;
     },
-  ): Promise<{ accessToken: string; impersonation: AdminImpersonationStatus }> {
+  ): Promise<{ accessToken: string; refreshToken: string; impersonation: AdminImpersonationStatus }> {
     const reason = data.reason?.trim();
     if (!reason || reason.length < 3) {
       throw new BadRequestException('reason must be at least 3 characters');
@@ -1719,9 +1799,17 @@ export class PlatformAdminService {
       throw new BadRequestException('Cannot impersonate a disabled lab');
     }
 
-    const issued = await this.adminAuthService.issueAccessTokenByPlatformUserId(actor.platformUserId, {
-      impersonatedLabId: lab.id,
-    });
+    const issued = await this.adminAuthService.reissueSession(
+      data.refreshToken,
+      {
+        platformUserId: actor.platformUserId,
+        impersonatedLabId: lab.id,
+      },
+      {
+        ipAddress: actor.ipAddress ?? null,
+        userAgent: actor.userAgent ?? null,
+      },
+    );
 
     await this.auditService.log({
       actorType: AuditActorType.PLATFORM_USER,
@@ -1741,6 +1829,7 @@ export class PlatformAdminService {
 
     return {
       accessToken: issued.accessToken,
+      refreshToken: issued.refreshToken,
       impersonation: {
         active: true,
         labId: lab.id,
@@ -1755,17 +1844,28 @@ export class PlatformAdminService {
     };
   }
 
-  async stopImpersonation(actor: {
-    platformUserId: string;
-    role: string;
-    impersonatedLabId?: string | null;
-    ipAddress?: string | null;
-    userAgent?: string | null;
-  }): Promise<{ accessToken: string; impersonation: AdminImpersonationStatus }> {
+  async stopImpersonation(
+    data: { refreshToken: string },
+    actor: {
+      platformUserId: string;
+      role: string;
+      impersonatedLabId?: string | null;
+      ipAddress?: string | null;
+      userAgent?: string | null;
+    },
+  ): Promise<{ accessToken: string; refreshToken: string; impersonation: AdminImpersonationStatus }> {
     const previousLabId = actor.impersonatedLabId?.trim() || null;
-    const issued = await this.adminAuthService.issueAccessTokenByPlatformUserId(actor.platformUserId, {
-      impersonatedLabId: null,
-    });
+    const issued = await this.adminAuthService.reissueSession(
+      data.refreshToken,
+      {
+        platformUserId: actor.platformUserId,
+        impersonatedLabId: null,
+      },
+      {
+        ipAddress: actor.ipAddress ?? null,
+        userAgent: actor.userAgent ?? null,
+      },
+    );
 
     if (previousLabId) {
       await this.auditService.log({
@@ -1783,6 +1883,7 @@ export class PlatformAdminService {
 
     return {
       accessToken: issued.accessToken,
+      refreshToken: issued.refreshToken,
       impersonation: {
         active: false,
         labId: null,
@@ -1870,10 +1971,54 @@ export class PlatformAdminService {
     );
 
     return labs.map((lab) => ({
-      ...lab,
+      id: lab.id,
+      code: lab.code,
+      subdomain: lab.subdomain,
+      name: lab.name,
+      timezone: lab.timezone,
+      isActive: lab.isActive,
+      createdAt: lab.createdAt,
       usersCount: usersByLab.get(lab.id) ?? 0,
       orders30dCount: ordersByLab.get(lab.id) ?? 0,
     }));
+  }
+
+  private toAdminLabSettingsSummary(settings: LabSettingsPayload): AdminLabSettingsSummary {
+    return {
+      id: settings.id,
+      code: settings.code,
+      name: settings.name,
+      reportDesignFingerprint: settings.reportDesignFingerprint,
+      dashboardAnnouncementText: settings.dashboardAnnouncementText,
+      labelSequenceBy: settings.labelSequenceBy === 'department' ? 'department' : 'tube_type',
+      sequenceResetBy: settings.sequenceResetBy === 'shift' ? 'shift' : 'day',
+      enableOnlineResults: settings.enableOnlineResults,
+      hasOnlineResultWatermarkImage: Boolean(settings.onlineResultWatermarkDataUrl),
+      onlineResultWatermarkText: settings.onlineResultWatermarkText,
+      printing: {
+        ...settings.printing,
+        mode: settings.printing.mode === 'direct_qz' ? 'direct_qz' : 'browser',
+      },
+      hasReportBanner: Boolean(settings.reportBranding?.bannerDataUrl),
+      hasReportFooter: Boolean(settings.reportBranding?.footerDataUrl),
+      hasReportLogo: Boolean(settings.reportBranding?.logoDataUrl),
+      hasReportWatermark: Boolean(settings.reportBranding?.watermarkDataUrl),
+      uiTestGroups: settings.uiTestGroups ?? [],
+      referringDoctors: settings.referringDoctors ?? [],
+    };
+  }
+
+  private toAdminLabReportDesign(settings: LabSettingsPayload): AdminLabReportDesign {
+    return {
+      id: settings.id,
+      code: settings.code,
+      name: settings.name,
+      reportDesignFingerprint: settings.reportDesignFingerprint,
+      reportBranding: settings.reportBranding,
+      reportStyle: settings.reportStyle,
+      onlineResultWatermarkDataUrl: settings.onlineResultWatermarkDataUrl,
+      onlineResultWatermarkText: settings.onlineResultWatermarkText,
+    };
   }
 
   private resolveDashboardDateRange(

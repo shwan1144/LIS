@@ -4,8 +4,7 @@ import { Repository, IsNull } from 'typeorm';
 import { randomBytes, randomUUID } from 'crypto';
 import { RefreshToken, RefreshTokenActorType } from '../entities/refresh-token.entity';
 import { hashPassword, verifyPassword } from './password.util';
-
-const REFRESH_TOKEN_TTL_DAYS = 30;
+import { REFRESH_TOKEN_TTL_DAYS } from '../config/auth-session.config';
 
 export interface RefreshTokenIssueResult {
   token: string;
@@ -91,6 +90,7 @@ export class RefreshTokenService {
   async rotate(
     rawToken: string,
     meta?: { ipAddress?: string | null; userAgent?: string | null },
+    options?: { nextContext?: Record<string, unknown> | null },
   ): Promise<RefreshTokenRotationResult> {
     const { tokenId, tokenSecret } = this.parseRawToken(rawToken);
     return this.refreshTokenRepo.manager.transaction(async (manager) => {
@@ -126,7 +126,7 @@ export class RefreshTokenService {
         actorType: existing.actorType,
         actorId: existing.actorId,
         familyId: existing.familyId,
-        context: existing.context ?? null,
+        context: options?.nextContext ?? existing.context ?? null,
         ipAddress: meta?.ipAddress ?? null,
         userAgent: meta?.userAgent ?? null,
       });

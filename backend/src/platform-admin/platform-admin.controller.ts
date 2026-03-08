@@ -27,6 +27,7 @@ import { SetLabStatusDto } from './dto/set-lab-status.dto';
 import { ExportAuditLogsDto } from './dto/export-audit-logs.dto';
 import { ResetLabUserPasswordDto } from './dto/reset-lab-user-password.dto';
 import { StartImpersonationDto } from './dto/start-impersonation.dto';
+import { RefreshTokenDto } from '../auth/dto/refresh-token.dto';
 import type { ReportStyleConfig } from '../reports/report-style.config';
 
 interface RequestWithPlatformUser {
@@ -86,8 +87,12 @@ export class PlatformAdminController {
 
   @Post('impersonation/stop')
   @Roles('SUPER_ADMIN')
-  async stopImpersonation(@Req() req: RequestWithPlatformUser) {
-    return this.platformAdminService.stopImpersonation({
+  @UsePipes(new ValidationPipe({ whitelist: true }))
+  async stopImpersonation(
+    @Req() req: RequestWithPlatformUser,
+    @Body() dto: RefreshTokenDto,
+  ) {
+    return this.platformAdminService.stopImpersonation(dto, {
       ...this.getActorContext(req),
       impersonatedLabId: req.user.impersonatedLabId ?? null,
     });
@@ -163,6 +168,14 @@ export class PlatformAdminController {
     @Param('labId', ParseUUIDPipe) labId: string,
   ) {
     return this.platformAdminService.getLabSettings(labId, this.getActorContext(req));
+  }
+
+  @Get('labs/:labId/report-design')
+  async getLabReportDesign(
+    @Req() req: RequestWithPlatformUser,
+    @Param('labId', ParseUUIDPipe) labId: string,
+  ) {
+    return this.platformAdminService.getLabReportDesign(labId, this.getActorContext(req));
   }
 
   @Patch('labs/:labId/settings')

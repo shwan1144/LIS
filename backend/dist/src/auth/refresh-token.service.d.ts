@@ -35,6 +35,8 @@ export declare class RefreshTokenService {
     rotate(rawToken: string, meta?: {
         ipAddress?: string | null;
         userAgent?: string | null;
+    }, options?: {
+        nextContext?: Record<string, unknown> | null;
     }): Promise<RefreshTokenRotationResult>;
     revoke(rawToken: string): Promise<void>;
     validate(rawToken: string): Promise<RefreshTokenValidationResult>;

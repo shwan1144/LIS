@@ -37,6 +37,7 @@ import {
   type AdminLabDto,
 } from '../../api/client';
 import { useAuth } from '../../contexts/AuthContext';
+import { invalidateAdminLabsCache } from '../../utils/admin-labs-cache';
 import { ADMIN_LAB_SCOPE_EVENT, ADMIN_SELECTED_LAB_KEY } from '../../utils/admin-ui';
 
 const { Title, Text } = Typography;
@@ -170,6 +171,7 @@ export function AdminLabsPage() {
         });
         message.success('Lab created');
       }
+      invalidateAdminLabsCache();
       setLabModalOpen(false);
       setPage(1);
       await loadLabs();
@@ -205,6 +207,7 @@ export function AdminLabsPage() {
         isActive: nextStatusActive,
         reason,
       });
+      invalidateAdminLabsCache();
       message.success(nextStatusActive ? 'Lab enabled' : 'Lab disabled');
       setStatusModalOpen(false);
       setStatusTarget(null);

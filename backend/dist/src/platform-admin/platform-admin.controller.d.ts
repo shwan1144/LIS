@@ -6,6 +6,7 @@ import { SetLabStatusDto } from './dto/set-lab-status.dto';
 import { ExportAuditLogsDto } from './dto/export-audit-logs.dto';
 import { ResetLabUserPasswordDto } from './dto/reset-lab-user-password.dto';
 import { StartImpersonationDto } from './dto/start-impersonation.dto';
+import { RefreshTokenDto } from '../auth/dto/refresh-token.dto';
 import type { ReportStyleConfig } from '../reports/report-style.config';
 interface RequestWithPlatformUser {
     user: {
@@ -31,10 +32,12 @@ export declare class PlatformAdminController {
     getImpersonationStatus(req: RequestWithPlatformUser): Promise<import("./platform-admin.service").AdminImpersonationStatus>;
     startImpersonation(req: RequestWithPlatformUser, dto: StartImpersonationDto): Promise<{
         accessToken: string;
+        refreshToken: string;
         impersonation: import("./platform-admin.service").AdminImpersonationStatus;
     }>;
-    stopImpersonation(req: RequestWithPlatformUser): Promise<{
+    stopImpersonation(req: RequestWithPlatformUser, dto: RefreshTokenDto): Promise<{
         accessToken: string;
+        refreshToken: string;
         impersonation: import("./platform-admin.service").AdminImpersonationStatus;
     }>;
     openImpersonatedLabPortal(req: RequestWithPlatformUser): Promise<{
@@ -53,37 +56,8 @@ export declare class PlatformAdminController {
     setLabStatus(req: RequestWithPlatformUser, labId: string, dto: SetLabStatusDto): Promise<import("../entities/lab.entity").Lab>;
     getSummary(req: RequestWithPlatformUser, labId?: string, dateFrom?: string, dateTo?: string): Promise<import("./platform-admin.service").AdminDashboardSummary>;
     getSettingsRoles(): Promise<string[]>;
-    getLabSettings(req: RequestWithPlatformUser, labId: string): Promise<{
-        id: string;
-        code: string;
-        name: string;
-        labelSequenceBy: string;
-        sequenceResetBy: string;
-        enableOnlineResults: boolean;
-        onlineResultWatermarkDataUrl: string | null;
-        onlineResultWatermarkText: string | null;
-        printing: {
-            mode: string;
-            receiptPrinterName: string | null;
-            labelsPrinterName: string | null;
-            reportPrinterName: string | null;
-        };
-        reportBranding: {
-            bannerDataUrl: string | null;
-            footerDataUrl: string | null;
-            logoDataUrl: string | null;
-            watermarkDataUrl: string | null;
-        };
-        reportStyle: ReportStyleConfig | null;
-        reportDesignFingerprint: string;
-        uiTestGroups: {
-            id: string;
-            name: string;
-            testIds: string[];
-        }[];
-        referringDoctors: string[];
-        dashboardAnnouncementText: string | null;
-    }>;
+    getLabSettings(req: RequestWithPlatformUser, labId: string): Promise<import("./platform-admin.service").AdminLabSettingsSummary>;
+    getLabReportDesign(req: RequestWithPlatformUser, labId: string): Promise<import("./platform-admin.service").AdminLabReportDesign>;
     updateLabSettings(labId: string, body: {
         labelSequenceBy?: string;
         sequenceResetBy?: string;
@@ -105,37 +79,7 @@ export declare class PlatformAdminController {
         reportStyle?: ReportStyleConfig | null;
         referringDoctors?: string[] | null;
         dashboardAnnouncementText?: string | null;
-    }): Promise<{
-        id: string;
-        code: string;
-        name: string;
-        labelSequenceBy: string;
-        sequenceResetBy: string;
-        enableOnlineResults: boolean;
-        onlineResultWatermarkDataUrl: string | null;
-        onlineResultWatermarkText: string | null;
-        printing: {
-            mode: string;
-            receiptPrinterName: string | null;
-            labelsPrinterName: string | null;
-            reportPrinterName: string | null;
-        };
-        reportBranding: {
-            bannerDataUrl: string | null;
-            footerDataUrl: string | null;
-            logoDataUrl: string | null;
-            watermarkDataUrl: string | null;
-        };
-        reportStyle: ReportStyleConfig | null;
-        reportDesignFingerprint: string;
-        uiTestGroups: {
-            id: string;
-            name: string;
-            testIds: string[];
-        }[];
-        referringDoctors: string[];
-        dashboardAnnouncementText: string | null;
-    }>;
+    }): Promise<import("./platform-admin.service").AdminLabSettingsSummary>;
     getLabUsers(req: RequestWithPlatformUser, labId: string): Promise<import("../entities/user.entity").User[]>;
     getLabUser(req: RequestWithPlatformUser, labId: string, id: string): Promise<{
         user: import("../entities/user.entity").User;

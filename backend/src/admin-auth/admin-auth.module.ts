@@ -9,8 +9,8 @@ import { AdminAuthService } from './admin-auth.service';
 import { AdminJwtStrategy } from './admin-jwt.strategy';
 import { AdminJwtAuthGuard } from './admin-jwt-auth.guard';
 import { requireSecret } from '../config/security-env';
+import { PLATFORM_ACCESS_TOKEN_TTL_SECONDS } from '../config/auth-session.config';
 
-const platformJwtAccessTtlSeconds = Number(process.env.PLATFORM_JWT_ACCESS_TTL || 900);
 const platformJwtSecret = requireSecret(
   'PLATFORM_JWT_SECRET',
   'platform-dev-secret',
@@ -24,10 +24,7 @@ const platformJwtSecret = requireSecret(
     JwtModule.register({
       secret: platformJwtSecret,
       signOptions: {
-        expiresIn:
-          Number.isFinite(platformJwtAccessTtlSeconds) && platformJwtAccessTtlSeconds > 0
-            ? platformJwtAccessTtlSeconds
-            : 900,
+        expiresIn: PLATFORM_ACCESS_TOKEN_TTL_SECONDS,
       },
     }),
     AuthModule,

@@ -21,12 +21,12 @@ import {
   getAdminAuditActions,
   getAdminAuditEntityTypes,
   getAdminAuditLogs,
-  getAdminLabs,
   exportAdminAuditLogsCsv,
   type AdminAuditLogItem,
   type AdminLabDto,
 } from '../../api/client';
 import { useAuth } from '../../contexts/AuthContext';
+import { loadAdminLabs } from '../../utils/admin-labs-cache';
 import { ADMIN_DATE_RANGE_EVENT, ADMIN_DATE_RANGE_KEY, type StoredAdminDateRange } from '../../utils/admin-ui';
 
 const { RangePicker } = DatePicker;
@@ -66,12 +66,12 @@ export function AdminAuditLogsPage() {
 
   const isAuditor = user?.role === 'AUDITOR';
 
-  const loadOptions = async () => {
+  const loadOptions = async (forceLabs = false) => {
     setLoadingOptions(true);
     setFiltersError(null);
     try {
       const [labsData, actionsData, entityData] = await Promise.all([
-        getAdminLabs(),
+        loadAdminLabs({ force: forceLabs }),
         getAdminAuditActions(),
         getAdminAuditEntityTypes(),
       ]);
@@ -289,7 +289,7 @@ export function AdminAuditLogsPage() {
               showIcon
               message={filtersError}
               action={
-                <Button size="small" onClick={() => void loadOptions()}>
+                <Button size="small" onClick={() => void loadOptions(true)}>
                   Retry filters
                 </Button>
               }

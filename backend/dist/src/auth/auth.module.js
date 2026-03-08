@@ -25,7 +25,7 @@ const roles_guard_1 = require("./roles.guard");
 const refresh_token_service_1 = require("./refresh-token.service");
 const auth_rate_limit_service_1 = require("./auth-rate-limit.service");
 const security_env_1 = require("../config/security-env");
-const jwtAccessTtlSeconds = Number(process.env.JWT_ACCESS_TTL || 900);
+const auth_session_config_1 = require("../config/auth-session.config");
 const jwtSecret = (0, security_env_1.requireSecret)('JWT_SECRET', 'lis-dev-secret-change-in-production', 'AuthModule');
 let AuthModule = class AuthModule {
 };
@@ -45,7 +45,7 @@ exports.AuthModule = AuthModule = __decorate([
             jwt_1.JwtModule.register({
                 secret: jwtSecret,
                 signOptions: {
-                    expiresIn: Number.isFinite(jwtAccessTtlSeconds) && jwtAccessTtlSeconds > 0 ? jwtAccessTtlSeconds : 900,
+                    expiresIn: auth_session_config_1.LAB_ACCESS_TOKEN_TTL_SECONDS,
                 },
             }),
         ],

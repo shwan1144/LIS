@@ -21,6 +21,13 @@ export declare class AdminAuthService {
         ipAddress?: string | null;
         userAgent?: string | null;
     }): Promise<AdminLoginResponseDto>;
+    reissueSession(refreshToken: string, options: {
+        platformUserId: string;
+        impersonatedLabId?: string | null;
+    }, meta?: {
+        ipAddress?: string | null;
+        userAgent?: string | null;
+    }): Promise<AdminLoginResponseDto>;
     logout(refreshToken: string): Promise<void>;
     issueAccessTokenByPlatformUserId(platformUserId: string, options?: {
         impersonatedLabId?: string | null;
@@ -33,5 +40,6 @@ export declare class AdminAuthService {
     }): string;
     private toPlatformUserDto;
     private buildAccessPayload;
+    private normalizeImpersonatedLabId;
     private logFailed;
 }

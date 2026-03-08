@@ -28,6 +28,7 @@ const platform_setting_entity_1 = require("../entities/platform-setting.entity")
 const typeorm_1 = require("typeorm");
 const admin_auth_service_1 = require("../admin-auth/admin-auth.service");
 const auth_service_1 = require("../auth/auth.service");
+const auth_session_config_1 = require("../config/auth-session.config");
 const MAX_REPORT_IMAGE_DATA_URL_LENGTH = 4 * 1024 * 1024;
 const REPORT_IMAGE_DATA_URL_PATTERN = /^data:image\/(png|jpeg|jpg|webp);base64,[a-zA-Z0-9+/=]+$/;
 const UUID_V4_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -92,18 +93,20 @@ let PlatformAdminService = PlatformAdminService_1 = class PlatformAdminService {
         });
     }
     async getLab(labId, actor) {
-        const labs = await this.listLabs();
-        const lab = labs.find((item) => item.id === labId);
-        if (!lab) {
-            throw new common_1.NotFoundException('Lab not found');
-        }
-        await this.logPlatformSensitiveRead(actor, {
-            labId,
-            entityType: 'lab',
-            entityId: labId,
-            description: `Viewed lab details for ${lab.name} (${lab.code})`,
+        return this.rlsSessionService.withPlatformAdminContext(async (manager) => {
+            const lab = await manager.getRepository(lab_entity_1.Lab).findOne({ where: { id: labId } });
+            if (!lab) {
+                throw new common_1.NotFoundException('Lab not found');
+            }
+            const [item] = await this.toAdminLabListItems(manager, [lab]);
+            await this.logPlatformSensitiveRead(actor, {
+                labId,
+                entityType: 'lab',
+                entityId: labId,
+                description: `Viewed lab details for ${item.name} (${item.code})`,
+            }, manager);
+            return item;
         });
-        return lab;
     }
     async createLab(dto, actor) {
         return this.rlsSessionService.withPlatformAdminContext(async (manager) => {
@@ -1006,7 +1009,9 @@ let PlatformAdminService = PlatformAdminService_1 = class PlatformAdminService {
                 themeColor: '#1677ff',
             },
             securityPolicy: {
-                sessionTimeoutMinutes: Number(process.env.PLATFORM_SESSION_TIMEOUT_MINUTES || 30),
+                sessionTimeoutMinutes: auth_session_config_1.PLATFORM_ACCESS_TOKEN_TTL_MINUTES,
+                accessTokenLifetimeMinutes: auth_session_config_1.PLATFORM_ACCESS_TOKEN_TTL_MINUTES,
+                refreshTokenLifetimeDays: auth_session_config_1.REFRESH_TOKEN_TTL_DAYS,
                 passwordMinLength: Number(process.env.PLATFORM_PASSWORD_MIN_LENGTH || 8),
                 requireStrongPassword: process.env.PLATFORM_REQUIRE_STRONG_PASSWORD !== 'false',
             },
@@ -1066,7 +1071,17 @@ let PlatformAdminService = PlatformAdminService_1 = class PlatformAdminService {
             entityId: labId,
             description: `Viewed lab settings for ${settings.name} (${settings.code})`,
         });
-        return settings;
+        return this.toAdminLabSettingsSummary(settings);
+    }
+    async getLabReportDesign(labId, actor) {
+        const settings = await this.settingsService.getLabSettings(labId);
+        await this.logPlatformSensitiveRead(actor, {
+            labId,
+            entityType: 'lab_report_design',
+            entityId: labId,
+            description: `Viewed report design for ${settings.name} (${settings.code})`,
+        });
+        return this.toAdminLabReportDesign(settings);
     }
     async updateLabSettings(labId, data) {
         const settings = await this.settingsService.updateLabSettings(labId, data);
@@ -1075,7 +1090,7 @@ let PlatformAdminService = PlatformAdminService_1 = class PlatformAdminService {
             labId,
             reportDesignFingerprint: settings.reportDesignFingerprint ?? null,
         }));
-        return settings;
+        return this.toAdminLabSettingsSummary(settings);
     }
     async getLabUsers(labId, actor) {
         const users = await this.settingsService.getUsersForLab(labId);
@@ -1172,8 +1187,12 @@ let PlatformAdminService = PlatformAdminService_1 = class PlatformAdminService {
         if (!lab.isActive) {
             throw new common_1.BadRequestException('Cannot impersonate a disabled lab');
         }
-        const issued = await this.adminAuthService.issueAccessTokenByPlatformUserId(actor.platformUserId, {
+        const issued = await this.adminAuthService.reissueSession(data.refreshToken, {
+            platformUserId: actor.platformUserId,
             impersonatedLabId: lab.id,
+        }, {
+            ipAddress: actor.ipAddress ?? null,
+            userAgent: actor.userAgent ?? null,
         });
         await this.auditService.log({
             actorType: audit_log_entity_2.AuditActorType.PLATFORM_USER,
@@ -1192,6 +1211,7 @@ let PlatformAdminService = PlatformAdminService_1 = class PlatformAdminService {
         });
         return {
             accessToken: issued.accessToken,
+            refreshToken: issued.refreshToken,
             impersonation: {
                 active: true,
                 labId: lab.id,
@@ -1205,10 +1225,14 @@ let PlatformAdminService = PlatformAdminService_1 = class PlatformAdminService {
             },
         };
     }
-    async stopImpersonation(actor) {
+    async stopImpersonation(data, actor) {
         const previousLabId = actor.impersonatedLabId?.trim() || null;
-        const issued = await this.adminAuthService.issueAccessTokenByPlatformUserId(actor.platformUserId, {
+        const issued = await this.adminAuthService.reissueSession(data.refreshToken, {
+            platformUserId: actor.platformUserId,
             impersonatedLabId: null,
+        }, {
+            ipAddress: actor.ipAddress ?? null,
+            userAgent: actor.userAgent ?? null,
         });
         if (previousLabId) {
             await this.auditService.log({
@@ -1225,6 +1249,7 @@ let PlatformAdminService = PlatformAdminService_1 = class PlatformAdminService {
         }
         return {
             accessToken: issued.accessToken,
+            refreshToken: issued.refreshToken,
             impersonation: {
                 active: false,
                 labId: null,
@@ -1280,10 +1305,52 @@ let PlatformAdminService = PlatformAdminService_1 = class PlatformAdminService {
         const usersByLab = new Map(userRows.map((row) => [row.labId, Number(row.usersCount) || 0]));
         const ordersByLab = new Map(ordersRows.map((row) => [row.labId, Number(row.orders30dCount) || 0]));
         return labs.map((lab) => ({
-            ...lab,
+            id: lab.id,
+            code: lab.code,
+            subdomain: lab.subdomain,
+            name: lab.name,
+            timezone: lab.timezone,
+            isActive: lab.isActive,
+            createdAt: lab.createdAt,
             usersCount: usersByLab.get(lab.id) ?? 0,
             orders30dCount: ordersByLab.get(lab.id) ?? 0,
         }));
+    }
+    toAdminLabSettingsSummary(settings) {
+        return {
+            id: settings.id,
+            code: settings.code,
+            name: settings.name,
+            reportDesignFingerprint: settings.reportDesignFingerprint,
+            dashboardAnnouncementText: settings.dashboardAnnouncementText,
+            labelSequenceBy: settings.labelSequenceBy === 'department' ? 'department' : 'tube_type',
+            sequenceResetBy: settings.sequenceResetBy === 'shift' ? 'shift' : 'day',
+            enableOnlineResults: settings.enableOnlineResults,
+            hasOnlineResultWatermarkImage: Boolean(settings.onlineResultWatermarkDataUrl),
+            onlineResultWatermarkText: settings.onlineResultWatermarkText,
+            printing: {
+                ...settings.printing,
+                mode: settings.printing.mode === 'direct_qz' ? 'direct_qz' : 'browser',
+            },
+            hasReportBanner: Boolean(settings.reportBranding?.bannerDataUrl),
+            hasReportFooter: Boolean(settings.reportBranding?.footerDataUrl),
+            hasReportLogo: Boolean(settings.reportBranding?.logoDataUrl),
+            hasReportWatermark: Boolean(settings.reportBranding?.watermarkDataUrl),
+            uiTestGroups: settings.uiTestGroups ?? [],
+            referringDoctors: settings.referringDoctors ?? [],
+        };
+    }
+    toAdminLabReportDesign(settings) {
+        return {
+            id: settings.id,
+            code: settings.code,
+            name: settings.name,
+            reportDesignFingerprint: settings.reportDesignFingerprint,
+            reportBranding: settings.reportBranding,
+            reportStyle: settings.reportStyle,
+            onlineResultWatermarkDataUrl: settings.onlineResultWatermarkDataUrl,
+            onlineResultWatermarkText: settings.onlineResultWatermarkText,
+        };
     }
     resolveDashboardDateRange(rawDateFrom, rawDateTo) {
         const now = new Date();

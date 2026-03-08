@@ -50,6 +50,7 @@ export declare class AuthService {
         ipAddress?: string | null;
         userAgent?: string | null;
     }): Promise<LoginResponseDto>;
+    private refreshImpersonatedLabToken;
     private findUserForLogin;
     private resolveLabForUser;
     private getLabPortalBridgeTtlSeconds;

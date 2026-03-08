@@ -25,6 +25,7 @@ const set_lab_status_dto_1 = require("./dto/set-lab-status.dto");
 const export_audit_logs_dto_1 = require("./dto/export-audit-logs.dto");
 const reset_lab_user_password_dto_1 = require("./dto/reset-lab-user-password.dto");
 const start_impersonation_dto_1 = require("./dto/start-impersonation.dto");
+const refresh_token_dto_1 = require("../auth/dto/refresh-token.dto");
 let PlatformAdminController = class PlatformAdminController {
     constructor(platformAdminService) {
         this.platformAdminService = platformAdminService;
@@ -49,8 +50,8 @@ let PlatformAdminController = class PlatformAdminController {
             impersonatedLabId: req.user.impersonatedLabId ?? null,
         });
     }
-    async stopImpersonation(req) {
-        return this.platformAdminService.stopImpersonation({
+    async stopImpersonation(req, dto) {
+        return this.platformAdminService.stopImpersonation(dto, {
             ...this.getActorContext(req),
             impersonatedLabId: req.user.impersonatedLabId ?? null,
         });
@@ -81,6 +82,9 @@ let PlatformAdminController = class PlatformAdminController {
     }
     async getLabSettings(req, labId) {
         return this.platformAdminService.getLabSettings(labId, this.getActorContext(req));
+    }
+    async getLabReportDesign(req, labId) {
+        return this.platformAdminService.getLabReportDesign(labId, this.getActorContext(req));
     }
     async updateLabSettings(labId, body) {
         return this.platformAdminService.updateLabSettings(labId, body);
@@ -268,9 +272,11 @@ __decorate([
 __decorate([
     (0, common_1.Post)('impersonation/stop'),
     (0, roles_decorator_1.Roles)('SUPER_ADMIN'),
+    (0, common_1.UsePipes)(new common_1.ValidationPipe({ whitelist: true })),
     __param(0, (0, common_1.Req)()),
+    __param(1, (0, common_1.Body)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [Object]),
+    __metadata("design:paramtypes", [Object, refresh_token_dto_1.RefreshTokenDto]),
     __metadata("design:returntype", Promise)
 ], PlatformAdminController.prototype, "stopImpersonation", null);
 __decorate([
@@ -345,6 +351,14 @@ __decorate([
     __metadata("design:paramtypes", [Object, String]),
     __metadata("design:returntype", Promise)
 ], PlatformAdminController.prototype, "getLabSettings", null);
+__decorate([
+    (0, common_1.Get)('labs/:labId/report-design'),
+    __param(0, (0, common_1.Req)()),
+    __param(1, (0, common_1.Param)('labId', common_1.ParseUUIDPipe)),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, String]),
+    __metadata("design:returntype", Promise)
+], PlatformAdminController.prototype, "getLabReportDesign", null);
 __decorate([
     (0, common_1.Patch)('labs/:labId/settings'),
     (0, roles_decorator_1.Roles)('SUPER_ADMIN'),

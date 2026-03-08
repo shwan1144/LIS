@@ -32,10 +32,10 @@ import {
   getAdminOrderResultsPdf,
   getAdminOrders,
   getAdminSummary,
+  type AdminLabSettingsSummaryDto,
   type AdminLabDto,
   type AdminOrderListItem,
   type AdminSummaryDto,
-  type LabSettingsDto,
   type SettingsUserDto,
 } from '../../api/client';
 import { useAuth } from '../../contexts/AuthContext';
@@ -66,7 +66,7 @@ export function AdminLabDetailsPage() {
   const [loadingUsers, setLoadingUsers] = useState(false);
   const [usersLoaded, setUsersLoaded] = useState(false);
 
-  const [settings, setSettings] = useState<LabSettingsDto | null>(null);
+  const [settings, setSettings] = useState<AdminLabSettingsSummaryDto | null>(null);
   const [loadingSettings, setLoadingSettings] = useState(false);
   const [settingsLoaded, setSettingsLoaded] = useState(false);
 
@@ -566,16 +566,16 @@ export function AdminLabDetailsPage() {
                       {settings?.dashboardAnnouncementText || '-'}
                     </Descriptions.Item>
                     <Descriptions.Item label="Report Banner">
-                      {settings?.reportBranding?.bannerDataUrl ? 'Uploaded' : 'Default'}
+                      {settings?.hasReportBanner ? 'Uploaded' : 'Default'}
                     </Descriptions.Item>
                     <Descriptions.Item label="Report Footer">
-                      {settings?.reportBranding?.footerDataUrl ? 'Uploaded' : 'Default'}
+                      {settings?.hasReportFooter ? 'Uploaded' : 'Default'}
                     </Descriptions.Item>
                     <Descriptions.Item label="Report Logo">
-                      {settings?.reportBranding?.logoDataUrl ? 'Uploaded' : 'Default'}
+                      {settings?.hasReportLogo ? 'Uploaded' : 'Default'}
                     </Descriptions.Item>
                     <Descriptions.Item label="Report Watermark">
-                      {settings?.reportBranding?.watermarkDataUrl ? 'Uploaded' : 'Default'}
+                      {settings?.hasReportWatermark ? 'Uploaded' : 'Default'}
                     </Descriptions.Item>
                   </Descriptions>
 

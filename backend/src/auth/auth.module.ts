@@ -16,8 +16,8 @@ import { RolesGuard } from './roles.guard';
 import { RefreshTokenService } from './refresh-token.service';
 import { AuthRateLimitService } from './auth-rate-limit.service';
 import { requireSecret } from '../config/security-env';
+import { LAB_ACCESS_TOKEN_TTL_SECONDS } from '../config/auth-session.config';
 
-const jwtAccessTtlSeconds = Number(process.env.JWT_ACCESS_TTL || 900);
 const jwtSecret = requireSecret(
   'JWT_SECRET',
   'lis-dev-secret-change-in-production',
@@ -38,7 +38,7 @@ const jwtSecret = requireSecret(
     JwtModule.register({
       secret: jwtSecret,
       signOptions: {
-        expiresIn: Number.isFinite(jwtAccessTtlSeconds) && jwtAccessTtlSeconds > 0 ? jwtAccessTtlSeconds : 900,
+        expiresIn: LAB_ACCESS_TOKEN_TTL_SECONDS,
       },
     }),
   ],

@@ -120,8 +120,15 @@ export class AuthService {
     },
   ): Promise<LoginResponseDto> {
     const rotated = await this.refreshTokenService.rotate(refreshToken, meta);
-    if (rotated.actorType !== RefreshTokenActorType.LAB_USER) {
+    if (
+      rotated.actorType !== RefreshTokenActorType.LAB_USER &&
+      rotated.actorType !== RefreshTokenActorType.LAB_IMPERSONATION
+    ) {
       throw new UnauthorizedException('Invalid refresh token scope');
+    }
+
+    if (rotated.actorType === RefreshTokenActorType.LAB_IMPERSONATION) {
+      return this.refreshImpersonatedLabToken(rotated, meta);
     }
 
     const user = await this.userRepository.findOne({
@@ -159,7 +166,10 @@ export class AuthService {
 
   async logoutLabToken(refreshToken: string, resolvedLabId: string | null = null): Promise<void> {
     const token = await this.refreshTokenService.validate(refreshToken);
-    if (token.actorType !== RefreshTokenActorType.LAB_USER) {
+    if (
+      token.actorType !== RefreshTokenActorType.LAB_USER &&
+      token.actorType !== RefreshTokenActorType.LAB_IMPERSONATION
+    ) {
       throw new UnauthorizedException('Invalid refresh token scope');
     }
     const contextLabId = (token.context?.labId as string | undefined) ?? null;
@@ -323,6 +333,13 @@ export class AuthService {
       platformUserId: platformUser.id,
     };
     const accessToken = this.jwtService.sign(payload);
+    const refresh = await this.refreshTokenService.issue({
+      actorType: RefreshTokenActorType.LAB_IMPERSONATION,
+      actorId: platformUser.id,
+      context: { labId: lab.id, platformUserId: platformUser.id },
+      ipAddress: params?.ipAddress ?? null,
+      userAgent: params?.userAgent ?? null,
+    });
 
     await this.auditService.log({
       actorType: AuditActorType.PLATFORM_USER,
@@ -338,6 +355,65 @@ export class AuthService {
 
     return {
       accessToken,
+      refreshToken: refresh.token,
+      user: {
+        id: platformUser.id,
+        username: platformUser.email,
+        fullName: null,
+        role: 'SUPER_ADMIN',
+        isImpersonation: true,
+      },
+      lab: this.toLabDto(lab),
+    };
+  }
+
+  private async refreshImpersonatedLabToken(
+    rotated: {
+      actorType: RefreshTokenActorType;
+      actorId: string;
+      context: Record<string, unknown> | null;
+      issued: { token: string };
+    },
+    meta?: {
+      resolvedLabId?: string | null;
+      ipAddress?: string | null;
+      userAgent?: string | null;
+    },
+  ): Promise<LoginResponseDto> {
+    const contextLabId = (rotated.context?.labId as string | undefined) ?? null;
+    const contextPlatformUserId =
+      (rotated.context?.platformUserId as string | undefined) ?? rotated.actorId;
+
+    if (meta?.resolvedLabId && contextLabId !== meta.resolvedLabId) {
+      throw new UnauthorizedException('Refresh token lab context mismatch');
+    }
+
+    const platformUser = await this.platformUserRepository.findOne({
+      where: { id: contextPlatformUserId, isActive: true },
+    });
+    if (!platformUser || platformUser.role !== PlatformUserRole.SUPER_ADMIN) {
+      throw new UnauthorizedException('Platform user not allowed');
+    }
+
+    const lab = contextLabId
+      ? await this.labRepository.findOne({ where: { id: contextLabId, isActive: true } })
+      : null;
+    if (!lab) {
+      throw new UnauthorizedException('Lab not found or disabled');
+    }
+
+    const payload = {
+      sub: platformUser.id,
+      username: platformUser.email,
+      labId: lab.id,
+      role: platformUser.role,
+      tokenType: 'lab_impersonation_access' as const,
+      platformUserId: platformUser.id,
+    };
+
+    return {
+      accessToken: this.jwtService.sign(payload),
+      refreshToken: rotated.issued.token,
       user: {
         id: platformUser.id,
         username: platformUser.email,

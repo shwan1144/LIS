@@ -1,4 +1,9 @@
-import axios from 'axios';
+import axios, { type InternalAxiosRequestConfig } from 'axios';
+import {
+  ensureFreshSession,
+  getAccessToken,
+  hasRefreshToken,
+} from '../auth/sessionManager';
 import { getCurrentAuthScope, resolveApiBaseUrl, type AuthScope } from '../utils/tenant-scope';
 
 const API_BASE = resolveApiBaseUrl(import.meta.env.VITE_API_URL);
@@ -9,8 +14,23 @@ export const api = axios.create({
   headers: { 'Content-Type': 'application/json' },
 });
 
+function isAuthLifecycleRequest(url?: string): boolean {
+  const normalizedUrl = url || '';
+  return [
+    '/auth/login',
+    '/auth/refresh',
+    '/auth/logout',
+    '/auth/portal-login',
+    '/admin/auth/login',
+    '/admin/auth/refresh',
+    '/admin/auth/logout',
+  ].some((path) => normalizedUrl.endsWith(path));
+}
+
+type RetriableRequestConfig = InternalAxiosRequestConfig & { _retry?: boolean };
+
 api.interceptors.request.use((config) => {
-  const token = localStorage.getItem('accessToken');
+  const token = getAccessToken();
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   } else {
@@ -30,17 +50,25 @@ api.interceptors.request.use((config) => {
 
 api.interceptors.response.use(
   (res) => res,
-  (err) => {
-    // Only handle 401 Unauthorized (not network errors or other status codes)
-    if (err.response?.status === 401) {
-      // Don't redirect if we're already on the login page
-      if (window.location.pathname !== '/login') {
-        sessionStorage.setItem('sessionExpired', '1');
-        localStorage.removeItem('accessToken');
-        localStorage.removeItem('user');
-        localStorage.removeItem('lab');
-        localStorage.removeItem('authScope');
-        window.location.href = '/login';
+  async (err) => {
+    const config = err.config as RetriableRequestConfig | undefined;
+    if (
+      err.response?.status === 401 &&
+      config &&
+      !config._retry &&
+      !isAuthLifecycleRequest(config.url) &&
+      hasRefreshToken()
+    ) {
+      config._retry = true;
+      try {
+        const session = await ensureFreshSession();
+        const refreshedAccessToken = session?.accessToken ?? getAccessToken();
+        if (refreshedAccessToken) {
+          config.headers.Authorization = `Bearer ${refreshedAccessToken}`;
+        }
+        return api(config);
+      } catch {
+        return Promise.reject(err);
       }
     }
     return Promise.reject(err);
@@ -150,6 +178,7 @@ export interface UserDto {
 
 export interface LoginResponse {
   accessToken: string;
+  refreshToken: string;
   user: UserDto;
   lab: LabDto | null;
   scope: AuthScope;
@@ -163,6 +192,7 @@ export interface PlatformUserDto {
 
 export interface PlatformLoginResponse {
   accessToken: string;
+  refreshToken: string;
   platformUser: PlatformUserDto;
 }
 
@@ -180,6 +210,7 @@ export async function loginPlatform(data: PlatformLoginRequest): Promise<LoginRe
   const res = await api.post<PlatformLoginResponse>('/admin/auth/login', data);
   return {
     accessToken: res.data.accessToken,
+    refreshToken: res.data.refreshToken,
     scope: 'PLATFORM',
     lab: null,
     user: {
@@ -241,6 +272,42 @@ export interface AdminGatewayActivationCodeResponse {
   activationCode: string;
   expiresAt: string;
   labId: string;
+}
+
+export interface AdminLabSettingsSummaryDto {
+  id: string;
+  code: string;
+  name: string;
+  reportDesignFingerprint: string;
+  dashboardAnnouncementText: string | null;
+  labelSequenceBy: 'tube_type' | 'department';
+  sequenceResetBy: 'day' | 'shift';
+  enableOnlineResults: boolean;
+  hasOnlineResultWatermarkImage: boolean;
+  onlineResultWatermarkText: string | null;
+  printing: {
+    mode: 'browser' | 'direct_qz';
+    receiptPrinterName: string | null;
+    labelsPrinterName: string | null;
+    reportPrinterName: string | null;
+  };
+  hasReportBanner: boolean;
+  hasReportFooter: boolean;
+  hasReportLogo: boolean;
+  hasReportWatermark: boolean;
+  uiTestGroups?: { id: string; name: string; testIds: string[] }[];
+  referringDoctors?: string[];
+}
+
+export interface AdminLabReportDesignDto {
+  id: string;
+  code: string;
+  name: string;
+  reportDesignFingerprint: string;
+  reportBranding: ReportBrandingDto;
+  reportStyle: ReportStyleDto | null;
+  onlineResultWatermarkDataUrl: string | null;
+  onlineResultWatermarkText: string | null;
 }
 
 export interface AdminSummaryDto {
@@ -452,6 +519,8 @@ export interface AdminPlatformSettingsOverviewDto {
   };
   securityPolicy: {
     sessionTimeoutMinutes: number;
+    accessTokenLifetimeMinutes: number;
+    refreshTokenLifetimeDays: number;
     passwordMinLength: number;
     requireStrongPassword: boolean;
   };
@@ -480,6 +549,7 @@ export interface AdminImpersonationStatusDto {
 
 export interface AdminImpersonationTokenResponse {
   accessToken: string;
+  refreshToken: string;
   impersonation: AdminImpersonationStatusDto;
 }
 
@@ -656,13 +726,16 @@ export async function getAdminImpersonationStatus(): Promise<AdminImpersonationS
 export async function startAdminImpersonation(data: {
   labId: string;
   reason: string;
+  refreshToken: string;
 }): Promise<AdminImpersonationTokenResponse> {
   const res = await api.post<AdminImpersonationTokenResponse>('/admin/api/impersonation/start', data);
   return res.data;
 }
 
-export async function stopAdminImpersonation(): Promise<AdminImpersonationTokenResponse> {
-  const res = await api.post<AdminImpersonationTokenResponse>('/admin/api/impersonation/stop');
+export async function stopAdminImpersonation(data: {
+  refreshToken: string;
+}): Promise<AdminImpersonationTokenResponse> {
+  const res = await api.post<AdminImpersonationTokenResponse>('/admin/api/impersonation/stop', data);
   return res.data;
 }
 
@@ -707,8 +780,13 @@ export async function getAdminSettingsRoles(): Promise<string[]> {
   return res.data;
 }
 
-export async function getAdminLabSettings(labId: string): Promise<LabSettingsDto> {
-  const res = await api.get<LabSettingsDto>(`/admin/api/labs/${labId}/settings`);
+export async function getAdminLabSettings(labId: string): Promise<AdminLabSettingsSummaryDto> {
+  const res = await api.get<AdminLabSettingsSummaryDto>(`/admin/api/labs/${labId}/settings`);
+  return res.data;
+}
+
+export async function getAdminLabReportDesign(labId: string): Promise<AdminLabReportDesignDto> {
+  const res = await api.get<AdminLabReportDesignDto>(`/admin/api/labs/${labId}/report-design`);
   return res.data;
 }
 
@@ -732,8 +810,8 @@ export async function updateAdminLabSettings(
     uiTestGroups?: { id: string; name: string; testIds: string[] }[] | null;
     referringDoctors?: string[] | null;
   },
-): Promise<LabSettingsDto> {
-  const res = await api.patch<LabSettingsDto>(`/admin/api/labs/${labId}/settings`, data);
+): Promise<AdminLabSettingsSummaryDto> {
+  const res = await api.patch<AdminLabSettingsSummaryDto>(`/admin/api/labs/${labId}/settings`, data);
   return res.data;
 }
 

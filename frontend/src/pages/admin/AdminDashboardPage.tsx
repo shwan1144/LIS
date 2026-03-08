@@ -30,7 +30,6 @@ import dayjs from 'dayjs';
 import { useNavigate } from 'react-router-dom';
 import {
   createAdminLab,
-  getAdminLabs,
   getAdminSummary,
   getAdminSystemHealth,
   type AdminLabDto,
@@ -38,6 +37,7 @@ import {
   type AdminSystemHealthDto,
 } from '../../api/client';
 import { useAuth } from '../../contexts/AuthContext';
+import { invalidateAdminLabsCache, loadAdminLabs } from '../../utils/admin-labs-cache';
 import {
   ADMIN_DATE_RANGE_EVENT,
   ADMIN_DATE_RANGE_KEY,
@@ -68,7 +68,9 @@ export function AdminDashboardPage() {
   const [summary, setSummary] = useState<AdminSummaryDto | null>(null);
   const [systemHealth, setSystemHealth] = useState<AdminSystemHealthDto | null>(null);
   const [labs, setLabs] = useState<AdminLabDto[]>([]);
-  const [scopeLabId, setScopeLabId] = useState<string | undefined>(undefined);
+  const [scopeLabId, setScopeLabId] = useState<string | undefined>(
+    () => localStorage.getItem(ADMIN_SELECTED_LAB_KEY) || undefined,
+  );
   const [scopeDateRange, setScopeDateRange] = useState<[Date, Date]>(() => getDateRangeFromStorage());
 
   const canCreateLab = user?.role === 'SUPER_ADMIN';
@@ -83,11 +85,14 @@ export function AdminDashboardPage() {
 
   const syncGlobalScope = () => {
     const storedLabId = localStorage.getItem(ADMIN_SELECTED_LAB_KEY) || undefined;
-    setScopeLabId(storedLabId);
-    setScopeDateRange(getDateRangeFromStorage());
+    const nextRange = getDateRangeFromStorage();
+    setScopeLabId((current) => (current === storedLabId ? current : storedLabId));
+    setScopeDateRange((current) =>
+      serializeDateRange(current) === serializeDateRange(nextRange) ? current : nextRange,
+    );
   };
 
-  const loadDashboard = async (withLoading = true): Promise<void> => {
+  const loadDashboard = async (withLoading = true, forceLabs = false): Promise<void> => {
     if (withLoading) {
       setLoading(true);
     }
@@ -99,7 +104,7 @@ export function AdminDashboardPage() {
           dateFrom: scopeDateRange[0].toISOString(),
           dateTo: scopeDateRange[1].toISOString(),
         }),
-        getAdminLabs(),
+        loadAdminLabs({ force: forceLabs }),
         getAdminSystemHealth(),
       ]);
       setSummary(summaryData);
@@ -114,10 +119,6 @@ export function AdminDashboardPage() {
       }
     }
   };
-
-  useEffect(() => {
-    syncGlobalScope();
-  }, []);
 
   useEffect(() => {
     const handleScopeChange = () => {
@@ -152,10 +153,11 @@ export function AdminDashboardPage() {
         timezone: values.timezone?.trim() || undefined,
         isActive: values.isActive,
       });
+      invalidateAdminLabsCache();
       message.success('Lab created');
       setCreateOpen(false);
       form.resetFields();
-      await loadDashboard(false);
+      await loadDashboard(false, true);
     } catch (err: unknown) {
       if (err && typeof err === 'object' && 'errorFields' in err) {
         return;
@@ -230,7 +232,7 @@ export function AdminDashboardPage() {
           </Space>
         </div>
         <Space>
-          <Button icon={<ReloadOutlined />} onClick={() => void loadDashboard(false)}>
+          <Button icon={<ReloadOutlined />} onClick={() => void loadDashboard(false, true)}>
             Refresh
           </Button>
           <Button onClick={() => navigate('/audit')}>View Audit Logs</Button>
@@ -507,6 +509,10 @@ function getDateRangeFromStorage(): [Date, Date] {
   } catch {
     return fallback;
   }
+}
+
+function serializeDateRange(value: [Date, Date]): string {
+  return `${value[0].toISOString()}|${value[1].toISOString()}`;
 }
 
 function formatDateTime(value: string): string {

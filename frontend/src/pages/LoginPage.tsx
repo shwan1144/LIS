@@ -103,7 +103,7 @@ export function LoginPage() {
       message.info('Session expired. Please sign in again.');
     }
     if (!bridgeToken && user && scope && scope !== currentScope) {
-      logout();
+      void logout();
     }
   }, [bridgeToken, currentScope, logout, scope, user]);
 
@@ -119,21 +119,17 @@ export function LoginPage() {
       window.history.replaceState(null, '', nextUrl);
     }
 
-    localStorage.removeItem('accessToken');
-    localStorage.removeItem('user');
-    localStorage.removeItem('lab');
-    localStorage.removeItem('authScope');
-    logout();
-
     const openLabPortal = async () => {
       setLoading(true);
       setAuthError(null);
       try {
+        await logout();
         const res = await loginLabViaBridgeToken({ token: bridgeToken });
         setAuth({
           user: res.user,
           lab: res.lab,
-          token: res.accessToken,
+          accessToken: res.accessToken,
+          refreshToken: res.refreshToken,
           scope: res.scope,
         });
         message.success('Opened lab panel');
@@ -184,7 +180,8 @@ export function LoginPage() {
       setAuth({
         user: res.user,
         lab: res.lab,
-        token: res.accessToken,
+        accessToken: res.accessToken,
+        refreshToken: res.refreshToken,
         scope: res.scope,
       });
       message.success('Signed in successfully');
@@ -346,4 +343,3 @@ export function LoginPage() {
     </div>
   );
 }
-

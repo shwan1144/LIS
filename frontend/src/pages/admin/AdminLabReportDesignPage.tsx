@@ -21,7 +21,7 @@ import {
 import { EyeOutlined } from '@ant-design/icons';
 import {
   getAdminOrders,
-  getAdminLabSettings,
+  getAdminLabReportDesign,
   previewAdminLabReportPdf,
   updateAdminLabSettings,
   type AdminOrderListItem,
@@ -286,6 +286,7 @@ export function AdminLabReportDesignPage() {
     reportStyle: ReportStyleDto;
     onlineResultWatermarkDataUrl: string | null;
     onlineResultWatermarkText: string;
+    reportDesignFingerprint: string;
   } | null>(null);
   const [previewOrderQuery, setPreviewOrderQuery] = useState('');
   const [previewOrderOptions, setPreviewOrderOptions] = useState<AdminOrderListItem[]>([]);
@@ -301,7 +302,7 @@ export function AdminLabReportDesignPage() {
     const load = async () => {
       setLoading(true);
       try {
-        const data = await getAdminLabSettings(selectedLabId);
+        const data = await getAdminLabReportDesign(selectedLabId);
         const nextBranding = data.reportBranding || emptyBranding();
         const nextReportStyle = data.reportStyle || defaultReportStyle();
         const nextWatermarkDataUrl = data.onlineResultWatermarkDataUrl || null;
@@ -315,6 +316,7 @@ export function AdminLabReportDesignPage() {
           reportStyle: cloneReportStyle(nextReportStyle),
           onlineResultWatermarkDataUrl: nextWatermarkDataUrl,
           onlineResultWatermarkText: nextWatermarkText,
+          reportDesignFingerprint: data.reportDesignFingerprint,
         });
       } catch (error) {
         message.error(getErrorMessage(error) || 'Failed to load report design settings');
@@ -628,50 +630,22 @@ export function AdminLabReportDesignPage() {
           ? expectedWatermarkText || null
           : undefined,
       });
-      const nextBranding = updated.reportBranding || emptyBranding();
-      const nextReportStyle = updated.reportStyle || defaultReportStyle();
-      const nextWatermarkDataUrl = updated.onlineResultWatermarkDataUrl || null;
       const nextWatermarkText = updated.onlineResultWatermarkText || '';
-      setBranding(nextBranding);
-      setReportStyle(cloneReportStyle(nextReportStyle));
-      setOnlineResultWatermarkDataUrl(nextWatermarkDataUrl);
+      setBranding(expectedBranding);
+      setReportStyle(cloneReportStyle(expectedReportStyle));
+      setOnlineResultWatermarkDataUrl(expectedWatermarkDataUrl);
       setOnlineResultWatermarkText(nextWatermarkText);
       setSavedSnapshot({
-        branding: nextBranding,
-        reportStyle: cloneReportStyle(nextReportStyle),
-        onlineResultWatermarkDataUrl: nextWatermarkDataUrl,
+        branding: expectedBranding,
+        reportStyle: cloneReportStyle(expectedReportStyle),
+        onlineResultWatermarkDataUrl: expectedWatermarkDataUrl,
         onlineResultWatermarkText: nextWatermarkText,
+        reportDesignFingerprint: updated.reportDesignFingerprint,
       });
-
-      const serverDidNotPersist =
-        JSON.stringify(nextBranding) !== JSON.stringify(expectedBranding) ||
-        JSON.stringify(nextReportStyle) !== JSON.stringify(expectedReportStyle) ||
-        nextWatermarkDataUrl !== expectedWatermarkDataUrl ||
-        nextWatermarkText !== expectedWatermarkText;
-
-      if (serverDidNotPersist) {
-        const mismatchFields: string[] = [];
-        if (JSON.stringify(nextBranding) !== JSON.stringify(expectedBranding)) {
-          mismatchFields.push('reportBranding');
-        }
-        if (JSON.stringify(nextReportStyle) !== JSON.stringify(expectedReportStyle)) {
-          mismatchFields.push('reportStyle');
-        }
-        if (nextWatermarkDataUrl !== expectedWatermarkDataUrl) {
-          mismatchFields.push('onlineResultWatermarkDataUrl');
-        }
-        if (nextWatermarkText !== expectedWatermarkText) {
-          mismatchFields.push('onlineResultWatermarkText');
-        }
-        message.error(
-          `Server did not persist report design (${mismatchFields.join(', ')}); settings reloaded from server.`,
-        );
-      } else {
-        const labLabel = selectedLab
-          ? `${selectedLab.name} (${selectedLab.code})`
-          : selectedLabId;
-        message.success(`Report design saved for ${labLabel}`);
-      }
+      const labLabel = selectedLab
+        ? `${selectedLab.name} (${selectedLab.code})`
+        : selectedLabId;
+      message.success(`Report design saved for ${labLabel}`);
     } catch (error) {
       message.error(getErrorMessage(error) || 'Failed to save report design settings');
     } finally {

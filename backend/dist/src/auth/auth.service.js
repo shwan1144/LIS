@@ -103,8 +103,12 @@ let AuthService = class AuthService {
     }
     async refreshLabToken(refreshToken, meta) {
         const rotated = await this.refreshTokenService.rotate(refreshToken, meta);
-        if (rotated.actorType !== refresh_token_entity_1.RefreshTokenActorType.LAB_USER) {
+        if (rotated.actorType !== refresh_token_entity_1.RefreshTokenActorType.LAB_USER &&
+            rotated.actorType !== refresh_token_entity_1.RefreshTokenActorType.LAB_IMPERSONATION) {
             throw new common_1.UnauthorizedException('Invalid refresh token scope');
+        }
+        if (rotated.actorType === refresh_token_entity_1.RefreshTokenActorType.LAB_IMPERSONATION) {
+            return this.refreshImpersonatedLabToken(rotated, meta);
         }
         const user = await this.userRepository.findOne({
             where: { id: rotated.actorId, isActive: true },
@@ -137,7 +141,8 @@ let AuthService = class AuthService {
     }
     async logoutLabToken(refreshToken, resolvedLabId = null) {
         const token = await this.refreshTokenService.validate(refreshToken);
-        if (token.actorType !== refresh_token_entity_1.RefreshTokenActorType.LAB_USER) {
+        if (token.actorType !== refresh_token_entity_1.RefreshTokenActorType.LAB_USER &&
+            token.actorType !== refresh_token_entity_1.RefreshTokenActorType.LAB_IMPERSONATION) {
             throw new common_1.UnauthorizedException('Invalid refresh token scope');
         }
         const contextLabId = token.context?.labId ?? null;
@@ -266,6 +271,13 @@ let AuthService = class AuthService {
             platformUserId: platformUser.id,
         };
         const accessToken = this.jwtService.sign(payload);
+        const refresh = await this.refreshTokenService.issue({
+            actorType: refresh_token_entity_1.RefreshTokenActorType.LAB_IMPERSONATION,
+            actorId: platformUser.id,
+            context: { labId: lab.id, platformUserId: platformUser.id },
+            ipAddress: params?.ipAddress ?? null,
+            userAgent: params?.userAgent ?? null,
+        });
         await this.auditService.log({
             actorType: audit_log_entity_1.AuditActorType.PLATFORM_USER,
             actorId: platformUser.id,
@@ -279,6 +291,46 @@ let AuthService = class AuthService {
         });
         return {
             accessToken,
+            refreshToken: refresh.token,
+            user: {
+                id: platformUser.id,
+                username: platformUser.email,
+                fullName: null,
+                role: 'SUPER_ADMIN',
+                isImpersonation: true,
+            },
+            lab: this.toLabDto(lab),
+        };
+    }
+    async refreshImpersonatedLabToken(rotated, meta) {
+        const contextLabId = rotated.context?.labId ?? null;
+        const contextPlatformUserId = rotated.context?.platformUserId ?? rotated.actorId;
+        if (meta?.resolvedLabId && contextLabId !== meta.resolvedLabId) {
+            throw new common_1.UnauthorizedException('Refresh token lab context mismatch');
+        }
+        const platformUser = await this.platformUserRepository.findOne({
+            where: { id: contextPlatformUserId, isActive: true },
+        });
+        if (!platformUser || platformUser.role !== platform_user_entity_1.PlatformUserRole.SUPER_ADMIN) {
+            throw new common_1.UnauthorizedException('Platform user not allowed');
+        }
+        const lab = contextLabId
+            ? await this.labRepository.findOne({ where: { id: contextLabId, isActive: true } })
+            : null;
+        if (!lab) {
+            throw new common_1.UnauthorizedException('Lab not found or disabled');
+        }
+        const payload = {
+            sub: platformUser.id,
+            username: platformUser.email,
+            labId: lab.id,
+            role: platformUser.role,
+            tokenType: 'lab_impersonation_access',
+            platformUserId: platformUser.id,
+        };
+        return {
+            accessToken: this.jwtService.sign(payload),
+            refreshToken: rotated.issued.token,
             user: {
                 id: platformUser.id,
                 username: platformUser.email,

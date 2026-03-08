@@ -18,7 +18,7 @@ const admin_auth_service_1 = require("./admin-auth.service");
 const admin_jwt_strategy_1 = require("./admin-jwt.strategy");
 const admin_jwt_auth_guard_1 = require("./admin-jwt-auth.guard");
 const security_env_1 = require("../config/security-env");
-const platformJwtAccessTtlSeconds = Number(process.env.PLATFORM_JWT_ACCESS_TTL || 900);
+const auth_session_config_1 = require("../config/auth-session.config");
 const platformJwtSecret = (0, security_env_1.requireSecret)('PLATFORM_JWT_SECRET', 'platform-dev-secret', 'AdminAuthModule');
 let AdminAuthModule = class AdminAuthModule {
 };
@@ -31,9 +31,7 @@ exports.AdminAuthModule = AdminAuthModule = __decorate([
             jwt_1.JwtModule.register({
                 secret: platformJwtSecret,
                 signOptions: {
-                    expiresIn: Number.isFinite(platformJwtAccessTtlSeconds) && platformJwtAccessTtlSeconds > 0
-                        ? platformJwtAccessTtlSeconds
-                        : 900,
+                    expiresIn: auth_session_config_1.PLATFORM_ACCESS_TOKEN_TTL_SECONDS,
                 },
             }),
             auth_module_1.AuthModule,

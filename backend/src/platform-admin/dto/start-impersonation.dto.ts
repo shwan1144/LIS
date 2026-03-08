@@ -1,4 +1,4 @@
-import { IsString, IsUUID, MaxLength, MinLength } from 'class-validator';
+import { IsNotEmpty, IsString, IsUUID, MaxLength, MinLength } from 'class-validator';
 
 export class StartImpersonationDto {
   @IsUUID()
@@ -8,4 +8,8 @@ export class StartImpersonationDto {
   @MinLength(3)
   @MaxLength(300)
   reason: string;
+
+  @IsString()
+  @IsNotEmpty()
+  refreshToken: string;
 }

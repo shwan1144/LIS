@@ -24,4 +24,9 @@ __decorate([
     (0, class_validator_1.MaxLength)(300),
     __metadata("design:type", String)
 ], StartImpersonationDto.prototype, "reason", void 0);
+__decorate([
+    (0, class_validator_1.IsString)(),
+    (0, class_validator_1.IsNotEmpty)(),
+    __metadata("design:type", String)
+], StartImpersonationDto.prototype, "refreshToken", void 0);
 //# sourceMappingURL=start-impersonation.dto.js.map

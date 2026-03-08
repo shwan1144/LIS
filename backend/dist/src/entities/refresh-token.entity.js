@@ -15,6 +15,7 @@ var RefreshTokenActorType;
 (function (RefreshTokenActorType) {
     RefreshTokenActorType["LAB_USER"] = "LAB_USER";
     RefreshTokenActorType["PLATFORM_USER"] = "PLATFORM_USER";
+    RefreshTokenActorType["LAB_IMPERSONATION"] = "LAB_IMPERSONATION";
 })(RefreshTokenActorType || (exports.RefreshTokenActorType = RefreshTokenActorType = {}));
 let RefreshToken = class RefreshToken {
 };

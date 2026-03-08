@@ -34,13 +34,13 @@ import dayjs, { type Dayjs } from 'dayjs';
 import { useAuth } from '../../contexts/AuthContext';
 import {
   getAdminImpersonationStatus,
-  getAdminLabs,
   startAdminImpersonation,
   stopAdminImpersonation,
   createAdminImpersonationLabPortalToken,
   type AdminImpersonationStatusDto,
   type AdminLabDto,
 } from '../../api/client';
+import { loadAdminLabs } from '../../utils/admin-labs-cache';
 import {
   ADMIN_DATE_RANGE_EVENT,
   ADMIN_DATE_RANGE_KEY,
@@ -77,7 +77,7 @@ function resolveEnvironmentTag(): { label: string; color: string } {
 export function AdminLayout() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { user, logout, setAccessToken } = useAuth();
+  const { user, logout, refreshToken, replaceTokens } = useAuth();
   const [labs, setLabs] = useState<AdminLabDto[]>([]);
   const [selectedLabId, setSelectedLabId] = useState<string | null>(null);
   const [datePreset, setDatePreset] = useState<AdminDatePreset>('7d');
@@ -145,9 +145,9 @@ export function AdminLayout() {
     window.dispatchEvent(new CustomEvent(ADMIN_LAB_SCOPE_EVENT, { detail: { labId: null } }));
   }, []);
 
-  const loadLabs = useCallback(async () => {
+  const loadLabs = useCallback(async (force = false) => {
     try {
-      const items = await getAdminLabs();
+      const items = await loadAdminLabs({ force });
       setLabs(items);
     } catch {
       setLabs([]);
@@ -250,6 +250,10 @@ export function AdminLayout() {
 
   const handleStartImpersonation = async () => {
     if (!isSuperAdmin) return;
+    if (!refreshToken) {
+      message.error('Current session cannot be rotated. Please sign in again.');
+      return;
+    }
     const values = await impersonationForm.validateFields().catch(() => null);
     if (!values) return;
 
@@ -258,8 +262,12 @@ export function AdminLayout() {
       const response = await startAdminImpersonation({
         labId: values.labId,
         reason: values.reason.trim(),
+        refreshToken,
       });
-      setAccessToken(response.accessToken);
+      replaceTokens({
+        accessToken: response.accessToken,
+        refreshToken: response.refreshToken,
+      });
       setImpersonation(response.impersonation);
       applyLabScope(response.impersonation.labId ?? null);
       setImpersonationModalOpen(false);
@@ -273,10 +281,17 @@ export function AdminLayout() {
 
   const handleStopImpersonation = async () => {
     if (!isSuperAdmin || !impersonation.active) return;
+    if (!refreshToken) {
+      message.error('Current session cannot be rotated. Please sign in again.');
+      return;
+    }
     setStopImpersonationSubmitting(true);
     try {
-      const response = await stopAdminImpersonation();
-      setAccessToken(response.accessToken);
+      const response = await stopAdminImpersonation({ refreshToken });
+      replaceTokens({
+        accessToken: response.accessToken,
+        refreshToken: response.refreshToken,
+      });
       setImpersonation(response.impersonation);
       applyLabScope(null);
       message.success('Impersonation stopped');
@@ -342,8 +357,8 @@ export function AdminLayout() {
     return targetUrl.toString();
   };
 
-  const handleLogout = () => {
-    logout();
+  const handleLogout = async () => {
+    await logout();
     navigate('/login', { replace: true });
   };
 
@@ -421,7 +436,7 @@ export function AdminLayout() {
               )
             ) : null}
             <Text style={{ color: 'rgba(255,255,255,0.85)' }}>{user?.username}</Text>
-            <Button icon={<LogoutOutlined />} onClick={handleLogout}>
+            <Button icon={<LogoutOutlined />} onClick={() => void handleLogout()}>
               Log out
             </Button>
           </Space>

@@ -18,7 +18,6 @@ import type { ColumnsType } from 'antd/es/table';
 import dayjs, { type Dayjs } from 'dayjs';
 import {
   getAdminLab,
-  getAdminLabs,
   getAdminOrder,
   getAdminOrders,
   getAdminOrderResultsPdf,
@@ -27,6 +26,7 @@ import {
   type AdminOrderListItem,
 } from '../../api/client';
 import { useAuth } from '../../contexts/AuthContext';
+import { loadAdminLabs } from '../../utils/admin-labs-cache';
 import {
   ADMIN_DATE_RANGE_EVENT,
   ADMIN_DATE_RANGE_KEY,
@@ -47,7 +47,9 @@ export function AdminOrdersPage() {
   const [labs, setLabs] = useState<AdminLabDto[]>([]);
   const [loadingLabs, setLoadingLabs] = useState(false);
 
-  const [labId, setLabId] = useState<string | undefined>(undefined);
+  const [labId, setLabId] = useState<string | undefined>(
+    () => localStorage.getItem(ADMIN_SELECTED_LAB_KEY) || undefined,
+  );
   const [status, setStatus] = useState<OrderStatusFilter>('');
   const [searchText, setSearchText] = useState('');
   const [searchApplied, setSearchApplied] = useState('');
@@ -66,11 +68,11 @@ export function AdminOrdersPage() {
   const [downloadingResultsPdf, setDownloadingResultsPdf] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState<AdminOrderDetail | null>(null);
 
-  const loadLabs = async () => {
+  const loadLabs = async (force = false) => {
     setLoadingLabs(true);
     setLabsError(null);
     try {
-      const items = await getAdminLabs();
+      const items = await loadAdminLabs({ force });
       setLabs(items);
     } catch (error) {
       setLabsError(getErrorMessage(error) || 'Failed to load labs');
@@ -80,8 +82,6 @@ export function AdminOrdersPage() {
   };
 
   useEffect(() => {
-    const savedLabId = localStorage.getItem(ADMIN_SELECTED_LAB_KEY) ?? undefined;
-    setLabId(savedLabId || undefined);
     void loadLabs();
   }, []);
 
@@ -114,17 +114,24 @@ export function AdminOrdersPage() {
   }, [labId, status, searchApplied, dateRange, page, size]);
 
   useEffect(() => {
-    const syncDateRange = () => {
-      setDateRange(getInitialDateRange());
+    const syncFilters = () => {
+      const storedLabId = localStorage.getItem(ADMIN_SELECTED_LAB_KEY) || undefined;
+      const nextRange = getInitialDateRange();
+      setLabId((current) => (current === storedLabId ? current : storedLabId));
+      setDateRange((current) =>
+        serializeDayjsRange(current) === serializeDayjsRange(nextRange) ? current : nextRange,
+      );
       setPage(1);
     };
 
-    window.addEventListener(ADMIN_DATE_RANGE_EVENT, syncDateRange as EventListener);
-    window.addEventListener('storage', syncDateRange);
+    window.addEventListener(ADMIN_LAB_SCOPE_EVENT, syncFilters as EventListener);
+    window.addEventListener(ADMIN_DATE_RANGE_EVENT, syncFilters as EventListener);
+    window.addEventListener('storage', syncFilters);
 
     return () => {
-      window.removeEventListener(ADMIN_DATE_RANGE_EVENT, syncDateRange as EventListener);
-      window.removeEventListener('storage', syncDateRange);
+      window.removeEventListener(ADMIN_LAB_SCOPE_EVENT, syncFilters as EventListener);
+      window.removeEventListener(ADMIN_DATE_RANGE_EVENT, syncFilters as EventListener);
+      window.removeEventListener('storage', syncFilters);
     };
   }, []);
 
@@ -318,7 +325,7 @@ export function AdminOrdersPage() {
               showIcon
               message={labsError}
               action={
-                <Button size="small" onClick={() => void loadLabs()}>
+                <Button size="small" onClick={() => void loadLabs(true)}>
                   Retry labs
                 </Button>
               }
@@ -524,6 +531,10 @@ function getInitialDateRange(): [Dayjs, Dayjs] {
     }
   }
   return [dayjs().subtract(6, 'day').startOf('day'), dayjs().endOf('day')];
+}
+
+function serializeDayjsRange(value: [Dayjs, Dayjs]): string {
+  return `${value[0].toISOString()}|${value[1].toISOString()}`;
 }
 
 function formatDate(value: string): string {

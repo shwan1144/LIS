@@ -19,7 +19,7 @@ const typeorm_2 = require("typeorm");
 const crypto_1 = require("crypto");
 const refresh_token_entity_1 = require("../entities/refresh-token.entity");
 const password_util_1 = require("./password.util");
-const REFRESH_TOKEN_TTL_DAYS = 30;
+const auth_session_config_1 = require("../config/auth-session.config");
 let RefreshTokenService = class RefreshTokenService {
     constructor(refreshTokenRepo) {
         this.refreshTokenRepo = refreshTokenRepo;
@@ -54,7 +54,7 @@ let RefreshTokenService = class RefreshTokenService {
             expiresAt,
         };
     }
-    async rotate(rawToken, meta) {
+    async rotate(rawToken, meta, options) {
         const { tokenId, tokenSecret } = this.parseRawToken(rawToken);
         return this.refreshTokenRepo.manager.transaction(async (manager) => {
             const repo = manager.getRepository(refresh_token_entity_1.RefreshToken);
@@ -83,7 +83,7 @@ let RefreshTokenService = class RefreshTokenService {
                 actorType: existing.actorType,
                 actorId: existing.actorId,
                 familyId: existing.familyId,
-                context: existing.context ?? null,
+                context: options?.nextContext ?? existing.context ?? null,
                 ipAddress: meta?.ipAddress ?? null,
                 userAgent: meta?.userAgent ?? null,
             });
@@ -152,7 +152,7 @@ let RefreshTokenService = class RefreshTokenService {
     }
     buildExpiryDate() {
         const expiresAt = new Date();
-        expiresAt.setDate(expiresAt.getDate() + REFRESH_TOKEN_TTL_DAYS);
+        expiresAt.setDate(expiresAt.getDate() + auth_session_config_1.REFRESH_TOKEN_TTL_DAYS);
         return expiresAt;
     }
 };

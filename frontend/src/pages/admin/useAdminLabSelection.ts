@@ -1,34 +1,17 @@
 import { useCallback, useEffect, useState } from 'react';
-import { getAdminLabs, type AdminLabDto } from '../../api/client';
+import type { AdminLabDto } from '../../api/client';
 import { ADMIN_LAB_SCOPE_EVENT, ADMIN_SELECTED_LAB_KEY } from '../../utils/admin-ui';
-
-let cachedLabs: AdminLabDto[] | null = null;
-let labsPromise: Promise<AdminLabDto[]> | null = null;
-
-async function loadAdminLabsOnce(): Promise<AdminLabDto[]> {
-  if (cachedLabs) return cachedLabs;
-  if (!labsPromise) {
-    labsPromise = getAdminLabs()
-      .then((items) => {
-        cachedLabs = items;
-        return items;
-      })
-      .finally(() => {
-        labsPromise = null;
-      });
-  }
-  return labsPromise;
-}
+import { loadAdminLabs } from '../../utils/admin-labs-cache';
 
 export function useAdminLabSelection() {
   const [labs, setLabs] = useState<AdminLabDto[]>([]);
   const [selectedLabId, setSelectedLabId] = useState<string | null>(null);
   const [loadingLabs, setLoadingLabs] = useState(false);
 
-  const loadLabs = useCallback(async () => {
+  const loadLabs = useCallback(async (force = false) => {
     setLoadingLabs(true);
     try {
-      const items = await loadAdminLabsOnce();
+      const items = await loadAdminLabs({ force });
       setLabs(items);
       if (items.length === 0) {
         setSelectedLabId(null);
@@ -65,6 +48,6 @@ export function useAdminLabSelection() {
     selectedLabId,
     loadingLabs,
     selectLab,
-    reloadLabs: loadLabs,
+    reloadLabs: (force = false) => loadLabs(force),
   };
 }

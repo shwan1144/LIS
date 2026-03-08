@@ -101,7 +101,13 @@ export function AdminSettingsPage() {
           <Card title={<><SafetyCertificateOutlined style={{ marginRight: 8 }} />Security Policy</>} loading={loading}>
             {!settings ? null : (
               <Descriptions column={1} size="small" bordered>
-                <Descriptions.Item label="Session timeout">
+                <Descriptions.Item label="Access token lifetime">
+                  {settings.securityPolicy.accessTokenLifetimeMinutes} minutes
+                </Descriptions.Item>
+                <Descriptions.Item label="Refresh token lifetime">
+                  {settings.securityPolicy.refreshTokenLifetimeDays} days
+                </Descriptions.Item>
+                <Descriptions.Item label="Session timeout (compat)">
                   {settings.securityPolicy.sessionTimeoutMinutes} minutes
                 </Descriptions.Item>
                 <Descriptions.Item label="Password min length">
@@ -214,4 +220,3 @@ function getErrorMessage(err: unknown): string | null {
   }
   return null;
 }
-

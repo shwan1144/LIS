@@ -114,8 +114,8 @@ export function AppLayout() {
       content: 'Are you sure you want to log out?',
       okText: 'Log out',
       cancelText: 'Cancel',
-      onOk: () => {
-        logout();
+      onOk: async () => {
+        await logout();
         navigate('/login');
       },
     });

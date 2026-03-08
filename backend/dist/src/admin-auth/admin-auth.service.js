@@ -54,7 +54,7 @@ let AdminAuthService = class AdminAuthService {
         const refresh = await this.refreshTokenService.issue({
             actorType: refresh_token_entity_1.RefreshTokenActorType.PLATFORM_USER,
             actorId: platformUser.id,
-            context: { role: platformUser.role },
+            context: { role: platformUser.role, impersonatedLabId: null },
             ipAddress: meta?.ipAddress ?? null,
             userAgent: meta?.userAgent ?? null,
         });
@@ -85,8 +85,36 @@ let AdminAuthService = class AdminAuthService {
         if (!platformUser) {
             throw new common_1.UnauthorizedException('Platform user not found');
         }
+        const impersonatedLabId = this.normalizeImpersonatedLabId(rotated.context);
         return {
-            accessToken: this.issueAccessToken(platformUser),
+            accessToken: this.issueAccessToken(platformUser, { impersonatedLabId }),
+            refreshToken: rotated.issued.token,
+            platformUser: this.toPlatformUserDto(platformUser),
+        };
+    }
+    async reissueSession(refreshToken, options, meta) {
+        const validated = await this.refreshTokenService.validate(refreshToken);
+        if (validated.actorType !== refresh_token_entity_1.RefreshTokenActorType.PLATFORM_USER) {
+            throw new common_1.UnauthorizedException('Invalid refresh token scope');
+        }
+        if (validated.actorId !== options.platformUserId) {
+            throw new common_1.UnauthorizedException('Refresh token actor mismatch');
+        }
+        const platformUser = await this.platformUserRepo.findOne({
+            where: { id: validated.actorId, isActive: true },
+        });
+        if (!platformUser) {
+            throw new common_1.UnauthorizedException('Platform user not found');
+        }
+        const impersonatedLabId = options.impersonatedLabId?.trim() || null;
+        const rotated = await this.refreshTokenService.rotate(refreshToken, meta, {
+            nextContext: {
+                role: platformUser.role,
+                impersonatedLabId,
+            },
+        });
+        return {
+            accessToken: this.issueAccessToken(platformUser, { impersonatedLabId }),
             refreshToken: rotated.issued.token,
             platformUser: this.toPlatformUserDto(platformUser),
         };
@@ -130,6 +158,10 @@ let AdminAuthService = class AdminAuthService {
             payload.impersonationStartedAt = new Date().toISOString();
         }
         return payload;
+    }
+    normalizeImpersonatedLabId(context) {
+        const raw = context?.impersonatedLabId;
+        return typeof raw === 'string' && raw.trim().length > 0 ? raw.trim() : null;
     }
     async logFailed(email, reason, meta) {
         await this.auditService.log({

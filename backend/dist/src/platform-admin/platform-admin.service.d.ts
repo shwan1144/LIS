@@ -18,10 +18,60 @@ export interface PlatformActorContext {
     ipAddress?: string | null;
     userAgent?: string | null;
 }
-export type AdminLabListItem = Lab & {
+export interface AdminLabListItem {
+    id: string;
+    code: string;
+    subdomain: string | null;
+    name: string;
+    timezone: string;
+    isActive: boolean;
+    createdAt: Date;
     usersCount: number;
     orders30dCount: number;
-};
+}
+export interface AdminLabSettingsSummary {
+    id: string;
+    code: string;
+    name: string;
+    reportDesignFingerprint: string;
+    dashboardAnnouncementText: string | null;
+    labelSequenceBy: 'tube_type' | 'department';
+    sequenceResetBy: 'day' | 'shift';
+    enableOnlineResults: boolean;
+    hasOnlineResultWatermarkImage: boolean;
+    onlineResultWatermarkText: string | null;
+    printing: {
+        mode: 'browser' | 'direct_qz';
+        receiptPrinterName: string | null;
+        labelsPrinterName: string | null;
+        reportPrinterName: string | null;
+    };
+    hasReportBanner: boolean;
+    hasReportFooter: boolean;
+    hasReportLogo: boolean;
+    hasReportWatermark: boolean;
+    uiTestGroups: {
+        id: string;
+        name: string;
+        testIds: string[];
+    }[];
+    referringDoctors: string[];
+}
+export interface AdminLabReportDesign {
+    id: string;
+    code: string;
+    name: string;
+    reportDesignFingerprint: string;
+    reportBranding: {
+        bannerDataUrl: string | null;
+        footerDataUrl: string | null;
+        logoDataUrl: string | null;
+        watermarkDataUrl: string | null;
+    };
+    reportStyle: ReportStyleConfig | null;
+    onlineResultWatermarkDataUrl: string | null;
+    onlineResultWatermarkText: string | null;
+}
 export interface AdminSystemHealth {
     status: 'ok' | 'degraded';
     checkedAt: string;
@@ -40,6 +90,8 @@ export interface AdminPlatformSettingsOverview {
     };
     securityPolicy: {
         sessionTimeoutMinutes: number;
+        accessTokenLifetimeMinutes: number;
+        refreshTokenLifetimeDays: number;
         passwordMinLength: number;
         requireStrongPassword: boolean;
     };
@@ -289,37 +341,8 @@ export declare class PlatformAdminService {
     updateGlobalDashboardAnnouncement(data: {
         dashboardAnnouncementText?: string | null;
     }): Promise<AdminGlobalDashboardAnnouncement>;
-    getLabSettings(labId: string, actor?: PlatformActorContext): Promise<{
-        id: string;
-        code: string;
-        name: string;
-        labelSequenceBy: string;
-        sequenceResetBy: string;
-        enableOnlineResults: boolean;
-        onlineResultWatermarkDataUrl: string | null;
-        onlineResultWatermarkText: string | null;
-        printing: {
-            mode: string;
-            receiptPrinterName: string | null;
-            labelsPrinterName: string | null;
-            reportPrinterName: string | null;
-        };
-        reportBranding: {
-            bannerDataUrl: string | null;
-            footerDataUrl: string | null;
-            logoDataUrl: string | null;
-            watermarkDataUrl: string | null;
-        };
-        reportStyle: ReportStyleConfig | null;
-        reportDesignFingerprint: string;
-        uiTestGroups: {
-            id: string;
-            name: string;
-            testIds: string[];
-        }[];
-        referringDoctors: string[];
-        dashboardAnnouncementText: string | null;
-    }>;
+    getLabSettings(labId: string, actor?: PlatformActorContext): Promise<AdminLabSettingsSummary>;
+    getLabReportDesign(labId: string, actor?: PlatformActorContext): Promise<AdminLabReportDesign>;
     updateLabSettings(labId: string, data: {
         labelSequenceBy?: string;
         sequenceResetBy?: string;
@@ -341,37 +364,7 @@ export declare class PlatformAdminService {
         reportStyle?: ReportStyleConfig | null;
         referringDoctors?: string[] | null;
         dashboardAnnouncementText?: string | null;
-    }): Promise<{
-        id: string;
-        code: string;
-        name: string;
-        labelSequenceBy: string;
-        sequenceResetBy: string;
-        enableOnlineResults: boolean;
-        onlineResultWatermarkDataUrl: string | null;
-        onlineResultWatermarkText: string | null;
-        printing: {
-            mode: string;
-            receiptPrinterName: string | null;
-            labelsPrinterName: string | null;
-            reportPrinterName: string | null;
-        };
-        reportBranding: {
-            bannerDataUrl: string | null;
-            footerDataUrl: string | null;
-            logoDataUrl: string | null;
-            watermarkDataUrl: string | null;
-        };
-        reportStyle: ReportStyleConfig | null;
-        reportDesignFingerprint: string;
-        uiTestGroups: {
-            id: string;
-            name: string;
-            testIds: string[];
-        }[];
-        referringDoctors: string[];
-        dashboardAnnouncementText: string | null;
-    }>;
+    }): Promise<AdminLabSettingsSummary>;
     getLabUsers(labId: string, actor?: PlatformActorContext): Promise<User[]>;
     getLabUser(userId: string, labId: string, actor?: PlatformActorContext): Promise<{
         user: User;
@@ -415,6 +408,7 @@ export declare class PlatformAdminService {
     startImpersonation(data: {
         labId: string;
         reason: string;
+        refreshToken: string;
     }, actor: {
         platformUserId: string;
         role: string;
@@ -423,9 +417,12 @@ export declare class PlatformAdminService {
         userAgent?: string | null;
     }): Promise<{
         accessToken: string;
+        refreshToken: string;
         impersonation: AdminImpersonationStatus;
     }>;
-    stopImpersonation(actor: {
+    stopImpersonation(data: {
+        refreshToken: string;
+    }, actor: {
         platformUserId: string;
         role: string;
         impersonatedLabId?: string | null;
@@ -433,6 +430,7 @@ export declare class PlatformAdminService {
         userAgent?: string | null;
     }): Promise<{
         accessToken: string;
+        refreshToken: string;
         impersonation: AdminImpersonationStatus;
     }>;
     createImpersonatedLabPortalToken(actor: {
@@ -454,6 +452,8 @@ export declare class PlatformAdminService {
     getLabShifts(labId: string): Promise<Shift[]>;
     getLabDepartments(labId: string): Promise<Department[]>;
     private toAdminLabListItems;
+    private toAdminLabSettingsSummary;
+    private toAdminLabReportDesign;
     private resolveDashboardDateRange;
     private getTodayRange;
     private buildOrderTrend;
