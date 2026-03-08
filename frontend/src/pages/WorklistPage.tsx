@@ -858,7 +858,7 @@ export function WorklistPage() {
             {record.patientName}
           </Text>
           <Text type="secondary" style={{ fontSize: 11, lineHeight: '14px' }}>
-            {record.patientAge != null ? `${record.patientAge}y` : '-'}
+            {record.patientAgeDisplay || '-'}
           </Text>
         </div>
       ),

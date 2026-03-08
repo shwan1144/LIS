@@ -29,6 +29,7 @@ const order_entity_2 = require("../entities/order.entity");
 const panel_status_service_1 = require("../panels/panel-status.service");
 const normal_range_util_1 = require("../tests/normal-range.util");
 const lab_timezone_util_1 = require("../database/lab-timezone.util");
+const patient_age_util_1 = require("../patients/patient-age.util");
 var WorklistView;
 (function (WorklistView) {
     WorklistView["FULL"] = "full";
@@ -217,6 +218,7 @@ let WorklistService = WorklistService_1 = class WorklistService {
                 .getRawMany();
             const items = rawItems.map((item) => {
                 const patientAge = this.computePatientAgeYears(item.patientDob);
+                const patientAgeDisplay = (0, patient_age_util_1.formatPatientAgeDisplay)(item.patientDob ?? null, item.registeredAt ?? null);
                 const numericAgeRanges = parseJsonField(item.numericAgeRanges) ??
                     null;
                 const resolvedRange = (0, normal_range_util_1.resolveNumericRange)({
@@ -236,6 +238,7 @@ let WorklistService = WorklistService_1 = class WorklistService {
                     patientName: item.patientName,
                     patientSex: item.patientSex,
                     patientAge,
+                    patientAgeDisplay,
                     testCode: item.testCode,
                     testName: item.testName,
                     testAbbreviation: item.testAbbreviation ?? null,
@@ -432,6 +435,7 @@ let WorklistService = WorklistService_1 = class WorklistService {
                     patientName: row.patientName ?? '-',
                     patientSex: row.patientSex ?? null,
                     patientAge: this.computePatientAgeYears(row.patientDob),
+                    patientAgeDisplay: (0, patient_age_util_1.formatPatientAgeDisplay)(row.patientDob, row.registeredAt),
                     progressTotalRoot,
                     progressPending,
                     progressCompleted,
@@ -568,6 +572,7 @@ let WorklistService = WorklistService_1 = class WorklistService {
                 .getRawMany();
             const items = rawItems.map((item) => this.mapRawWorklistItem(item));
             const patientAge = this.computePatientAgeYears(order.patient?.dateOfBirth ?? null);
+            const patientAgeDisplay = (0, patient_age_util_1.formatPatientAgeDisplay)(order.patient?.dateOfBirth ?? null, order.registeredAt);
             return {
                 orderId: order.id,
                 orderNumber: order.orderNumber ?? order.id.substring(0, 8),
@@ -575,6 +580,7 @@ let WorklistService = WorklistService_1 = class WorklistService {
                 patientName: order.patient?.fullName ?? '-',
                 patientSex: order.patient?.sex ?? null,
                 patientAge,
+                patientAgeDisplay,
                 items,
             };
         }
@@ -630,6 +636,7 @@ let WorklistService = WorklistService_1 = class WorklistService {
                 throw new common_1.NotFoundException('Order test not found');
             }
             const patientAge = this.computePatientAgeYears(orderTest.sample.order.patient?.dateOfBirth);
+            const patientAgeDisplay = (0, patient_age_util_1.formatPatientAgeDisplay)(orderTest.sample.order.patient?.dateOfBirth ?? null, orderTest.sample.order.registeredAt);
             const resolvedRange = (0, normal_range_util_1.resolveNumericRange)({
                 normalMin: orderTest.test.normalMin,
                 normalMax: orderTest.test.normalMax,
@@ -647,6 +654,7 @@ let WorklistService = WorklistService_1 = class WorklistService {
                 patientName: orderTest.sample.order.patient?.fullName ?? '-',
                 patientSex: orderTest.sample.order.patient?.sex ?? null,
                 patientAge,
+                patientAgeDisplay,
                 testCode: orderTest.test.code,
                 testName: orderTest.test.name,
                 testAbbreviation: orderTest.test.abbreviation ?? null,
@@ -1111,6 +1119,7 @@ let WorklistService = WorklistService_1 = class WorklistService {
     }
     mapRawWorklistItem(item) {
         const patientAge = this.computePatientAgeYears(item.patientDob ?? null);
+        const patientAgeDisplay = (0, patient_age_util_1.formatPatientAgeDisplay)(item.patientDob ?? null, item.registeredAt ?? null);
         const numericAgeRanges = parseJsonField(item.numericAgeRanges) ?? null;
         const resolvedRange = (0, normal_range_util_1.resolveNumericRange)({
             normalMin: item.normalMin,
@@ -1130,6 +1139,7 @@ let WorklistService = WorklistService_1 = class WorklistService {
             patientName: String(item.patientName ?? '-'),
             patientSex: item.patientSex ?? null,
             patientAge,
+            patientAgeDisplay,
             testCode: String(item.testCode ?? ''),
             testName: String(item.testName ?? ''),
             testAbbreviation: item.testAbbreviation ?? null,

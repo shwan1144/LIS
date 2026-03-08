@@ -510,4 +510,27 @@ describe('buildResultsReportHtml panel page isolation', () => {
       '<span class="label">Referred By:</span><span class="name-value ">Patient Address</span>',
     );
   });
+
+  it('renders infant age display against the order registration date', () => {
+    const order = createOrder({
+      registeredAt: new Date('2026-03-09T10:00:00.000Z'),
+      patient: {
+        ...createOrder().patient,
+        sex: 'M',
+        dateOfBirth: '2026-03-04',
+      } as Order['patient'],
+    });
+
+    const html = buildResultsReportHtml({
+      order,
+      orderTests: [],
+      reportableCount: 0,
+      verifiedCount: 0,
+      verifiers: [],
+      latestVerifiedAt: null,
+      comments: [],
+    });
+
+    expect(html).toContain('<span class="label">Age/Sex:</span>5 days/Male');
+  });
 });

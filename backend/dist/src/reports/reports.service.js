@@ -32,6 +32,7 @@ const test_entity_1 = require("../entities/test.entity");
 const results_report_template_1 = require("./html/results-report.template");
 const report_design_fingerprint_util_1 = require("./report-design-fingerprint.util");
 const normal_range_util_1 = require("../tests/normal-range.util");
+const patient_age_util_1 = require("../patients/patient-age.util");
 const REPORT_BANNER_WIDTH = 2480;
 const REPORT_BANNER_HEIGHT = 220;
 function formatDateTime(value) {
@@ -852,12 +853,9 @@ let ReportsService = ReportsService_1 = class ReportsService {
             doc.text('Patient Information', { align: 'left' });
             doc.fontSize(10).font('Helvetica');
             const patientName = order.patient.fullName || '-';
+            const patientAgeDisplay = (0, patient_age_util_1.formatPatientAgeDisplay)(order.patient.dateOfBirth, order.registeredAt);
             doc.text(`Name: ${patientName}`, { align: 'left' });
-            if (order.patient.dateOfBirth) {
-                const age = Math.floor((Date.now() - new Date(order.patient.dateOfBirth).getTime()) /
-                    (365.25 * 24 * 60 * 60 * 1000));
-                doc.text(`Age: ${age} years`, { align: 'left' });
-            }
+            doc.text(`Age: ${patientAgeDisplay || '-'}`, { align: 'left' });
             if (order.patient.sex) {
                 doc.text(`Gender: ${order.patient.sex}`, { align: 'left' });
             }
@@ -1106,6 +1104,7 @@ let ReportsService = ReportsService_1 = class ReportsService {
         const { order, orderTests, verifiers, latestVerifiedAt, comments } = input;
         const patient = order.patient;
         const patientAgeYears = computeAgeYears(patient?.dateOfBirth ?? null);
+        const patientAgeDisplay = (0, patient_age_util_1.formatPatientAgeDisplay)(patient?.dateOfBirth ?? null, order.registeredAt);
         const labBranding = order.lab;
         const bannerImage = this.decodeImageDataUrl(labBranding?.reportBannerDataUrl);
         const footerImage = this.decodeImageDataUrl(labBranding?.reportFooterDataUrl);
@@ -1156,7 +1155,7 @@ let ReportsService = ReportsService_1 = class ReportsService {
             drawTwoColumnInfo(doc, [
                 ['Patient Name', patient?.fullName || '-'],
                 ['Patient ID', patient?.patientNumber || '-'],
-                ['Age', patientAgeYears?.toString() || '-'],
+                ['Age', patientAgeDisplay || '-'],
                 ['Sex', patient?.sex || '-'],
             ], [
                 ['Order Number', order.orderNumber || order.id.substring(0, 8)],

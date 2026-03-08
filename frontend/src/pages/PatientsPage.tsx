@@ -11,7 +11,6 @@ import {
   Typography,
   Tag,
   Radio,
-  InputNumber,
 } from 'antd';
 import { SearchOutlined, PlusOutlined, ShoppingCartOutlined, EditOutlined } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
@@ -25,7 +24,9 @@ import {
 } from '../api/client';
 
 const { Title, Text } = Typography;
-const CURRENT_YEAR = new Date().getFullYear();
+const TODAY_ISO = new Date(Date.now() - new Date().getTimezoneOffset() * 60_000)
+  .toISOString()
+  .slice(0, 10);
 
 export function PatientsPage() {
   const navigate = useNavigate();
@@ -73,15 +74,14 @@ export function PatientsPage() {
 
   const onSearch = () => load();
 
-  const handleCreate = async (values: CreatePatientDto & { birthYear?: number }) => {
-    const birthYear = values.birthYear ? Number(values.birthYear) : undefined;
+  const handleCreate = async (values: CreatePatientDto) => {
     const payload: CreatePatientDto = {
       fullName: values.fullName,
       nationalId: values.nationalId || undefined,
       phone: values.phone || undefined,
       sex: values.sex || undefined,
       address: values.address || undefined,
-      dateOfBirth: birthYear ? `${birthYear}-01-01` : undefined,
+      dateOfBirth: values.dateOfBirth || undefined,
     };
     setSubmitting(true);
     try {
@@ -263,7 +263,7 @@ export function PatientsPage() {
             <Input placeholder="Phone" />
           </Form.Item>
           <Form.Item name="dateOfBirth" label="Date of birth">
-            <Input type="date" />
+            <Input type="date" max={TODAY_ISO} />
           </Form.Item>
           <Form.Item name="sex" label="Sex">
             <Radio.Group buttonStyle="solid">
@@ -299,7 +299,7 @@ export function PatientsPage() {
           form={form}
           layout="vertical"
           onFinish={handleCreate}
-          initialValues={{ sex: undefined, birthYear: undefined }}
+          initialValues={{ sex: undefined, dateOfBirth: undefined }}
         >
           <Form.Item
             name="fullName"
@@ -314,20 +314,8 @@ export function PatientsPage() {
           <Form.Item name="phone" label="Phone">
             <Input placeholder="Phone" />
           </Form.Item>
-          <Form.Item
-            name="birthYear"
-            label="Year of birth"
-            rules={[
-              { type: 'number', min: 1900, max: CURRENT_YEAR, message: `Enter year between 1900 and ${CURRENT_YEAR}` },
-            ]}
-          >
-            <InputNumber
-              min={1900}
-              max={CURRENT_YEAR}
-              precision={0}
-              style={{ width: '100%' }}
-              placeholder="e.g. 1992"
-            />
+          <Form.Item name="dateOfBirth" label="Date of birth">
+            <Input type="date" max={TODAY_ISO} />
           </Form.Item>
           <Form.Item name="sex" label="Sex">
             <Radio.Group buttonStyle="solid">

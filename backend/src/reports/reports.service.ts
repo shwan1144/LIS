@@ -26,6 +26,7 @@ import { buildReportDesignFingerprint } from './report-design-fingerprint.util';
 import type { ReportStyleConfig } from './report-style.config';
 import type { Browser } from 'playwright';
 import { resolveNormalText, resolveNumericRange } from '../tests/normal-range.util';
+import { formatPatientAgeDisplay } from '../patients/patient-age.util';
 
 type PdfKitDocument = InstanceType<typeof PDFDocument>;
 const REPORT_BANNER_WIDTH = 2480;
@@ -1096,14 +1097,12 @@ export class ReportsService implements OnModuleInit, OnModuleDestroy {
       doc.text('Patient Information', { align: 'left' });
       doc.fontSize(10).font('Helvetica');
       const patientName = order.patient.fullName || '-';
+      const patientAgeDisplay = formatPatientAgeDisplay(
+        order.patient.dateOfBirth,
+        order.registeredAt,
+      );
       doc.text(`Name: ${patientName}`, { align: 'left' });
-      if (order.patient.dateOfBirth) {
-        const age = Math.floor(
-          (Date.now() - new Date(order.patient.dateOfBirth).getTime()) /
-          (365.25 * 24 * 60 * 60 * 1000),
-        );
-        doc.text(`Age: ${age} years`, { align: 'left' });
-      }
+      doc.text(`Age: ${patientAgeDisplay || '-'}`, { align: 'left' });
       if (order.patient.sex) {
         doc.text(`Gender: ${order.patient.sex}`, { align: 'left' });
       }
@@ -1425,6 +1424,10 @@ export class ReportsService implements OnModuleInit, OnModuleDestroy {
     const { order, orderTests, verifiers, latestVerifiedAt, comments } = input;
     const patient = order.patient;
     const patientAgeYears = computeAgeYears(patient?.dateOfBirth ?? null);
+    const patientAgeDisplay = formatPatientAgeDisplay(
+      patient?.dateOfBirth ?? null,
+      order.registeredAt,
+    );
     const labBranding = order.lab as unknown as {
       reportBannerDataUrl?: string | null;
       reportFooterDataUrl?: string | null;
@@ -1488,7 +1491,7 @@ export class ReportsService implements OnModuleInit, OnModuleDestroy {
         [
           ['Patient Name', patient?.fullName || '-'],
           ['Patient ID', patient?.patientNumber || '-'],
-          ['Age', patientAgeYears?.toString() || '-'],
+          ['Age', patientAgeDisplay || '-'],
           ['Sex', patient?.sex || '-'],
         ],
         [

@@ -7,6 +7,7 @@ import {
   resolveReportStyleConfig,
 } from '../report-style.config';
 import { resolveNormalText, resolveNumericRange } from '../../tests/normal-range.util';
+import { formatPatientAgeDisplay } from '../../patients/patient-age.util';
 
 // Fallback logo (from provided template)
 const TEMPLATE_LOGO_BASE64 =
@@ -158,7 +159,11 @@ export function buildResultsReportHtml(input: {
   const orderNumber = order.orderNumber || order.id.substring(0, 8);
   const patientName = order.patient?.fullName?.trim() || '-';
   const patientNameIsRtl = containsArabicScript(patientName);
-  const age = computeAgeYears(order.patient?.dateOfBirth ?? null);
+  const ageYearsForRanges = computeAgeYears(order.patient?.dateOfBirth ?? null);
+  const ageDisplay = formatPatientAgeDisplay(
+    order.patient?.dateOfBirth ?? null,
+    order.registeredAt,
+  );
   const sex = order.patient?.sex || '-';
   const sexLabel = sex === 'M' ? 'Male' : sex === 'F' ? 'Female' : sex || '-';
   const patientId = order.patient?.patientNumber || order.patient?.externalId || order.patient?.nationalId || order.patient?.id || '-';
@@ -188,7 +193,7 @@ export function buildResultsReportHtml(input: {
   const hasCustomBanner = Boolean(bannerSrc);
   const hasCustomLogo = Boolean(logoSrc);
   const visitDate = formatDateTime(order.registeredAt);
-  const ageSex = `${age != null ? `${age} Years` : '-'}/${sexLabel}`;
+  const ageSex = `${ageDisplay || '-'}/${sexLabel}`;
   const referredByDisplay = String(referredBy || '').trim() || 'Himself';
   const referredByIsRtl = containsArabicScript(referredByDisplay);
   const bannerUrlAttr = bannerSrc ? `src="${escapeHtml(bannerSrc)}"` : '';
@@ -385,7 +390,7 @@ export function buildResultsReportHtml(input: {
             <td style="width:14%;" class="nowrap">${escapeHtml(formatResultValue(child))}</td>
             <td style="width:14%;" class="nowrap">${escapeHtml(ct?.unit || '-')}</td>
             <td style="width:14%;" class="${statusClass}">${escapeHtml(statusText)}</td>
-            <td style="width:30%;" class="reference-value">${escapeHtml(formatRange(child, order.patient?.sex ?? null, age))}</td>
+            <td style="width:30%;" class="reference-value">${escapeHtml(formatRange(child, order.patient?.sex ?? null, ageYearsForRanges))}</td>
           </tr>`;
         })
         .join('');
@@ -459,7 +464,7 @@ export function buildResultsReportHtml(input: {
             <td style="width:14%;" class="nowrap">${escapeHtml(formatResultValue(ot))}</td>
             <td style="width:14%;" class="nowrap">${escapeHtml(t?.unit || '-')}</td>
             <td style="width:14%;" class="${statusClass}">${escapeHtml(statusText)}</td>
-            <td style="width:30%;" class="reference-value">${escapeHtml(formatRange(ot, order.patient?.sex ?? null, age))}</td>
+            <td style="width:30%;" class="reference-value">${escapeHtml(formatRange(ot, order.patient?.sex ?? null, ageYearsForRanges))}</td>
           </tr>`;
           })
           .join('');

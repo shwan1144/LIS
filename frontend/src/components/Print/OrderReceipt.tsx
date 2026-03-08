@@ -2,6 +2,7 @@ import { forwardRef } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import dayjs from 'dayjs';
 import type { OrderDto } from '../../api/client';
+import { formatPatientAgeDisplay } from '../../utils/patient-age';
 import './print.css';
 
 interface OrderReceiptProps {
@@ -23,9 +24,10 @@ export const OrderReceipt = forwardRef<HTMLDivElement, OrderReceiptProps>(
     );
 
     const patientName = order.patient.fullName || '';
-    const patientAge = order.patient.dateOfBirth
-      ? dayjs().diff(dayjs(order.patient.dateOfBirth), 'year')
-      : null;
+    const patientAgeDisplay = formatPatientAgeDisplay(
+      order.patient.dateOfBirth,
+      order.registeredAt,
+    );
     const apiBase = (import.meta.env.VITE_API_URL || window.location.origin).replace(/\/+$/, '');
     const patientResultUrl = `${apiBase}/public/results/${order.id}`;
     const onlineResultsEnabled = order.lab?.enableOnlineResults !== false;
@@ -76,12 +78,10 @@ export const OrderReceipt = forwardRef<HTMLDivElement, OrderReceiptProps>(
             <span className="receipt-label">Patient:</span>
             <span className="receipt-value">{patientName}</span>
           </div>
-          {patientAge !== null && (
-            <div className="receipt-row">
-              <span className="receipt-label">Age:</span>
-              <span className="receipt-value">{patientAge} years</span>
-            </div>
-          )}
+          <div className="receipt-row">
+            <span className="receipt-label">Age:</span>
+            <span className="receipt-value">{patientAgeDisplay || '-'}</span>
+          </div>
           {order.patient.sex && (
             <div className="receipt-row">
               <span className="receipt-label">Gender:</span>

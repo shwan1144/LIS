@@ -29,6 +29,7 @@ import {
   getUtcRangeForLabDate,
   normalizeLabTimeZone,
 } from '../database/lab-timezone.util';
+import { formatPatientAgeDisplay } from '../patients/patient-age.util';
 
 export interface WorklistItem {
   id: string;
@@ -36,6 +37,7 @@ export interface WorklistItem {
   patientName: string;
   patientSex: string | null;
   patientAge: number | null;
+  patientAgeDisplay: string | null;
   testCode: string;
   testName: string;
   testAbbreviation: string | null;
@@ -96,6 +98,7 @@ export interface WorklistOrderSummaryItem {
   patientName: string;
   patientSex: string | null;
   patientAge: number | null;
+  patientAgeDisplay: string | null;
   progressTotalRoot: number;
   progressPending: number;
   progressCompleted: number;
@@ -113,6 +116,7 @@ export interface WorklistOrderTestsPayload {
   patientName: string;
   patientSex: string | null;
   patientAge: number | null;
+  patientAgeDisplay: string | null;
   items: WorklistItem[];
 }
 
@@ -335,6 +339,10 @@ export class WorklistService {
       const items: WorklistItem[] = rawItems.map((item) => {
         // Calculate age
         const patientAge = this.computePatientAgeYears(item.patientDob);
+        const patientAgeDisplay = formatPatientAgeDisplay(
+          (item.patientDob as string | Date | null | undefined) ?? null,
+          (item.registeredAt as string | Date | null | undefined) ?? null,
+        );
         const numericAgeRanges =
           (parseJsonField(item.numericAgeRanges) as TestNumericAgeRange[] | null) ??
           null;
@@ -360,6 +368,7 @@ export class WorklistService {
           patientName: item.patientName,
           patientSex: item.patientSex,
           patientAge,
+          patientAgeDisplay,
           testCode: item.testCode,
           testName: item.testName,
           testAbbreviation: item.testAbbreviation ?? null,
@@ -635,6 +644,7 @@ export class WorklistService {
           patientName: row.patientName ?? '-',
           patientSex: row.patientSex ?? null,
           patientAge: this.computePatientAgeYears(row.patientDob),
+          patientAgeDisplay: formatPatientAgeDisplay(row.patientDob, row.registeredAt),
           progressTotalRoot,
           progressPending,
           progressCompleted,
@@ -792,6 +802,10 @@ export class WorklistService {
 
       const items = rawItems.map((item) => this.mapRawWorklistItem(item));
       const patientAge = this.computePatientAgeYears(order.patient?.dateOfBirth ?? null);
+      const patientAgeDisplay = formatPatientAgeDisplay(
+        order.patient?.dateOfBirth ?? null,
+        order.registeredAt,
+      );
 
       return {
         orderId: order.id,
@@ -800,6 +814,7 @@ export class WorklistService {
         patientName: order.patient?.fullName ?? '-',
         patientSex: order.patient?.sex ?? null,
         patientAge,
+        patientAgeDisplay,
         items,
       };
     } finally {
@@ -866,6 +881,10 @@ export class WorklistService {
       }
 
       const patientAge = this.computePatientAgeYears(orderTest.sample.order.patient?.dateOfBirth);
+      const patientAgeDisplay = formatPatientAgeDisplay(
+        orderTest.sample.order.patient?.dateOfBirth ?? null,
+        orderTest.sample.order.registeredAt,
+      );
       const resolvedRange = resolveNumericRange(
         {
           normalMin: orderTest.test.normalMin,
@@ -889,6 +908,7 @@ export class WorklistService {
         patientName: orderTest.sample.order.patient?.fullName ?? '-',
         patientSex: orderTest.sample.order.patient?.sex ?? null,
         patientAge,
+        patientAgeDisplay,
         testCode: orderTest.test.code,
         testName: orderTest.test.name,
         testAbbreviation: orderTest.test.abbreviation ?? null,
@@ -1501,6 +1521,10 @@ export class WorklistService {
     const patientAge = this.computePatientAgeYears(
       (item.patientDob as string | Date | null | undefined) ?? null,
     );
+    const patientAgeDisplay = formatPatientAgeDisplay(
+      (item.patientDob as string | Date | null | undefined) ?? null,
+      (item.registeredAt as string | Date | null | undefined) ?? null,
+    );
     const numericAgeRanges =
       (parseJsonField(item.numericAgeRanges) as TestNumericAgeRange[] | null) ?? null;
     const resolvedRange = resolveNumericRange(
@@ -1527,6 +1551,7 @@ export class WorklistService {
       patientName: String(item.patientName ?? '-'),
       patientSex: (item.patientSex as string | null) ?? null,
       patientAge,
+      patientAgeDisplay,
       testCode: String(item.testCode ?? ''),
       testName: String(item.testName ?? ''),
       testAbbreviation: (item.testAbbreviation as string | null) ?? null,

@@ -1779,6 +1779,7 @@ export interface WorklistItem {
   patientName: string;
   patientSex: string | null;
   patientAge: number | null;
+  patientAgeDisplay: string | null;
   testCode: string;
   testName: string;
   testAbbreviation: string | null;
@@ -1862,6 +1863,7 @@ export interface WorklistOrderSummaryDto {
   patientName: string;
   patientSex: string | null;
   patientAge: number | null;
+  patientAgeDisplay: string | null;
   progressTotalRoot: number;
   progressPending: number;
   progressCompleted: number;
@@ -1887,6 +1889,7 @@ export interface WorklistOrderModalDto {
   patientName: string;
   patientSex: string | null;
   patientAge: number | null;
+  patientAgeDisplay: string | null;
   items: WorklistItem[];
 }
 
