@@ -6,7 +6,7 @@ import { OrderTest } from '../entities/order-test.entity';
 import { Department } from '../entities/department.entity';
 import { CreateTestDto } from './dto/create-test.dto';
 import { UpdateTestDto } from './dto/update-test.dto';
-interface TestPanelComponentView {
+export interface TestPanelComponentView {
     childTestId: string;
     required: boolean;
     sortOrder: number;
@@ -24,7 +24,7 @@ interface TestPanelComponentView {
 type TestWithPanelComponents = Test & {
     panelComponents?: TestPanelComponentView[];
 };
-type TestListItem = TestWithPanelComponents & {
+export type TestListItem = TestWithPanelComponents & {
     defaultPrice: number | null;
 };
 export declare class TestsService {

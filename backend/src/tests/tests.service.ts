@@ -24,7 +24,7 @@ import {
 } from './normal-range.util';
 import { normalizeOrderTestFlag } from '../order-tests/order-test-flag.util';
 
-interface TestPanelComponentView {
+export interface TestPanelComponentView {
   childTestId: string;
   required: boolean;
   sortOrder: number;
@@ -44,7 +44,7 @@ type TestWithPanelComponents = Test & {
   panelComponents?: TestPanelComponentView[];
 };
 
-type TestListItem = TestWithPanelComponents & {
+export type TestListItem = TestWithPanelComponents & {
   defaultPrice: number | null;
 };
 
