@@ -8,7 +8,7 @@ import axios from 'axios';
 import { jsPDF } from 'jspdf';
 import html2canvas from 'html2canvas';
 
-const GATEWAY_URL = 'http://localhost:17880';
+const GATEWAY_URL = 'http://localhost:17881';
 
 const QZ_SCRIPT_URL = 'https://cdn.jsdelivr.net/npm/qz-tray@2.2.4/qz-tray.js';
 const QZ_SCRIPT_TIMEOUT_MS = 10000;

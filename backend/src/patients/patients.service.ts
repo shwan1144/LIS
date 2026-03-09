@@ -34,15 +34,47 @@ export class PatientsService {
       qb.andWhere('p.phone = :phone', { phone: params.phone.trim() });
     }
     if (params.search?.trim()) {
-      const term = `%${params.search.trim()}%`;
       const exactTerm = params.search.trim();
+      const normalizedSearch = exactTerm.toLowerCase();
+      const term = `%${exactTerm}%`;
       qb.andWhere(
         '(p.fullName ILIKE :term OR p.phone ILIKE :term OR p.nationalId ILIKE :term OR p.patientNumber = :exactTerm)',
         { term, exactTerm },
       );
+
+      qb
+        .orderBy(
+          `CASE
+            WHEN p.patientNumber = :exactTerm THEN 0
+            WHEN p.phone = :exactTerm THEN 1
+            WHEN p.nationalId = :exactTerm THEN 2
+            WHEN LOWER(COALESCE(p.fullName, '')) = :normalizedSearch THEN 3
+            WHEN LOWER(COALESCE(p.fullName, '')) LIKE :namePrefixTerm THEN 4
+            WHEN LOWER(COALESCE(p.fullName, '')) LIKE :nameWordPrefixTerm THEN 5
+            WHEN LOWER(COALESCE(p.fullName, '')) LIKE :nameContainsTerm THEN 6
+            WHEN COALESCE(p.phone, '') LIKE :startsWithTerm THEN 7
+            WHEN COALESCE(p.nationalId, '') LIKE :startsWithTerm THEN 8
+            WHEN COALESCE(p.phone, '') ILIKE :term THEN 9
+            WHEN COALESCE(p.nationalId, '') ILIKE :term THEN 10
+            ELSE 11
+          END`,
+          'ASC',
+        )
+        .addOrderBy('p.updatedAt', 'DESC')
+        .addOrderBy('p.fullName', 'ASC')
+        .setParameters({
+          exactTerm,
+          normalizedSearch,
+          namePrefixTerm: `${normalizedSearch}%`,
+          nameWordPrefixTerm: `% ${normalizedSearch}%`,
+          nameContainsTerm: `%${normalizedSearch}%`,
+          startsWithTerm: `${exactTerm}%`,
+        });
+    } else {
+      qb.orderBy('p.updatedAt', 'DESC');
     }
 
-    qb.orderBy('p.updatedAt', 'DESC').skip(skip).take(size);
+    qb.skip(skip).take(size);
 
     const [items, total] = await qb.getManyAndCount();
 
