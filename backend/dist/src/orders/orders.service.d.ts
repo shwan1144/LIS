@@ -98,7 +98,7 @@ export declare class OrdersService {
     private buildSampleGroupingKey;
     private bulkCreateOrderTests;
     private createOrderSampleBarcodeAllocator;
-    private canForceRemoveVerified;
+    private canForceRemoveLockedTests;
     private getRootOrderTestRemovalAccess;
     private buildRootOrderTestAuditItem;
     private getOrderTestLabel;

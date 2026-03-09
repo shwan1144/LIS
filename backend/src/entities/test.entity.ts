@@ -25,9 +25,13 @@ export interface TestParameterDefinition {
 }
 
 export type NumericAgeRangeSex = 'ANY' | 'M' | 'F';
+export type NumericAgeRangeUnit = 'DAY' | 'MONTH' | 'YEAR';
 
 export interface TestNumericAgeRange {
   sex: NumericAgeRangeSex;
+  ageUnit?: NumericAgeRangeUnit | null;
+  minAge?: number | null;
+  maxAge?: number | null;
   minAgeYears?: number | null;
   maxAgeYears?: number | null;
   normalMin?: number | null;
@@ -35,7 +39,7 @@ export interface TestNumericAgeRange {
 }
 
 export type TestResultEntryType = 'NUMERIC' | 'QUALITATIVE' | 'TEXT';
-export type TestResultFlag = 'N' | 'H' | 'L' | 'HH' | 'LL' | 'POS' | 'NEG' | 'ABN';
+export type TestResultFlag = 'N' | 'H' | 'L' | 'POS' | 'NEG' | 'ABN';
 
 export interface TestResultTextOption {
   value: string;
@@ -153,7 +157,7 @@ export class Test {
 
   /**
    * Optional age/sex-specific numeric ranges.
-   * Example: [{ sex: 'F', minAgeYears: 18, maxAgeYears: 45, normalMin: 0.6, normalMax: 1.1 }]
+   * Example: [{ sex: 'F', ageUnit: 'YEAR', minAge: 18, maxAge: 45, normalMin: 0.6, normalMax: 1.1 }]
    */
   @Column({ type: 'jsonb', nullable: true })
   numericAgeRanges: TestNumericAgeRange[] | null;

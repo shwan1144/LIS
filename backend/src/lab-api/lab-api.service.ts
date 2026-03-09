@@ -33,6 +33,8 @@ import {
   formatOrderDatePrefixForTimeZone,
   normalizeLabTimeZone,
 } from '../database/lab-timezone.util';
+import { hasMeaningfulOrderTestResult } from '../order-tests/order-test-result.util';
+import { normalizeOrderTestFlag } from '../order-tests/order-test-flag.util';
 
 const PATIENT_NUMBER_LOCK_KEY = 620001;
 
@@ -279,9 +281,16 @@ export class LabApiService {
       }
 
       const now = new Date();
-      const numericValue = Number(dto.value);
-      orderTest.resultText = dto.value;
+      const normalizedValue = dto.value?.trim() ?? '';
+      const numericValue =
+        normalizedValue.length > 0 ? Number(normalizedValue) : Number.NaN;
+      orderTest.resultText = normalizedValue.length > 0 ? normalizedValue : null;
       orderTest.resultValue = Number.isFinite(numericValue) ? numericValue : null;
+      if (!hasMeaningfulOrderTestResult(orderTest)) {
+        throw new BadRequestException(
+          'Cannot complete a test without a real result value, text, or parameters',
+        );
+      }
       orderTest.flag = this.toResultFlag(dto.flags);
       orderTest.resultedAt = now;
       orderTest.resultedBy = actor?.userId ?? null;
@@ -478,16 +487,7 @@ export class LabApiService {
   }
 
   private toResultFlag(flag: string | undefined): ResultFlag | null {
-    const value = (flag || '').trim().toUpperCase();
-    if (value === ResultFlag.NORMAL) return ResultFlag.NORMAL;
-    if (value === ResultFlag.HIGH) return ResultFlag.HIGH;
-    if (value === ResultFlag.LOW) return ResultFlag.LOW;
-    if (value === ResultFlag.CRITICAL_HIGH) return ResultFlag.CRITICAL_HIGH;
-    if (value === ResultFlag.CRITICAL_LOW) return ResultFlag.CRITICAL_LOW;
-    if (value === ResultFlag.POSITIVE) return ResultFlag.POSITIVE;
-    if (value === ResultFlag.NEGATIVE) return ResultFlag.NEGATIVE;
-    if (value === ResultFlag.ABNORMAL) return ResultFlag.ABNORMAL;
-    return null;
+    return normalizeOrderTestFlag(flag);
   }
 
   private async updateOrderStatusAfterResult(

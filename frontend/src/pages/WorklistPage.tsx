@@ -41,6 +41,11 @@ import { useTheme } from '../contexts/ThemeContext';
 import { WorklistStatusDashboard } from '../components/WorklistStatusDashboard';
 import { useFillToViewportBottom } from '../hooks/useFillToViewportBottom';
 import {
+  RESULT_FLAG_COLOR as FLAG_COLOR,
+  RESULT_FLAG_LABEL as FLAG_LABEL,
+  normalizeResultFlag,
+} from '../utils/result-flag';
+import {
   buildWorklistOrderGroups,
   type WorklistOrderGroupSummary,
 } from './worklistGrouping';
@@ -48,45 +53,10 @@ import './QueuePages.css';
 
 const { Title, Text } = Typography;
 
-const FLAG_COLOR: Record<ResultFlag, string> = {
-  N: 'green',
-  H: 'orange',
-  L: 'blue',
-  HH: 'red',
-  LL: 'red',
-  POS: 'red',
-  NEG: 'green',
-  ABN: 'purple',
-};
-
-const FLAG_LABEL: Record<ResultFlag, string> = {
-  N: 'Normal',
-  H: 'High',
-  L: 'Low',
-  HH: 'Critical High',
-  LL: 'Critical Low',
-  POS: 'Positive',
-  NEG: 'Negative',
-  ABN: 'Abnormal',
-};
-
 interface GroupedOrderCache {
   order: WorklistOrderModalDto;
   groups: WorklistOrderGroupSummary[];
   appliedDepartmentId: string | null;
-}
-
-function normalizeResultFlag(flag: string | null | undefined): ResultFlag | null {
-  const normalized = String(flag ?? '').trim().toUpperCase();
-  if (normalized === 'N') return 'N';
-  if (normalized === 'H') return 'H';
-  if (normalized === 'L') return 'L';
-  if (normalized === 'HH') return 'HH';
-  if (normalized === 'LL') return 'LL';
-  if (normalized === 'POS') return 'POS';
-  if (normalized === 'NEG') return 'NEG';
-  if (normalized === 'ABN') return 'ABN';
-  return null;
 }
 
 function resolveFlagFromResultText(
@@ -108,13 +78,11 @@ function calculateNumericFlagFromRange(
   if (normalMin === null && normalMax === null) return null;
 
   if (normalMax !== null && resultValue > normalMax) {
-    const criticalHigh = normalMax * 1.5;
-    return resultValue > criticalHigh ? 'HH' : 'H';
+    return 'H';
   }
 
   if (normalMin !== null && resultValue < normalMin) {
-    const criticalLow = normalMin * 0.5;
-    return resultValue < criticalLow ? 'LL' : 'L';
+    return 'L';
   }
 
   return 'N';

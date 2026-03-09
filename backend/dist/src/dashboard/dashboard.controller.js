@@ -34,7 +34,6 @@ let DashboardController = class DashboardController {
             return {
                 ordersToday: 0,
                 pendingVerification: 0,
-                criticalAlerts: 0,
                 avgTatHours: null,
                 totalPatients: 0,
             };
@@ -136,7 +135,7 @@ let DashboardController = class DashboardController {
                 withinTargetTotal: 0,
                 targetMinutes: 60,
             },
-            quality: { abnormalCount: 0, criticalCount: 0, totalVerified: 0 },
+            quality: { abnormalCount: 0, totalVerified: 0 },
             unmatched: { pending: 0, resolved: 0, discarded: 0, byReason: {} },
             instrumentWorkload: [],
         };

@@ -54,8 +54,9 @@ describe('CreateTestDto numeric coercion', () => {
       numericAgeRanges: [
         {
           sex: 'ANY',
-          minAgeYears: '1',
-          maxAgeYears: '12',
+          ageUnit: 'MONTH',
+          minAge: '1',
+          maxAge: '12',
           normalMin: '0.5',
           normalMax: '1.2',
         },
@@ -65,9 +66,29 @@ describe('CreateTestDto numeric coercion', () => {
     const errors = validateSync(dto);
 
     expect(errors).toHaveLength(0);
-    expect(dto.numericAgeRanges?.[0].minAgeYears).toBe(1);
-    expect(dto.numericAgeRanges?.[0].maxAgeYears).toBe(12);
+    expect(dto.numericAgeRanges?.[0].ageUnit).toBe('MONTH');
+    expect(dto.numericAgeRanges?.[0].minAge).toBe(1);
+    expect(dto.numericAgeRanges?.[0].maxAge).toBe(12);
     expect(dto.numericAgeRanges?.[0].normalMin).toBe(0.5);
     expect(dto.numericAgeRanges?.[0].normalMax).toBe(1.2);
+  });
+
+  it('still coerces legacy year-only age range fields for compatibility', () => {
+    const dto = plainToInstance(CreateTestDto, {
+      ...basePayload,
+      numericAgeRanges: [
+        {
+          sex: 'ANY',
+          minAgeYears: '1',
+          maxAgeYears: '12',
+        },
+      ],
+    });
+
+    const errors = validateSync(dto);
+
+    expect(errors).toHaveLength(0);
+    expect(dto.numericAgeRanges?.[0].minAgeYears).toBe(1);
+    expect(dto.numericAgeRanges?.[0].maxAgeYears).toBe(12);
   });
 });

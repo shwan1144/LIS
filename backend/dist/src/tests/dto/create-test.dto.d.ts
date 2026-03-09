@@ -1,6 +1,7 @@
 import { TestType, TubeType } from '../../entities/test.entity';
 export declare const TEST_RESULT_ENTRY_TYPES: readonly ["NUMERIC", "QUALITATIVE", "TEXT"];
-export declare const TEST_RESULT_FLAGS: readonly ["N", "H", "L", "HH", "LL", "POS", "NEG", "ABN"];
+export declare const TEST_RESULT_FLAGS: readonly ["N", "H", "L", "POS", "NEG", "ABN"];
+export declare const TEST_NUMERIC_AGE_UNITS: readonly ["DAY", "MONTH", "YEAR"];
 export declare class TestParameterDefinitionDto {
     code: string;
     label: string;
@@ -11,6 +12,9 @@ export declare class TestParameterDefinitionDto {
 }
 export declare class TestNumericAgeRangeDto {
     sex: 'ANY' | 'M' | 'F';
+    ageUnit?: (typeof TEST_NUMERIC_AGE_UNITS)[number] | null;
+    minAge?: number | null;
+    maxAge?: number | null;
     minAgeYears?: number | null;
     maxAgeYears?: number | null;
     normalMin?: number | null;

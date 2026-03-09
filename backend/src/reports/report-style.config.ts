@@ -72,6 +72,7 @@ export interface ReportResultsTableStyle {
   rowStripeColor: string;
   abnormalRowBackgroundColor: string;
   referenceValueColor: string;
+  showStatusColumn: boolean;
   showDepartmentRow: boolean;
   departmentRowBackgroundColor: string;
   departmentRowTextColor: string;
@@ -136,6 +137,7 @@ export const DEFAULT_REPORT_STYLE_V1: ReportStyleConfig = {
     rowStripeColor: '#F9FBFF',
     abnormalRowBackgroundColor: '#FFF5F5',
     referenceValueColor: '#333333',
+    showStatusColumn: true,
     showDepartmentRow: true,
     departmentRowBackgroundColor: '#222222',
     departmentRowTextColor: '#FFFFFF',
@@ -195,6 +197,7 @@ const RESULTS_TABLE_KEYS: Array<keyof ReportResultsTableStyle> = [
   'rowStripeColor',
   'abnormalRowBackgroundColor',
   'referenceValueColor',
+  'showStatusColumn',
   'showDepartmentRow',
   'departmentRowBackgroundColor',
   'departmentRowTextColor',
@@ -373,6 +376,10 @@ export function validateAndNormalizeReportStyleConfig(
     referenceValueColor: assertColor(
       resultsObj.referenceValueColor,
       `${fieldName}.resultsTable.referenceValueColor`,
+    ),
+    showStatusColumn: assertBoolean(
+      resultsObj.showStatusColumn,
+      `${fieldName}.resultsTable.showStatusColumn`,
     ),
     showDepartmentRow: assertBoolean(
       resultsObj.showDepartmentRow,

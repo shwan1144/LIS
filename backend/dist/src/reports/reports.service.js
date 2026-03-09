@@ -43,16 +43,8 @@ function formatDateTime(value) {
         return '-';
     return d.toLocaleString();
 }
-function computeAgeYears(dateOfBirth) {
-    if (!dateOfBirth)
-        return null;
-    const dob = new Date(dateOfBirth);
-    if (Number.isNaN(dob.getTime()))
-        return null;
-    return Math.floor((Date.now() - dob.getTime()) / (365.25 * 24 * 60 * 60 * 1000));
-}
-function getNormalRange(test, sex, ageYears) {
-    const { normalMin: min, normalMax: max } = (0, normal_range_util_1.resolveNumericRange)(test, sex, ageYears);
+function getNormalRange(test, sex, patientAge) {
+    const { normalMin: min, normalMax: max } = (0, normal_range_util_1.resolveNumericRange)(test, sex, patientAge);
     const resolvedText = (0, normal_range_util_1.resolveNormalText)(test, sex);
     if (resolvedText !== null)
         return resolvedText;
@@ -1103,7 +1095,7 @@ let ReportsService = ReportsService_1 = class ReportsService {
     async renderTestResultsFallbackPDF(input) {
         const { order, orderTests, verifiers, latestVerifiedAt, comments } = input;
         const patient = order.patient;
-        const patientAgeYears = computeAgeYears(patient?.dateOfBirth ?? null);
+        const patientAgeForRanges = (0, patient_age_util_1.getPatientAgeSnapshot)(patient?.dateOfBirth ?? null, order.registeredAt);
         const patientAgeDisplay = (0, patient_age_util_1.formatPatientAgeDisplay)(patient?.dateOfBirth ?? null, order.registeredAt);
         const labBranding = order.lab;
         const bannerImage = this.decodeImageDataUrl(labBranding?.reportBannerDataUrl);
@@ -1225,7 +1217,7 @@ let ReportsService = ReportsService_1 = class ReportsService {
                     testLabel: `${testName}${testCode}`,
                     result: formatResultValue(ot),
                     unit: t?.unit || '-',
-                    reference: t ? getNormalRange(t, patient?.sex ?? null, patientAgeYears) : '-',
+                    reference: t ? getNormalRange(t, patient?.sex ?? null, patientAgeForRanges) : '-',
                     extraParams: formatResultParameters(ot.resultParameters),
                 });
             };

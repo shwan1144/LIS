@@ -5,7 +5,7 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, IsNull } from 'typeorm';
+import { Repository, IsNull, In } from 'typeorm';
 import { Test, TestType, TubeType } from '../entities/test.entity';
 import type {
   TestNumericAgeRange,
@@ -19,6 +19,10 @@ import { OrderTest } from '../entities/order-test.entity';
 import { Department } from '../entities/department.entity';
 import { CreateTestDto } from './dto/create-test.dto';
 import { UpdateTestDto } from './dto/update-test.dto';
+import {
+  normalizeNumericAgeRanges,
+} from './normal-range.util';
+import { normalizeOrderTestFlag } from '../order-tests/order-test-flag.util';
 
 interface TestPanelComponentView {
   childTestId: string;
@@ -40,6 +44,10 @@ type TestWithPanelComponents = Test & {
   panelComponents?: TestPanelComponentView[];
 };
 
+type TestListItem = TestWithPanelComponents & {
+  defaultPrice: number | null;
+};
+
 @Injectable()
 export class TestsService {
   constructor(
@@ -58,13 +66,16 @@ export class TestsService {
   async findAll(
     labId: string,
     activeOnly: boolean = true,
-  ): Promise<Test[]> {
+  ): Promise<TestListItem[]> {
     const where = activeOnly ? { labId, isActive: true } : { labId };
     const tests = await this.testRepo.find({
       where,
       order: { sortOrder: 'ASC', code: 'ASC' },
     });
-    return this.attachPanelComponents(tests);
+    const withComponents = await this.attachPanelComponents(
+      tests.map((test) => this.normalizeTestForOutput(test)),
+    );
+    return this.attachDefaultPrices(withComponents, labId);
   }
 
   async findOne(id: string, labId: string): Promise<Test> {
@@ -72,7 +83,9 @@ export class TestsService {
     if (!test) {
       throw new NotFoundException('Test not found');
     }
-    const [withComponents] = await this.attachPanelComponents([test]);
+    const [withComponents] = await this.attachPanelComponents([
+      this.normalizeTestForOutput(test),
+    ]);
     return withComponents ?? test;
   }
 
@@ -128,7 +141,9 @@ export class TestsService {
     });
     const saved = await this.testRepo.save(test);
     await this.syncPanelComponentsForTest(saved, dto, labId);
-    const [withComponents] = await this.attachPanelComponents([saved]);
+    const [withComponents] = await this.attachPanelComponents([
+      this.normalizeTestForOutput(saved),
+    ]);
     return withComponents ?? saved;
   }
 
@@ -199,7 +214,9 @@ export class TestsService {
 
     const saved = await this.testRepo.save(test);
     await this.syncPanelComponentsForTest(saved, dto, labId);
-    const [withComponents] = await this.attachPanelComponents([saved]);
+    const [withComponents] = await this.attachPanelComponents([
+      this.normalizeTestForOutput(saved),
+    ]);
     return withComponents ?? saved;
   }
 
@@ -213,14 +230,24 @@ export class TestsService {
         const sex = (range.sex || 'ANY').toUpperCase();
         const normalizedSex: TestNumericAgeRange['sex'] =
           sex === 'M' || sex === 'F' ? sex : 'ANY';
-        const minAgeYears =
-          range.minAgeYears === undefined || range.minAgeYears === null
-            ? null
-            : Number(range.minAgeYears);
-        const maxAgeYears =
-          range.maxAgeYears === undefined || range.maxAgeYears === null
-            ? null
-            : Number(range.maxAgeYears);
+        const ageUnitRaw =
+          typeof range.ageUnit === 'string' && range.ageUnit.trim().length > 0
+            ? range.ageUnit.trim().toUpperCase()
+            : 'YEAR';
+        const ageUnit: NonNullable<TestNumericAgeRange['ageUnit']> =
+          ageUnitRaw === 'DAY' || ageUnitRaw === 'MONTH' ? ageUnitRaw : 'YEAR';
+        const minAge =
+          range.minAge === undefined || range.minAge === null
+            ? range.minAgeYears === undefined || range.minAgeYears === null
+              ? null
+              : Number(range.minAgeYears)
+            : Number(range.minAge);
+        const maxAge =
+          range.maxAge === undefined || range.maxAge === null
+            ? range.maxAgeYears === undefined || range.maxAgeYears === null
+              ? null
+              : Number(range.maxAgeYears)
+            : Number(range.maxAge);
         const normalMin =
           range.normalMin === undefined || range.normalMin === null
             ? null
@@ -231,9 +258,9 @@ export class TestsService {
             : Number(range.normalMax);
 
         if (
-          minAgeYears !== null &&
-          maxAgeYears !== null &&
-          minAgeYears > maxAgeYears
+          minAge !== null &&
+          maxAge !== null &&
+          minAge > maxAge
         ) {
           throw new BadRequestException(
             'Invalid numeric age range: min age cannot be greater than max age',
@@ -252,8 +279,9 @@ export class TestsService {
 
         return {
           sex: normalizedSex,
-          minAgeYears,
-          maxAgeYears,
+          ageUnit,
+          minAge,
+          maxAge,
           normalMin,
           normalMax,
         };
@@ -268,12 +296,17 @@ export class TestsService {
       const weightDiff = weight(a.sex) - weight(b.sex);
       if (weightDiff !== 0) return weightDiff;
 
-      const minA = a.minAgeYears ?? Number.NEGATIVE_INFINITY;
-      const minB = b.minAgeYears ?? Number.NEGATIVE_INFINITY;
+      const unitWeight = (unit: string | null | undefined) =>
+        unit === 'DAY' ? 0 : unit === 'MONTH' ? 1 : 2;
+      const rangeUnitDiff = unitWeight(a.ageUnit) - unitWeight(b.ageUnit);
+      if (rangeUnitDiff !== 0) return rangeUnitDiff;
+
+      const minA = a.minAge ?? Number.NEGATIVE_INFINITY;
+      const minB = b.minAge ?? Number.NEGATIVE_INFINITY;
       if (minA !== minB) return minA - minB;
 
-      const maxA = a.maxAgeYears ?? Number.POSITIVE_INFINITY;
-      const maxB = b.maxAgeYears ?? Number.POSITIVE_INFINITY;
+      const maxA = a.maxAge ?? Number.POSITIVE_INFINITY;
+      const maxB = b.maxAge ?? Number.POSITIVE_INFINITY;
       return maxA - maxB;
     });
 
@@ -338,14 +371,33 @@ export class TestsService {
     if (flag === null || flag === undefined || String(flag).trim() === '') {
       return null;
     }
-    const normalized = String(flag).trim().toUpperCase();
-    const allowed = ['N', 'H', 'L', 'HH', 'LL', 'POS', 'NEG', 'ABN'];
-    if (!allowed.includes(normalized)) {
+    const normalized = normalizeOrderTestFlag(flag);
+    const allowed = ['N', 'H', 'L', 'POS', 'NEG', 'ABN'];
+    if (!normalized || !allowed.includes(normalized)) {
       throw new BadRequestException(
         `Invalid result option flag "${flag}". Allowed: ${allowed.join(', ')}`,
       );
     }
     return normalized as TestResultTextOption['flag'];
+  }
+
+  private normalizeTestForOutput(test: Test): Test {
+    return Object.assign(test, {
+      numericAgeRanges: normalizeNumericAgeRanges(test.numericAgeRanges)?.map((range) => ({
+        sex: range.sex,
+        ageUnit: range.ageUnit,
+        minAge: range.minAge,
+        maxAge: range.maxAge,
+        normalMin: range.normalMin,
+        normalMax: range.normalMax,
+      })) ?? null,
+      resultTextOptions:
+        test.resultTextOptions?.map((option) => ({
+          value: option.value,
+          flag: normalizeOrderTestFlag(option.flag ?? null),
+          isDefault: Boolean(option.isDefault),
+        })) ?? null,
+    });
   }
 
   private validateResultEntryConfig(
@@ -628,6 +680,33 @@ export class TestsService {
         panelComponents: grouped.get(test.id) ?? [],
       });
     });
+  }
+
+  private async attachDefaultPrices(
+    tests: TestWithPanelComponents[],
+    labId: string,
+  ): Promise<TestListItem[]> {
+    if (!tests.length) return [];
+
+    const pricingRows = await this.pricingRepo.find({
+      where: {
+        labId,
+        testId: In(tests.map((test) => test.id)),
+        shiftId: IsNull(),
+        patientType: IsNull(),
+        isActive: true,
+      },
+    });
+
+    const defaultPriceByTestId = new Map<string, number>();
+    for (const row of pricingRows) {
+      defaultPriceByTestId.set(row.testId, parseFloat(row.price.toString()));
+    }
+
+    return tests.map((test) => ({
+      ...test,
+      defaultPrice: defaultPriceByTestId.get(test.id) ?? null,
+    }));
   }
 
   async delete(id: string, labId: string): Promise<void> {
@@ -984,8 +1063,8 @@ export class TestsService {
           { value: 'Negative', flag: 'N', isDefault: true },
           { value: 'Trace', flag: 'ABN' },
           { value: '+', flag: 'H' },
-          { value: '++', flag: 'HH' },
-          { value: '+++', flag: 'HH' },
+          { value: '++', flag: 'H' },
+          { value: '+++', flag: 'H' },
         ],
         sortOrder: 22,
         reportSection: 'Chemical',
@@ -999,8 +1078,8 @@ export class TestsService {
           { value: 'Negative', flag: 'N', isDefault: true },
           { value: 'Trace', flag: 'ABN' },
           { value: '+', flag: 'H' },
-          { value: '++', flag: 'HH' },
-          { value: '+++', flag: 'HH' },
+          { value: '++', flag: 'H' },
+          { value: '+++', flag: 'H' },
         ],
         sortOrder: 23,
         reportSection: 'Chemical',
@@ -1014,8 +1093,8 @@ export class TestsService {
           { value: 'Negative', flag: 'N', isDefault: true },
           { value: 'Trace', flag: 'ABN' },
           { value: '+', flag: 'H' },
-          { value: '++', flag: 'HH' },
-          { value: '+++', flag: 'HH' },
+          { value: '++', flag: 'H' },
+          { value: '+++', flag: 'H' },
         ],
         sortOrder: 24,
         reportSection: 'Chemical',
@@ -1041,7 +1120,7 @@ export class TestsService {
           { value: 'Negative', flag: 'N', isDefault: true },
           { value: 'Trace', flag: 'ABN' },
           { value: '+', flag: 'H' },
-          { value: '++', flag: 'HH' },
+          { value: '++', flag: 'H' },
         ],
         sortOrder: 26,
         reportSection: 'Chemical',

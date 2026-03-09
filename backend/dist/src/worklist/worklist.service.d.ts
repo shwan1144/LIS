@@ -165,8 +165,10 @@ export declare class WorklistService {
     private findMatchingResultTextOption;
     private resolveFlagFromResultText;
     private toResultFlag;
+    private toResultTextOptionFlag;
     private calculateFlag;
     private computePatientAgeYears;
+    private computePatientAgeSnapshot;
     private resolveWorklistPerfLogThresholdMs;
     private elapsedMs;
     getWorklistStats(labId: string): Promise<{

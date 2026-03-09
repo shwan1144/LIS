@@ -34,6 +34,11 @@ import {
   type UnmatchedResultDto,
   type ResolveUnmatchedDto,
 } from '../api/client';
+import {
+  getResultFlagLabel,
+  getResultFlagTagColor,
+  normalizeResultFlag,
+} from '../utils/result-flag';
 
 const { Title, Text } = Typography;
 const { Search } = Input;
@@ -52,25 +57,6 @@ const reasonLabels: Record<string, string> = {
   NO_MAPPING: 'No Mapping',
   INVALID_SAMPLE_STATUS: 'Invalid Status',
   DUPLICATE_RESULT: 'Duplicate',
-};
-
-const getFlagTagColor = (flag: string): string => {
-  switch (flag) {
-    case 'N':
-    case 'NEG':
-      return 'green';
-    case 'HH':
-    case 'POS':
-      return 'red';
-    case 'H':
-    case 'ABN':
-      return 'orange';
-    case 'L':
-    case 'LL':
-      return 'blue';
-    default:
-      return 'default';
-  }
 };
 
 export function UnmatchedResultsPage() {
@@ -213,8 +199,8 @@ export function UnmatchedResultsPage() {
         <Space>
           <Text>{formatValue(record)}</Text>
           {record.flag && (
-            <Tag color={getFlagTagColor(record.flag)}>
-              {record.flag}
+            <Tag color={getResultFlagTagColor(record.flag)}>
+              {getResultFlagLabel(record.flag) ?? normalizeResultFlag(record.flag) ?? record.flag}
             </Tag>
           )}
         </Space>
@@ -374,8 +360,8 @@ export function UnmatchedResultsPage() {
               <Space>
                 <Text>{formatValue(selectedItem)}</Text>
                 {selectedItem.flag && (
-                  <Tag color={getFlagTagColor(selectedItem.flag)}>
-                    {selectedItem.flag}
+                  <Tag color={getResultFlagTagColor(selectedItem.flag)}>
+                    {getResultFlagLabel(selectedItem.flag) ?? normalizeResultFlag(selectedItem.flag) ?? selectedItem.flag}
                   </Tag>
                 )}
               </Space>

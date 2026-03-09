@@ -143,7 +143,6 @@ export declare class PlatformAdminController {
         verifiedTestsCount: number;
         completedTestsCount: number;
         pendingTestsCount: number;
-        hasCriticalFlag: boolean;
         lastVerifiedAt: Date | null;
     }>;
     getOrderResultsPdf(req: RequestWithPlatformUser, orderId: string, res: Response): Promise<Response<any, Record<string, any>> | undefined>;

@@ -11,6 +11,7 @@ import { HL7ParserService, ParsedORU, HL7Result } from './hl7-parser.service';
 import { PanelStatusService } from '../panels/panel-status.service';
 import { AuditService } from '../audit/audit.service';
 import { AuditAction } from '../entities/audit-log.entity';
+import { hasMeaningfulOrderTestResult } from '../order-tests/order-test-result.util';
 
 export interface IngestionResult {
   success: boolean;
@@ -233,18 +234,18 @@ export class HL7IngestionService {
         if (processResult.success && processResult.orderTestId) {
           processedCount++;
           processedOrderTestIds.add(processResult.orderTestId);
-        } else {
+        } else if (processResult.reason) {
           unmatchedCount++;
-          if (processResult.reason) {
-            await this.storeUnmatched(
-              instrument,
-              sampleIdentifier.trim(),
-              result,
-              processResult.reason,
-              messageRecord.id,
-              processResult.message,
-            );
-          }
+          await this.storeUnmatched(
+            instrument,
+            sampleIdentifier.trim(),
+            result,
+            processResult.reason,
+            messageRecord.id,
+            processResult.message,
+          );
+        } else {
+          errors.push(`OBX ${i + 1}: ${processResult.message}`);
         }
       } catch (err) {
         const errorMsg = err instanceof Error ? err.message : String(err);
@@ -375,6 +376,20 @@ export class HL7IngestionService {
     // Parse result value
     const { numericValue, textValue } = this.parseResultValue(result.value, mapping.multiplier);
     const flag = this.hl7Parser.mapFlag(result.flag) as ResultFlag | null;
+    if (
+      !hasMeaningfulOrderTestResult({
+        resultValue: numericValue,
+        resultText: textValue,
+      })
+    ) {
+      this.logger.warn(
+        `Skipping empty instrument result for orderTest ${orderTest.id} from ${instrument.code}`,
+      );
+      return {
+        success: false,
+        message: 'Instrument result did not contain a real value',
+      };
+    }
 
     // Store history
     const history = this.historyRepo.create({

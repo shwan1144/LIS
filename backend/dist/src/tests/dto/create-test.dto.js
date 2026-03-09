@@ -9,12 +9,13 @@ var __metadata = (this && this.__metadata) || function (k, v) {
     if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.CreateTestDto = exports.TestPanelComponentDto = exports.TestResultTextOptionDto = exports.TestNumericAgeRangeDto = exports.TestParameterDefinitionDto = exports.TEST_RESULT_FLAGS = exports.TEST_RESULT_ENTRY_TYPES = void 0;
+exports.CreateTestDto = exports.TestPanelComponentDto = exports.TestResultTextOptionDto = exports.TestNumericAgeRangeDto = exports.TestParameterDefinitionDto = exports.TEST_NUMERIC_AGE_UNITS = exports.TEST_RESULT_FLAGS = exports.TEST_RESULT_ENTRY_TYPES = void 0;
 const class_validator_1 = require("class-validator");
 const class_transformer_1 = require("class-transformer");
 const test_entity_1 = require("../../entities/test.entity");
 exports.TEST_RESULT_ENTRY_TYPES = ['NUMERIC', 'QUALITATIVE', 'TEXT'];
-exports.TEST_RESULT_FLAGS = ['N', 'H', 'L', 'HH', 'LL', 'POS', 'NEG', 'ABN'];
+exports.TEST_RESULT_FLAGS = ['N', 'H', 'L', 'POS', 'NEG', 'ABN'];
+exports.TEST_NUMERIC_AGE_UNITS = ['DAY', 'MONTH', 'YEAR'];
 class TestParameterDefinitionDto {
 }
 exports.TestParameterDefinitionDto = TestParameterDefinitionDto;
@@ -59,6 +60,25 @@ __decorate([
     (0, class_validator_1.IsIn)(['ANY', 'M', 'F']),
     __metadata("design:type", String)
 ], TestNumericAgeRangeDto.prototype, "sex", void 0);
+__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsIn)(exports.TEST_NUMERIC_AGE_UNITS),
+    __metadata("design:type", Object)
+], TestNumericAgeRangeDto.prototype, "ageUnit", void 0);
+__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_transformer_1.Type)(() => Number),
+    (0, class_validator_1.IsNumber)(),
+    (0, class_validator_1.Min)(0),
+    __metadata("design:type", Object)
+], TestNumericAgeRangeDto.prototype, "minAge", void 0);
+__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_transformer_1.Type)(() => Number),
+    (0, class_validator_1.IsNumber)(),
+    (0, class_validator_1.Min)(0),
+    __metadata("design:type", Object)
+], TestNumericAgeRangeDto.prototype, "maxAge", void 0);
 __decorate([
     (0, class_validator_1.IsOptional)(),
     (0, class_transformer_1.Type)(() => Number),

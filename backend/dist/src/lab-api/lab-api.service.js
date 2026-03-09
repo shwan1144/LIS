@@ -23,6 +23,8 @@ const sample_entity_1 = require("../entities/sample.entity");
 const test_entity_1 = require("../entities/test.entity");
 const lab_counter_util_1 = require("../database/lab-counter.util");
 const lab_timezone_util_1 = require("../database/lab-timezone.util");
+const order_test_result_util_1 = require("../order-tests/order-test-result.util");
+const order_test_flag_util_1 = require("../order-tests/order-test-flag.util");
 const PATIENT_NUMBER_LOCK_KEY = 620001;
 let LabApiService = class LabApiService {
     constructor(rlsSessionService, auditService) {
@@ -215,9 +217,13 @@ let LabApiService = class LabApiService {
                 throw new common_1.NotFoundException('Order test not found');
             }
             const now = new Date();
-            const numericValue = Number(dto.value);
-            orderTest.resultText = dto.value;
+            const normalizedValue = dto.value?.trim() ?? '';
+            const numericValue = normalizedValue.length > 0 ? Number(normalizedValue) : Number.NaN;
+            orderTest.resultText = normalizedValue.length > 0 ? normalizedValue : null;
             orderTest.resultValue = Number.isFinite(numericValue) ? numericValue : null;
+            if (!(0, order_test_result_util_1.hasMeaningfulOrderTestResult)(orderTest)) {
+                throw new common_1.BadRequestException('Cannot complete a test without a real result value, text, or parameters');
+            }
             orderTest.flag = this.toResultFlag(dto.flags);
             orderTest.resultedAt = now;
             orderTest.resultedBy = actor?.userId ?? null;
@@ -374,24 +380,7 @@ let LabApiService = class LabApiService {
         return Math.floor(maxSeq);
     }
     toResultFlag(flag) {
-        const value = (flag || '').trim().toUpperCase();
-        if (value === order_test_entity_1.ResultFlag.NORMAL)
-            return order_test_entity_1.ResultFlag.NORMAL;
-        if (value === order_test_entity_1.ResultFlag.HIGH)
-            return order_test_entity_1.ResultFlag.HIGH;
-        if (value === order_test_entity_1.ResultFlag.LOW)
-            return order_test_entity_1.ResultFlag.LOW;
-        if (value === order_test_entity_1.ResultFlag.CRITICAL_HIGH)
-            return order_test_entity_1.ResultFlag.CRITICAL_HIGH;
-        if (value === order_test_entity_1.ResultFlag.CRITICAL_LOW)
-            return order_test_entity_1.ResultFlag.CRITICAL_LOW;
-        if (value === order_test_entity_1.ResultFlag.POSITIVE)
-            return order_test_entity_1.ResultFlag.POSITIVE;
-        if (value === order_test_entity_1.ResultFlag.NEGATIVE)
-            return order_test_entity_1.ResultFlag.NEGATIVE;
-        if (value === order_test_entity_1.ResultFlag.ABNORMAL)
-            return order_test_entity_1.ResultFlag.ABNORMAL;
-        return null;
+        return (0, order_test_flag_util_1.normalizeOrderTestFlag)(flag);
     }
     async updateOrderStatusAfterResult(manager, labId, sampleId) {
         const sample = await manager.getRepository(sample_entity_1.Sample).findOne({

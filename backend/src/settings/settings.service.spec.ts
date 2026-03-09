@@ -175,7 +175,8 @@ describe('SettingsService referringDoctors', () => {
     ).rejects.toBeInstanceOf(BadRequestException);
   });
 
-  it('defaults department and category report rows to visible', () => {
+  it('defaults status, department, and category report rows to visible', () => {
+    expect(DEFAULT_REPORT_STYLE_V1.resultsTable.showStatusColumn).toBe(true);
     expect(DEFAULT_REPORT_STYLE_V1.resultsTable.showDepartmentRow).toBe(true);
     expect(DEFAULT_REPORT_STYLE_V1.resultsTable.showCategoryRow).toBe(true);
   });
@@ -189,6 +190,7 @@ describe('SettingsService referringDoctors', () => {
       ...DEFAULT_REPORT_STYLE_V1,
       resultsTable: {
         ...DEFAULT_REPORT_STYLE_V1.resultsTable,
+        showStatusColumn: false,
         showDepartmentRow: false,
         showCategoryRow: true,
       },
@@ -220,6 +222,7 @@ describe('SettingsService referringDoctors', () => {
 
   it('backfills report row toggles when persisted reportStyle is older JSON', async () => {
     const {
+      showStatusColumn: _showStatusColumn,
       showDepartmentRow: _showDepartmentRow,
       showCategoryRow: _showCategoryRow,
       fontFamily: _resultsFontFamily,
@@ -249,6 +252,7 @@ describe('SettingsService referringDoctors', () => {
     expect(result.reportStyle?.resultsTable.fontFamily).toBe(
       DEFAULT_REPORT_STYLE_V1.resultsTable.fontFamily,
     );
+    expect(result.reportStyle?.resultsTable.showStatusColumn).toBe(true);
     expect(result.reportStyle?.resultsTable.showDepartmentRow).toBe(true);
     expect(result.reportStyle?.resultsTable.showCategoryRow).toBe(true);
   });
@@ -274,6 +278,7 @@ describe('SettingsService referringDoctors', () => {
       resultsTable: {
         ...DEFAULT_REPORT_STYLE_V1.resultsTable,
         headerBackgroundColor: '#101010',
+        showStatusColumn: false,
       },
     };
     const result = await service.updateLabSettings('lab-id', {
@@ -337,7 +342,7 @@ describe('SettingsService referringDoctors', () => {
     expect(second.reportDesignFingerprint).not.toBe(first.reportDesignFingerprint);
   });
 
-  it('changes reportDesignFingerprint when department/category row visibility changes', async () => {
+  it('changes reportDesignFingerprint when status/department/category row visibility changes', async () => {
     const lab = createLab();
     const findOne = jest.fn().mockResolvedValue(lab);
     const save = jest.fn().mockImplementation(async (entity: Lab) => entity);
@@ -355,6 +360,15 @@ describe('SettingsService referringDoctors', () => {
         },
       },
     });
+    const statusHidden = await service.updateLabSettings('lab-id', {
+      reportStyle: {
+        ...DEFAULT_REPORT_STYLE_V1,
+        resultsTable: {
+          ...DEFAULT_REPORT_STYLE_V1.resultsTable,
+          showStatusColumn: false,
+        },
+      },
+    });
     const categoryHidden = await service.updateLabSettings('lab-id', {
       reportStyle: {
         ...DEFAULT_REPORT_STYLE_V1,
@@ -366,7 +380,9 @@ describe('SettingsService referringDoctors', () => {
     });
 
     expect(departmentHidden.reportDesignFingerprint).not.toBe(baseline.reportDesignFingerprint);
+    expect(statusHidden.reportDesignFingerprint).not.toBe(baseline.reportDesignFingerprint);
     expect(categoryHidden.reportDesignFingerprint).not.toBe(baseline.reportDesignFingerprint);
+    expect(statusHidden.reportDesignFingerprint).not.toBe(departmentHidden.reportDesignFingerprint);
     expect(categoryHidden.reportDesignFingerprint).not.toBe(departmentHidden.reportDesignFingerprint);
   });
 

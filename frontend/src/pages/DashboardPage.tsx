@@ -3,7 +3,6 @@ import { Card, Row, Col, Typography, Statistic, Table, Spin, message, Space } fr
 import {
   FileTextOutlined,
   ClockCircleOutlined,
-  WarningOutlined,
   ThunderboltOutlined,
   TeamOutlined,
   BarChartOutlined,
@@ -60,7 +59,6 @@ export function DashboardPage() {
   const k = kpis ?? {
     ordersToday: 0,
     pendingVerification: 0,
-    criticalAlerts: 0,
     avgTatHours: null,
     totalPatients: 0,
   };
@@ -104,9 +102,9 @@ export function DashboardPage() {
         <Col xs={24} sm={12} lg={6}>
           <Card>
             <Statistic
-              title="Critical alerts"
-              value={k.criticalAlerts}
-              prefix={<WarningOutlined />}
+              title="Total patients"
+              value={k.totalPatients}
+              prefix={<TeamOutlined />}
             />
           </Card>
         </Col>
@@ -122,7 +120,7 @@ export function DashboardPage() {
       </Row>
 
       <Row gutter={[16, 16]}>
-        <Col xs={24} lg={14}>
+        <Col xs={24}>
           <Card title="Orders trend (last 7 days)" extra={<BarChartOutlined />}>
             {trend.length === 0 ? (
               <Typography.Text type="secondary">No order data yet.</Typography.Text>
@@ -138,11 +136,6 @@ export function DashboardPage() {
                 pagination={false}
               />
             )}
-          </Card>
-        </Col>
-        <Col xs={24} lg={10}>
-          <Card title="Quick stats" extra={<TeamOutlined />}>
-            <Statistic title="Total patients" value={k.totalPatients} />
           </Card>
         </Col>
       </Row>

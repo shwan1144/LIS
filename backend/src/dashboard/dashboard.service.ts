@@ -21,7 +21,6 @@ type PdfKitDocument = InstanceType<typeof PDFDocument>;
 export interface DashboardKpis {
   ordersToday: number;
   pendingVerification: number;
-  criticalAlerts: number;
   avgTatHours: number | null;
   totalPatients: number;
 }
@@ -62,7 +61,6 @@ export interface StatisticsDto {
   };
   quality: {
     abnormalCount: number;
-    criticalCount: number;
     totalVerified: number;
   };
   unmatched: {
@@ -117,21 +115,9 @@ export class DashboardService {
       .getCount();
 
     // Count critical results — root-level only (panels = 1)
-    const criticalAlerts = await this.orderTestRepo
-      .createQueryBuilder('ot')
-      .innerJoin('ot.sample', 's')
-      .innerJoin('s.order', 'o')
-      .where('o.labId = :labId', { labId })
-      .andWhere('ot.parentOrderTestId IS NULL')
-      .andWhere('ot.flag IN (:...flags)', { flags: [ResultFlag.CRITICAL_HIGH, ResultFlag.CRITICAL_LOW] })
-      .andWhere('ot.status != :verified', { verified: OrderTestStatus.VERIFIED })
-      .getCount();
-
-
     return {
       ordersToday,
       pendingVerification,
-      criticalAlerts,
       avgTatHours: null, // Will be implemented with TAT tracking
       totalPatients,
     };
@@ -649,7 +635,7 @@ export class DashboardService {
     startDate: Date,
     endDate: Date,
     filters: { shiftId: string | null; departmentId: string | null },
-  ): Promise<{ abnormalCount: number; criticalCount: number; totalVerified: number }> {
+  ): Promise<{ abnormalCount: number; totalVerified: number }> {
     const base = this.orderTestRepo
       .createQueryBuilder('ot')
       .innerJoin('ot.sample', 's')
@@ -667,21 +653,15 @@ export class DashboardService {
       base.andWhere('t.departmentId = :departmentId', { departmentId: filters.departmentId });
     }
 
-    const [abnormalCount, criticalCount, totalVerified] = await Promise.all([
+    const [abnormalCount, totalVerified] = await Promise.all([
       base
         .clone()
         .andWhere('ot.flag IN (:...flags)', { flags: [ResultFlag.HIGH, ResultFlag.LOW] })
         .getCount(),
-      base
-        .clone()
-        .andWhere('ot.flag IN (:...flags)', {
-          flags: [ResultFlag.CRITICAL_HIGH, ResultFlag.CRITICAL_LOW],
-        })
-        .getCount(),
       base.clone().getCount(),
     ]);
 
-    return { abnormalCount, criticalCount, totalVerified };
+    return { abnormalCount, totalVerified };
   }
 
   private normalizeAnnouncementText(value: string | null | undefined): string | null {

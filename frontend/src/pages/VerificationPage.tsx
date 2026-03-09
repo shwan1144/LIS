@@ -28,7 +28,6 @@ import {
   rejectResult,
   verifyMultipleResults,
   type DepartmentDto,
-  type ResultFlag,
   type VerificationRowStatusFilter,
   type WorklistItem,
   type WorklistOrderModalDto,
@@ -42,31 +41,13 @@ import {
   type WorklistOrderGroupSummary,
 } from './worklistGrouping';
 import { useTheme } from '../contexts/ThemeContext';
+import {
+  RESULT_FLAG_COLOR as FLAG_COLOR,
+  RESULT_FLAG_LABEL as FLAG_LABEL,
+} from '../utils/result-flag';
 import './QueuePages.css';
 
 const { Title, Text } = Typography;
-
-const FLAG_COLOR: Record<ResultFlag, string> = {
-  N: 'green',
-  H: 'orange',
-  L: 'blue',
-  HH: 'red',
-  LL: 'red',
-  POS: 'red',
-  NEG: 'green',
-  ABN: 'purple',
-};
-
-const FLAG_LABEL: Record<ResultFlag, string> = {
-  N: 'Normal',
-  H: 'High',
-  L: 'Low',
-  HH: 'Critical High',
-  LL: 'Critical Low',
-  POS: 'Positive',
-  NEG: 'Negative',
-  ABN: 'Abnormal',
-};
 
 const STATUS_COLOR: Record<WorklistItem['status'], string> = {
   PENDING: 'default',

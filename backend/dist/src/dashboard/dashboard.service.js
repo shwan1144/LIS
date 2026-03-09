@@ -52,19 +52,9 @@ let DashboardService = class DashboardService {
             .andWhere('ot.parentOrderTestId IS NULL')
             .andWhere('ot.status = :status', { status: order_test_entity_1.OrderTestStatus.COMPLETED })
             .getCount();
-        const criticalAlerts = await this.orderTestRepo
-            .createQueryBuilder('ot')
-            .innerJoin('ot.sample', 's')
-            .innerJoin('s.order', 'o')
-            .where('o.labId = :labId', { labId })
-            .andWhere('ot.parentOrderTestId IS NULL')
-            .andWhere('ot.flag IN (:...flags)', { flags: [order_test_entity_1.ResultFlag.CRITICAL_HIGH, order_test_entity_1.ResultFlag.CRITICAL_LOW] })
-            .andWhere('ot.status != :verified', { verified: order_test_entity_1.OrderTestStatus.VERIFIED })
-            .getCount();
         return {
             ordersToday,
             pendingVerification,
-            criticalAlerts,
             avgTatHours: null,
             totalPatients,
         };
@@ -472,20 +462,14 @@ let DashboardService = class DashboardService {
         if (filters.departmentId) {
             base.andWhere('t.departmentId = :departmentId', { departmentId: filters.departmentId });
         }
-        const [abnormalCount, criticalCount, totalVerified] = await Promise.all([
+        const [abnormalCount, totalVerified] = await Promise.all([
             base
                 .clone()
                 .andWhere('ot.flag IN (:...flags)', { flags: [order_test_entity_1.ResultFlag.HIGH, order_test_entity_1.ResultFlag.LOW] })
                 .getCount(),
-            base
-                .clone()
-                .andWhere('ot.flag IN (:...flags)', {
-                flags: [order_test_entity_1.ResultFlag.CRITICAL_HIGH, order_test_entity_1.ResultFlag.CRITICAL_LOW],
-            })
-                .getCount(),
             base.clone().getCount(),
         ]);
-        return { abnormalCount, criticalCount, totalVerified };
+        return { abnormalCount, totalVerified };
     }
     normalizeAnnouncementText(value) {
         const trimmed = String(value ?? '').trim();

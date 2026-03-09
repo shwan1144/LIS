@@ -11,7 +11,6 @@ import { UnmatchedResultsService } from '../unmatched/unmatched-results.service'
 export interface DashboardKpis {
     ordersToday: number;
     pendingVerification: number;
-    criticalAlerts: number;
     avgTatHours: number | null;
     totalPatients: number;
 }
@@ -64,7 +63,6 @@ export interface StatisticsDto {
     };
     quality: {
         abnormalCount: number;
-        criticalCount: number;
         totalVerified: number;
     };
     unmatched: {

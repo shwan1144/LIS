@@ -37,8 +37,8 @@ const { Title, Text } = Typography;
 const MAX_BANNER_FOOTER_BYTES = Math.floor(2.75 * 1024 * 1024);
 const MIN_REPORT_BANNER_WIDTH = 2400;
 const MIN_REPORT_BANNER_HEIGHT = 600;
-const REPORT_BANNER_RECOMMENDED_SIZE_MM = '198 x 50 mm';
-const REPORT_FOOTER_RECOMMENDED_SIZE_MM = '198 x 18 mm';
+const REPORT_BANNER_RECOMMENDED_SIZE_MM = '198 x 50 mm / 2400 x 600 px';
+const REPORT_FOOTER_RECOMMENDED_SIZE_MM = '198 x 18 mm / 2400 x 600 px';
 
 type BrandingKey = keyof ReportBrandingDto;
 
@@ -183,6 +183,7 @@ function defaultReportStyle(): ReportStyleDto {
       rowStripeColor: '#F9FBFF',
       abnormalRowBackgroundColor: '#FFF5F5',
       referenceValueColor: '#333333',
+      showStatusColumn: true,
       showDepartmentRow: true,
       departmentRowBackgroundColor: '#222222',
       departmentRowTextColor: '#FFFFFF',
@@ -725,8 +726,17 @@ export function AdminLabReportDesignPage() {
   const stripedRowBg = reportStyle.resultsTable.rowStripeEnabled
     ? reportStyle.resultsTable.rowStripeColor
     : 'transparent';
+  const showStatusColumn = reportStyle.resultsTable.showStatusColumn;
   const showDepartmentRow = reportStyle.resultsTable.showDepartmentRow;
   const showCategoryRow = reportStyle.resultsTable.showCategoryRow;
+  const previewColumnCount = showStatusColumn ? 5 : 4;
+  const previewRegularWidths = {
+    test: '28%',
+    result: showStatusColumn ? '14%' : '18%',
+    unit: showStatusColumn ? '14%' : '18%',
+    status: '14%',
+    reference: showStatusColumn ? '30%' : '36%',
+  } as const;
   const scrollToPreview = () => {
     previewCardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
@@ -1092,6 +1102,14 @@ export function AdminLabReportDesignPage() {
                                   onChange={(value) => updateResultsStyle('referenceValueColor', value)}
                                 />
                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                  <Text>Show Status Column</Text>
+                                  <Switch
+                                    checked={showStatusColumn}
+                                    onChange={(value) => updateResultsStyle('showStatusColumn', value)}
+                                    disabled={!canMutate}
+                                  />
+                                </div>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                   <Text>Show Department Row</Text>
                                   <Switch
                                     checked={showDepartmentRow}
@@ -1134,19 +1152,19 @@ export function AdminLabReportDesignPage() {
                                 <StyleColorControl
                                   label="Status Normal"
                                   value={reportStyle.resultsTable.statusNormalColor}
-                                  disabled={!canMutate}
+                                  disabled={!canMutate || !showStatusColumn}
                                   onChange={(value) => updateResultsStyle('statusNormalColor', value)}
                                 />
                                 <StyleColorControl
                                   label="Status High"
                                   value={reportStyle.resultsTable.statusHighColor}
-                                  disabled={!canMutate}
+                                  disabled={!canMutate || !showStatusColumn}
                                   onChange={(value) => updateResultsStyle('statusHighColor', value)}
                                 />
                                 <StyleColorControl
                                   label="Status Low"
                                   value={reportStyle.resultsTable.statusLowColor}
-                                  disabled={!canMutate}
+                                  disabled={!canMutate || !showStatusColumn}
                                   onChange={(value) => updateResultsStyle('statusLowColor', value)}
                                 />
                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -1353,23 +1371,26 @@ export function AdminLabReportDesignPage() {
                                 style={{
                                   width: '100%',
                                   borderCollapse: 'collapse',
+                                  tableLayout: 'fixed',
                                   fontFamily: resolvePreviewFontStack(reportStyle.resultsTable.fontFamily),
                                 }}
                               >
                                 <thead>
                                   <tr>
-                                    <th style={previewHeaderCellStyle}>Test</th>
-                                    <th style={previewHeaderCellStyle}>Result</th>
-                                    <th style={previewHeaderCellStyle}>Unit</th>
-                                    <th style={previewHeaderCellStyle}>Status</th>
-                                    <th style={previewHeaderCellStyle}>Reference Value</th>
+                                    <th style={{ ...previewHeaderCellStyle, width: previewRegularWidths.test }}>Test</th>
+                                    <th style={{ ...previewHeaderCellStyle, width: previewRegularWidths.result }}>Result</th>
+                                    <th style={{ ...previewHeaderCellStyle, width: previewRegularWidths.unit }}>Unit</th>
+                                    {showStatusColumn ? (
+                                      <th style={{ ...previewHeaderCellStyle, width: previewRegularWidths.status }}>Status</th>
+                                    ) : null}
+                                    <th style={{ ...previewHeaderCellStyle, width: previewRegularWidths.reference }}>Reference Value</th>
                                   </tr>
                                 </thead>
                                 <tbody>
                                   {showDepartmentRow ? (
                                     <tr>
                                       <td
-                                        colSpan={5}
+                                        colSpan={previewColumnCount}
                                         style={{
                                           ...previewBodyCellStyle,
                                           background: reportStyle.resultsTable.departmentRowBackgroundColor,
@@ -1386,7 +1407,7 @@ export function AdminLabReportDesignPage() {
                                   {showCategoryRow ? (
                                     <tr>
                                       <td
-                                        colSpan={5}
+                                        colSpan={previewColumnCount}
                                         style={{
                                           ...previewBodyCellStyle,
                                           background: reportStyle.resultsTable.categoryRowBackgroundColor,
@@ -1401,22 +1422,26 @@ export function AdminLabReportDesignPage() {
                                     </tr>
                                   ) : null}
                                   <tr>
-                                    <td style={{ ...previewBodyCellStyle, background: stripedRowBg }}>Glucose</td>
-                                    <td style={{ ...previewBodyCellStyle, background: stripedRowBg }}>110</td>
-                                    <td style={{ ...previewBodyCellStyle, background: stripedRowBg }}>mg/dL</td>
+                                    <td style={{ ...previewBodyCellStyle, width: previewRegularWidths.test, background: stripedRowBg }}>Glucose</td>
+                                    <td style={{ ...previewBodyCellStyle, width: previewRegularWidths.result, background: stripedRowBg }}>110</td>
+                                    <td style={{ ...previewBodyCellStyle, width: previewRegularWidths.unit, background: stripedRowBg }}>mg/dL</td>
+                                    {showStatusColumn ? (
+                                      <td
+                                        style={{
+                                          ...previewBodyCellStyle,
+                                          width: previewRegularWidths.status,
+                                          background: stripedRowBg,
+                                          color: reportStyle.resultsTable.statusNormalColor,
+                                          fontWeight: 700,
+                                        }}
+                                      >
+                                        Normal
+                                      </td>
+                                    ) : null}
                                     <td
                                       style={{
                                         ...previewBodyCellStyle,
-                                        background: stripedRowBg,
-                                        color: reportStyle.resultsTable.statusNormalColor,
-                                        fontWeight: 700,
-                                      }}
-                                    >
-                                      Normal
-                                    </td>
-                                    <td
-                                      style={{
-                                        ...previewBodyCellStyle,
+                                        width: previewRegularWidths.reference,
                                         background: stripedRowBg,
                                         color: reportStyle.resultsTable.referenceValueColor,
                                       }}
@@ -1428,6 +1453,7 @@ export function AdminLabReportDesignPage() {
                                     <td
                                       style={{
                                         ...previewBodyCellStyle,
+                                        width: previewRegularWidths.test,
                                         background: reportStyle.resultsTable.abnormalRowBackgroundColor,
                                       }}
                                     >
@@ -1436,6 +1462,7 @@ export function AdminLabReportDesignPage() {
                                     <td
                                       style={{
                                         ...previewBodyCellStyle,
+                                        width: previewRegularWidths.result,
                                         background: reportStyle.resultsTable.abnormalRowBackgroundColor,
                                       }}
                                     >
@@ -1444,24 +1471,29 @@ export function AdminLabReportDesignPage() {
                                     <td
                                       style={{
                                         ...previewBodyCellStyle,
+                                        width: previewRegularWidths.unit,
                                         background: reportStyle.resultsTable.abnormalRowBackgroundColor,
                                       }}
                                     >
                                       U/L
                                     </td>
+                                    {showStatusColumn ? (
+                                      <td
+                                        style={{
+                                          ...previewBodyCellStyle,
+                                          width: previewRegularWidths.status,
+                                          background: reportStyle.resultsTable.abnormalRowBackgroundColor,
+                                          color: reportStyle.resultsTable.statusHighColor,
+                                          fontWeight: 700,
+                                        }}
+                                      >
+                                        High
+                                      </td>
+                                    ) : null}
                                     <td
                                       style={{
                                         ...previewBodyCellStyle,
-                                        background: reportStyle.resultsTable.abnormalRowBackgroundColor,
-                                        color: reportStyle.resultsTable.statusHighColor,
-                                        fontWeight: 700,
-                                      }}
-                                    >
-                                      High
-                                    </td>
-                                    <td
-                                      style={{
-                                        ...previewBodyCellStyle,
+                                        width: previewRegularWidths.reference,
                                         background: reportStyle.resultsTable.abnormalRowBackgroundColor,
                                         color: reportStyle.resultsTable.referenceValueColor,
                                       }}
@@ -1470,19 +1502,22 @@ export function AdminLabReportDesignPage() {
                                     </td>
                                   </tr>
                                   <tr>
-                                    <td style={previewBodyCellStyle}>HDL</td>
-                                    <td style={previewBodyCellStyle}>35</td>
-                                    <td style={previewBodyCellStyle}>mg/dL</td>
-                                    <td
-                                      style={{
-                                        ...previewBodyCellStyle,
-                                        color: reportStyle.resultsTable.statusLowColor,
-                                        fontWeight: 700,
-                                      }}
-                                    >
-                                      Low
-                                    </td>
-                                    <td style={{ ...previewBodyCellStyle, color: reportStyle.resultsTable.referenceValueColor }}>
+                                    <td style={{ ...previewBodyCellStyle, width: previewRegularWidths.test }}>HDL</td>
+                                    <td style={{ ...previewBodyCellStyle, width: previewRegularWidths.result }}>35</td>
+                                    <td style={{ ...previewBodyCellStyle, width: previewRegularWidths.unit }}>mg/dL</td>
+                                    {showStatusColumn ? (
+                                      <td
+                                        style={{
+                                          ...previewBodyCellStyle,
+                                          width: previewRegularWidths.status,
+                                          color: reportStyle.resultsTable.statusLowColor,
+                                          fontWeight: 700,
+                                        }}
+                                      >
+                                        Low
+                                      </td>
+                                    ) : null}
+                                    <td style={{ ...previewBodyCellStyle, width: previewRegularWidths.reference, color: reportStyle.resultsTable.referenceValueColor }}>
                                       &gt; 40
                                     </td>
                                   </tr>

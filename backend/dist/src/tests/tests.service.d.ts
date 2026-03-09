@@ -1,11 +1,32 @@
 import { Repository } from 'typeorm';
-import { Test } from '../entities/test.entity';
+import { Test, TestType } from '../entities/test.entity';
 import { Pricing } from '../entities/pricing.entity';
 import { TestComponent } from '../entities/test-component.entity';
 import { OrderTest } from '../entities/order-test.entity';
 import { Department } from '../entities/department.entity';
 import { CreateTestDto } from './dto/create-test.dto';
 import { UpdateTestDto } from './dto/update-test.dto';
+interface TestPanelComponentView {
+    childTestId: string;
+    required: boolean;
+    sortOrder: number;
+    reportSection: string | null;
+    reportGroup: string | null;
+    childTest: {
+        id: string;
+        code: string;
+        name: string;
+        type: TestType;
+        unit: string | null;
+        isActive: boolean;
+    };
+}
+type TestWithPanelComponents = Test & {
+    panelComponents?: TestPanelComponentView[];
+};
+type TestListItem = TestWithPanelComponents & {
+    defaultPrice: number | null;
+};
 export declare class TestsService {
     private readonly testRepo;
     private readonly pricingRepo;
@@ -13,7 +34,7 @@ export declare class TestsService {
     private readonly orderTestRepo;
     private readonly departmentRepo;
     constructor(testRepo: Repository<Test>, pricingRepo: Repository<Pricing>, testComponentRepo: Repository<TestComponent>, orderTestRepo: Repository<OrderTest>, departmentRepo: Repository<Department>);
-    findAll(labId: string, activeOnly?: boolean): Promise<Test[]>;
+    findAll(labId: string, activeOnly?: boolean): Promise<TestListItem[]>;
     findOne(id: string, labId: string): Promise<Test>;
     findByCode(code: string, labId: string): Promise<Test | null>;
     create(labId: string, dto: CreateTestDto): Promise<Test>;
@@ -23,12 +44,14 @@ export declare class TestsService {
     private normalizeResultEntryType;
     private normalizeResultTextOptions;
     private normalizeResultFlag;
+    private normalizeTestForOutput;
     private validateResultEntryConfig;
     private isUuid;
     private resolvePanelComponentTestIds;
     private validatePanelComponents;
     private syncPanelComponentsForTest;
     private attachPanelComponents;
+    private attachDefaultPrices;
     delete(id: string, labId: string): Promise<void>;
     toggleActive(id: string, labId: string): Promise<Test>;
     getPricingForTest(testId: string, labId: string): Promise<{
@@ -59,3 +82,4 @@ export declare class TestsService {
         tests: string[];
     }>;
 }
+export {};

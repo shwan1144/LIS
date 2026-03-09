@@ -993,11 +993,11 @@ OBX|4|NM|FIB^Fibrinogen||280|mg/dL|200-400|N|||F`,
       message: `MSH|^~\\&|HEMATOLOGY|LAB|LIS|HOSPITAL|${getTimestamp()}||ORU^R01|MSG${Date.now()}|P|2.5
 PID|1||{{PATIENT_ID}}||Doe^John||19800101|M
 OBR|1|{{ORDER_ID}}|{{SAMPLE_ID}}|CBC^Complete Blood Count||${getTimestamp()}
-OBX|1|NM|WBC^White Blood Cell Count||15.8|10^9/L|4.0-11.0|HH|||F
+OBX|1|NM|WBC^White Blood Cell Count||15.8|10^9/L|4.0-11.0|H|||F
 OBX|2|NM|RBC^Red Blood Cell Count||3.2|10^12/L|4.5-5.5|L|||F
-OBX|3|NM|HGB^Hemoglobin||8.5|g/dL|12.0-16.0|LL|||F
+OBX|3|NM|HGB^Hemoglobin||8.5|g/dL|12.0-16.0|L|||F
 OBX|4|NM|HCT^Hematocrit||28.0|%|36-46|L|||F
-OBX|5|NM|PLT^Platelet Count||45|10^9/L|150-400|LL|||F`,
+OBX|5|NM|PLT^Platelet Count||45|10^9/L|150-400|L|||F`,
     },
     medonicM51CbcHl7: {
       name: 'Medonic M51 CBC (HL7)',

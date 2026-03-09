@@ -444,7 +444,7 @@ export class HL7ParserService {
   /**
    * Map HL7 abnormal flag to LIS flag
    */
-  mapFlag(hl7Flag: string): 'N' | 'H' | 'L' | 'HH' | 'LL' | 'POS' | 'NEG' | 'ABN' | null {
+  mapFlag(hl7Flag: string): 'N' | 'H' | 'L' | 'POS' | 'NEG' | 'ABN' | null {
     const flag = hl7Flag?.toUpperCase();
     switch (flag) {
       case 'N':
@@ -456,11 +456,11 @@ export class HL7ParserService {
       case 'HH':
       case 'PH': // Panic High
       case '>':
-        return 'HH'; // Critical High
+        return 'H';
       case 'LL':
       case 'PL': // Panic Low
       case '<':
-        return 'LL'; // Critical Low
+        return 'L';
       case 'POS':
       case 'POSITIVE':
       case 'REACTIVE':

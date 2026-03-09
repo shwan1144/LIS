@@ -26,6 +26,7 @@ const hl7_parser_service_1 = require("./hl7-parser.service");
 const panel_status_service_1 = require("../panels/panel-status.service");
 const audit_service_1 = require("../audit/audit.service");
 const audit_log_entity_1 = require("../entities/audit-log.entity");
+const order_test_result_util_1 = require("../order-tests/order-test-result.util");
 let HL7IngestionService = HL7IngestionService_1 = class HL7IngestionService {
     constructor(instrumentRepo, mappingRepo, messageRepo, orderTestRepo, historyRepo, unmatchedRepo, orderRepo, hl7Parser, panelStatusService, auditService) {
         this.instrumentRepo = instrumentRepo;
@@ -180,11 +181,12 @@ let HL7IngestionService = HL7IngestionService_1 = class HL7IngestionService {
                     processedCount++;
                     processedOrderTestIds.add(processResult.orderTestId);
                 }
-                else {
+                else if (processResult.reason) {
                     unmatchedCount++;
-                    if (processResult.reason) {
-                        await this.storeUnmatched(instrument, sampleIdentifier.trim(), result, processResult.reason, messageRecord.id, processResult.message);
-                    }
+                    await this.storeUnmatched(instrument, sampleIdentifier.trim(), result, processResult.reason, messageRecord.id, processResult.message);
+                }
+                else {
+                    errors.push(`OBX ${i + 1}: ${processResult.message}`);
                 }
             }
             catch (err) {
@@ -270,6 +272,16 @@ let HL7IngestionService = HL7IngestionService_1 = class HL7IngestionService {
         }
         const { numericValue, textValue } = this.parseResultValue(result.value, mapping.multiplier);
         const flag = this.hl7Parser.mapFlag(result.flag);
+        if (!(0, order_test_result_util_1.hasMeaningfulOrderTestResult)({
+            resultValue: numericValue,
+            resultText: textValue,
+        })) {
+            this.logger.warn(`Skipping empty instrument result for orderTest ${orderTest.id} from ${instrument.code}`);
+            return {
+                success: false,
+                message: 'Instrument result did not contain a real value',
+            };
+        }
         const history = this.historyRepo.create({
             orderTestId: orderTest.id,
             resultValue: numericValue,

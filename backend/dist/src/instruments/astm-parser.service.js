@@ -81,10 +81,10 @@ let AstmParserService = AstmParserService_1 = class AstmParserService {
                 return 'L';
             case 'HH':
             case '>':
-                return 'HH';
+                return 'H';
             case 'LL':
             case '<':
-                return 'LL';
+                return 'L';
             case 'POS':
             case 'POSITIVE':
             case 'REACTIVE':

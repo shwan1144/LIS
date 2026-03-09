@@ -304,12 +304,6 @@ export function AdminLabDetailsPage() {
       render: (_, row) => <Tag color="green">{row.verifiedTestsCount}/{row.testsCount}</Tag>,
     },
     {
-      title: 'Flag',
-      key: 'flag',
-      width: 110,
-      render: (_, row) => (row.hasCriticalFlag ? <Tag color="red">Critical</Tag> : '-'),
-    },
-    {
       title: 'Action',
       key: 'action',
       width: 180,

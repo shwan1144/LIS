@@ -129,7 +129,6 @@ export interface AdminOrderListItem {
     finalAmount: number | null;
     testsCount: number;
     verifiedTestsCount: number;
-    hasCriticalFlag: boolean;
     barcode: string | null;
 }
 export interface AdminDashboardTrendPoint {
@@ -304,7 +303,6 @@ export declare class PlatformAdminService {
         verifiedTestsCount: number;
         completedTestsCount: number;
         pendingTestsCount: number;
-        hasCriticalFlag: boolean;
         lastVerifiedAt: Date | null;
     }>;
     generateOrderResultsPdf(orderId: string, actor?: PlatformActorContext): Promise<{

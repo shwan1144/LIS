@@ -24,6 +24,7 @@ import {
   PLATFORM_ACCESS_TOKEN_TTL_MINUTES,
   REFRESH_TOKEN_TTL_DAYS,
 } from '../config/auth-session.config';
+import { normalizeOrderTestFlag } from '../order-tests/order-test-flag.util';
 
 const MAX_REPORT_IMAGE_DATA_URL_LENGTH = 4 * 1024 * 1024;
 const REPORT_IMAGE_DATA_URL_PATTERN = /^data:image\/(png|jpeg|jpg|webp);base64,[a-zA-Z0-9+/=]+$/;
@@ -155,7 +156,6 @@ export interface AdminOrderListItem {
   finalAmount: number | null;
   testsCount: number;
   verifiedTestsCount: number;
-  hasCriticalFlag: boolean;
   barcode: string | null;
 }
 
@@ -1110,7 +1110,6 @@ export class PlatformAdminService {
     verifiedTestsCount: number;
     completedTestsCount: number;
     pendingTestsCount: number;
-    hasCriticalFlag: boolean;
     lastVerifiedAt: Date | null;
   }> {
     return this.rlsSessionService.withPlatformAdminContext(async (manager) => {
@@ -1130,13 +1129,15 @@ export class PlatformAdminService {
       }
 
       const tests = order.samples?.flatMap((sample) => sample.orderTests ?? []) ?? [];
+      for (const test of tests) {
+        test.flag = normalizeOrderTestFlag(test.flag ?? null);
+      }
       const testsCount = tests.length;
       const verifiedTestsCount = tests.filter((test) => test.status === 'VERIFIED').length;
       const completedTestsCount = tests.filter((test) => test.status === 'COMPLETED').length;
       const pendingTestsCount = tests.filter(
         (test) => test.status === 'PENDING' || test.status === 'IN_PROGRESS',
       ).length;
-      const hasCriticalFlag = tests.some((test) => test.flag === 'HH' || test.flag === 'LL');
       const lastVerifiedAt = tests
         .map((test) => test.verifiedAt)
         .filter((value): value is Date => Boolean(value))
@@ -1164,7 +1165,6 @@ export class PlatformAdminService {
         verifiedTestsCount,
         completedTestsCount,
         pendingTestsCount,
-        hasCriticalFlag,
         lastVerifiedAt,
       };
       await this.logPlatformSensitiveRead(actor, {
@@ -2126,7 +2126,6 @@ export class PlatformAdminService {
   private toAdminOrderListItem(order: Order): AdminOrderListItem {
     const tests = order.samples?.flatMap((sample) => sample.orderTests ?? []) ?? [];
     const verifiedTestsCount = tests.filter((test) => test.status === 'VERIFIED').length;
-    const hasCriticalFlag = tests.some((test) => test.flag === 'HH' || test.flag === 'LL');
     const firstBarcode = order.samples?.find((sample) => Boolean(sample.barcode))?.barcode ?? null;
 
     return {
@@ -2144,7 +2143,6 @@ export class PlatformAdminService {
       finalAmount: Number(order.finalAmount ?? 0),
       testsCount: tests.length,
       verifiedTestsCount,
-      hasCriticalFlag,
       barcode: firstBarcode,
     };
   }

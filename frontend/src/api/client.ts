@@ -144,6 +144,7 @@ export interface ReportResultsTableStyleDto {
   rowStripeColor: string;
   abnormalRowBackgroundColor: string;
   referenceValueColor: string;
+  showStatusColumn: boolean;
   showDepartmentRow: boolean;
   departmentRowBackgroundColor: string;
   departmentRowTextColor: string;
@@ -405,14 +406,13 @@ export interface AdminOrderListItem {
   finalAmount: number | null;
   testsCount: number;
   verifiedTestsCount: number;
-  hasCriticalFlag: boolean;
   barcode: string | null;
 }
 
 export interface AdminOrderTestDetail {
   id: string;
   status: 'PENDING' | 'IN_PROGRESS' | 'COMPLETED' | 'VERIFIED' | 'REJECTED';
-  flag: 'N' | 'H' | 'L' | 'HH' | 'LL' | 'POS' | 'NEG' | 'ABN' | null;
+  flag: ResultFlag | null;
   resultValue: number | null;
   resultText: string | null;
   verifiedAt: string | null;
@@ -468,7 +468,6 @@ export interface AdminOrderDetail {
   verifiedTestsCount: number;
   completedTestsCount: number;
   pendingTestsCount: number;
-  hasCriticalFlag: boolean;
   lastVerifiedAt: string | null;
 }
 
@@ -1030,7 +1029,6 @@ export async function updatePatient(id: string, data: Partial<CreatePatientDto>)
 export interface DashboardKpis {
   ordersToday: number;
   pendingVerification: number;
-  criticalAlerts: number;
   avgTatHours: number | null;
   totalPatients: number;
 }
@@ -1051,7 +1049,6 @@ export async function getDashboardKpis(): Promise<DashboardKpis> {
   return {
     ordersToday: Number(raw.ordersToday ?? 0),
     pendingVerification: Number(raw.pendingVerification ?? 0),
-    criticalAlerts: Number(raw.criticalAlerts ?? 0),
     avgTatHours:
       raw.avgTatHours === null || raw.avgTatHours === undefined
         ? null
@@ -1115,7 +1112,6 @@ export interface StatisticsDto {
   };
   quality: {
     abnormalCount: number;
-    criticalCount: number;
     totalVerified: number;
   };
   unmatched: {
@@ -1596,11 +1592,16 @@ export interface TestParameterDefinition {
 
 export interface TestNumericAgeRange {
   sex: 'ANY' | 'M' | 'F';
+  ageUnit?: TestNumericAgeUnit | null;
+  minAge?: number | null;
+  maxAge?: number | null;
   minAgeYears?: number | null;
   maxAgeYears?: number | null;
   normalMin?: number | null;
   normalMax?: number | null;
 }
+
+export type TestNumericAgeUnit = 'DAY' | 'MONTH' | 'YEAR';
 
 export type TestResultEntryType = 'NUMERIC' | 'QUALITATIVE' | 'TEXT';
 
@@ -1654,6 +1655,7 @@ export interface TestDto {
   departmentId: string | null;
   isActive: boolean;
   sortOrder: number;
+  defaultPrice?: number | null;
   expectedCompletionMinutes: number | null;
   createdAt: string;
   updatedAt: string;
@@ -1758,14 +1760,12 @@ export async function seedAllTests(): Promise<{
 }
 
 // Worklist
-export type ResultFlag = 'N' | 'H' | 'L' | 'HH' | 'LL' | 'POS' | 'NEG' | 'ABN';
+export type ResultFlag = 'N' | 'H' | 'L' | 'POS' | 'NEG' | 'ABN';
 
 export const ResultFlag = {
   NORMAL: 'N' as const,
   HIGH: 'H' as const,
   LOW: 'L' as const,
-  CRITICAL_HIGH: 'HH' as const,
-  CRITICAL_LOW: 'LL' as const,
   POSITIVE: 'POS' as const,
   NEGATIVE: 'NEG' as const,
   ABNORMAL: 'ABN' as const,

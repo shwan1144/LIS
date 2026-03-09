@@ -33,6 +33,7 @@ const create_order_response_dto_1 = require("./dto/create-order-response.dto");
 const audit_service_1 = require("../audit/audit.service");
 const lab_counter_util_1 = require("../database/lab-counter.util");
 const lab_timezone_util_1 = require("../database/lab-timezone.util");
+const order_test_flag_util_1 = require("../order-tests/order-test-flag.util");
 let OrdersService = OrdersService_1 = class OrdersService {
     constructor(orderRepo, patientRepo, labRepo, shiftRepo, testRepo, pricingRepo, testComponentRepo, worklistRepo, auditService) {
         this.orderRepo = orderRepo;
@@ -441,8 +442,8 @@ let OrdersService = OrdersService_1 = class OrdersService {
         }
         const desiredSet = new Set(uniqueTestIds);
         const requestedRemovalReason = options?.removalReason?.trim() || null;
-        const forceRemoveVerified = options?.forceRemoveVerified === true;
-        const canForceRemoveVerified = this.canForceRemoveVerified(actor, actorRole);
+        const forceRemoveLockedTests = options?.forceRemoveVerified === true;
+        const canForceRemoveLockedTests = this.canForceRemoveLockedTests(actor, actorRole);
         const updateResult = await this.orderRepo.manager.transaction(async (manager) => {
             const orderRepo = manager.getRepository(order_entity_1.Order);
             const sampleRepo = manager.getRepository(sample_entity_1.Sample);
@@ -491,16 +492,16 @@ let OrdersService = OrdersService_1 = class OrdersService {
                     .filter((reason) => Boolean(reason)))).join(' ');
                 throw new common_1.BadRequestException(`Cannot remove tests: ${labels}.${reasons ? ` ${reasons}` : ''}`);
             }
-            const verifiedOverrideRemovals = rootsToRemove.filter(({ access }) => access.requiresVerifiedOverride);
-            if (verifiedOverrideRemovals.length > 0) {
-                const labels = verifiedOverrideRemovals
+            const adminOverrideRemovals = rootsToRemove.filter(({ access }) => access.requiresAdminOverride);
+            if (adminOverrideRemovals.length > 0) {
+                const labels = adminOverrideRemovals
                     .map(({ orderTest }) => this.getOrderTestLabel(orderTest))
                     .join(', ');
-                if (!canForceRemoveVerified || !forceRemoveVerified) {
-                    throw new common_1.BadRequestException(`Admin override is required to remove verified tests: ${labels}.`);
+                if (!canForceRemoveLockedTests || !forceRemoveLockedTests) {
+                    throw new common_1.BadRequestException(`Lab-admin override is required to remove these tests: ${labels}.`);
                 }
                 if (!requestedRemovalReason) {
-                    throw new common_1.BadRequestException('Removal reason is required when removing verified tests.');
+                    throw new common_1.BadRequestException('Removal reason is required when removing tests with admin override.');
                 }
             }
             const tests = await testRepo.find({
@@ -621,7 +622,7 @@ let OrdersService = OrdersService_1 = class OrdersService {
             return {
                 orderId: order.id,
                 originalRootTests: rootOrderTests.map((orderTest) => this.buildRootOrderTestAuditItem(orderTest, childOrderTestsByParent.get(orderTest.id) ?? [], false)),
-                removedRootTests: rootsToRemove.map(({ orderTest, childOrderTests, access }) => this.buildRootOrderTestAuditItem(orderTest, childOrderTests, access.requiresVerifiedOverride)),
+                removedRootTests: rootsToRemove.map(({ orderTest, childOrderTests, access }) => this.buildRootOrderTestAuditItem(orderTest, childOrderTests, access.requiresAdminOverride)),
                 addedTests: addedRootTests
                     .map((testId) => testMap.get(testId))
                     .filter((test) => Boolean(test))
@@ -630,8 +631,8 @@ let OrdersService = OrdersService_1 = class OrdersService {
                     code: test.code,
                     name: test.name,
                 })),
-                verifiedRemovalOverrideUsed: verifiedOverrideRemovals.length > 0,
-                removalReason: verifiedOverrideRemovals.length > 0 ? requestedRemovalReason : null,
+                adminRemovalOverrideUsed: adminOverrideRemovals.length > 0,
+                removalReason: adminOverrideRemovals.length > 0 ? requestedRemovalReason : null,
             };
         });
         if (updateResult.removedRootTests.length > 0 || updateResult.addedTests.length > 0) {
@@ -663,7 +664,7 @@ let OrdersService = OrdersService_1 = class OrdersService {
                     testIds: uniqueTestIds,
                     removedRootTests: updateResult.removedRootTests,
                     addedTests: updateResult.addedTests,
-                    verifiedRemovalOverrideUsed: updateResult.verifiedRemovalOverrideUsed,
+                    adminRemovalOverrideUsed: updateResult.adminRemovalOverrideUsed,
                     removalReason: updateResult.removalReason,
                 },
                 description: descriptionParts.join('; '),
@@ -829,7 +830,7 @@ let OrdersService = OrdersService_1 = class OrdersService {
             return `${prefix}-${String(fallbackSeq).padStart(2, '0')}`;
         };
     }
-    canForceRemoveVerified(actor, actorRole) {
+    canForceRemoveLockedTests(actor, actorRole) {
         return (actor.isImpersonation ||
             actorRole === 'LAB_ADMIN' ||
             actorRole === 'SUPER_ADMIN');
@@ -840,21 +841,29 @@ let OrdersService = OrdersService_1 = class OrdersService {
         if (hasVerified) {
             return {
                 removable: true,
-                requiresVerifiedOverride: true,
+                requiresAdminOverride: true,
                 blockedReason: null,
             };
         }
         if (rootOrderTest.status === order_test_entity_1.OrderTestStatus.REJECTED) {
             return {
                 removable: true,
-                requiresVerifiedOverride: false,
+                requiresAdminOverride: false,
                 blockedReason: null,
             };
         }
         if (rootOrderTest.status === order_test_entity_1.OrderTestStatus.COMPLETED) {
             return {
                 removable: true,
-                requiresVerifiedOverride: false,
+                requiresAdminOverride: false,
+                blockedReason: null,
+            };
+        }
+        if (rootOrderTest.status === order_test_entity_1.OrderTestStatus.IN_PROGRESS &&
+            childOrderTests.length > 0) {
+            return {
+                removable: true,
+                requiresAdminOverride: true,
                 blockedReason: null,
             };
         }
@@ -862,24 +871,24 @@ let OrdersService = OrdersService_1 = class OrdersService {
             childOrderTests.every((orderTest) => orderTest.status === order_test_entity_1.OrderTestStatus.PENDING)) {
             return {
                 removable: true,
-                requiresVerifiedOverride: false,
+                requiresAdminOverride: false,
                 blockedReason: null,
             };
         }
         return {
             removable: false,
-            requiresVerifiedOverride: false,
+            requiresAdminOverride: false,
             blockedReason: 'Only pending, completed, and rejected tests can be removed. In-progress tests stay locked.',
         };
     }
-    buildRootOrderTestAuditItem(rootOrderTest, childOrderTests, requiresVerifiedOverride) {
+    buildRootOrderTestAuditItem(rootOrderTest, childOrderTests, requiresAdminOverride) {
         return {
             id: rootOrderTest.id,
             testId: rootOrderTest.testId,
             code: rootOrderTest.test?.code ?? '',
             name: rootOrderTest.test?.name ?? '',
             status: rootOrderTest.status,
-            requiresVerifiedOverride,
+            requiresAdminOverride,
             isPanel: childOrderTests.length > 0,
         };
     }
@@ -1379,6 +1388,7 @@ let OrdersService = OrdersService_1 = class OrdersService {
     stripHeavyOrderTestsPayload(order) {
         for (const sample of order.samples ?? []) {
             for (const orderTest of sample.orderTests ?? []) {
+                orderTest.flag = (0, order_test_flag_util_1.normalizeOrderTestFlag)(orderTest.flag ?? null);
                 const testPayload = orderTest.test;
                 if (!testPayload)
                     continue;

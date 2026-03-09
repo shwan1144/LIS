@@ -1,6 +1,8 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.formatPatientAgeDisplay = formatPatientAgeDisplay;
+exports.getPatientAgeSnapshot = getPatientAgeSnapshot;
+exports.getPatientAgeYears = getPatientAgeYears;
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 function parseDateInput(value) {
     if (!value)
@@ -68,20 +70,31 @@ function formatUnit(value, singular) {
     return `${value} ${singular}${value === 1 ? '' : 's'}`;
 }
 function formatPatientAgeDisplay(dateOfBirth, referenceDate = new Date()) {
+    const age = getPatientAgeSnapshot(dateOfBirth, referenceDate);
+    if (!age)
+        return null;
+    if (age.years >= 1) {
+        return formatUnit(age.years, 'year');
+    }
+    if (age.months >= 1) {
+        return formatUnit(age.months, 'month');
+    }
+    return formatUnit(age.days, 'day');
+}
+function getPatientAgeSnapshot(dateOfBirth, referenceDate = new Date()) {
     const dob = toUtcDateParts(dateOfBirth);
     const reference = toUtcDateParts(referenceDate);
     if (!dob || !reference)
         return null;
     if (compareUtcDates(reference, dob) < 0)
         return null;
-    const years = completedYears(dob, reference);
-    if (years >= 1) {
-        return formatUnit(years, 'year');
-    }
-    const months = completedMonths(dob, reference);
-    if (months >= 1) {
-        return formatUnit(months, 'month');
-    }
-    return formatUnit(Math.max(0, completedDays(dob, reference)), 'day');
+    return {
+        years: completedYears(dob, reference),
+        months: completedMonths(dob, reference),
+        days: Math.max(0, completedDays(dob, reference)),
+    };
+}
+function getPatientAgeYears(dateOfBirth, referenceDate = new Date()) {
+    return getPatientAgeSnapshot(dateOfBirth, referenceDate)?.years ?? null;
 }
 //# sourceMappingURL=patient-age.util.js.map

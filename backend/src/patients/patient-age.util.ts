@@ -6,6 +6,12 @@ type UtcDateParts = {
   day: number;
 };
 
+export interface PatientAgeSnapshot {
+  years: number;
+  months: number;
+  days: number;
+}
+
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
 function parseDateInput(value: DateInput): Date | null {
@@ -87,20 +93,39 @@ export function formatPatientAgeDisplay(
   dateOfBirth: DateInput,
   referenceDate: DateInput = new Date(),
 ): string | null {
+  const age = getPatientAgeSnapshot(dateOfBirth, referenceDate);
+  if (!age) return null;
+
+  if (age.years >= 1) {
+    return formatUnit(age.years, 'year');
+  }
+
+  if (age.months >= 1) {
+    return formatUnit(age.months, 'month');
+  }
+
+  return formatUnit(age.days, 'day');
+}
+
+export function getPatientAgeSnapshot(
+  dateOfBirth: DateInput,
+  referenceDate: DateInput = new Date(),
+): PatientAgeSnapshot | null {
   const dob = toUtcDateParts(dateOfBirth);
   const reference = toUtcDateParts(referenceDate);
   if (!dob || !reference) return null;
   if (compareUtcDates(reference, dob) < 0) return null;
 
-  const years = completedYears(dob, reference);
-  if (years >= 1) {
-    return formatUnit(years, 'year');
-  }
+  return {
+    years: completedYears(dob, reference),
+    months: completedMonths(dob, reference),
+    days: Math.max(0, completedDays(dob, reference)),
+  };
+}
 
-  const months = completedMonths(dob, reference);
-  if (months >= 1) {
-    return formatUnit(months, 'month');
-  }
-
-  return formatUnit(Math.max(0, completedDays(dob, reference)), 'day');
+export function getPatientAgeYears(
+  dateOfBirth: DateInput,
+  referenceDate: DateInput = new Date(),
+): number | null {
+  return getPatientAgeSnapshot(dateOfBirth, referenceDate)?.years ?? null;
 }

@@ -7,7 +7,11 @@ import {
   resolveReportStyleConfig,
 } from '../report-style.config';
 import { resolveNormalText, resolveNumericRange } from '../../tests/normal-range.util';
-import { formatPatientAgeDisplay } from '../../patients/patient-age.util';
+import {
+  formatPatientAgeDisplay,
+  getPatientAgeSnapshot,
+} from '../../patients/patient-age.util';
+import { normalizeOrderTestFlag } from '../../order-tests/order-test-flag.util';
 
 // Fallback logo (from provided template)
 const TEMPLATE_LOGO_BASE64 =
@@ -29,24 +33,17 @@ function formatDateTime(value: Date | string | null | undefined): string {
   return d.toLocaleString();
 }
 
-function computeAgeYears(dateOfBirth: string | null): number | null {
-  if (!dateOfBirth) return null;
-  const d = new Date(dateOfBirth);
-  if (Number.isNaN(d.getTime())) return null;
-  return Math.floor((Date.now() - d.getTime()) / (365.25 * 24 * 60 * 60 * 1000));
-}
-
 function containsArabicScript(text: string): boolean {
   return /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/.test(text);
 }
 
 function normalizeFlag(flag: string | null | undefined): string {
-  const f = (flag || '').trim().toUpperCase();
+  const f = normalizeOrderTestFlag(flag) ?? String(flag ?? '').trim().toUpperCase();
   return f || '-';
 }
 
 function isAbnormalFlag(flag: string): boolean {
-  return flag === 'H' || flag === 'L' || flag === 'HH' || flag === 'LL';
+  return flag === 'H' || flag === 'L';
 }
 
 function formatResultValue(ot: OrderTest): string {
@@ -58,14 +55,14 @@ function formatResultValue(ot: OrderTest): string {
 function formatRange(
   ot: OrderTest,
   patientSex: string | null,
-  patientAgeYears: number | null,
+  patientAgeSnapshot: ReturnType<typeof getPatientAgeSnapshot>,
 ): string {
   const test: any = ot.test;
   if (!test) return '-';
   const { normalMin: min, normalMax: max } = resolveNumericRange(
     test,
     patientSex,
-    patientAgeYears,
+    patientAgeSnapshot,
   );
   const resolvedText = resolveNormalText(test, patientSex);
   if (resolvedText !== null) return resolvedText;
@@ -85,8 +82,8 @@ function formatParams(params: Record<string, string> | null): string[] {
 
 function flagToStatus(flag: string): string {
   const f = normalizeFlag(flag);
-  if (f === 'H' || f === 'HH') return 'High';
-  if (f === 'L' || f === 'LL') return 'Low';
+  if (f === 'H') return 'High';
+  if (f === 'L') return 'Low';
   if (f === '-' || f === '') return 'Normal';
   return f;
 }
@@ -159,7 +156,10 @@ export function buildResultsReportHtml(input: {
   const orderNumber = order.orderNumber || order.id.substring(0, 8);
   const patientName = order.patient?.fullName?.trim() || '-';
   const patientNameIsRtl = containsArabicScript(patientName);
-  const ageYearsForRanges = computeAgeYears(order.patient?.dateOfBirth ?? null);
+  const ageForRanges = getPatientAgeSnapshot(
+    order.patient?.dateOfBirth ?? null,
+    order.registeredAt ?? null,
+  );
   const ageDisplay = formatPatientAgeDisplay(
     order.patient?.dateOfBirth ?? null,
     order.registeredAt,
@@ -174,6 +174,24 @@ export function buildResultsReportHtml(input: {
   // Branding: only use values explicitly configured for this lab.
   const labAny: any = order.lab as any;
   const reportStyle = resolveReportStyleConfig(labAny?.reportStyle);
+  const showStatusColumn = reportStyle.resultsTable.showStatusColumn;
+  const regularVisibleColumnCount = showStatusColumn ? 5 : 4;
+  const parameterVisibleColumnCount = showStatusColumn ? 4 : 3;
+  const regularTableWidths = {
+    test: '28%',
+    result: showStatusColumn ? '14%' : '18%',
+    unit: showStatusColumn ? '14%' : '18%',
+    status: '14%',
+    reference: showStatusColumn ? '30%' : '36%',
+  } as const;
+  const parameterTableWidths = {
+    test: '28%',
+    result: showStatusColumn ? '24%' : '36%',
+    status: '24%',
+    reference: showStatusColumn ? '24%' : '36%',
+  } as const;
+  const regularHeaderCellsHtml = `<th style="width:${regularTableWidths.test};">Test</th><th style="width:${regularTableWidths.result};">Result</th><th style="width:${regularTableWidths.unit};">Unit</th>${showStatusColumn ? `<th style="width:${regularTableWidths.status};">Status</th>` : ''}<th style="width:${regularTableWidths.reference};">Reference Value</th>`;
+  const parameterHeaderCellsHtml = `<th style="width:${parameterTableWidths.test};">Test</th><th style="width:${parameterTableWidths.result};">Result</th>${showStatusColumn ? `<th style="width:${parameterTableWidths.status};">Status</th>` : ''}<th style="width:${parameterTableWidths.reference};">Reference Value</th>`;
   const pageMarginTopMm = reportStyle.pageLayout.pageMarginTopMm;
   const pageMarginRightMm = reportStyle.pageLayout.pageMarginRightMm;
   const pageMarginBottomMm = reportStyle.pageLayout.pageMarginBottomMm;
@@ -355,10 +373,10 @@ export function buildResultsReportHtml(input: {
           }
           const rowClass = isAbnormalParam ? ' class="abnormal"' : '';
           return `<tr${rowClass}>
-            <td style="width:28%;font-weight:600;">${escapeHtml(p?.label || p?.code || '')}</td>
-            <td style="width:24%;">${valueCell}</td>
-            <td style="width:24%;" class="${statusClass}">${escapeHtml(statusText)}</td>
-            <td style="width:24%;" class="reference-value">${escapeHtml(referenceValue)}</td>
+            <td style="width:${parameterTableWidths.test};font-weight:600;">${escapeHtml(p?.label || p?.code || '')}</td>
+            <td style="width:${parameterTableWidths.result};">${valueCell}</td>
+            ${showStatusColumn ? `<td style="width:${parameterTableWidths.status};" class="${statusClass}">${escapeHtml(statusText)}</td>` : ''}
+            <td style="width:${parameterTableWidths.reference};" class="reference-value">${escapeHtml(referenceValue)}</td>
           </tr>`;
         })
         .join('');
@@ -366,16 +384,16 @@ export function buildResultsReportHtml(input: {
         paramRows = Object.entries(resultParams)
           .filter(([, v]) => v != null && String(v).trim() !== '')
           .map(([k, v]) => `<tr>
-            <td style="width:28%;font-weight:600;">${escapeHtml(k)}</td>
-            <td style="width:24%;">${escapeHtml(String(v))}</td>
-            <td style="width:24%;" class="reference-value">-</td>
-            <td style="width:24%;">-</td>
+            <td style="width:${parameterTableWidths.test};font-weight:600;">${escapeHtml(k)}</td>
+            <td style="width:${parameterTableWidths.result};">${escapeHtml(String(v))}</td>
+            ${showStatusColumn ? `<td style="width:${parameterTableWidths.status};">-</td>` : ''}
+            <td style="width:${parameterTableWidths.reference};" class="reference-value">-</td>
           </tr>`)
           .join('');
       }
       contentHtml = `<table class="gue-gse-table">
-        <thead><tr><th style="width:28%;">Test</th><th style="width:24%;">Result</th><th style="width:24%;">Status</th><th style="width:24%;">Reference Value</th></tr></thead>
-        <tbody>${paramRows || '<tr><td colspan="4">No parameters</td></tr>'}</tbody>
+        <thead><tr>${parameterHeaderCellsHtml}</tr></thead>
+        <tbody>${paramRows || `<tr><td colspan="${parameterVisibleColumnCount}">No parameters</td></tr>`}</tbody>
       </table>`;
     } else if (kids.length > 0) {
       const childRows = kids
@@ -386,20 +404,20 @@ export function buildResultsReportHtml(input: {
           const abnormal = isAbnormalFlag(flag);
           const statusClass = abnormal ? (flag.startsWith('H') ? 'status-high' : 'status-low') : 'status-normal';
           return `<tr class="${abnormal ? 'abnormal' : ''}">
-            <td style="width:28%;">${escapeHtml(ct?.abbreviation || ct?.name || '-')}</td>
-            <td style="width:14%;" class="nowrap">${escapeHtml(formatResultValue(child))}</td>
-            <td style="width:14%;" class="nowrap">${escapeHtml(ct?.unit || '-')}</td>
-            <td style="width:14%;" class="${statusClass}">${escapeHtml(statusText)}</td>
-            <td style="width:30%;" class="reference-value">${escapeHtml(formatRange(child, order.patient?.sex ?? null, ageYearsForRanges))}</td>
+            <td style="width:${regularTableWidths.test};">${escapeHtml(ct?.abbreviation || ct?.name || '-')}</td>
+            <td style="width:${regularTableWidths.result};" class="nowrap">${escapeHtml(formatResultValue(child))}</td>
+            <td style="width:${regularTableWidths.unit};" class="nowrap">${escapeHtml(ct?.unit || '-')}</td>
+            ${showStatusColumn ? `<td style="width:${regularTableWidths.status};" class="${statusClass}">${escapeHtml(statusText)}</td>` : ''}
+            <td style="width:${regularTableWidths.reference};" class="reference-value">${escapeHtml(formatRange(child, order.patient?.sex ?? null, ageForRanges))}</td>
           </tr>`;
         })
         .join('');
-      contentHtml = `<table>
-        <thead><tr><th style="width:28%;">Test</th><th style="width:14%;">Result</th><th style="width:14%;">Unit</th><th style="width:14%;">Status</th><th style="width:30%;">Reference Value</th></tr></thead>
+      contentHtml = `<table class="panel-results-table">
+        <thead><tr>${regularHeaderCellsHtml}</tr></thead>
         <tbody>${childRows}</tbody>
       </table>`;
     } else {
-      contentHtml = '<table class="gue-gse-table"><tbody><tr><td colspan="2">No data</td></tr></tbody></table>';
+      contentHtml = `<table class="gue-gse-table"><tbody><tr><td colspan="${parameterVisibleColumnCount}">No data</td></tr></tbody></table>`;
     }
     panelPageSections.push(`
       <div class="panel-section">
@@ -444,11 +462,11 @@ export function buildResultsReportHtml(input: {
     let deptBodiesHtml = '';
     for (const [dept, catMap] of deptCatMap) {
       let deptRowsHtml = reportStyle.resultsTable.showDepartmentRow
-        ? `<tr class="dept-row"><td colspan="5">${escapeHtml(dept)}</td></tr>`
+        ? `<tr class="dept-row"><td colspan="${regularVisibleColumnCount}">${escapeHtml(dept)}</td></tr>`
         : '';
       for (const [cat, tests] of catMap) {
         if (cat && reportStyle.resultsTable.showCategoryRow) {
-          deptRowsHtml += `<tr class="cat-row"><td colspan="5">${escapeHtml(cat)}</td></tr>`;
+          deptRowsHtml += `<tr class="cat-row"><td colspan="${regularVisibleColumnCount}">${escapeHtml(cat)}</td></tr>`;
         }
         deptRowsHtml += tests
           .map((ot) => {
@@ -460,11 +478,11 @@ export function buildResultsReportHtml(input: {
               ? (flag.startsWith('H') ? 'status-high' : 'status-low')
               : 'status-normal';
             return `<tr class="${abnormal ? 'abnormal' : ''}">
-            <td style="width:28%;">${escapeHtml(t?.abbreviation || t?.name || '-')}</td>
-            <td style="width:14%;" class="nowrap">${escapeHtml(formatResultValue(ot))}</td>
-            <td style="width:14%;" class="nowrap">${escapeHtml(t?.unit || '-')}</td>
-            <td style="width:14%;" class="${statusClass}">${escapeHtml(statusText)}</td>
-            <td style="width:30%;" class="reference-value">${escapeHtml(formatRange(ot, order.patient?.sex ?? null, ageYearsForRanges))}</td>
+            <td style="width:${regularTableWidths.test};">${escapeHtml(t?.abbreviation || t?.name || '-')}</td>
+            <td style="width:${regularTableWidths.result};" class="nowrap">${escapeHtml(formatResultValue(ot))}</td>
+            <td style="width:${regularTableWidths.unit};" class="nowrap">${escapeHtml(t?.unit || '-')}</td>
+            ${showStatusColumn ? `<td style="width:${regularTableWidths.status};" class="${statusClass}">${escapeHtml(statusText)}</td>` : ''}
+            <td style="width:${regularTableWidths.reference};" class="reference-value">${escapeHtml(formatRange(ot, order.patient?.sex ?? null, ageForRanges))}</td>
           </tr>`;
           })
           .join('');
@@ -473,7 +491,7 @@ export function buildResultsReportHtml(input: {
     }
 
     regularContentHtml = `<table class="regular-results-table">
-      <thead><tr><th style="width:28%;">Test</th><th style="width:14%;">Result</th><th style="width:14%;">Unit</th><th style="width:14%;">Status</th><th style="width:30%;">Reference Value</th></tr></thead>
+      <thead><tr>${regularHeaderCellsHtml}</tr></thead>
       ${deptBodiesHtml}
     </table>`;
   }
@@ -695,6 +713,12 @@ export function buildResultsReportHtml(input: {
       font-size: var(--results-body-font-size);
       text-align: var(--results-cell-align);
     }
+    .regular-results-table,
+    .panel-results-table,
+    .gue-gse-table {
+      width: 100%;
+      table-layout: fixed;
+    }
     .regular-results-table {
       page-break-inside: auto;
       break-inside: auto;
@@ -751,7 +775,7 @@ export function buildResultsReportHtml(input: {
     .panel-page .panel-section { page-break-inside: auto; break-inside: auto; }
     .panel-page table { page-break-inside: var(--results-panel-table-break); break-inside: var(--results-panel-table-break); }
     .panel-page tr { page-break-inside: var(--results-panel-row-break); break-inside: var(--results-panel-row-break); }
-    .gue-gse-table { width: 100%; margin-top: 8px; margin-bottom: 12px; }
+    .gue-gse-table { margin-top: 8px; margin-bottom: 12px; }
     ${rowStripeCss}
     .report-footer {
       position: absolute;

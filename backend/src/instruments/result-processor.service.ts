@@ -8,6 +8,7 @@ import { Order, OrderStatus } from '../entities/order.entity';
 import { HL7ParserService, HL7Result } from './hl7-parser.service';
 import { AuditService } from '../audit/audit.service';
 import { AuditAction } from '../entities/audit-log.entity';
+import { hasMeaningfulOrderTestResult } from '../order-tests/order-test-result.util';
 
 export interface ProcessedResult {
   success: boolean;
@@ -116,6 +117,21 @@ export class InstrumentResultProcessor {
 
     // Parse and convert result value
     const { numericValue, textValue } = this.parseResultValue(result.value, mapping.multiplier);
+    if (
+      !hasMeaningfulOrderTestResult({
+        resultValue: numericValue,
+        resultText: textValue,
+        resultParameters: null,
+      })
+    ) {
+      this.logger.warn(`Ignoring empty instrument result for OrderTest=${orderTest.id}`);
+      return {
+        success: false,
+        orderTestId: orderTest.id,
+        orderId: orderTest.sample?.order?.id,
+        message: 'Instrument result did not contain a real value',
+      };
+    }
 
     // Map the flag
     const flag = this.hl7Parser.mapFlag(result.flag) as ResultFlag | null;

@@ -16,7 +16,8 @@ import { Type } from 'class-transformer';
 import { TestType, TubeType } from '../../entities/test.entity';
 
 export const TEST_RESULT_ENTRY_TYPES = ['NUMERIC', 'QUALITATIVE', 'TEXT'] as const;
-export const TEST_RESULT_FLAGS = ['N', 'H', 'L', 'HH', 'LL', 'POS', 'NEG', 'ABN'] as const;
+export const TEST_RESULT_FLAGS = ['N', 'H', 'L', 'POS', 'NEG', 'ABN'] as const;
+export const TEST_NUMERIC_AGE_UNITS = ['DAY', 'MONTH', 'YEAR'] as const;
 
 export class TestParameterDefinitionDto {
   @IsString()
@@ -51,6 +52,22 @@ export class TestParameterDefinitionDto {
 export class TestNumericAgeRangeDto {
   @IsIn(['ANY', 'M', 'F'])
   sex: 'ANY' | 'M' | 'F';
+
+  @IsOptional()
+  @IsIn(TEST_NUMERIC_AGE_UNITS)
+  ageUnit?: (typeof TEST_NUMERIC_AGE_UNITS)[number] | null;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  minAge?: number | null;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  maxAge?: number | null;
 
   @IsOptional()
   @Type(() => Number)

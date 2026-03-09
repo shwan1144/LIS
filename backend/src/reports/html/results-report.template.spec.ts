@@ -297,6 +297,19 @@ describe('buildResultsReportHtml panel page isolation', () => {
     expect(html).toContain('class="cat-row"');
   });
 
+  it('renders regular results without a status column when hidden', () => {
+    const html = buildRegularResultsHtml({ showStatusColumn: false });
+
+    const regularHeaderRow =
+      '<thead><tr><th style="width:28%;">Test</th><th style="width:18%;">Result</th><th style="width:18%;">Unit</th><th style="width:36%;">Reference Value</th></tr></thead>';
+
+    expect(countMatches(html, 'class="regular-results-table"')).toBe(1);
+    expect(countMatches(html, regularHeaderRow)).toBe(1);
+    expect(html).not.toContain('<th style="width:14%;">Status</th>');
+    expect(html).toContain('<tr class="dept-row"><td colspan="4">Hormone</td></tr>');
+    expect(html).toContain('<tr class="cat-row"><td colspan="4">Thyroid</td></tr>');
+  });
+
   it('renders only category rows when department rows are hidden', () => {
     const html = buildRegularResultsHtml({ showDepartmentRow: false, showCategoryRow: true });
 
@@ -357,6 +370,97 @@ describe('buildResultsReportHtml panel page isolation', () => {
     expect(countMatches(regularChunk, regularHeaderRow)).toBe(1);
   });
 
+  it('renders panel child tables without a status column when hidden', () => {
+    const order = createOrder({
+      lab: {
+        ...createOrder().lab,
+        reportStyle: {
+          ...DEFAULT_REPORT_STYLE_V1,
+          resultsTable: {
+            ...DEFAULT_REPORT_STYLE_V1.resultsTable,
+            showStatusColumn: false,
+          },
+        },
+      } as Order['lab'],
+    });
+    const panelParent = createOrderTest('panel-cbc', {
+      name: 'CBC Panel',
+      code: 'CBC',
+      type: TestType.PANEL,
+    });
+    const panelChild = createOrderTest('panel-cbc-child', {
+      name: 'Hemoglobin',
+      code: 'HGB',
+      parentOrderTestId: panelParent.id,
+      resultValue: 13.4,
+      unit: 'g/dL',
+    });
+
+    const html = buildResultsReportHtml({
+      order,
+      orderTests: [panelParent, panelChild],
+      reportableCount: 2,
+      verifiedCount: 2,
+      verifiers: ['Verifier'],
+      latestVerifiedAt: new Date('2026-02-26T11:00:00.000Z'),
+      comments: [],
+    });
+
+    const panelHeaderRow =
+      '<thead><tr><th style="width:28%;">Test</th><th style="width:18%;">Result</th><th style="width:18%;">Unit</th><th style="width:36%;">Reference Value</th></tr></thead>';
+
+    expect(html).toContain('class="panel-results-table"');
+    expect(countMatches(html, panelHeaderRow)).toBe(1);
+    expect(html).not.toContain('<th style="width:14%;">Status</th>');
+  });
+
+  it('renders GUE/GSE parameter tables without a status column and keeps fallback colspans aligned', () => {
+    const order = createOrder({
+      lab: {
+        ...createOrder().lab,
+        reportStyle: {
+          ...DEFAULT_REPORT_STYLE_V1,
+          resultsTable: {
+            ...DEFAULT_REPORT_STYLE_V1.resultsTable,
+            showStatusColumn: false,
+          },
+        },
+      } as Order['lab'],
+    });
+    const noParametersPanel = createOrderTest('panel-gue-empty', {
+      name: 'GUE Panel',
+      code: 'GUE',
+      type: TestType.PANEL,
+      resultParameters: { color: '   ' },
+    });
+    const rawParametersPanel = createOrderTest('panel-gue-raw', {
+      name: 'GUE Raw Panel',
+      code: 'GUE',
+      type: TestType.PANEL,
+      resultParameters: { color: 'yellow' },
+    });
+
+    const html = buildResultsReportHtml({
+      order,
+      orderTests: [noParametersPanel, rawParametersPanel],
+      reportableCount: 2,
+      verifiedCount: 2,
+      verifiers: ['Verifier'],
+      latestVerifiedAt: new Date('2026-02-26T11:00:00.000Z'),
+      comments: [],
+    });
+
+    const parameterHeaderRow =
+      '<thead><tr><th style="width:28%;">Test</th><th style="width:36%;">Result</th><th style="width:36%;">Reference Value</th></tr></thead>';
+
+    expect(countMatches(html, parameterHeaderRow)).toBe(2);
+    expect(html).not.toContain('<th style="width:24%;">Status</th>');
+    expect(html).toContain('<tr><td colspan="3">No parameters</td></tr>');
+    expect(html).toContain('<td style="width:28%;font-weight:600;">color</td>');
+    expect(html).toContain('<td style="width:36%;">yellow</td>');
+    expect(html).toContain('<td style="width:36%;" class="reference-value">-</td>');
+  });
+
   it('contains panel overflow-safe page-break CSS rules', () => {
     const html = buildResultsReportHtml({
       order: createOrder(),
@@ -378,6 +482,16 @@ describe('buildResultsReportHtml panel page isolation', () => {
     expect(html).toContain('display: table-header-group;');
     expect(html).toContain('.regular-results-table tbody.regular-dept-block {');
     expect(html).toContain('page-break-inside: var(--results-regular-dept-break);');
+  });
+
+  it('keeps result tables at full width with fixed layout CSS', () => {
+    const html = buildRegularResultsHtml({ showStatusColumn: false });
+
+    expect(html).toContain('.regular-results-table,');
+    expect(html).toContain('.panel-results-table,');
+    expect(html).toContain('.gue-gse-table {');
+    expect(html).toContain('width: 100%;');
+    expect(html).toContain('table-layout: fixed;');
   });
 
   it('uses contain footer rendering and updated footer height CSS', () => {

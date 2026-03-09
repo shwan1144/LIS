@@ -2,6 +2,8 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.normalizePatientSex = normalizePatientSex;
 exports.resolveNormalText = resolveNormalText;
+exports.normalizeNumericAgeRange = normalizeNumericAgeRange;
+exports.normalizeNumericAgeRanges = normalizeNumericAgeRanges;
 exports.resolveNumericRange = resolveNumericRange;
 function toNullableNumber(value) {
     if (value === null || value === undefined || value === '')
@@ -43,26 +45,60 @@ function resolveNormalText(test, patientSexRaw) {
     }
     return toNonEmptyText(test.normalText);
 }
-function normalizeAgeRange(range) {
+function toAgeUnit(value) {
+    const normalized = String(value ?? '').trim().toUpperCase();
+    if (normalized === 'DAY' || normalized === 'MONTH' || normalized === 'YEAR') {
+        return normalized;
+    }
+    return 'YEAR';
+}
+function getAgeValueForUnit(patientAge, ageUnit) {
+    if (!patientAge)
+        return null;
+    if (ageUnit === 'DAY')
+        return patientAge.days;
+    if (ageUnit === 'MONTH')
+        return patientAge.months;
+    return patientAge.years;
+}
+function toComparableAgeSpan(ageUnit, minAge, maxAge) {
+    if (minAge === null || maxAge === null)
+        return Number.POSITIVE_INFINITY;
+    const unitFactor = ageUnit === 'DAY' ? 1 : ageUnit === 'MONTH' ? 30 : 365.25;
+    return Math.max(0, maxAge - minAge) * unitFactor;
+}
+function normalizeNumericAgeRange(range) {
     const sex = (range.sex || 'ANY').toUpperCase();
     const normalizedSex = sex === 'M' || sex === 'F' ? sex : 'ANY';
+    const ageUnit = toAgeUnit(range.ageUnit);
+    const minAge = range.minAge === undefined || range.minAge === null
+        ? toNullableNumber(range.minAgeYears)
+        : toNullableNumber(range.minAge);
+    const maxAge = range.maxAge === undefined || range.maxAge === null
+        ? toNullableNumber(range.maxAgeYears)
+        : toNullableNumber(range.maxAge);
     return {
         sex: normalizedSex,
-        minAgeYears: toNullableNumber(range.minAgeYears),
-        maxAgeYears: toNullableNumber(range.maxAgeYears),
+        ageUnit,
+        minAge,
+        maxAge,
         normalMin: toNullableNumber(range.normalMin),
         normalMax: toNullableNumber(range.normalMax),
     };
 }
-function ageMatches(range, patientAgeYears) {
-    const minAge = toNullableNumber(range.minAgeYears);
-    const maxAge = toNullableNumber(range.maxAgeYears);
-    if (patientAgeYears === null) {
-        return minAge === null && maxAge === null;
+function normalizeNumericAgeRanges(ranges) {
+    if (!ranges?.length)
+        return null;
+    return ranges.map(normalizeNumericAgeRange);
+}
+function ageMatches(range, patientAge) {
+    const ageValue = getAgeValueForUnit(patientAge, range.ageUnit);
+    if (ageValue === null) {
+        return range.minAge === null && range.maxAge === null;
     }
-    if (minAge !== null && patientAgeYears < minAge)
+    if (range.minAge !== null && ageValue < range.minAge)
         return false;
-    if (maxAge !== null && patientAgeYears > maxAge)
+    if (range.maxAge !== null && ageValue > range.maxAge)
         return false;
     return true;
 }
@@ -73,51 +109,53 @@ function sexMatches(rangeSex, patientSex) {
         return false;
     return rangeSex === patientSex;
 }
-function getRangeSpecificityScore(range, patientSex, patientAgeYears) {
+function getRangeSpecificityScore(range, patientSex, patientAge) {
     let score = 0;
     if (patientSex && range.sex === patientSex)
         score += 100;
     else if (range.sex === 'ANY')
         score += 50;
-    const minAge = toNullableNumber(range.minAgeYears);
-    const maxAge = toNullableNumber(range.maxAgeYears);
-    if (minAge !== null && maxAge !== null) {
+    if (range.minAge !== null && range.maxAge !== null) {
         score += 30;
     }
-    else if (minAge !== null || maxAge !== null) {
+    else if (range.minAge !== null || range.maxAge !== null) {
         score += 15;
     }
-    if (patientAgeYears !== null) {
-        const span = minAge !== null && maxAge !== null
-            ? Math.max(0, maxAge - minAge)
-            : Number.POSITIVE_INFINITY;
+    if (patientAge !== null) {
+        const span = toComparableAgeSpan(range.ageUnit, range.minAge, range.maxAge);
         if (Number.isFinite(span)) {
             score += Math.max(0, 20 - Math.min(20, span));
         }
+        if (range.ageUnit === 'DAY')
+            score += 6;
+        else if (range.ageUnit === 'MONTH')
+            score += 3;
     }
     return score;
 }
-function resolveAgeSpecificRange(test, patientSex, patientAgeYears) {
+function resolveAgeSpecificRange(test, patientSex, patientAge) {
     const ranges = (test.numericAgeRanges ?? [])
-        .map(normalizeAgeRange)
+        .map(normalizeNumericAgeRange)
         .filter((range) => {
-        const min = toNullableNumber(range.normalMin);
-        const max = toNullableNumber(range.normalMax);
-        if (min === null && max === null)
+        if (range.normalMin === null && range.normalMax === null)
             return false;
         if (!sexMatches(range.sex, patientSex))
             return false;
-        return ageMatches(range, patientAgeYears);
+        return ageMatches(range, patientAge);
     });
     if (!ranges.length)
         return null;
     ranges.sort((a, b) => {
-        const scoreA = getRangeSpecificityScore(a, patientSex, patientAgeYears);
-        const scoreB = getRangeSpecificityScore(b, patientSex, patientAgeYears);
+        const scoreA = getRangeSpecificityScore(a, patientSex, patientAge);
+        const scoreB = getRangeSpecificityScore(b, patientSex, patientAge);
         if (scoreA !== scoreB)
             return scoreB - scoreA;
-        const minA = toNullableNumber(a.minAgeYears);
-        const minB = toNullableNumber(b.minAgeYears);
+        if (a.ageUnit !== b.ageUnit) {
+            const weight = (ageUnit) => ageUnit === 'DAY' ? 0 : ageUnit === 'MONTH' ? 1 : 2;
+            return weight(a.ageUnit) - weight(b.ageUnit);
+        }
+        const minA = a.minAge;
+        const minB = b.minAge;
         if (minA !== minB) {
             if (minA === null)
                 return 1;
@@ -125,8 +163,8 @@ function resolveAgeSpecificRange(test, patientSex, patientAgeYears) {
                 return -1;
             return minB - minA;
         }
-        const maxA = toNullableNumber(a.maxAgeYears);
-        const maxB = toNullableNumber(b.maxAgeYears);
+        const maxA = a.maxAge;
+        const maxB = b.maxAge;
         if (maxA !== maxB) {
             if (maxA === null)
                 return 1;
@@ -142,9 +180,9 @@ function resolveAgeSpecificRange(test, patientSex, patientAgeYears) {
         normalMax: toNullableNumber(best.normalMax),
     };
 }
-function resolveNumericRange(test, patientSexRaw, patientAgeYears) {
+function resolveNumericRange(test, patientSexRaw, patientAge) {
     const patientSex = normalizePatientSex(patientSexRaw);
-    const ageSpecific = resolveAgeSpecificRange(test, patientSex, patientAgeYears);
+    const ageSpecific = resolveAgeSpecificRange(test, patientSex, patientAge);
     if (ageSpecific) {
         return {
             normalMin: ageSpecific.normalMin,

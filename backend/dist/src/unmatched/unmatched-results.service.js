@@ -21,6 +21,8 @@ const order_test_entity_1 = require("../entities/order-test.entity");
 const panel_status_service_1 = require("../panels/panel-status.service");
 const audit_service_1 = require("../audit/audit.service");
 const audit_log_entity_1 = require("../entities/audit-log.entity");
+const order_test_result_util_1 = require("../order-tests/order-test-result.util");
+const order_test_flag_util_1 = require("../order-tests/order-test-flag.util");
 let UnmatchedResultsService = class UnmatchedResultsService {
     constructor(unmatchedRepo, orderTestRepo, panelStatusService, auditService) {
         this.unmatchedRepo = unmatchedRepo;
@@ -47,7 +49,7 @@ let UnmatchedResultsService = class UnmatchedResultsService {
             qb.andWhere('u.reason = :reason', { reason: params.reason });
         }
         const total = await qb.getCount();
-        const items = await qb.skip(skip).take(size).getMany();
+        const items = (await qb.skip(skip).take(size).getMany()).map((item) => this.normalizeUnmatchedResult(item));
         return { items, total };
     }
     async findOne(id, labId) {
@@ -58,7 +60,7 @@ let UnmatchedResultsService = class UnmatchedResultsService {
         if (!result || result.instrument.labId !== labId) {
             throw new common_1.NotFoundException('Unmatched result not found');
         }
-        return result;
+        return this.normalizeUnmatchedResult(result);
     }
     async resolve(id, labId, actor, dto) {
         const unmatched = await this.findOne(id, labId);
@@ -81,9 +83,15 @@ let UnmatchedResultsService = class UnmatchedResultsService {
             }
             const previousValue = orderTest.resultValue;
             const previousText = orderTest.resultText;
+            if (!(0, order_test_result_util_1.hasMeaningfulOrderTestResult)({
+                resultValue: unmatched.resultValue,
+                resultText: unmatched.resultText,
+            })) {
+                throw new common_1.BadRequestException('Cannot complete a test without a real result value, text, or parameters');
+            }
             orderTest.resultValue = unmatched.resultValue;
             orderTest.resultText = unmatched.resultText;
-            orderTest.flag = unmatched.flag;
+            orderTest.flag = (0, order_test_flag_util_1.normalizeOrderTestFlag)(unmatched.flag);
             orderTest.resultedAt = unmatched.receivedAt;
             orderTest.resultedBy = actor.userId;
             orderTest.status = order_test_entity_1.OrderTestStatus.COMPLETED;
@@ -115,7 +123,7 @@ let UnmatchedResultsService = class UnmatchedResultsService {
                 newValues: {
                     resultValue: unmatched.resultValue,
                     resultText: unmatched.resultText,
-                    flag: unmatched.flag,
+                    flag: (0, order_test_flag_util_1.normalizeOrderTestFlag)(unmatched.flag),
                     source: 'unmatched_inbox',
                     unmatchedResultId: unmatched.id,
                     ...impersonationAudit,
@@ -134,7 +142,11 @@ let UnmatchedResultsService = class UnmatchedResultsService {
             unmatched.resolvedAt = new Date();
             unmatched.resolutionNotes = dto.notes || 'Discarded by user';
         }
-        return this.unmatchedRepo.save(unmatched);
+        return this.normalizeUnmatchedResult(await this.unmatchedRepo.save(unmatched));
+    }
+    normalizeUnmatchedResult(result) {
+        result.flag = (0, order_test_flag_util_1.normalizeOrderTestFlag)(result.flag) ?? result.flag ?? null;
+        return result;
     }
     async getStats(labId, startDate, endDate) {
         const qb = this.unmatchedRepo

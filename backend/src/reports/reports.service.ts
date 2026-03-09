@@ -26,7 +26,7 @@ import { buildReportDesignFingerprint } from './report-design-fingerprint.util';
 import type { ReportStyleConfig } from './report-style.config';
 import type { Browser } from 'playwright';
 import { resolveNormalText, resolveNumericRange } from '../tests/normal-range.util';
-import { formatPatientAgeDisplay } from '../patients/patient-age.util';
+import { formatPatientAgeDisplay, getPatientAgeSnapshot } from '../patients/patient-age.util';
 
 type PdfKitDocument = InstanceType<typeof PDFDocument>;
 const REPORT_BANNER_WIDTH = 2480;
@@ -91,22 +91,15 @@ function formatDateTime(value: Date | string | null | undefined): string {
   return d.toLocaleString();
 }
 
-function computeAgeYears(dateOfBirth: string | null): number | null {
-  if (!dateOfBirth) return null;
-  const dob = new Date(dateOfBirth);
-  if (Number.isNaN(dob.getTime())) return null;
-  return Math.floor((Date.now() - dob.getTime()) / (365.25 * 24 * 60 * 60 * 1000));
-}
-
 function getNormalRange(
   test: Test,
   sex: string | null,
-  ageYears: number | null,
+  patientAge: ReturnType<typeof getPatientAgeSnapshot>,
 ): string {
   const { normalMin: min, normalMax: max } = resolveNumericRange(
     test,
     sex,
-    ageYears,
+    patientAge,
   );
   const resolvedText = resolveNormalText(test, sex);
   if (resolvedText !== null) return resolvedText;
@@ -1423,7 +1416,10 @@ export class ReportsService implements OnModuleInit, OnModuleDestroy {
   }): Promise<Buffer> {
     const { order, orderTests, verifiers, latestVerifiedAt, comments } = input;
     const patient = order.patient;
-    const patientAgeYears = computeAgeYears(patient?.dateOfBirth ?? null);
+    const patientAgeForRanges = getPatientAgeSnapshot(
+      patient?.dateOfBirth ?? null,
+      order.registeredAt,
+    );
     const patientAgeDisplay = formatPatientAgeDisplay(
       patient?.dateOfBirth ?? null,
       order.registeredAt,
@@ -1599,7 +1595,7 @@ export class ReportsService implements OnModuleInit, OnModuleDestroy {
           testLabel: `${testName}${testCode}`,
           result: formatResultValue(ot),
           unit: t?.unit || '-',
-          reference: t ? getNormalRange(t, patient?.sex ?? null, patientAgeYears) : '-',
+          reference: t ? getNormalRange(t, patient?.sex ?? null, patientAgeForRanges) : '-',
           extraParams: formatResultParameters(ot.resultParameters),
         });
       };

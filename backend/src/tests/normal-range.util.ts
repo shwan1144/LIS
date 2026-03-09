@@ -1,4 +1,9 @@
-import type { NumericAgeRangeSex, TestNumericAgeRange } from '../entities/test.entity';
+import type {
+  NumericAgeRangeSex,
+  NumericAgeRangeUnit,
+  TestNumericAgeRange,
+} from '../entities/test.entity';
+import type { PatientAgeSnapshot } from '../patients/patient-age.util';
 
 type NumericLike = number | string | null | undefined;
 
@@ -22,6 +27,15 @@ export interface ResolvedNumericRange {
   normalMin: number | null;
   normalMax: number | null;
   source: 'age' | 'sex' | 'general' | 'none';
+}
+
+export interface NormalizedNumericAgeRange {
+  sex: NumericAgeRangeSex;
+  ageUnit: NumericAgeRangeUnit;
+  minAge: number | null;
+  maxAge: number | null;
+  normalMin: number | null;
+  normalMax: number | null;
 }
 
 function toNullableNumber(value: NumericLike): number | null {
@@ -66,30 +80,80 @@ export function resolveNormalText(
   return toNonEmptyText(test.normalText);
 }
 
-function normalizeAgeRange(range: TestNumericAgeRange): TestNumericAgeRange {
+function toAgeUnit(value: unknown): NumericAgeRangeUnit {
+  const normalized = String(value ?? '').trim().toUpperCase();
+  if (normalized === 'DAY' || normalized === 'MONTH' || normalized === 'YEAR') {
+    return normalized;
+  }
+  return 'YEAR';
+}
+
+function getAgeValueForUnit(
+  patientAge: PatientAgeSnapshot | null,
+  ageUnit: NumericAgeRangeUnit,
+): number | null {
+  if (!patientAge) return null;
+  if (ageUnit === 'DAY') return patientAge.days;
+  if (ageUnit === 'MONTH') return patientAge.months;
+  return patientAge.years;
+}
+
+function toComparableAgeSpan(
+  ageUnit: NumericAgeRangeUnit,
+  minAge: number | null,
+  maxAge: number | null,
+): number {
+  if (minAge === null || maxAge === null) return Number.POSITIVE_INFINITY;
+  const unitFactor = ageUnit === 'DAY' ? 1 : ageUnit === 'MONTH' ? 30 : 365.25;
+  return Math.max(0, maxAge - minAge) * unitFactor;
+}
+
+export function normalizeNumericAgeRange(
+  range: TestNumericAgeRange,
+): NormalizedNumericAgeRange {
   const sex = (range.sex || 'ANY').toUpperCase();
   const normalizedSex: NumericAgeRangeSex =
     sex === 'M' || sex === 'F' ? sex : 'ANY';
+  const ageUnit = toAgeUnit(range.ageUnit);
+  const minAge =
+    range.minAge === undefined || range.minAge === null
+      ? toNullableNumber(range.minAgeYears)
+      : toNullableNumber(range.minAge);
+  const maxAge =
+    range.maxAge === undefined || range.maxAge === null
+      ? toNullableNumber(range.maxAgeYears)
+      : toNullableNumber(range.maxAge);
+
   return {
     sex: normalizedSex,
-    minAgeYears: toNullableNumber(range.minAgeYears),
-    maxAgeYears: toNullableNumber(range.maxAgeYears),
+    ageUnit,
+    minAge,
+    maxAge,
     normalMin: toNullableNumber(range.normalMin),
     normalMax: toNullableNumber(range.normalMax),
   };
 }
 
-function ageMatches(range: TestNumericAgeRange, patientAgeYears: number | null): boolean {
-  const minAge = toNullableNumber(range.minAgeYears);
-  const maxAge = toNullableNumber(range.maxAgeYears);
+export function normalizeNumericAgeRanges(
+  ranges: TestNumericAgeRange[] | null | undefined,
+): NormalizedNumericAgeRange[] | null {
+  if (!ranges?.length) return null;
+  return ranges.map(normalizeNumericAgeRange);
+}
 
-  if (patientAgeYears === null) {
+function ageMatches(
+  range: NormalizedNumericAgeRange,
+  patientAge: PatientAgeSnapshot | null,
+): boolean {
+  const ageValue = getAgeValueForUnit(patientAge, range.ageUnit);
+
+  if (ageValue === null) {
     // If age is unknown, only use unbounded age ranges.
-    return minAge === null && maxAge === null;
+    return range.minAge === null && range.maxAge === null;
   }
 
-  if (minAge !== null && patientAgeYears < minAge) return false;
-  if (maxAge !== null && patientAgeYears > maxAge) return false;
+  if (range.minAge !== null && ageValue < range.minAge) return false;
+  if (range.maxAge !== null && ageValue > range.maxAge) return false;
   return true;
 }
 
@@ -100,9 +164,9 @@ function sexMatches(rangeSex: NumericAgeRangeSex, patientSex: 'M' | 'F' | null):
 }
 
 function getRangeSpecificityScore(
-  range: TestNumericAgeRange,
+  range: NormalizedNumericAgeRange,
   patientSex: 'M' | 'F' | null,
-  patientAgeYears: number | null,
+  patientAge: PatientAgeSnapshot | null,
 ): number {
   let score = 0;
 
@@ -110,23 +174,20 @@ function getRangeSpecificityScore(
   if (patientSex && range.sex === patientSex) score += 100;
   else if (range.sex === 'ANY') score += 50;
 
-  const minAge = toNullableNumber(range.minAgeYears);
-  const maxAge = toNullableNumber(range.maxAgeYears);
-  if (minAge !== null && maxAge !== null) {
+  if (range.minAge !== null && range.maxAge !== null) {
     score += 30;
-  } else if (minAge !== null || maxAge !== null) {
+  } else if (range.minAge !== null || range.maxAge !== null) {
     score += 15;
   }
 
   // If age is known, prefer narrower ranges.
-  if (patientAgeYears !== null) {
-    const span =
-      minAge !== null && maxAge !== null
-        ? Math.max(0, maxAge - minAge)
-        : Number.POSITIVE_INFINITY;
+  if (patientAge !== null) {
+    const span = toComparableAgeSpan(range.ageUnit, range.minAge, range.maxAge);
     if (Number.isFinite(span)) {
       score += Math.max(0, 20 - Math.min(20, span));
     }
+    if (range.ageUnit === 'DAY') score += 6;
+    else if (range.ageUnit === 'MONTH') score += 3;
   }
 
   return score;
@@ -135,35 +196,39 @@ function getRangeSpecificityScore(
 function resolveAgeSpecificRange(
   test: NumericRangeCarrier,
   patientSex: 'M' | 'F' | null,
-  patientAgeYears: number | null,
+  patientAge: PatientAgeSnapshot | null,
 ): { normalMin: number | null; normalMax: number | null } | null {
   const ranges = (test.numericAgeRanges ?? [])
-    .map(normalizeAgeRange)
+    .map(normalizeNumericAgeRange)
     .filter((range) => {
-      const min = toNullableNumber(range.normalMin);
-      const max = toNullableNumber(range.normalMax);
-      if (min === null && max === null) return false;
+      if (range.normalMin === null && range.normalMax === null) return false;
       if (!sexMatches(range.sex, patientSex)) return false;
-      return ageMatches(range, patientAgeYears);
+      return ageMatches(range, patientAge);
     });
 
   if (!ranges.length) return null;
 
   ranges.sort((a, b) => {
-    const scoreA = getRangeSpecificityScore(a, patientSex, patientAgeYears);
-    const scoreB = getRangeSpecificityScore(b, patientSex, patientAgeYears);
+    const scoreA = getRangeSpecificityScore(a, patientSex, patientAge);
+    const scoreB = getRangeSpecificityScore(b, patientSex, patientAge);
     if (scoreA !== scoreB) return scoreB - scoreA;
 
-    const minA = toNullableNumber(a.minAgeYears);
-    const minB = toNullableNumber(b.minAgeYears);
+    if (a.ageUnit !== b.ageUnit) {
+      const weight = (ageUnit: NumericAgeRangeUnit) =>
+        ageUnit === 'DAY' ? 0 : ageUnit === 'MONTH' ? 1 : 2;
+      return weight(a.ageUnit) - weight(b.ageUnit);
+    }
+
+    const minA = a.minAge;
+    const minB = b.minAge;
     if (minA !== minB) {
       if (minA === null) return 1;
       if (minB === null) return -1;
       return minB - minA;
     }
 
-    const maxA = toNullableNumber(a.maxAgeYears);
-    const maxB = toNullableNumber(b.maxAgeYears);
+    const maxA = a.maxAge;
+    const maxB = b.maxAge;
     if (maxA !== maxB) {
       if (maxA === null) return 1;
       if (maxB === null) return -1;
@@ -183,11 +248,11 @@ function resolveAgeSpecificRange(
 export function resolveNumericRange(
   test: NumericRangeCarrier,
   patientSexRaw: string | null | undefined,
-  patientAgeYears: number | null,
+  patientAge: PatientAgeSnapshot | null,
 ): ResolvedNumericRange {
   const patientSex = normalizePatientSex(patientSexRaw);
 
-  const ageSpecific = resolveAgeSpecificRange(test, patientSex, patientAgeYears);
+  const ageSpecific = resolveAgeSpecificRange(test, patientSex, patientAge);
   if (ageSpecific) {
     return {
       normalMin: ageSpecific.normalMin,

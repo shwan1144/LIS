@@ -26,6 +26,7 @@ const audit_service_1 = require("../audit/audit.service");
 const audit_log_entity_1 = require("../entities/audit-log.entity");
 const panel_status_service_1 = require("../panels/panel-status.service");
 const astm_parser_service_1 = require("./astm-parser.service");
+const order_test_result_util_1 = require("../order-tests/order-test-result.util");
 let AstmIngestionService = AstmIngestionService_1 = class AstmIngestionService {
     constructor(instrumentRepo, mappingRepo, messageRepo, orderTestRepo, historyRepo, unmatchedRepo, orderRepo, astmParser, panelStatusService, auditService) {
         this.instrumentRepo = instrumentRepo;
@@ -123,9 +124,12 @@ let AstmIngestionService = AstmIngestionService_1 = class AstmIngestionService {
                     processedCount += 1;
                     processedOrderTestIds.add(processed.orderTestId);
                 }
-                else {
+                else if (processed.reason) {
                     unmatchedCount += 1;
-                    await this.storeUnmatched(instrument, result, processed.reason ?? unmatched_instrument_result_entity_1.UnmatchedReason.NO_MAPPING, messageRecord.id, processed.message);
+                    await this.storeUnmatched(instrument, result, processed.reason, messageRecord.id, processed.message);
+                }
+                else {
+                    errors.push(`R${result.sequence}: ${processed.message}`);
                 }
             }
             catch (err) {
@@ -237,6 +241,16 @@ let AstmIngestionService = AstmIngestionService_1 = class AstmIngestionService {
         }
         const { numericValue, textValue } = this.parseResultValue(result.value, mapping.multiplier);
         const flag = this.astmParser.mapFlag(result.flag);
+        if (!(0, order_test_result_util_1.hasMeaningfulOrderTestResult)({
+            resultValue: numericValue,
+            resultText: textValue,
+        })) {
+            this.logger.warn(`Skipping empty ASTM result for orderTest ${orderTest.id} from ${instrument.code}`);
+            return {
+                success: false,
+                message: 'Instrument result did not contain a real value',
+            };
+        }
         const history = this.historyRepo.create({
             orderTestId: orderTest.id,
             resultValue: numericValue,

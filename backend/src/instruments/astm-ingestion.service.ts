@@ -11,6 +11,7 @@ import { AuditService } from '../audit/audit.service';
 import { AuditAction } from '../entities/audit-log.entity';
 import { PanelStatusService } from '../panels/panel-status.service';
 import { AstmParserService, AstmResult } from './astm-parser.service';
+import { hasMeaningfulOrderTestResult } from '../order-tests/order-test-result.util';
 
 export interface AstmIngestionResult {
   success: boolean;
@@ -144,15 +145,17 @@ export class AstmIngestionService {
         if (processed.success && processed.orderTestId) {
           processedCount += 1;
           processedOrderTestIds.add(processed.orderTestId);
-        } else {
+        } else if (processed.reason) {
           unmatchedCount += 1;
           await this.storeUnmatched(
             instrument,
             result,
-            processed.reason ?? UnmatchedReason.NO_MAPPING,
+            processed.reason,
             messageRecord.id,
             processed.message,
           );
+        } else {
+          errors.push(`R${result.sequence}: ${processed.message}`);
         }
       } catch (err) {
         const errorMsg = err instanceof Error ? err.message : String(err);
@@ -295,6 +298,20 @@ export class AstmIngestionService {
 
     const { numericValue, textValue } = this.parseResultValue(result.value, mapping.multiplier);
     const flag = this.astmParser.mapFlag(result.flag) as ResultFlag | null;
+    if (
+      !hasMeaningfulOrderTestResult({
+        resultValue: numericValue,
+        resultText: textValue,
+      })
+    ) {
+      this.logger.warn(
+        `Skipping empty ASTM result for orderTest ${orderTest.id} from ${instrument.code}`,
+      );
+      return {
+        success: false,
+        message: 'Instrument result did not contain a real value',
+      };
+    }
 
     const history = this.historyRepo.create({
       orderTestId: orderTest.id,

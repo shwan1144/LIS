@@ -406,7 +406,7 @@ export function OrdersPage() {
       : !selectedCreatedOrder
         ? 'Order details are still loading.'
         : undefined;
-  const canAdminRemoveVerifiedTests =
+  const canAdminOverrideLockedTestRemoval =
     Boolean(user?.isImpersonation) ||
     user?.role === 'LAB_ADMIN' ||
     user?.role === 'SUPER_ADMIN';
@@ -770,12 +770,22 @@ export function OrdersPage() {
       let adminReasonRequired = false;
 
       if (subtreeHasVerified) {
-        if (canAdminRemoveVerifiedTests) {
+        if (canAdminOverrideLockedTestRemoval) {
           removable = true;
           adminReasonRequired = true;
         } else {
           blocked = true;
-          blockedReason = 'Verified tests can be removed only by a lab admin with a reason.';
+          blockedReason =
+            'Verified tests can be removed only by a lab admin with a reason.';
+        }
+      } else if (orderTest.status === 'IN_PROGRESS' && childTests.length > 0) {
+        if (canAdminOverrideLockedTestRemoval) {
+          removable = true;
+          adminReasonRequired = true;
+        } else {
+          blocked = true;
+          blockedReason =
+            'In-progress panels can be removed only by a lab admin with a reason.';
         }
       } else if (orderTest.status === 'REJECTED') {
         removable = true;
@@ -1136,10 +1146,12 @@ export function OrdersPage() {
       return;
     }
 
-    const requiresVerifiedOverride = removedTests.some((test) => test.adminReasonRequired);
-    if (requiresVerifiedOverride) {
-      if (!canAdminRemoveVerifiedTests) {
-        message.error('Verified tests can be removed only by a lab admin with a reason.');
+    const requiresAdminOverride = removedTests.some((test) => test.adminReasonRequired);
+    if (requiresAdminOverride) {
+      if (!canAdminOverrideLockedTestRemoval) {
+        message.error(
+          'Verified tests and in-progress panels can be removed only by a lab admin with a reason.',
+        );
         return;
       }
       if (!editTestsRemovalReason.trim()) {
@@ -1149,8 +1161,8 @@ export function OrdersPage() {
     }
 
     await submitEditedTests({
-      forceRemoveVerified: requiresVerifiedOverride || undefined,
-      removalReason: requiresVerifiedOverride ? editTestsRemovalReason.trim() : undefined,
+      forceRemoveVerified: requiresAdminOverride || undefined,
+      removalReason: requiresAdminOverride ? editTestsRemovalReason.trim() : undefined,
     });
   };
 
@@ -2622,8 +2634,9 @@ export function OrdersPage() {
         <div className="orders-edit-tests-shell">
           <Text className="orders-edit-tests-description" type="secondary">
             Remove pending, completed, and rejected tests here. Removing a panel removes the whole
-            panel. Verified tests require lab-admin override with a reason. Order number and sample
-            sequence numbers stay unchanged.
+            panel. Verified tests and in-progress panels require lab-admin override with a reason.
+            Other in-progress tests stay locked. Order number and sample sequence numbers stay
+            unchanged.
           </Text>
 
           <div className="orders-edit-tests-toolbar">

@@ -27,6 +27,7 @@ import {
 } from '../../api/client';
 import { useAuth } from '../../contexts/AuthContext';
 import { loadAdminLabs } from '../../utils/admin-labs-cache';
+import { getResultFlagTagColor, normalizeResultFlag } from '../../utils/result-flag';
 import {
   ADMIN_DATE_RANGE_EVENT,
   ADMIN_DATE_RANGE_KEY,
@@ -283,12 +284,6 @@ export function AdminOrdersPage() {
       align: 'right',
       render: (value: number | null) => formatMoney(value),
     },
-    {
-      title: 'Flags',
-      key: 'flags',
-      width: 110,
-      render: (_, row) => (row.hasCriticalFlag ? <Tag color="red">Critical</Tag> : '-'),
-    },
   ];
 
   const detailTestRows = useMemo(() => {
@@ -507,7 +502,11 @@ export function AdminOrdersPage() {
                   key: 'flag',
                   width: 80,
                   render: (value: string | null) =>
-                    value ? <Tag color={value === 'HH' || value === 'LL' ? 'red' : 'orange'}>{value}</Tag> : '-',
+                    value ? (
+                      <Tag color={getResultFlagTagColor(value)}>
+                        {normalizeResultFlag(value) ?? value}
+                      </Tag>
+                    ) : '-',
                 },
               ]}
             />

@@ -100,7 +100,7 @@ export class AstmParserService {
     };
   }
 
-  mapFlag(astmFlag: string): 'N' | 'H' | 'L' | 'HH' | 'LL' | 'POS' | 'NEG' | 'ABN' | null {
+  mapFlag(astmFlag: string): 'N' | 'H' | 'L' | 'POS' | 'NEG' | 'ABN' | null {
     const flag = (astmFlag || '').trim().toUpperCase();
     if (!flag) return null;
 
@@ -113,10 +113,10 @@ export class AstmParserService {
         return 'L';
       case 'HH':
       case '>':
-        return 'HH';
+        return 'H';
       case 'LL':
       case '<':
-        return 'LL';
+        return 'L';
       case 'POS':
       case 'POSITIVE':
       case 'REACTIVE':
@@ -229,4 +229,3 @@ export class AstmParserService {
     return maybeMessage || cleaned;
   }
 }
-

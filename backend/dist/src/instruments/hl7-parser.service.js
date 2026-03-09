@@ -281,11 +281,11 @@ let HL7ParserService = class HL7ParserService {
             case 'HH':
             case 'PH':
             case '>':
-                return 'HH';
+                return 'H';
             case 'LL':
             case 'PL':
             case '<':
-                return 'LL';
+                return 'L';
             case 'POS':
             case 'POSITIVE':
             case 'REACTIVE':

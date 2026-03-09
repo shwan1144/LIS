@@ -15,6 +15,7 @@ import { Department } from '../entities/department.entity';
 import type {
   TestParameterDefinition,
   TestResultEntryType,
+  TestResultFlag,
   TestResultTextOption,
 } from '../entities/test.entity';
 import { AuditService } from '../audit/audit.service';
@@ -29,7 +30,13 @@ import {
   getUtcRangeForLabDate,
   normalizeLabTimeZone,
 } from '../database/lab-timezone.util';
-import { formatPatientAgeDisplay } from '../patients/patient-age.util';
+import {
+  formatPatientAgeDisplay,
+  getPatientAgeSnapshot,
+  getPatientAgeYears,
+} from '../patients/patient-age.util';
+import { hasMeaningfulOrderTestResult } from '../order-tests/order-test-result.util';
+import { normalizeOrderTestFlag } from '../order-tests/order-test-flag.util';
 
 export interface WorklistItem {
   id: string;
@@ -337,8 +344,11 @@ export class WorklistService {
 
       // Process items to calculate age and resolve normal ranges by age+sex.
       const items: WorklistItem[] = rawItems.map((item) => {
-        // Calculate age
-        const patientAge = this.computePatientAgeYears(item.patientDob);
+        const patientAgeSnapshot = this.computePatientAgeSnapshot(
+          item.patientDob,
+          item.registeredAt,
+        );
+        const patientAge = patientAgeSnapshot?.years ?? null;
         const patientAgeDisplay = formatPatientAgeDisplay(
           (item.patientDob as string | Date | null | undefined) ?? null,
           (item.registeredAt as string | Date | null | undefined) ?? null,
@@ -357,7 +367,7 @@ export class WorklistService {
             numericAgeRanges,
           },
           item.patientSex,
-          patientAge,
+          patientAgeSnapshot,
         );
 
         return {
@@ -396,7 +406,7 @@ export class WorklistService {
               ? parseFloat(item.resultValue)
               : null,
           resultText: item.resultText,
-          flag: item.flag,
+          flag: normalizeOrderTestFlag(item.flag as string | null | undefined),
           resultedAt: item.resultedAt,
           resultedBy: item.resultedBy ?? null,
           verifiedAt: item.verifiedAt,
@@ -643,7 +653,7 @@ export class WorklistService {
           registeredAt: new Date(row.registeredAt),
           patientName: row.patientName ?? '-',
           patientSex: row.patientSex ?? null,
-          patientAge: this.computePatientAgeYears(row.patientDob),
+          patientAge: this.computePatientAgeYears(row.patientDob, row.registeredAt),
           patientAgeDisplay: formatPatientAgeDisplay(row.patientDob, row.registeredAt),
           progressTotalRoot,
           progressPending,
@@ -801,7 +811,10 @@ export class WorklistService {
         .getRawMany<Record<string, unknown>>();
 
       const items = rawItems.map((item) => this.mapRawWorklistItem(item));
-      const patientAge = this.computePatientAgeYears(order.patient?.dateOfBirth ?? null);
+      const patientAge = this.computePatientAgeYears(
+        order.patient?.dateOfBirth ?? null,
+        order.registeredAt,
+      );
       const patientAgeDisplay = formatPatientAgeDisplay(
         order.patient?.dateOfBirth ?? null,
         order.registeredAt,
@@ -880,7 +893,11 @@ export class WorklistService {
         throw new NotFoundException('Order test not found');
       }
 
-      const patientAge = this.computePatientAgeYears(orderTest.sample.order.patient?.dateOfBirth);
+      const patientAgeSnapshot = this.computePatientAgeSnapshot(
+        orderTest.sample.order.patient?.dateOfBirth,
+        orderTest.sample.order.registeredAt,
+      );
+      const patientAge = patientAgeSnapshot?.years ?? null;
       const patientAgeDisplay = formatPatientAgeDisplay(
         orderTest.sample.order.patient?.dateOfBirth ?? null,
         orderTest.sample.order.registeredAt,
@@ -896,7 +913,7 @@ export class WorklistService {
           numericAgeRanges: orderTest.test.numericAgeRanges,
         },
         orderTest.sample.order.patient?.sex ?? null,
-        patientAge,
+        patientAgeSnapshot,
       );
 
       return {
@@ -924,7 +941,7 @@ export class WorklistService {
         status: orderTest.status,
         resultValue: orderTest.resultValue ?? null,
         resultText: orderTest.resultText ?? null,
-        flag: orderTest.flag ?? null,
+        flag: normalizeOrderTestFlag(orderTest.flag ?? null),
         resultedAt: orderTest.resultedAt ?? null,
         resultedBy: orderTest.resultedBy ?? null,
         verifiedAt: orderTest.verifiedAt ?? null,
@@ -1066,16 +1083,23 @@ export class WorklistService {
         orderTest.flag = optionFlag;
       } else {
         // Calculate numeric flag based on normal range
-        const patientAgeYears = this.computePatientAgeYears(
+        const patientAgeSnapshot = this.computePatientAgeSnapshot(
           orderTest.sample.order.patient?.dateOfBirth ?? null,
+          orderTest.sample.order.registeredAt,
         );
         orderTest.flag = this.calculateFlag(
           orderTest.resultValue,
           orderTest.test,
           orderTest.sample.order.patient?.sex || null,
-          patientAgeYears,
+          patientAgeSnapshot,
         );
       }
+    }
+
+    if (!hasMeaningfulOrderTestResult(orderTest)) {
+      throw new BadRequestException(
+        'Cannot complete a test without a real result value, text, or parameters',
+      );
     }
 
     // Update status and timestamp
@@ -1217,16 +1241,21 @@ export class WorklistService {
         if (optionFlag) {
           orderTest.flag = optionFlag;
         } else {
-          const patientAgeYears = this.computePatientAgeYears(
+          const patientAgeSnapshot = this.computePatientAgeSnapshot(
             orderTest.sample.order.patient?.dateOfBirth ?? null,
+            orderTest.sample.order.registeredAt,
           );
           orderTest.flag = this.calculateFlag(
             orderTest.resultValue,
             orderTest.test,
             orderTest.sample.order.patient?.sex || null,
-            patientAgeYears,
+            patientAgeSnapshot,
           );
         }
+      }
+
+      if (!hasMeaningfulOrderTestResult(orderTest)) {
+        continue;
       }
 
       const isUpdate = orderTest.resultedAt !== null;
@@ -1320,6 +1349,11 @@ export class WorklistService {
     if (orderTest.status === OrderTestStatus.PENDING) {
       throw new BadRequestException('Cannot verify a test without a result');
     }
+    if (!hasMeaningfulOrderTestResult(orderTest)) {
+      throw new BadRequestException(
+        'Cannot verify a test without a real result value, text, or parameters',
+      );
+    }
 
     orderTest.status = OrderTestStatus.VERIFIED;
     orderTest.verifiedAt = new Date();
@@ -1380,7 +1414,12 @@ export class WorklistService {
     let failed = 0;
 
     for (const ot of orderTests) {
-      if (ot.sample.order.labId !== labId || ot.status === OrderTestStatus.VERIFIED || ot.status === OrderTestStatus.PENDING) {
+      if (
+        ot.sample.order.labId !== labId ||
+        ot.status === OrderTestStatus.VERIFIED ||
+        ot.status === OrderTestStatus.PENDING ||
+        !hasMeaningfulOrderTestResult(ot)
+      ) {
         failed++;
         continue;
       }
@@ -1518,9 +1557,11 @@ export class WorklistService {
   }
 
   private mapRawWorklistItem(item: Record<string, unknown>): WorklistItem {
-    const patientAge = this.computePatientAgeYears(
+    const patientAgeSnapshot = this.computePatientAgeSnapshot(
       (item.patientDob as string | Date | null | undefined) ?? null,
+      (item.registeredAt as string | Date | null | undefined) ?? null,
     );
+    const patientAge = patientAgeSnapshot?.years ?? null;
     const patientAgeDisplay = formatPatientAgeDisplay(
       (item.patientDob as string | Date | null | undefined) ?? null,
       (item.registeredAt as string | Date | null | undefined) ?? null,
@@ -1538,7 +1579,7 @@ export class WorklistService {
         numericAgeRanges,
       },
       (item.patientSex as string | null) ?? null,
-      patientAge,
+      patientAgeSnapshot,
     );
 
     const rawResultValue = item.resultValue;
@@ -1571,7 +1612,9 @@ export class WorklistService {
         item.resultEntryType as string | null | undefined,
       ),
       resultTextOptions:
-        (parseJsonField(item.resultTextOptions) as TestResultTextOption[] | null) ?? null,
+        this.normalizeResultTextOptions(
+          (parseJsonField(item.resultTextOptions) as TestResultTextOption[] | null) ?? null,
+        ),
       allowCustomResultText: Boolean(item.allowCustomResultText),
       tubeType: (item.tubeType as string | null) ?? null,
       status: item.status as OrderTestStatus,
@@ -1580,7 +1623,7 @@ export class WorklistService {
           ? parseFloat(String(rawResultValue))
           : null,
       resultText: (item.resultText as string | null) ?? null,
-      flag: (item.flag as ResultFlag | null) ?? null,
+      flag: normalizeOrderTestFlag(item.flag as string | null | undefined),
       resultedAt: (item.resultedAt as Date | null) ?? null,
       resultedBy: (item.resultedBy as string | null) ?? null,
       verifiedAt: (item.verifiedAt as Date | null) ?? null,
@@ -1630,13 +1673,13 @@ export class WorklistService {
     const normalized = options
       .map((option) => ({
         value: this.normalizeResultText(option?.value),
-        flag: this.toResultFlag(option?.flag ?? null),
+        flag: this.toResultTextOptionFlag(option?.flag ?? null),
         isDefault: Boolean(option?.isDefault),
       }))
       .filter(
         (option): option is {
           value: string;
-          flag: ResultFlag | null;
+          flag: TestResultFlag | null;
           isDefault: boolean;
         } => Boolean(option.value),
       )
@@ -1671,16 +1714,17 @@ export class WorklistService {
   }
 
   private toResultFlag(flag: string | null | undefined): ResultFlag | null {
-    const normalized = String(flag ?? '').trim().toUpperCase();
-    if (!normalized) return null;
-    if (normalized === ResultFlag.NORMAL) return ResultFlag.NORMAL;
-    if (normalized === ResultFlag.HIGH) return ResultFlag.HIGH;
-    if (normalized === ResultFlag.LOW) return ResultFlag.LOW;
-    if (normalized === ResultFlag.CRITICAL_HIGH) return ResultFlag.CRITICAL_HIGH;
-    if (normalized === ResultFlag.CRITICAL_LOW) return ResultFlag.CRITICAL_LOW;
-    if (normalized === ResultFlag.POSITIVE) return ResultFlag.POSITIVE;
-    if (normalized === ResultFlag.NEGATIVE) return ResultFlag.NEGATIVE;
-    if (normalized === ResultFlag.ABNORMAL) return ResultFlag.ABNORMAL;
+    return normalizeOrderTestFlag(flag);
+  }
+
+  private toResultTextOptionFlag(flag: string | null | undefined): TestResultFlag | null {
+    const normalized = normalizeOrderTestFlag(flag);
+    if (normalized === ResultFlag.NORMAL) return 'N';
+    if (normalized === ResultFlag.HIGH) return 'H';
+    if (normalized === ResultFlag.LOW) return 'L';
+    if (normalized === ResultFlag.POSITIVE) return 'POS';
+    if (normalized === ResultFlag.NEGATIVE) return 'NEG';
+    if (normalized === ResultFlag.ABNORMAL) return 'ABN';
     return null;
   }
 
@@ -1688,14 +1732,14 @@ export class WorklistService {
     resultValue: number | null,
     test: Test,
     patientSex: string | null,
-    patientAgeYears: number | null,
+    patientAgeSnapshot: ReturnType<WorklistService['computePatientAgeSnapshot']>,
   ): ResultFlag | null {
     if (resultValue === null) return null;
 
     const { normalMin, normalMax } = resolveNumericRange(
       test,
       patientSex,
-      patientAgeYears,
+      patientAgeSnapshot,
     );
 
     // No range defined
@@ -1705,20 +1749,10 @@ export class WorklistService {
 
     // Check flag
     if (normalMax !== null && resultValue > parseFloat(normalMax.toString())) {
-      // Check for critical high (e.g., 2x the upper limit)
-      const criticalThreshold = parseFloat(normalMax.toString()) * 1.5;
-      if (resultValue > criticalThreshold) {
-        return ResultFlag.CRITICAL_HIGH;
-      }
       return ResultFlag.HIGH;
     }
 
     if (normalMin !== null && resultValue < parseFloat(normalMin.toString())) {
-      // Check for critical low (e.g., 50% of lower limit)
-      const criticalThreshold = parseFloat(normalMin.toString()) * 0.5;
-      if (resultValue < criticalThreshold) {
-        return ResultFlag.CRITICAL_LOW;
-      }
       return ResultFlag.LOW;
     }
 
@@ -1727,18 +1761,16 @@ export class WorklistService {
 
   private computePatientAgeYears(
     dateOfBirth: string | Date | null | undefined,
+    referenceDate: string | Date | null | undefined = new Date(),
   ): number | null {
-    if (!dateOfBirth) return null;
-    const dob = new Date(dateOfBirth);
-    if (Number.isNaN(dob.getTime())) return null;
+    return getPatientAgeYears(dateOfBirth, referenceDate);
+  }
 
-    const today = new Date();
-    let age = today.getFullYear() - dob.getFullYear();
-    const monthDiff = today.getMonth() - dob.getMonth();
-    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < dob.getDate())) {
-      age--;
-    }
-    return age < 0 ? null : age;
+  private computePatientAgeSnapshot(
+    dateOfBirth: string | Date | null | undefined,
+    referenceDate: string | Date | null | undefined = new Date(),
+  ) {
+    return getPatientAgeSnapshot(dateOfBirth, referenceDate);
   }
 
   private resolveWorklistPerfLogThresholdMs(): number {

@@ -33,6 +33,7 @@ export interface ReportResultsTableStyle {
     rowStripeColor: string;
     abnormalRowBackgroundColor: string;
     referenceValueColor: string;
+    showStatusColumn: boolean;
     showDepartmentRow: boolean;
     departmentRowBackgroundColor: string;
     departmentRowTextColor: string;

@@ -51,6 +51,7 @@ import {
   type TestTubeType,
   type TestParameterDefinition,
   type TestNumericAgeRange,
+  type TestNumericAgeUnit,
   type TestResultEntryType,
   type TestResultTextOption,
   type ShiftDto,
@@ -87,11 +88,15 @@ const RESULT_FLAG_OPTIONS: { label: string; value: NonNullable<TestResultTextOpt
   { label: 'Normal (N)', value: 'N' },
   { label: 'High (H)', value: 'H' },
   { label: 'Low (L)', value: 'L' },
-  { label: 'Critical High (HH)', value: 'HH' },
-  { label: 'Critical Low (LL)', value: 'LL' },
   { label: 'Positive (POS)', value: 'POS' },
   { label: 'Negative (NEG)', value: 'NEG' },
   { label: 'Abnormal (ABN)', value: 'ABN' },
+];
+
+const AGE_UNIT_OPTIONS: { label: string; value: TestNumericAgeUnit }[] = [
+  { label: 'Days', value: 'DAY' },
+  { label: 'Months', value: 'MONTH' },
+  { label: 'Years', value: 'YEAR' },
 ];
 
 
@@ -112,6 +117,14 @@ function toNumberOrNull(value: unknown): number | null {
   return parseFiniteNumber(value);
 }
 
+function normalizeAgeUnit(value: unknown): TestNumericAgeUnit {
+  const normalized = String(value ?? '').trim().toUpperCase();
+  if (normalized === 'DAY' || normalized === 'MONTH' || normalized === 'YEAR') {
+    return normalized;
+  }
+  return 'YEAR';
+}
+
 function normalizeTestDtoNumericFields(test: TestDto): TestDto {
   return {
     ...test,
@@ -123,18 +136,44 @@ function normalizeTestDtoNumericFields(test: TestDto): TestDto {
     normalMaxFemale: toNumberOrNull(test.normalMaxFemale),
     numericAgeRanges: (test.numericAgeRanges ?? []).map((range) => ({
       ...range,
-      minAgeYears: toNumberOrNull(range.minAgeYears),
-      maxAgeYears: toNumberOrNull(range.maxAgeYears),
+      ageUnit: normalizeAgeUnit(range.ageUnit),
+      minAge:
+        toNumberOrNull(range.minAge) ??
+        toNumberOrNull(range.minAgeYears),
+      maxAge:
+        toNumberOrNull(range.maxAge) ??
+        toNumberOrNull(range.maxAgeYears),
       normalMin: toNumberOrNull(range.normalMin),
       normalMax: toNumberOrNull(range.normalMax),
     })),
   };
 }
 
-function formatRangeNumericValue(value: unknown): string {
-  const parsed = parseFiniteNumber(value);
-  return parsed === null ? '-' : String(parsed);
+function formatTestPrice(value: number | null | undefined): string {
+  if (value === null || value === undefined || Number.isNaN(Number(value))) {
+    return '-';
+  }
+  return `${new Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(Number(value))} IQD`;
 }
+
+function formatExpectedTat(minutes: number | null | undefined): string {
+  if (minutes === null || minutes === undefined || !Number.isFinite(Number(minutes))) {
+    return '-';
+  }
+
+  const normalized = Math.max(0, Math.round(Number(minutes)));
+  if (normalized < 60) {
+    return `${normalized} min`;
+  }
+
+  const hours = Math.floor(normalized / 60);
+  const remainingMinutes = normalized % 60;
+  if (remainingMinutes === 0) {
+    return `${hours} hr`;
+  }
+  return `${hours} hr ${remainingMinutes} min`;
+}
+
 
 /** Sortable subtest list for panel editor — proper component so hooks work correctly */
 function SortableSubtestList({
@@ -335,8 +374,9 @@ export function TestsPage() {
         normalMax: toNumberOrUndefined(fullTest.normalMax),
         numericAgeRanges: (fullTest.numericAgeRanges ?? []).map((range) => ({
           sex: range.sex ?? 'ANY',
-          minAgeYears: toNumberOrUndefined(range.minAgeYears),
-          maxAgeYears: toNumberOrUndefined(range.maxAgeYears),
+          ageUnit: normalizeAgeUnit(range.ageUnit),
+          minAge: toNumberOrUndefined(range.minAge ?? range.minAgeYears),
+          maxAge: toNumberOrUndefined(range.maxAge ?? range.maxAgeYears),
           normalMin: toNumberOrUndefined(range.normalMin),
           normalMax: toNumberOrUndefined(range.normalMax),
         })),
@@ -499,8 +539,9 @@ export function TestsPage() {
       (values.numericAgeRanges ?? [])
         .map((range) => ({
           sex: (range.sex || 'ANY') as 'ANY' | 'M' | 'F',
-          minAgeYears: toNumberOrNull(range.minAgeYears),
-          maxAgeYears: toNumberOrNull(range.maxAgeYears),
+          ageUnit: normalizeAgeUnit(range.ageUnit),
+          minAge: toNumberOrNull(range.minAge ?? range.minAgeYears),
+          maxAge: toNumberOrNull(range.maxAge ?? range.maxAgeYears),
           normalMin: toNumberOrNull(range.normalMin),
           normalMax: toNumberOrNull(range.normalMax),
         }))
@@ -538,10 +579,10 @@ export function TestsPage() {
       ...values,
       normalMin: normalizedNormalMin,
       normalMax: normalizedNormalMax,
-      normalMinMale: null,
-      normalMaxMale: null,
-      normalMinFemale: null,
-      normalMaxFemale: null,
+      normalMinMale: toNumberOrNull(values.normalMinMale),
+      normalMaxMale: toNumberOrNull(values.normalMaxMale),
+      normalMinFemale: toNumberOrNull(values.normalMinFemale),
+      normalMaxFemale: toNumberOrNull(values.normalMaxFemale),
       sortOrder: normalizedSortOrder,
       expectedCompletionMinutes: normalizedExpectedCompletionMinutes,
       category: categoryValue ? categoryValue.trim() || null : null,
@@ -656,24 +697,6 @@ export function TestsPage() {
     });
   };
 
-  const formatNormalRange = (test: TestDto) => {
-    const ageRulesCount = test.numericAgeRanges?.length ?? 0;
-    if (test.normalTextMale || test.normalTextFemale) {
-      const male = test.normalTextMale || '-';
-      const female = test.normalTextFemale || '-';
-      return `Male: ${male} | Female: ${female}`;
-    }
-    if (test.normalText) return test.normalText;
-    if (test.normalMin !== null || test.normalMax !== null) {
-      const min = formatRangeNumericValue(test.normalMin);
-      const max = formatRangeNumericValue(test.normalMax);
-      const base = `${min} - ${max}${test.unit ? ` ${test.unit}` : ''}`;
-      return ageRulesCount > 0 ? `${base} (+${ageRulesCount} age rule${ageRulesCount > 1 ? 's' : ''})` : base;
-    }
-    if (ageRulesCount > 0) return `Age-based (${ageRulesCount} rule${ageRulesCount > 1 ? 's' : ''})`;
-    return '-';
-  };
-
   const columns: ColumnsType<TestDto> = [
     {
       title: 'Code',
@@ -749,10 +772,19 @@ export function TestsPage() {
       render: (unit: string | null) => unit || '-',
     },
     {
-      title: 'Normal Range',
-      key: 'normalRange',
-      width: 190,
-      render: (_, record) => formatNormalRange(record),
+      title: 'Price',
+      dataIndex: 'defaultPrice',
+      key: 'defaultPrice',
+      width: 130,
+      align: 'right',
+      render: (value: number | null | undefined) => formatTestPrice(value),
+    },
+    {
+      title: 'Expected TAT',
+      dataIndex: 'expectedCompletionMinutes',
+      key: 'expectedCompletionMinutes',
+      width: 130,
+      render: (value: number | null | undefined) => formatExpectedTat(value),
     },
     {
       title: 'Active',
@@ -1209,8 +1241,31 @@ export function TestsPage() {
                         children: (
                           <>
                             <Text type="secondary" style={{ display: 'block', marginBottom: 12 }}>
-                              Enter text exactly as you want it shown in normal range for each gender.
+                              Optional sex-specific numeric ranges are used for automatic High/Low status before
+                              falling back to the general range.
                             </Text>
+                            <Row gutter={16}>
+                              <Col span={6}>
+                                <Form.Item name="normalMinMale" label="Male Min">
+                                  <InputNumber style={{ width: '100%' }} placeholder="Minimum" />
+                                </Form.Item>
+                              </Col>
+                              <Col span={6}>
+                                <Form.Item name="normalMaxMale" label="Male Max">
+                                  <InputNumber style={{ width: '100%' }} placeholder="Maximum" />
+                                </Form.Item>
+                              </Col>
+                              <Col span={6}>
+                                <Form.Item name="normalMinFemale" label="Female Min">
+                                  <InputNumber style={{ width: '100%' }} placeholder="Minimum" />
+                                </Form.Item>
+                              </Col>
+                              <Col span={6}>
+                                <Form.Item name="normalMaxFemale" label="Female Max">
+                                  <InputNumber style={{ width: '100%' }} placeholder="Maximum" />
+                                </Form.Item>
+                              </Col>
+                            </Row>
                             <Row gutter={16}>
                               <Col span={12}>
                                 <Form.Item name="normalTextMale" label="Normal Text (Male)">
@@ -1259,7 +1314,7 @@ export function TestsPage() {
                                       }}
                                     >
                                       <Row gutter={12} align="bottom">
-                                        <Col span={4}>
+                                        <Col span={3}>
                                           <Form.Item
                                             {...restField}
                                             name={[name, 'sex']}
@@ -1277,26 +1332,37 @@ export function TestsPage() {
                                           </Form.Item>
                                         </Col>
                                         <Col span={4}>
-                                          <Form.Item {...restField} name={[name, 'minAgeYears']} label="Min age (y)">
+                                          <Form.Item
+                                            {...restField}
+                                            name={[name, 'ageUnit']}
+                                            label="Age unit"
+                                            rules={[{ required: true, message: 'Required' }]}
+                                            initialValue="YEAR"
+                                          >
+                                            <Select options={AGE_UNIT_OPTIONS} />
+                                          </Form.Item>
+                                        </Col>
+                                        <Col span={3}>
+                                          <Form.Item {...restField} name={[name, 'minAge']} label="Min age">
                                             <InputNumber style={{ width: '100%' }} min={0} placeholder="0" />
                                           </Form.Item>
                                         </Col>
-                                        <Col span={4}>
-                                          <Form.Item {...restField} name={[name, 'maxAgeYears']} label="Max age (y)">
+                                        <Col span={3}>
+                                          <Form.Item {...restField} name={[name, 'maxAge']} label="Max age">
                                             <InputNumber style={{ width: '100%' }} min={0} placeholder="120" />
                                           </Form.Item>
                                         </Col>
-                                        <Col span={5}>
+                                        <Col span={4}>
                                           <Form.Item {...restField} name={[name, 'normalMin']} label="Normal min">
                                             <InputNumber style={{ width: '100%' }} placeholder="Min value" />
                                           </Form.Item>
                                         </Col>
-                                        <Col span={5}>
+                                        <Col span={4}>
                                           <Form.Item {...restField} name={[name, 'normalMax']} label="Normal max">
                                             <InputNumber style={{ width: '100%' }} placeholder="Max value" />
                                           </Form.Item>
                                         </Col>
-                                        <Col span={2}>
+                                        <Col span={3}>
                                           <Button
                                             danger
                                             type="text"
@@ -1315,8 +1381,9 @@ export function TestsPage() {
                                     onClick={() =>
                                       add({
                                         sex: 'ANY',
-                                        minAgeYears: null,
-                                        maxAgeYears: null,
+                                        ageUnit: 'YEAR',
+                                        minAge: null,
+                                        maxAge: null,
                                         normalMin: null,
                                         normalMax: null,
                                       })

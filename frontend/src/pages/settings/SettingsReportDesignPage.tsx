@@ -12,8 +12,8 @@ const REPORT_DESIGN_VERSION_STORAGE_KEY = 'lis_report_design_version';
 const MAX_BANNER_FOOTER_BYTES = Math.floor(2.75 * 1024 * 1024);
 const MIN_REPORT_BANNER_WIDTH = 2400;
 const MIN_REPORT_BANNER_HEIGHT = 600;
-const REPORT_BANNER_RECOMMENDED_SIZE_MM = '198 x 50 mm';
-const REPORT_FOOTER_RECOMMENDED_SIZE_MM = '198 x 18 mm';
+const REPORT_BANNER_RECOMMENDED_SIZE_MM = '198 x 50 mm / 2400 x 600 px';
+const REPORT_FOOTER_RECOMMENDED_SIZE_MM = '198 x 18 mm / 2400 x 600 px';
 
 type BrandingKey = keyof ReportBrandingDto;
 

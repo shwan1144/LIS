@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { UnmatchedInstrumentResult, UnmatchedReason } from '../entities/unmatched-instrument-result.entity';
@@ -7,6 +7,8 @@ import { PanelStatusService } from '../panels/panel-status.service';
 import { AuditService } from '../audit/audit.service';
 import { AuditAction } from '../entities/audit-log.entity';
 import { LabActorContext } from '../types/lab-actor-context';
+import { hasMeaningfulOrderTestResult } from '../order-tests/order-test-result.util';
+import { normalizeOrderTestFlag } from '../order-tests/order-test-flag.util';
 
 export interface UnmatchedResultDto {
   id: string;
@@ -79,7 +81,9 @@ export class UnmatchedResultsService {
     }
 
     const total = await qb.getCount();
-    const items = await qb.skip(skip).take(size).getMany();
+    const items = (await qb.skip(skip).take(size).getMany()).map((item) =>
+      this.normalizeUnmatchedResult(item),
+    );
 
     return { items, total };
   }
@@ -97,7 +101,7 @@ export class UnmatchedResultsService {
       throw new NotFoundException('Unmatched result not found');
     }
 
-    return result;
+    return this.normalizeUnmatchedResult(result);
   }
 
   /**
@@ -136,10 +140,20 @@ export class UnmatchedResultsService {
       // Update OrderTest with result from unmatched
       const previousValue = orderTest.resultValue;
       const previousText = orderTest.resultText;
+      if (
+        !hasMeaningfulOrderTestResult({
+          resultValue: unmatched.resultValue,
+          resultText: unmatched.resultText,
+        })
+      ) {
+        throw new BadRequestException(
+          'Cannot complete a test without a real result value, text, or parameters',
+        );
+      }
 
       orderTest.resultValue = unmatched.resultValue;
       orderTest.resultText = unmatched.resultText;
-      orderTest.flag = unmatched.flag;
+      orderTest.flag = normalizeOrderTestFlag(unmatched.flag);
       orderTest.resultedAt = unmatched.receivedAt;
       orderTest.resultedBy = actor.userId;
       orderTest.status = OrderTestStatus.COMPLETED;
@@ -181,7 +195,7 @@ export class UnmatchedResultsService {
         newValues: {
           resultValue: unmatched.resultValue,
           resultText: unmatched.resultText,
-          flag: unmatched.flag,
+          flag: normalizeOrderTestFlag(unmatched.flag),
           source: 'unmatched_inbox',
           unmatchedResultId: unmatched.id,
           ...impersonationAudit,
@@ -201,7 +215,14 @@ export class UnmatchedResultsService {
       unmatched.resolutionNotes = dto.notes || 'Discarded by user';
     }
 
-    return this.unmatchedRepo.save(unmatched);
+    return this.normalizeUnmatchedResult(await this.unmatchedRepo.save(unmatched));
+  }
+
+  private normalizeUnmatchedResult(
+    result: UnmatchedInstrumentResult,
+  ): UnmatchedInstrumentResult {
+    result.flag = normalizeOrderTestFlag(result.flag) ?? result.flag ?? null;
+    return result;
   }
 
   /**

@@ -10,15 +10,19 @@ export interface TestParameterDefinition {
     defaultValue?: string;
 }
 export type NumericAgeRangeSex = 'ANY' | 'M' | 'F';
+export type NumericAgeRangeUnit = 'DAY' | 'MONTH' | 'YEAR';
 export interface TestNumericAgeRange {
     sex: NumericAgeRangeSex;
+    ageUnit?: NumericAgeRangeUnit | null;
+    minAge?: number | null;
+    maxAge?: number | null;
     minAgeYears?: number | null;
     maxAgeYears?: number | null;
     normalMin?: number | null;
     normalMax?: number | null;
 }
 export type TestResultEntryType = 'NUMERIC' | 'QUALITATIVE' | 'TEXT';
-export type TestResultFlag = 'N' | 'H' | 'L' | 'HH' | 'LL' | 'POS' | 'NEG' | 'ABN';
+export type TestResultFlag = 'N' | 'H' | 'L' | 'POS' | 'NEG' | 'ABN';
 export interface TestResultTextOption {
     value: string;
     flag?: TestResultFlag | null;

@@ -39,6 +39,7 @@ import {
   normalizeLabTimeZone,
 } from '../database/lab-timezone.util';
 import { LabActorContext } from '../types/lab-actor-context';
+import { normalizeOrderTestFlag } from '../order-tests/order-test-flag.util';
 
 export interface WorklistItemStored {
   rowId: string;
@@ -100,7 +101,7 @@ type OrderProgressTarget = {
 
 type RootOrderTestRemovalAccess = {
   removable: boolean;
-  requiresVerifiedOverride: boolean;
+  requiresAdminOverride: boolean;
   blockedReason: string | null;
 };
 
@@ -110,7 +111,7 @@ type RootOrderTestAuditItem = {
   code: string;
   name: string;
   status: OrderTestStatus;
-  requiresVerifiedOverride: boolean;
+  requiresAdminOverride: boolean;
   isPanel: boolean;
 };
 
@@ -647,8 +648,8 @@ export class OrdersService {
     }
     const desiredSet = new Set(uniqueTestIds);
     const requestedRemovalReason = options?.removalReason?.trim() || null;
-    const forceRemoveVerified = options?.forceRemoveVerified === true;
-    const canForceRemoveVerified = this.canForceRemoveVerified(actor, actorRole);
+    const forceRemoveLockedTests = options?.forceRemoveVerified === true;
+    const canForceRemoveLockedTests = this.canForceRemoveLockedTests(actor, actorRole);
 
     const updateResult = await this.orderRepo.manager.transaction(async (manager) => {
       const orderRepo = manager.getRepository(Order);
@@ -710,21 +711,21 @@ export class OrdersService {
         );
       }
 
-      const verifiedOverrideRemovals = rootsToRemove.filter(
-        ({ access }) => access.requiresVerifiedOverride,
+      const adminOverrideRemovals = rootsToRemove.filter(
+        ({ access }) => access.requiresAdminOverride,
       );
-      if (verifiedOverrideRemovals.length > 0) {
-        const labels = verifiedOverrideRemovals
+      if (adminOverrideRemovals.length > 0) {
+        const labels = adminOverrideRemovals
           .map(({ orderTest }) => this.getOrderTestLabel(orderTest))
           .join(', ');
-        if (!canForceRemoveVerified || !forceRemoveVerified) {
+        if (!canForceRemoveLockedTests || !forceRemoveLockedTests) {
           throw new BadRequestException(
-            `Admin override is required to remove verified tests: ${labels}.`,
+            `Lab-admin override is required to remove these tests: ${labels}.`,
           );
         }
         if (!requestedRemovalReason) {
           throw new BadRequestException(
-            'Removal reason is required when removing verified tests.',
+            'Removal reason is required when removing tests with admin override.',
           );
         }
       }
@@ -919,7 +920,7 @@ export class OrdersService {
           this.buildRootOrderTestAuditItem(
             orderTest,
             childOrderTests,
-            access.requiresVerifiedOverride,
+            access.requiresAdminOverride,
           ),
         ),
         addedTests: addedRootTests
@@ -930,8 +931,8 @@ export class OrdersService {
             code: test.code,
             name: test.name,
           })),
-        verifiedRemovalOverrideUsed: verifiedOverrideRemovals.length > 0,
-        removalReason: verifiedOverrideRemovals.length > 0 ? requestedRemovalReason : null,
+        adminRemovalOverrideUsed: adminOverrideRemovals.length > 0,
+        removalReason: adminOverrideRemovals.length > 0 ? requestedRemovalReason : null,
       };
     });
 
@@ -965,7 +966,7 @@ export class OrdersService {
           testIds: uniqueTestIds,
           removedRootTests: updateResult.removedRootTests,
           addedTests: updateResult.addedTests,
-          verifiedRemovalOverrideUsed: updateResult.verifiedRemovalOverrideUsed,
+          adminRemovalOverrideUsed: updateResult.adminRemovalOverrideUsed,
           removalReason: updateResult.removalReason,
         },
         description: descriptionParts.join('; '),
@@ -1178,7 +1179,7 @@ export class OrdersService {
     };
   }
 
-  private canForceRemoveVerified(actor: LabActorContext, actorRole?: string): boolean {
+  private canForceRemoveLockedTests(actor: LabActorContext, actorRole?: string): boolean {
     return (
       actor.isImpersonation ||
       actorRole === 'LAB_ADMIN' ||
@@ -1195,7 +1196,7 @@ export class OrdersService {
     if (hasVerified) {
       return {
         removable: true,
-        requiresVerifiedOverride: true,
+        requiresAdminOverride: true,
         blockedReason: null,
       };
     }
@@ -1203,7 +1204,7 @@ export class OrdersService {
     if (rootOrderTest.status === OrderTestStatus.REJECTED) {
       return {
         removable: true,
-        requiresVerifiedOverride: false,
+        requiresAdminOverride: false,
         blockedReason: null,
       };
     }
@@ -1211,7 +1212,18 @@ export class OrdersService {
     if (rootOrderTest.status === OrderTestStatus.COMPLETED) {
       return {
         removable: true,
-        requiresVerifiedOverride: false,
+        requiresAdminOverride: false,
+        blockedReason: null,
+      };
+    }
+
+    if (
+      rootOrderTest.status === OrderTestStatus.IN_PROGRESS &&
+      childOrderTests.length > 0
+    ) {
+      return {
+        removable: true,
+        requiresAdminOverride: true,
         blockedReason: null,
       };
     }
@@ -1222,14 +1234,14 @@ export class OrdersService {
     ) {
       return {
         removable: true,
-        requiresVerifiedOverride: false,
+        requiresAdminOverride: false,
         blockedReason: null,
       };
     }
 
     return {
       removable: false,
-      requiresVerifiedOverride: false,
+      requiresAdminOverride: false,
       blockedReason: 'Only pending, completed, and rejected tests can be removed. In-progress tests stay locked.',
     };
   }
@@ -1237,7 +1249,7 @@ export class OrdersService {
   private buildRootOrderTestAuditItem(
     rootOrderTest: OrderTest,
     childOrderTests: OrderTest[],
-    requiresVerifiedOverride: boolean,
+    requiresAdminOverride: boolean,
   ): RootOrderTestAuditItem {
     return {
       id: rootOrderTest.id,
@@ -1245,7 +1257,7 @@ export class OrdersService {
       code: rootOrderTest.test?.code ?? '',
       name: rootOrderTest.test?.name ?? '',
       status: rootOrderTest.status,
-      requiresVerifiedOverride,
+      requiresAdminOverride,
       isPanel: childOrderTests.length > 0,
     };
   }
@@ -1928,6 +1940,7 @@ export class OrdersService {
   private stripHeavyOrderTestsPayload(order: Order): Order {
     for (const sample of order.samples ?? []) {
       for (const orderTest of sample.orderTests ?? []) {
+        orderTest.flag = normalizeOrderTestFlag(orderTest.flag ?? null);
         const testPayload = orderTest.test as unknown as Record<string, unknown> | undefined;
         if (!testPayload) continue;
         delete testPayload.lab;

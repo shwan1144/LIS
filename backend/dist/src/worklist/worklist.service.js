@@ -30,6 +30,8 @@ const panel_status_service_1 = require("../panels/panel-status.service");
 const normal_range_util_1 = require("../tests/normal-range.util");
 const lab_timezone_util_1 = require("../database/lab-timezone.util");
 const patient_age_util_1 = require("../patients/patient-age.util");
+const order_test_result_util_1 = require("../order-tests/order-test-result.util");
+const order_test_flag_util_1 = require("../order-tests/order-test-flag.util");
 var WorklistView;
 (function (WorklistView) {
     WorklistView["FULL"] = "full";
@@ -217,7 +219,8 @@ let WorklistService = WorklistService_1 = class WorklistService {
                 .setParameter('rejectedStatus', order_test_entity_1.OrderTestStatus.REJECTED)
                 .getRawMany();
             const items = rawItems.map((item) => {
-                const patientAge = this.computePatientAgeYears(item.patientDob);
+                const patientAgeSnapshot = this.computePatientAgeSnapshot(item.patientDob, item.registeredAt);
+                const patientAge = patientAgeSnapshot?.years ?? null;
                 const patientAgeDisplay = (0, patient_age_util_1.formatPatientAgeDisplay)(item.patientDob ?? null, item.registeredAt ?? null);
                 const numericAgeRanges = parseJsonField(item.numericAgeRanges) ??
                     null;
@@ -229,7 +232,7 @@ let WorklistService = WorklistService_1 = class WorklistService {
                     normalMinFemale: item.normalMinFemale,
                     normalMaxFemale: item.normalMaxFemale,
                     numericAgeRanges,
-                }, item.patientSex, patientAge);
+                }, item.patientSex, patientAgeSnapshot);
                 return {
                     id: item.id,
                     orderNumber: item.orderNumber,
@@ -261,7 +264,7 @@ let WorklistService = WorklistService_1 = class WorklistService {
                         ? parseFloat(item.resultValue)
                         : null,
                     resultText: item.resultText,
-                    flag: item.flag,
+                    flag: (0, order_test_flag_util_1.normalizeOrderTestFlag)(item.flag),
                     resultedAt: item.resultedAt,
                     resultedBy: item.resultedBy ?? null,
                     verifiedAt: item.verifiedAt,
@@ -434,7 +437,7 @@ let WorklistService = WorklistService_1 = class WorklistService {
                     registeredAt: new Date(row.registeredAt),
                     patientName: row.patientName ?? '-',
                     patientSex: row.patientSex ?? null,
-                    patientAge: this.computePatientAgeYears(row.patientDob),
+                    patientAge: this.computePatientAgeYears(row.patientDob, row.registeredAt),
                     patientAgeDisplay: (0, patient_age_util_1.formatPatientAgeDisplay)(row.patientDob, row.registeredAt),
                     progressTotalRoot,
                     progressPending,
@@ -571,7 +574,7 @@ let WorklistService = WorklistService_1 = class WorklistService {
                 .setParameter('panelType', 'PANEL')
                 .getRawMany();
             const items = rawItems.map((item) => this.mapRawWorklistItem(item));
-            const patientAge = this.computePatientAgeYears(order.patient?.dateOfBirth ?? null);
+            const patientAge = this.computePatientAgeYears(order.patient?.dateOfBirth ?? null, order.registeredAt);
             const patientAgeDisplay = (0, patient_age_util_1.formatPatientAgeDisplay)(order.patient?.dateOfBirth ?? null, order.registeredAt);
             return {
                 orderId: order.id,
@@ -635,7 +638,8 @@ let WorklistService = WorklistService_1 = class WorklistService {
                 !allowedDepartmentIds.includes(orderTest.test.departmentId)) {
                 throw new common_1.NotFoundException('Order test not found');
             }
-            const patientAge = this.computePatientAgeYears(orderTest.sample.order.patient?.dateOfBirth);
+            const patientAgeSnapshot = this.computePatientAgeSnapshot(orderTest.sample.order.patient?.dateOfBirth, orderTest.sample.order.registeredAt);
+            const patientAge = patientAgeSnapshot?.years ?? null;
             const patientAgeDisplay = (0, patient_age_util_1.formatPatientAgeDisplay)(orderTest.sample.order.patient?.dateOfBirth ?? null, orderTest.sample.order.registeredAt);
             const resolvedRange = (0, normal_range_util_1.resolveNumericRange)({
                 normalMin: orderTest.test.normalMin,
@@ -645,7 +649,7 @@ let WorklistService = WorklistService_1 = class WorklistService {
                 normalMinFemale: orderTest.test.normalMinFemale,
                 normalMaxFemale: orderTest.test.normalMaxFemale,
                 numericAgeRanges: orderTest.test.numericAgeRanges,
-            }, orderTest.sample.order.patient?.sex ?? null, patientAge);
+            }, orderTest.sample.order.patient?.sex ?? null, patientAgeSnapshot);
             return {
                 id: orderTest.id,
                 orderNumber: orderTest.sample.order.orderNumber ?? orderTest.sample.order.id.substring(0, 8),
@@ -670,7 +674,7 @@ let WorklistService = WorklistService_1 = class WorklistService {
                 status: orderTest.status,
                 resultValue: orderTest.resultValue ?? null,
                 resultText: orderTest.resultText ?? null,
-                flag: orderTest.flag ?? null,
+                flag: (0, order_test_flag_util_1.normalizeOrderTestFlag)(orderTest.flag ?? null),
                 resultedAt: orderTest.resultedAt ?? null,
                 resultedBy: orderTest.resultedBy ?? null,
                 verifiedAt: orderTest.verifiedAt ?? null,
@@ -769,9 +773,12 @@ let WorklistService = WorklistService_1 = class WorklistService {
                 orderTest.flag = optionFlag;
             }
             else {
-                const patientAgeYears = this.computePatientAgeYears(orderTest.sample.order.patient?.dateOfBirth ?? null);
-                orderTest.flag = this.calculateFlag(orderTest.resultValue, orderTest.test, orderTest.sample.order.patient?.sex || null, patientAgeYears);
+                const patientAgeSnapshot = this.computePatientAgeSnapshot(orderTest.sample.order.patient?.dateOfBirth ?? null, orderTest.sample.order.registeredAt);
+                orderTest.flag = this.calculateFlag(orderTest.resultValue, orderTest.test, orderTest.sample.order.patient?.sex || null, patientAgeSnapshot);
             }
+        }
+        if (!(0, order_test_result_util_1.hasMeaningfulOrderTestResult)(orderTest)) {
+            throw new common_1.BadRequestException('Cannot complete a test without a real result value, text, or parameters');
         }
         const isUpdate = orderTest.resultedAt !== null;
         orderTest.status = isVerifiedOverride
@@ -882,9 +889,12 @@ let WorklistService = WorklistService_1 = class WorklistService {
                     orderTest.flag = optionFlag;
                 }
                 else {
-                    const patientAgeYears = this.computePatientAgeYears(orderTest.sample.order.patient?.dateOfBirth ?? null);
-                    orderTest.flag = this.calculateFlag(orderTest.resultValue, orderTest.test, orderTest.sample.order.patient?.sex || null, patientAgeYears);
+                    const patientAgeSnapshot = this.computePatientAgeSnapshot(orderTest.sample.order.patient?.dateOfBirth ?? null, orderTest.sample.order.registeredAt);
+                    orderTest.flag = this.calculateFlag(orderTest.resultValue, orderTest.test, orderTest.sample.order.patient?.sex || null, patientAgeSnapshot);
                 }
+            }
+            if (!(0, order_test_result_util_1.hasMeaningfulOrderTestResult)(orderTest)) {
+                continue;
             }
             const isUpdate = orderTest.resultedAt !== null;
             orderTest.status = isVerifiedOverride ? order_test_entity_1.OrderTestStatus.VERIFIED : order_test_entity_1.OrderTestStatus.COMPLETED;
@@ -962,6 +972,9 @@ let WorklistService = WorklistService_1 = class WorklistService {
         if (orderTest.status === order_test_entity_1.OrderTestStatus.PENDING) {
             throw new common_1.BadRequestException('Cannot verify a test without a result');
         }
+        if (!(0, order_test_result_util_1.hasMeaningfulOrderTestResult)(orderTest)) {
+            throw new common_1.BadRequestException('Cannot verify a test without a real result value, text, or parameters');
+        }
         orderTest.status = order_test_entity_1.OrderTestStatus.VERIFIED;
         orderTest.verifiedAt = new Date();
         orderTest.verifiedBy = actor.userId;
@@ -1008,7 +1021,10 @@ let WorklistService = WorklistService_1 = class WorklistService {
         const auditLogs = [];
         let failed = 0;
         for (const ot of orderTests) {
-            if (ot.sample.order.labId !== labId || ot.status === order_test_entity_1.OrderTestStatus.VERIFIED || ot.status === order_test_entity_1.OrderTestStatus.PENDING) {
+            if (ot.sample.order.labId !== labId ||
+                ot.status === order_test_entity_1.OrderTestStatus.VERIFIED ||
+                ot.status === order_test_entity_1.OrderTestStatus.PENDING ||
+                !(0, order_test_result_util_1.hasMeaningfulOrderTestResult)(ot)) {
                 failed++;
                 continue;
             }
@@ -1118,7 +1134,8 @@ let WorklistService = WorklistService_1 = class WorklistService {
         return forLab.length > 0 ? forLab : null;
     }
     mapRawWorklistItem(item) {
-        const patientAge = this.computePatientAgeYears(item.patientDob ?? null);
+        const patientAgeSnapshot = this.computePatientAgeSnapshot(item.patientDob ?? null, item.registeredAt ?? null);
+        const patientAge = patientAgeSnapshot?.years ?? null;
         const patientAgeDisplay = (0, patient_age_util_1.formatPatientAgeDisplay)(item.patientDob ?? null, item.registeredAt ?? null);
         const numericAgeRanges = parseJsonField(item.numericAgeRanges) ?? null;
         const resolvedRange = (0, normal_range_util_1.resolveNumericRange)({
@@ -1129,7 +1146,7 @@ let WorklistService = WorklistService_1 = class WorklistService {
             normalMinFemale: item.normalMinFemale,
             normalMaxFemale: item.normalMaxFemale,
             numericAgeRanges,
-        }, item.patientSex ?? null, patientAge);
+        }, item.patientSex ?? null, patientAgeSnapshot);
         const rawResultValue = item.resultValue;
         return {
             id: String(item.id),
@@ -1153,7 +1170,7 @@ let WorklistService = WorklistService_1 = class WorklistService {
                 normalTextFemale: item.normalTextFemale ?? null,
             }, item.patientSex ?? null),
             resultEntryType: this.normalizeResultEntryType(item.resultEntryType),
-            resultTextOptions: parseJsonField(item.resultTextOptions) ?? null,
+            resultTextOptions: this.normalizeResultTextOptions(parseJsonField(item.resultTextOptions) ?? null),
             allowCustomResultText: Boolean(item.allowCustomResultText),
             tubeType: item.tubeType ?? null,
             status: item.status,
@@ -1161,7 +1178,7 @@ let WorklistService = WorklistService_1 = class WorklistService {
                 ? parseFloat(String(rawResultValue))
                 : null,
             resultText: item.resultText ?? null,
-            flag: item.flag ?? null,
+            flag: (0, order_test_flag_util_1.normalizeOrderTestFlag)(item.flag),
             resultedAt: item.resultedAt ?? null,
             resultedBy: item.resultedBy ?? null,
             verifiedAt: item.verifiedAt ?? null,
@@ -1198,7 +1215,7 @@ let WorklistService = WorklistService_1 = class WorklistService {
         const normalized = options
             .map((option) => ({
             value: this.normalizeResultText(option?.value),
-            flag: this.toResultFlag(option?.flag ?? null),
+            flag: this.toResultTextOptionFlag(option?.flag ?? null),
             isDefault: Boolean(option?.isDefault),
         }))
             .filter((option) => Boolean(option.value))
@@ -1223,63 +1240,44 @@ let WorklistService = WorklistService_1 = class WorklistService {
         return this.toResultFlag(matched?.flag ?? null);
     }
     toResultFlag(flag) {
-        const normalized = String(flag ?? '').trim().toUpperCase();
-        if (!normalized)
-            return null;
+        return (0, order_test_flag_util_1.normalizeOrderTestFlag)(flag);
+    }
+    toResultTextOptionFlag(flag) {
+        const normalized = (0, order_test_flag_util_1.normalizeOrderTestFlag)(flag);
         if (normalized === order_test_entity_1.ResultFlag.NORMAL)
-            return order_test_entity_1.ResultFlag.NORMAL;
+            return 'N';
         if (normalized === order_test_entity_1.ResultFlag.HIGH)
-            return order_test_entity_1.ResultFlag.HIGH;
+            return 'H';
         if (normalized === order_test_entity_1.ResultFlag.LOW)
-            return order_test_entity_1.ResultFlag.LOW;
-        if (normalized === order_test_entity_1.ResultFlag.CRITICAL_HIGH)
-            return order_test_entity_1.ResultFlag.CRITICAL_HIGH;
-        if (normalized === order_test_entity_1.ResultFlag.CRITICAL_LOW)
-            return order_test_entity_1.ResultFlag.CRITICAL_LOW;
+            return 'L';
         if (normalized === order_test_entity_1.ResultFlag.POSITIVE)
-            return order_test_entity_1.ResultFlag.POSITIVE;
+            return 'POS';
         if (normalized === order_test_entity_1.ResultFlag.NEGATIVE)
-            return order_test_entity_1.ResultFlag.NEGATIVE;
+            return 'NEG';
         if (normalized === order_test_entity_1.ResultFlag.ABNORMAL)
-            return order_test_entity_1.ResultFlag.ABNORMAL;
+            return 'ABN';
         return null;
     }
-    calculateFlag(resultValue, test, patientSex, patientAgeYears) {
+    calculateFlag(resultValue, test, patientSex, patientAgeSnapshot) {
         if (resultValue === null)
             return null;
-        const { normalMin, normalMax } = (0, normal_range_util_1.resolveNumericRange)(test, patientSex, patientAgeYears);
+        const { normalMin, normalMax } = (0, normal_range_util_1.resolveNumericRange)(test, patientSex, patientAgeSnapshot);
         if (normalMin === null && normalMax === null) {
             return null;
         }
         if (normalMax !== null && resultValue > parseFloat(normalMax.toString())) {
-            const criticalThreshold = parseFloat(normalMax.toString()) * 1.5;
-            if (resultValue > criticalThreshold) {
-                return order_test_entity_1.ResultFlag.CRITICAL_HIGH;
-            }
             return order_test_entity_1.ResultFlag.HIGH;
         }
         if (normalMin !== null && resultValue < parseFloat(normalMin.toString())) {
-            const criticalThreshold = parseFloat(normalMin.toString()) * 0.5;
-            if (resultValue < criticalThreshold) {
-                return order_test_entity_1.ResultFlag.CRITICAL_LOW;
-            }
             return order_test_entity_1.ResultFlag.LOW;
         }
         return order_test_entity_1.ResultFlag.NORMAL;
     }
-    computePatientAgeYears(dateOfBirth) {
-        if (!dateOfBirth)
-            return null;
-        const dob = new Date(dateOfBirth);
-        if (Number.isNaN(dob.getTime()))
-            return null;
-        const today = new Date();
-        let age = today.getFullYear() - dob.getFullYear();
-        const monthDiff = today.getMonth() - dob.getMonth();
-        if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < dob.getDate())) {
-            age--;
-        }
-        return age < 0 ? null : age;
+    computePatientAgeYears(dateOfBirth, referenceDate = new Date()) {
+        return (0, patient_age_util_1.getPatientAgeYears)(dateOfBirth, referenceDate);
+    }
+    computePatientAgeSnapshot(dateOfBirth, referenceDate = new Date()) {
+        return (0, patient_age_util_1.getPatientAgeSnapshot)(dateOfBirth, referenceDate);
     }
     resolveWorklistPerfLogThresholdMs() {
         const parsed = Number.parseInt(process.env.WORKLIST_PERF_LOG_THRESHOLD_MS ?? '500', 10);

@@ -23,6 +23,7 @@ const order_entity_1 = require("../entities/order.entity");
 const hl7_parser_service_1 = require("./hl7-parser.service");
 const audit_service_1 = require("../audit/audit.service");
 const audit_log_entity_1 = require("../entities/audit-log.entity");
+const order_test_result_util_1 = require("../order-tests/order-test-result.util");
 let InstrumentResultProcessor = InstrumentResultProcessor_1 = class InstrumentResultProcessor {
     constructor(mappingRepo, orderTestRepo, orderRepo, hl7Parser, auditService) {
         this.mappingRepo = mappingRepo;
@@ -98,6 +99,19 @@ let InstrumentResultProcessor = InstrumentResultProcessor_1 = class InstrumentRe
             };
         }
         const { numericValue, textValue } = this.parseResultValue(result.value, mapping.multiplier);
+        if (!(0, order_test_result_util_1.hasMeaningfulOrderTestResult)({
+            resultValue: numericValue,
+            resultText: textValue,
+            resultParameters: null,
+        })) {
+            this.logger.warn(`Ignoring empty instrument result for OrderTest=${orderTest.id}`);
+            return {
+                success: false,
+                orderTestId: orderTest.id,
+                orderId: orderTest.sample?.order?.id,
+                message: 'Instrument result did not contain a real value',
+            };
+        }
         const flag = this.hl7Parser.mapFlag(result.flag);
         const previousValue = orderTest.resultValue;
         const isUpdate = orderTest.resultedAt !== null;

@@ -57,6 +57,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { PrintPreviewModal } from '../components/Print';
 import { WorklistStatusDashboard } from '../components/WorklistStatusDashboard';
+import { normalizeResultFlag } from '../utils/result-flag';
 import {
   directPrintReceipt,
   directPrintReportPdf,
@@ -148,8 +149,6 @@ const RESULT_FLAG_META: Record<string, { color: string; label: string }> = {
   N: { color: 'green', label: 'Normal' },
   H: { color: 'orange', label: 'High' },
   L: { color: 'blue', label: 'Low' },
-  HH: { color: 'red', label: 'Critical High' },
-  LL: { color: 'volcano', label: 'Critical Low' },
   POS: { color: 'red', label: 'Positive' },
   NEG: { color: 'green', label: 'Negative' },
   ABN: { color: 'purple', label: 'Abnormal' },
@@ -1373,8 +1372,9 @@ export function ReportsPage() {
         key: 'flag',
         width: 100,
         render: (_: unknown, row: ExpandedOrderTestRow) => {
-          const meta = row.flag ? RESULT_FLAG_META[row.flag] : null;
-          if (!meta || row.flag === 'N')
+          const normalizedFlag = normalizeResultFlag(row.flag);
+          const meta = normalizedFlag ? RESULT_FLAG_META[normalizedFlag] : null;
+          if (!meta || normalizedFlag === 'N')
             return (
               <Text type="secondary" style={{ fontSize: 10 }}>
                 -

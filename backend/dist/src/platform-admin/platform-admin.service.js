@@ -29,6 +29,7 @@ const typeorm_1 = require("typeorm");
 const admin_auth_service_1 = require("../admin-auth/admin-auth.service");
 const auth_service_1 = require("../auth/auth.service");
 const auth_session_config_1 = require("../config/auth-session.config");
+const order_test_flag_util_1 = require("../order-tests/order-test-flag.util");
 const MAX_REPORT_IMAGE_DATA_URL_LENGTH = 4 * 1024 * 1024;
 const REPORT_IMAGE_DATA_URL_PATTERN = /^data:image\/(png|jpeg|jpg|webp);base64,[a-zA-Z0-9+/=]+$/;
 const UUID_V4_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -688,11 +689,13 @@ let PlatformAdminService = PlatformAdminService_1 = class PlatformAdminService {
                 throw new common_1.NotFoundException('Order not found');
             }
             const tests = order.samples?.flatMap((sample) => sample.orderTests ?? []) ?? [];
+            for (const test of tests) {
+                test.flag = (0, order_test_flag_util_1.normalizeOrderTestFlag)(test.flag ?? null);
+            }
             const testsCount = tests.length;
             const verifiedTestsCount = tests.filter((test) => test.status === 'VERIFIED').length;
             const completedTestsCount = tests.filter((test) => test.status === 'COMPLETED').length;
             const pendingTestsCount = tests.filter((test) => test.status === 'PENDING' || test.status === 'IN_PROGRESS').length;
-            const hasCriticalFlag = tests.some((test) => test.flag === 'HH' || test.flag === 'LL');
             const lastVerifiedAt = tests
                 .map((test) => test.verifiedAt)
                 .filter((value) => Boolean(value))
@@ -719,7 +722,6 @@ let PlatformAdminService = PlatformAdminService_1 = class PlatformAdminService {
                 verifiedTestsCount,
                 completedTestsCount,
                 pendingTestsCount,
-                hasCriticalFlag,
                 lastVerifiedAt,
             };
             await this.logPlatformSensitiveRead(actor, {
@@ -1422,7 +1424,6 @@ let PlatformAdminService = PlatformAdminService_1 = class PlatformAdminService {
     toAdminOrderListItem(order) {
         const tests = order.samples?.flatMap((sample) => sample.orderTests ?? []) ?? [];
         const verifiedTestsCount = tests.filter((test) => test.status === 'VERIFIED').length;
-        const hasCriticalFlag = tests.some((test) => test.flag === 'HH' || test.flag === 'LL');
         const firstBarcode = order.samples?.find((sample) => Boolean(sample.barcode))?.barcode ?? null;
         return {
             id: order.id,
@@ -1439,7 +1440,6 @@ let PlatformAdminService = PlatformAdminService_1 = class PlatformAdminService {
             finalAmount: Number(order.finalAmount ?? 0),
             testsCount: tests.length,
             verifiedTestsCount,
-            hasCriticalFlag,
             barcode: firstBarcode,
         };
     }

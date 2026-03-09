@@ -27,7 +27,7 @@ export interface ParsedAstmMessage {
 export declare class AstmParserService {
     private static readonly CONTROL_CHARS_RE;
     parseMessage(rawMessage: string): ParsedAstmMessage;
-    mapFlag(astmFlag: string): 'N' | 'H' | 'L' | 'HH' | 'LL' | 'POS' | 'NEG' | 'ABN' | null;
+    mapFlag(astmFlag: string): 'N' | 'H' | 'L' | 'POS' | 'NEG' | 'ABN' | null;
     isLikelyAstm(rawMessage: string): boolean;
     private normalizeInput;
     private splitRecords;
