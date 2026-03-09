@@ -189,10 +189,7 @@ function formatPatientPickerValue(value: string | null | undefined): string {
   return normalized || '-';
 }
 
-function formatPatientPickerSex(value: string | null | undefined): string {
-  const normalized = String(value ?? '').trim().toUpperCase();
-  return PATIENT_SEX_LABELS[normalized] ?? formatPatientPickerValue(value);
-}
+
 
 function getPatientMutationErrorMessage(error: unknown, fallback: string): string {
   const messageFromResponse =
@@ -2440,9 +2437,8 @@ export function OrdersPage() {
                               <Text type="secondary">No tests in this order.</Text>
                             ) : (
                               <div
-                                className={`order-tests-readonly-wrapper${
-                                  isDark ? ' order-tests-readonly-wrapper-dark' : ''
-                                }`}
+                                className={`order-tests-readonly-wrapper${isDark ? ' order-tests-readonly-wrapper-dark' : ''
+                                  }`}
                               >
                                 <div className="order-tests-readonly-grid-header">
                                   <span className="order-tests-readonly-label">Selected tests</span>
@@ -2519,9 +2515,8 @@ export function OrdersPage() {
                           </Col>
                           <Col span={6}>
                             <div
-                              className={`order-composer-tubes-summary${
-                                isDark ? ' order-composer-tubes-summary-dark' : ''
-                              }`}
+                              className={`order-composer-tubes-summary${isDark ? ' order-composer-tubes-summary-dark' : ''
+                                }`}
                             >
                               <Space direction="vertical" size={6} style={{ width: '100%' }}>
                                 <Text strong className="order-composer-tubes-title">
@@ -2752,9 +2747,8 @@ export function OrdersPage() {
                       </Card>
 
                       <div
-                        className={`order-composer-tubes-summary order-composer-tubes-summary-spaced${
-                          isDark ? ' order-composer-tubes-summary-dark' : ''
-                        }`}
+                        className={`order-composer-tubes-summary order-composer-tubes-summary-spaced${isDark ? ' order-composer-tubes-summary-dark' : ''
+                          }`}
                       >
                         <Space direction="vertical" size={6} style={{ width: '100%' }}>
                           <Text strong className="order-composer-tubes-title">
@@ -2877,11 +2871,9 @@ export function OrdersPage() {
               <div className="orders-patient-picker-results-table">
                 <div className="orders-patient-picker-results-header" aria-hidden="true">
                   <span>Name</span>
+                  <span>Date of Birth</span>
                   <span>Phone</span>
                   <span>National ID</span>
-                  <span>Gender</span>
-                  <span>DOB</span>
-                  <span>Patient ID</span>
                 </div>
                 <div className="orders-patient-picker-results-list" role="listbox">
                   {patientPickerSearchResults.map((patient) => {
@@ -2897,19 +2889,13 @@ export function OrdersPage() {
                           {formatPatientPickerValue(getPatientName(patient))}
                         </span>
                         <span className="orders-patient-picker-result-cell">
+                          {formatPatientPickerValue(patient.dateOfBirth)}
+                        </span>
+                        <span className="orders-patient-picker-result-cell">
                           {formatPatientPickerValue(patient.phone)}
                         </span>
                         <span className="orders-patient-picker-result-cell">
                           {formatPatientPickerValue(patient.nationalId)}
-                        </span>
-                        <span className="orders-patient-picker-result-cell">
-                          {formatPatientPickerSex(patient.sex)}
-                        </span>
-                        <span className="orders-patient-picker-result-cell">
-                          {formatPatientPickerValue(patient.dateOfBirth)}
-                        </span>
-                        <span className="orders-patient-picker-result-cell orders-patient-picker-result-cell--id">
-                          {formatPatientPickerValue(patient.patientNumber)}
                         </span>
                       </button>
                     );
@@ -2923,34 +2909,41 @@ export function OrdersPage() {
             {patientPickerSelectedPatient ? (
               <div className="orders-patient-picker-selected-card">
                 <div className="orders-patient-picker-selected-copy">
-                  <Text className="orders-patient-picker-selected-label" type="secondary">
-                    Selected patient
-                  </Text>
-                  <Text strong className="orders-patient-picker-selected-name">
-                    {formatPatientPickerValue(getPatientName(patientPickerSelectedPatient))}
-                  </Text>
+                  <div className="orders-patient-picker-selected-header">
+                    <UserOutlined className="orders-patient-picker-selected-icon" />
+                    <div className="orders-patient-picker-selected-identity">
+                      <Text className="orders-patient-picker-selected-label" type="secondary">
+                        Patient selected
+                      </Text>
+                      <Text strong className="orders-patient-picker-selected-name">
+                        {formatPatientPickerValue(getPatientName(patientPickerSelectedPatient))}
+                      </Text>
+                    </div>
+                  </div>
                   <div className="orders-patient-picker-selected-meta">
-                    <span>
-                      <strong>Patient ID:</strong> {formatPatientPickerValue(patientPickerSelectedPatient.patientNumber)}
-                    </span>
-                    <span>
-                      <strong>Phone:</strong> {formatPatientPickerValue(patientPickerSelectedPatient.phone)}
-                    </span>
-                    <span>
-                      <strong>National ID:</strong> {formatPatientPickerValue(patientPickerSelectedPatient.nationalId)}
-                    </span>
-                    <span>
-                      <strong>Gender:</strong> {formatPatientPickerSex(patientPickerSelectedPatient.sex)}
-                    </span>
-                    <span>
-                      <strong>DOB:</strong> {formatPatientPickerValue(patientPickerSelectedPatient.dateOfBirth)}
-                    </span>
+                    <div className="orders-patient-picker-meta-item">
+                      <Text type="secondary">ID</Text>
+                      <Text strong>{formatPatientPickerValue(patientPickerSelectedPatient.patientNumber)}</Text>
+                    </div>
+                    <div className="orders-patient-picker-meta-item">
+                      <Text type="secondary">DOB</Text>
+                      <Text strong>{formatPatientPickerValue(patientPickerSelectedPatient.dateOfBirth)}</Text>
+                    </div>
+                    <div className="orders-patient-picker-meta-item">
+                      <Text type="secondary">Phone</Text>
+                      <Text strong>{formatPatientPickerValue(patientPickerSelectedPatient.phone)}</Text>
+                    </div>
+                    <div className="orders-patient-picker-meta-item">
+                      <Text type="secondary">National ID</Text>
+                      <Text strong>{formatPatientPickerValue(patientPickerSelectedPatient.nationalId)}</Text>
+                    </div>
                   </div>
                 </div>
-                <Space wrap className="orders-patient-picker-selected-actions">
+                <div className="orders-patient-picker-selected-actions">
                   <Button
                     icon={<EditOutlined />}
                     onClick={openPatientEditModal}
+                    className="orders-patient-picker-edit-btn"
                   >
                     Edit
                   </Button>
@@ -2958,10 +2951,11 @@ export function OrdersPage() {
                     type="primary"
                     icon={<ShoppingCartOutlined />}
                     onClick={handlePatientPickerGoToOrder}
+                    className="orders-patient-picker-order-btn"
                   >
                     Go to order
                   </Button>
-                </Space>
+                </div>
               </div>
             ) : (
               <div className="orders-patient-picker-footer-placeholder">
@@ -3206,8 +3200,7 @@ export function OrdersPage() {
               columns={editTestsTableColumns}
               rowKey="testId"
               rowClassName={(test) =>
-                `orders-edit-tests-table-row${test.blocked ? ' is-blocked' : ''}${
-                  test.adminReasonRequired ? ' is-admin-review' : ''
+                `orders-edit-tests-table-row${test.blocked ? ' is-blocked' : ''}${test.adminReasonRequired ? ' is-admin-review' : ''
                 }`
               }
               pagination={false}

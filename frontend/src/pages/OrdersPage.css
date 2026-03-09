@@ -1159,10 +1159,11 @@ html[data-theme='dark'] .orders-history-new-btn.ant-btn:disabled {
 }
 
 .orders-patient-picker-shell {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr) 100px;
   gap: 16px;
   flex: 1 1 auto;
+  height: 100%;
   min-height: 0;
 }
 
@@ -1188,6 +1189,7 @@ html[data-theme='dark'] .orders-history-new-btn.ant-btn:disabled {
 .orders-patient-picker-results-panel {
   display: flex;
   flex: 1 1 auto;
+  height: 100%;
   min-height: 0;
   border: 1px solid rgba(22, 119, 255, 0.14);
   border-radius: 18px;
@@ -1219,12 +1221,10 @@ html[data-theme='dark'] .orders-history-new-btn.ant-btn:disabled {
   display: grid;
   grid-template-columns:
     minmax(180px, 2fr)
-    minmax(108px, 1fr)
-    minmax(128px, 1.2fr)
-    minmax(84px, 0.8fr)
-    minmax(96px, 0.9fr)
-    minmax(96px, 0.95fr);
-  gap: 12px;
+    minmax(120px, 1fr)
+    minmax(140px, 1.2fr)
+    minmax(140px, 1.2fr);
+  gap: 16px;
   align-items: center;
 }
 
@@ -1296,24 +1296,53 @@ html[data-theme='dark'] .orders-history-new-btn.ant-btn:disabled {
 
 .orders-patient-picker-selected-card {
   display: flex;
-  align-items: flex-start;
   justify-content: space-between;
-  gap: 16px;
-  padding: 16px 18px;
+  align-items: stretch;
+  gap: 24px;
+  padding: 16px 20px;
   border-radius: 18px;
-  border: 1px solid rgba(34, 197, 94, 0.22);
-  background:
-    linear-gradient(135deg, rgba(220, 252, 231, 0.86) 0%, rgba(255, 255, 255, 0.96) 100%);
+  border: 1px solid rgba(82, 196, 26, 0.22);
+  background: linear-gradient(135deg, rgba(82, 196, 26, 0.08) 0%, rgba(255, 255, 255, 0.96) 100%);
+  box-shadow: 0 8px 24px rgba(82, 196, 26, 0.08);
+  width: 100%;
+}
+
+.orders-patient-picker-selected-header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 12px;
+}
+
+.orders-patient-picker-selected-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #1677ff 0%, #69b1ff 100%);
+  color: #fff;
+  font-size: 18px;
+  box-shadow: 0 6px 16px rgba(22, 119, 255, 0.2);
+}
+
+.orders-patient-picker-selected-identity {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
 }
 
 .orders-patient-picker-footer-slot {
-  min-height: 100px;
   display: flex;
   flex: 0 0 auto;
+  min-height: 0;
+  height: 100%;
 }
 
 .orders-patient-picker-footer-placeholder {
   width: 100%;
+  height: 100%;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -1335,7 +1364,8 @@ html[data-theme='dark'] .orders-history-new-btn.ant-btn:disabled {
   flex-direction: column;
   gap: 8px;
   min-width: 0;
-  flex: 1 1 auto;
+  width: 100%;
+  overflow: hidden;
 }
 
 .orders-patient-picker-selected-label.ant-typography,
@@ -1344,26 +1374,52 @@ html[data-theme='dark'] .orders-history-new-btn.ant-btn:disabled {
 }
 
 .orders-patient-picker-selected-name.ant-typography {
+  display: block;
   font-size: 18px;
   line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .orders-patient-picker-selected-meta {
   display: flex;
-  flex-wrap: wrap;
-  gap: 4px 14px;
+  flex-wrap: nowrap;
+  gap: 20px;
   color: rgba(15, 23, 42, 0.72);
   font-size: 12px;
   line-height: 1.45;
+  margin-left: 54px;
 }
 
-.orders-patient-picker-selected-meta > span {
-  white-space: nowrap;
+.orders-patient-picker-meta-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.orders-patient-picker-meta-item strong {
+  color: rgba(15, 23, 42, 0.9);
+  font-size: 13px;
 }
 
 .orders-patient-picker-selected-actions {
-  flex: 0 0 auto;
-  align-self: center;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 8px;
+  min-width: 140px;
+}
+
+.orders-patient-picker-edit-btn,
+.orders-patient-picker-order-btn {
+  height: 38px !important;
+  border-radius: 10px !important;
+  font-weight: 600 !important;
+}
+
+.orders-patient-picker-order-btn {
+  box-shadow: 0 4px 12px rgba(22, 119, 255, 0.2) !important;
 }
 
 html[data-theme='dark'] .orders-patient-picker-modal .ant-modal-content,
@@ -1496,13 +1552,17 @@ html[data-theme='dark'] .orders-patient-form-modal .ant-input-textarea,
 
   .orders-patient-picker-toolbar,
   .orders-patient-picker-selected-card {
-    flex-direction: column;
+    grid-template-columns: 1fr;
     align-items: flex-start;
   }
 
   .orders-patient-picker-empty-state,
   .orders-patient-picker-results-panel {
     min-height: 0;
+  }
+
+  .orders-patient-picker-shell {
+    grid-template-rows: auto auto minmax(0, 1fr) 112px;
   }
 
   .orders-patient-picker-selected-actions {
@@ -1518,7 +1578,7 @@ html[data-theme='dark'] .orders-patient-form-modal .ant-input-textarea,
   }
 
   .orders-patient-picker-footer-slot {
-    min-height: 92px;
+    height: 100%;
   }
 }
 
