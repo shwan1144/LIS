@@ -19,12 +19,19 @@ export type GatewayLogMessage = {
 
 contextBridge.exposeInMainWorld('api', {
     onStatus: (callback: (status: GatewayStatus) => void) => {
-        ipcRenderer.on('status-update', (_event, value: GatewayStatus) => callback(value));
+        const listener = (_event: Electron.IpcRendererEvent, value: GatewayStatus) => callback(value);
+        ipcRenderer.on('status-update', listener);
+        return () => ipcRenderer.removeListener('status-update', listener);
     },
     onLog: (callback: (message: GatewayLogMessage) => void) => {
-        ipcRenderer.on('log-message', (_event, value: GatewayLogMessage) => callback(value));
+        const listener = (_event: Electron.IpcRendererEvent, value: GatewayLogMessage) => callback(value);
+        ipcRenderer.on('log-message', listener);
+        return () => ipcRenderer.removeListener('log-message', listener);
     },
     setAutostart: (enabled: boolean) => {
         ipcRenderer.send('set-autostart', enabled);
+    },
+    hideToTray: () => {
+        ipcRenderer.send('hide-to-tray');
     },
 });

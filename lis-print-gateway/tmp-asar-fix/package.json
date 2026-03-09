@@ -1,0 +1,14 @@
+{
+  "name": "lis-print-gateway",
+  "version": "1.2.0",
+  "main": "dist/main.js",
+  "author": "Medilis",
+  "license": "ISC",
+  "description": "LIS Dedicated Print Gateway with GUI Monitor",
+  "dependencies": {
+    "cors": "^2.8.6",
+    "dotenv": "^17.3.1",
+    "electron-is-dev": "^3.0.1",
+    "pdf-to-printer": "^5.7.0"
+  }
+}
