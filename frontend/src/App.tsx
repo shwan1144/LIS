@@ -47,6 +47,19 @@ function AppTitleUpdater() {
   const { lab, scope } = useAuth();
 
   useEffect(() => {
+    const tabIconHref = scope === 'PLATFORM' ? '/icons/admin-panel-icon.svg' : '/icons/icon-192.png';
+    const applyIconHref = (rel: 'icon' | 'shortcut icon') => {
+      const existing = document.querySelector(`link[rel="${rel}"]`) as HTMLLinkElement | null;
+      if (existing) {
+        existing.href = tabIconHref;
+        return;
+      }
+      const link = document.createElement('link');
+      link.rel = rel;
+      link.href = tabIconHref;
+      document.head.appendChild(link);
+    };
+
     if (scope === 'PLATFORM') {
       document.title = 'LIS Admin Panel';
     } else if (lab) {
@@ -54,6 +67,9 @@ function AppTitleUpdater() {
     } else {
       document.title = 'LIS';
     }
+
+    applyIconHref('icon');
+    applyIconHref('shortcut icon');
   }, [lab, scope]);
 
   return null;
