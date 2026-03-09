@@ -9,7 +9,6 @@ import {
   Select,
   Space,
   Spin,
-  Statistic,
   Table,
   Typography,
   message,
@@ -33,6 +32,7 @@ import {
   type StatisticsDto,
 } from '../api/client';
 import { useAuth } from '../contexts/AuthContext';
+import './DashboardPage.css';
 
 const { Title, Text } = Typography;
 const { RangePicker } = DatePicker;
@@ -218,8 +218,39 @@ export function StatisticsPage() {
     (a, b) => b.count - a.count || a.testCode.localeCompare(b.testCode),
   );
 
+  const kpiCards = [
+    {
+      key: 'profit',
+      label: 'Profit (IQD)',
+      value: formatCurrency(profit),
+      icon: <DollarOutlined />,
+      tone: 'teal',
+    },
+    {
+      key: 'orders',
+      label: 'Orders',
+      value: String(orders.total),
+      icon: <FileTextOutlined />,
+      tone: 'blue',
+    },
+    {
+      key: 'department-tests',
+      label: 'Department test',
+      value: String(departmentTestTotal),
+      icon: <ApartmentOutlined />,
+      tone: 'orange',
+    },
+    {
+      key: 'total-tests',
+      label: 'Total test',
+      value: String(tests.total),
+      icon: <ExperimentOutlined />,
+      tone: 'purple',
+    },
+  ] as const;
+
   return (
-    <div>
+    <div className="dashboard-page">
       <Space style={{ marginBottom: 16 }} wrap>
         <Title level={4} style={{ margin: 0 }}>
           Statistics
@@ -266,26 +297,19 @@ export function StatisticsPage() {
       </Space>
 
       <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
-        <Col xs={24} sm={12} md={12} lg={6}>
-          <Card>
-            <Statistic title="Profit (IQD)" value={formatCurrency(profit)} prefix={<DollarOutlined />} />
-          </Card>
-        </Col>
-        <Col xs={24} sm={12} md={12} lg={6}>
-          <Card>
-            <Statistic title="Orders" value={orders.total} prefix={<FileTextOutlined />} />
-          </Card>
-        </Col>
-        <Col xs={24} sm={12} md={12} lg={6}>
-          <Card>
-            <Statistic title="Department test" value={departmentTestTotal} prefix={<ApartmentOutlined />} />
-          </Card>
-        </Col>
-        <Col xs={24} sm={12} md={12} lg={6}>
-          <Card>
-            <Statistic title="Total test" value={tests.total} prefix={<ExperimentOutlined />} />
-          </Card>
-        </Col>
+        {kpiCards.map((item) => (
+          <Col key={item.key} xs={24} sm={12} md={12} lg={6}>
+            <Card className={`dashboard-kpi-card dashboard-kpi-card--${item.tone}`}>
+              <div className="dashboard-kpi-label">{item.label}</div>
+              <div className="dashboard-kpi-body">
+                <div className="dashboard-kpi-icon" aria-hidden="true">
+                  {item.icon}
+                </div>
+                <div className="dashboard-kpi-value">{item.value}</div>
+              </div>
+            </Card>
+          </Col>
+        ))}
       </Row>
 
       <Row gutter={[16, 16]}>
@@ -333,4 +357,3 @@ export function StatisticsPage() {
     </div>
   );
 }
-

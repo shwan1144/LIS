@@ -59,17 +59,18 @@ export function SettingsPrintingPage() {
 
   useEffect(() => {
     if (currentMode === 'direct_gateway') {
-      const fetchPrinters = async () => {
-        try {
-          const res = await axios.get('http://localhost:17880/local/printers', { timeout: 2000 });
-          if (Array.isArray(res.data.printers)) {
-            setAvailablePrinters(res.data.printers);
-          }
-        } catch {
-          // ignore or show hint
-        }
+      const fetchPrinters = () => {
+        axios.get('http://localhost:17881/local/printers')
+          .then(res => {
+            if (res.data && Array.isArray(res.data.printers)) {
+              setAvailablePrinters(res.data.printers);
+            }
+          })
+          .catch(err => {
+            console.warn('Failed to fetch printers from gateway:', err);
+          });
       };
-      void fetchPrinters();
+      fetchPrinters();
     } else {
       setAvailablePrinters([]);
     }
