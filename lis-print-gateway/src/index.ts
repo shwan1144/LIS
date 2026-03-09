@@ -2,7 +2,10 @@ import * as http from 'http';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
+import * as dotenv from 'dotenv';
 import { getPrinters, print as printPdf } from 'pdf-to-printer';
+
+dotenv.config();
 
 const PORT = process.env.PORT || 17881;
 

@@ -5,7 +5,13 @@
   "scripts": {
     "start": "ts-node src/index.ts",
     "build": "tsc",
-    "serve": "node dist/index.js"
+    "serve": "node dist/index.js",
+    "build:exe": "npm run build && pkg dist/index.js --targets node18-win-x64 --output dist/bin/lis-print-gateway.exe"
+  },
+  "pkg": {
+    "assets": [
+      "node_modules/pdf-to-printer/dist/SumatraPDF-3.4.6-32.exe"
+    ]
   },
   "keywords": [],
   "author": "",
@@ -19,6 +25,7 @@
   "devDependencies": {
     "@types/cors": "^2.8.19",
     "@types/node": "^25.4.0",
+    "pkg": "^5.8.1",
     "ts-node": "^10.9.2",
     "typescript": "^5.9.3"
   }
