@@ -1,0 +1,157 @@
+.worklist-status-card.ant-card {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: 18px;
+  background:
+    linear-gradient(135deg, var(--worklist-status-bg-start) 0%, rgba(255, 255, 255, 0.97) 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.72),
+    0 12px 28px rgba(15, 23, 42, 0.07);
+  transition:
+    border-color 0.18s ease,
+    box-shadow 0.18s ease;
+}
+
+.worklist-status-card.ant-card::before {
+  content: '';
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 4px;
+  background: linear-gradient(180deg, var(--worklist-status-accent), var(--worklist-status-accent-strong));
+}
+
+.worklist-status-card.ant-card::after {
+  content: '';
+  position: absolute;
+  top: -22px;
+  right: -26px;
+  width: 86px;
+  height: 86px;
+  border-radius: 999px;
+  background: radial-gradient(circle, var(--worklist-status-glow) 0%, rgba(255, 255, 255, 0) 72%);
+  pointer-events: none;
+}
+
+.worklist-status-card.ant-card:hover {
+  border-color: color-mix(in srgb, var(--worklist-status-accent) 22%, rgba(148, 163, 184, 0.2));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.78),
+    0 14px 30px rgba(15, 23, 42, 0.09);
+}
+
+.worklist-status-card .ant-card-body {
+  position: relative;
+  z-index: 1;
+  min-height: 84px;
+  padding: 12px 14px 12px 18px;
+}
+
+.worklist-status-card--pending {
+  --worklist-status-accent: #2563eb;
+  --worklist-status-accent-strong: #1d4ed8;
+  --worklist-status-bg-start: rgba(219, 234, 254, 0.9);
+  --worklist-status-glow: rgba(37, 99, 235, 0.16);
+}
+
+.worklist-status-card--completed {
+  --worklist-status-accent: #f97316;
+  --worklist-status-accent-strong: #ea580c;
+  --worklist-status-bg-start: rgba(255, 237, 213, 0.92);
+  --worklist-status-glow: rgba(249, 115, 22, 0.18);
+}
+
+.worklist-status-card--verified {
+  --worklist-status-accent: #22c55e;
+  --worklist-status-accent-strong: #16a34a;
+  --worklist-status-bg-start: rgba(220, 252, 231, 0.92);
+  --worklist-status-glow: rgba(34, 197, 94, 0.18);
+}
+
+.worklist-status-card--rejected {
+  --worklist-status-accent: #ef4444;
+  --worklist-status-accent-strong: #dc2626;
+  --worklist-status-bg-start: rgba(254, 226, 226, 0.92);
+  --worklist-status-glow: rgba(239, 68, 68, 0.18);
+}
+
+.worklist-status-card__content {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.worklist-status-card__label.ant-typography {
+  margin: 0;
+  color: #475569;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: 0.01em;
+}
+
+.worklist-status-card__metric {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.worklist-status-card__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 11px;
+  background: linear-gradient(135deg, var(--worklist-status-accent), var(--worklist-status-accent-strong));
+  color: #ffffff;
+  font-size: 16px;
+  line-height: 1;
+  box-shadow: 0 10px 20px color-mix(in srgb, var(--worklist-status-accent) 28%, transparent);
+  flex: 0 0 auto;
+}
+
+.worklist-status-card__value.ant-typography {
+  margin: 0;
+  color: #0f172a;
+  font-size: 28px;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: -0.03em;
+}
+
+html[data-theme='dark'] .worklist-status-card.ant-card {
+  border-color: rgba(71, 85, 105, 0.46);
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--worklist-status-accent) 14%, rgba(15, 23, 42, 0.96)) 0%, rgba(15, 23, 42, 0.96) 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.04),
+    0 16px 32px rgba(2, 6, 23, 0.3);
+}
+
+html[data-theme='dark'] .worklist-status-card.ant-card:hover {
+  border-color: color-mix(in srgb, var(--worklist-status-accent) 38%, rgba(71, 85, 105, 0.46));
+}
+
+html[data-theme='dark'] .worklist-status-card__label.ant-typography {
+  color: rgba(219, 234, 254, 0.8);
+}
+
+html[data-theme='dark'] .worklist-status-card__value.ant-typography {
+  color: #f8fafc;
+}
+
+@media (max-width: 767px) {
+  .worklist-status-card .ant-card-body {
+    min-height: 80px;
+    padding: 11px 13px 11px 17px;
+  }
+
+  .worklist-status-card__content {
+    gap: 8px;
+  }
+
+  .worklist-status-card__value.ant-typography {
+    font-size: 26px;
+  }
+}

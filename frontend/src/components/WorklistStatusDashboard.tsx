@@ -5,8 +5,9 @@ import {
   CloseCircleOutlined,
   ExclamationCircleOutlined,
 } from '@ant-design/icons';
-import { Card, Col, Row, Space, Typography } from 'antd';
+import { Card, Col, Row, Typography } from 'antd';
 import type { WorklistStats } from '../api/client';
+import './WorklistStatusDashboard.css';
 
 const { Text } = Typography;
 
@@ -18,31 +19,31 @@ type WorklistStatusDashboardProps = {
 const STATUS_ITEMS: Array<{
   key: keyof WorklistStats;
   label: string;
-  color: string;
+  tone: 'pending' | 'completed' | 'verified' | 'rejected';
   icon: ReactNode;
 }> = [
   {
     key: 'pending',
     label: 'Pending',
-    color: '#1677ff',
+    tone: 'pending',
     icon: <ExclamationCircleOutlined />,
   },
   {
     key: 'completed',
     label: 'Completed',
-    color: '#faad14',
+    tone: 'completed',
     icon: <ClockCircleOutlined />,
   },
   {
     key: 'verified',
     label: 'Verified',
-    color: '#52c41a',
+    tone: 'verified',
     icon: <CheckCircleOutlined />,
   },
   {
     key: 'rejected',
     label: 'Rejected',
-    color: '#ff4d4f',
+    tone: 'rejected',
     icon: <CloseCircleOutlined />,
   },
 ];
@@ -52,26 +53,23 @@ export function WorklistStatusDashboard({
   style,
 }: WorklistStatusDashboardProps) {
   return (
-    <Row gutter={[12, 12]} style={style}>
+    <Row className="worklist-status-dashboard" gutter={[12, 12]} style={style}>
       {STATUS_ITEMS.map((item) => (
         <Col key={item.key} xs={12} md={12} lg={6}>
-          <Card size="small" styles={{ body: { padding: '10px 12px' } }}>
-            <Space direction="vertical" size={2}>
-              <Text type="secondary" style={{ fontSize: 12, lineHeight: '16px' }}>
+          <Card className={`worklist-status-card worklist-status-card--${item.tone}`} size="small">
+            <div className="worklist-status-card__content">
+              <Text className="worklist-status-card__label" type="secondary">
                 {item.label}
               </Text>
-              <Space size={8} align="center">
-                <span style={{ color: item.color, lineHeight: 1 }}>
+              <div className="worklist-status-card__metric">
+                <span className="worklist-status-card__icon" aria-hidden="true">
                   {item.icon}
                 </span>
-                <Text
-                  strong
-                  style={{ color: item.color, fontSize: 24, lineHeight: '24px' }}
-                >
+                <Text className="worklist-status-card__value" strong>
                   {stats?.[item.key] ?? 0}
                 </Text>
-              </Space>
-            </Space>
+              </div>
+            </div>
           </Card>
         </Col>
       ))}
