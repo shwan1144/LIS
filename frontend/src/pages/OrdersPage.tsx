@@ -2142,12 +2142,13 @@ export function OrdersPage() {
               <Space>
                 <Button
                   type="dashed"
-                  size="small"
+                  size="middle"
                   icon={<PlusOutlined />}
                   onClick={openPatientPickerModal}
                   disabled={patientBootstrapLoading}
+                  className="orders-history-new-btn"
                 >
-                  New
+                  Patient
                 </Button>
                 <Button
                   size="small"
@@ -2918,50 +2919,61 @@ export function OrdersPage() {
             )}
           </div>
 
-          {patientPickerSelectedPatient ? (
-            <div className="orders-patient-picker-selected-card">
-              <div className="orders-patient-picker-selected-copy">
-                <Text className="orders-patient-picker-selected-label" type="secondary">
-                  Selected patient
-                </Text>
-                <Text strong className="orders-patient-picker-selected-name">
-                  {formatPatientPickerValue(getPatientName(patientPickerSelectedPatient))}
-                </Text>
-                <div className="orders-patient-picker-selected-meta">
-                  <span>
-                    <strong>Patient ID:</strong> {formatPatientPickerValue(patientPickerSelectedPatient.patientNumber)}
-                  </span>
-                  <span>
-                    <strong>Phone:</strong> {formatPatientPickerValue(patientPickerSelectedPatient.phone)}
-                  </span>
-                  <span>
-                    <strong>National ID:</strong> {formatPatientPickerValue(patientPickerSelectedPatient.nationalId)}
-                  </span>
-                  <span>
-                    <strong>Gender:</strong> {formatPatientPickerSex(patientPickerSelectedPatient.sex)}
-                  </span>
-                  <span>
-                    <strong>DOB:</strong> {formatPatientPickerValue(patientPickerSelectedPatient.dateOfBirth)}
-                  </span>
+          <div className="orders-patient-picker-footer-slot">
+            {patientPickerSelectedPatient ? (
+              <div className="orders-patient-picker-selected-card">
+                <div className="orders-patient-picker-selected-copy">
+                  <Text className="orders-patient-picker-selected-label" type="secondary">
+                    Selected patient
+                  </Text>
+                  <Text strong className="orders-patient-picker-selected-name">
+                    {formatPatientPickerValue(getPatientName(patientPickerSelectedPatient))}
+                  </Text>
+                  <div className="orders-patient-picker-selected-meta">
+                    <span>
+                      <strong>Patient ID:</strong> {formatPatientPickerValue(patientPickerSelectedPatient.patientNumber)}
+                    </span>
+                    <span>
+                      <strong>Phone:</strong> {formatPatientPickerValue(patientPickerSelectedPatient.phone)}
+                    </span>
+                    <span>
+                      <strong>National ID:</strong> {formatPatientPickerValue(patientPickerSelectedPatient.nationalId)}
+                    </span>
+                    <span>
+                      <strong>Gender:</strong> {formatPatientPickerSex(patientPickerSelectedPatient.sex)}
+                    </span>
+                    <span>
+                      <strong>DOB:</strong> {formatPatientPickerValue(patientPickerSelectedPatient.dateOfBirth)}
+                    </span>
+                  </div>
                 </div>
+                <Space wrap className="orders-patient-picker-selected-actions">
+                  <Button
+                    icon={<EditOutlined />}
+                    onClick={openPatientEditModal}
+                  >
+                    Edit
+                  </Button>
+                  <Button
+                    type="primary"
+                    icon={<ShoppingCartOutlined />}
+                    onClick={handlePatientPickerGoToOrder}
+                  >
+                    Go to order
+                  </Button>
+                </Space>
               </div>
-              <Space wrap className="orders-patient-picker-selected-actions">
-                <Button
-                  icon={<EditOutlined />}
-                  onClick={openPatientEditModal}
-                >
-                  Edit
-                </Button>
-                <Button
-                  type="primary"
-                  icon={<ShoppingCartOutlined />}
-                  onClick={handlePatientPickerGoToOrder}
-                >
-                  Go to order
-                </Button>
-              </Space>
-            </div>
-          ) : null}
+            ) : (
+              <div className="orders-patient-picker-footer-placeholder">
+                <Text className="orders-patient-picker-footer-placeholder-title" strong>
+                  Select a patient
+                </Text>
+                <Text type="secondary">
+                  Choose a row above to enable Edit and Go to order.
+                </Text>
+              </div>
+            )}
+          </div>
         </div>
       </Modal>
 
