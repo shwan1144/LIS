@@ -22,6 +22,7 @@ import {
   Modal,
   Table,
   Tooltip,
+  Form,
 } from 'antd';
 import {
   ShoppingCartOutlined,
@@ -32,16 +33,19 @@ import {
   PlusOutlined,
   ReloadOutlined,
   SearchOutlined,
+  EditOutlined,
 } from '@ant-design/icons';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useLocation } from 'react-router-dom';
 import dayjs from 'dayjs';
 import {
   createOrder,
+  createPatient,
   getTests,
   getPatient,
   getDepartments,
   getShifts,
   searchOrdersHistory,
+  searchPatients,
   getOrder,
   getNextOrderNumber,
   getOrderPriceEstimate,
@@ -50,6 +54,7 @@ import {
   updateOrderDiscount,
   updateOrderTests,
   updateOrderDeliveryMethods,
+  updatePatient,
   type CreateOrderDto,
   type DeliveryMethod,
   type PatientDto,
@@ -62,6 +67,12 @@ import {
   type DepartmentDto,
   type ShiftDto,
 } from '../api/client';
+import {
+  PatientFormFields,
+  getPatientFormInitialValues,
+  normalizePatientFormPayload,
+  type PatientFormValues,
+} from '../components/patients/PatientFormFields';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { PrintPreviewModal } from '../components/Print';
@@ -106,6 +117,8 @@ interface OrderListRow {
 const ORDER_PAGE_SIZE = 25;
 const CREATE_ORDER_TIMEOUT_MS = 15_000;
 const CREATE_ORDER_SLOW_FEEDBACK_MS = 1_200;
+const PATIENT_PICKER_PAGE_SIZE = 8;
+const PATIENT_PICKER_DEBOUNCE_MS = 250;
 const ORDER_STATUS_FILTERS: Array<{ label: string; value: 'ALL' | OrderStatus }> = [
   { label: 'All statuses', value: 'ALL' },
   { label: 'Registered', value: 'REGISTERED' },
@@ -137,6 +150,11 @@ const SHIFT_COLOR_PALETTE = [
   'purple',
 ] as const;
 const ONLY_TODAYS_ORDERS_EDITABLE_MESSAGE = "Only today's orders can be edited.";
+const PATIENT_SEX_LABELS: Record<string, string> = {
+  M: 'Male',
+  F: 'Female',
+  O: 'Other',
+};
 
 function normalizeReferringDoctorList(values: string[] | null | undefined): string[] {
   if (!Array.isArray(values)) return [];
@@ -164,6 +182,24 @@ function getShiftTagColor(shiftLabel: string): (typeof SHIFT_COLOR_PALETTE)[numb
     hash = (hash * 31 + shiftLabel.charCodeAt(i)) | 0;
   }
   return SHIFT_COLOR_PALETTE[Math.abs(hash) % SHIFT_COLOR_PALETTE.length];
+}
+
+function formatPatientPickerValue(value: string | null | undefined): string {
+  const normalized = String(value ?? '').trim();
+  return normalized || '-';
+}
+
+function formatPatientPickerSex(value: string | null | undefined): string {
+  const normalized = String(value ?? '').trim().toUpperCase();
+  return PATIENT_SEX_LABELS[normalized] ?? formatPatientPickerValue(value);
+}
+
+function getPatientMutationErrorMessage(error: unknown, fallback: string): string {
+  const messageFromResponse =
+    error && typeof error === 'object' && 'response' in error
+      ? (error as { response?: { data?: { message?: string } } }).response?.data?.message
+      : undefined;
+  return messageFromResponse || fallback;
 }
 
 function normalizeDeliveryMethods(methods: readonly string[] | null | undefined): DeliveryMethod[] {
@@ -294,7 +330,6 @@ const TubeIcon = ({ color }: { color: string }) => (
 );
 
 export function OrdersPage() {
-  const navigate = useNavigate();
   const location = useLocation();
   const { isDark } = useTheme();
   const { user, lab, currentShiftId, currentShiftLabel } = useAuth();
@@ -326,10 +361,23 @@ export function OrdersPage() {
   const [historyShiftFilter, setHistoryShiftFilter] = useState<string>('ALL');
   const [historyShiftOptions, setHistoryShiftOptions] = useState<ShiftDto[]>([]);
   const [draftPatient, setDraftPatient] = useState<PatientDto | null>(null);
+  const [patientPickerModalOpen, setPatientPickerModalOpen] = useState(false);
+  const [patientCreateModalOpen, setPatientCreateModalOpen] = useState(false);
+  const [patientEditModalOpen, setPatientEditModalOpen] = useState(false);
+  const [patientPickerSearchInput, setPatientPickerSearchInput] = useState('');
+  const [patientPickerSearchResults, setPatientPickerSearchResults] = useState<PatientDto[]>([]);
+  const [patientPickerSearchLoading, setPatientPickerSearchLoading] = useState(false);
+  const [patientPickerSelectedPatient, setPatientPickerSelectedPatient] = useState<PatientDto | null>(null);
+  const [patientCreateSubmitting, setPatientCreateSubmitting] = useState(false);
+  const [patientEditSubmitting, setPatientEditSubmitting] = useState(false);
+  const [patientCreateForm] = Form.useForm<PatientFormValues>();
+  const [patientEditForm] = Form.useForm<PatientFormValues>();
   /** When set, loadOrderHistory will select the draft row for this patient (e.g. after "Go to order" from Patients). Cleared after use. Ref to avoid extra list reload. */
   const focusDraftPatientIdRef = useRef<string | null>(null);
   const historyRequestSeqRef = useRef(0);
   const hasLoadedHistoryRef = useRef(false);
+  const patientPickerSearchTimerRef = useRef<number | null>(null);
+  const patientPickerSearchRequestSeqRef = useRef(0);
 
   const [departments, setDepartments] = useState<DepartmentDto[]>([]);
   const [testOptions, setTestOptions] = useState<TestDto[]>([]);
@@ -437,6 +485,8 @@ export function OrdersPage() {
         : selectedOrderIsToday === false
           ? ONLY_TODAYS_ORDERS_EDITABLE_MESSAGE
           : undefined;
+  const patientPickerQuery = patientPickerSearchInput.trim();
+  const patientPickerModalBusy = patientCreateSubmitting || patientEditSubmitting;
   const canAdminOverrideLockedTestRemoval =
     Boolean(user?.isImpersonation) ||
     user?.role === 'LAB_ADMIN' ||
@@ -594,6 +644,68 @@ export function OrdersPage() {
       cancelled = true;
     };
   }, [location.key, location.pathname, location.state]);
+
+  useEffect(() => {
+    if (!patientPickerModalOpen) {
+      if (patientPickerSearchTimerRef.current != null) {
+        window.clearTimeout(patientPickerSearchTimerRef.current);
+        patientPickerSearchTimerRef.current = null;
+      }
+      setPatientPickerSearchLoading(false);
+      return;
+    }
+
+    const query = patientPickerSearchInput.trim();
+    if (patientPickerSearchTimerRef.current != null) {
+      window.clearTimeout(patientPickerSearchTimerRef.current);
+      patientPickerSearchTimerRef.current = null;
+    }
+
+    if (query.length < 1) {
+      patientPickerSearchRequestSeqRef.current += 1;
+      setPatientPickerSearchLoading(false);
+      setPatientPickerSearchResults([]);
+      return;
+    }
+
+    const requestSeq = patientPickerSearchRequestSeqRef.current + 1;
+    patientPickerSearchRequestSeqRef.current = requestSeq;
+    setPatientPickerSearchLoading(true);
+    patientPickerSearchTimerRef.current = window.setTimeout(() => {
+      void searchPatients({
+        search: query,
+        page: 1,
+        size: PATIENT_PICKER_PAGE_SIZE,
+      })
+        .then((result) => {
+          if (patientPickerSearchRequestSeqRef.current !== requestSeq) {
+            return;
+          }
+          setPatientPickerSearchResults(Array.isArray(result.items) ? result.items : []);
+        })
+        .catch(() => {
+          if (patientPickerSearchRequestSeqRef.current !== requestSeq) {
+            return;
+          }
+          setPatientPickerSearchResults([]);
+          message.error('Failed to search patients');
+        })
+        .finally(() => {
+          if (patientPickerSearchRequestSeqRef.current !== requestSeq) {
+            return;
+          }
+          setPatientPickerSearchLoading(false);
+          patientPickerSearchTimerRef.current = null;
+        });
+    }, PATIENT_PICKER_DEBOUNCE_MS);
+
+    return () => {
+      if (patientPickerSearchTimerRef.current != null) {
+        window.clearTimeout(patientPickerSearchTimerRef.current);
+        patientPickerSearchTimerRef.current = null;
+      }
+    };
+  }, [patientPickerModalOpen, patientPickerSearchInput]);
 
   useEffect(() => {
     void loadOrderHistory();
@@ -903,6 +1015,36 @@ export function OrdersPage() {
       )
     );
   };
+
+  const syncPatientReferences = useCallback((patient: PatientDto) => {
+    setDraftPatient((current) => (current?.id === patient.id ? patient : current));
+    setPatientPickerSelectedPatient((current) => (current?.id === patient.id ? patient : current));
+    setPatientPickerSearchResults((prev) =>
+      prev.map((item) => (item.id === patient.id ? patient : item)),
+    );
+    setPatientList((prev) =>
+      prev.map((row) =>
+        row.patient.id === patient.id
+          ? {
+            ...row,
+            patient,
+            createdOrder: row.createdOrder ? { ...row.createdOrder, patient } : row.createdOrder,
+          }
+          : row,
+      ),
+    );
+    setOrderDetailsCache((prev) => {
+      let changed = false;
+      const nextEntries = Object.entries(prev).map(([orderId, order]) => {
+        if (order.patient?.id !== patient.id) {
+          return [orderId, order] as const;
+        }
+        changed = true;
+        return [orderId, { ...order, patient }] as const;
+      });
+      return changed ? Object.fromEntries(nextEntries) : prev;
+    });
+  }, []);
 
   const fetchOrderDetails = useCallback(
     async (orderId: string, mode: 'auto' | 'retry' = 'auto') => {
@@ -1355,6 +1497,103 @@ export function OrdersPage() {
     setListPage(1);
   };
 
+  const closePatientPickerModal = useCallback(() => {
+    if (patientCreateSubmitting || patientEditSubmitting) return;
+    if (patientPickerSearchTimerRef.current != null) {
+      window.clearTimeout(patientPickerSearchTimerRef.current);
+      patientPickerSearchTimerRef.current = null;
+    }
+    patientPickerSearchRequestSeqRef.current += 1;
+    setPatientPickerModalOpen(false);
+    setPatientCreateModalOpen(false);
+    setPatientEditModalOpen(false);
+    setPatientPickerSearchInput('');
+    setPatientPickerSearchResults([]);
+    setPatientPickerSearchLoading(false);
+    setPatientPickerSelectedPatient(null);
+    patientCreateForm.resetFields();
+    patientEditForm.resetFields();
+  }, [
+    patientCreateForm,
+    patientCreateSubmitting,
+    patientEditForm,
+    patientEditSubmitting,
+  ]);
+
+  const openPatientPickerModal = () => {
+    if (patientPickerSearchTimerRef.current != null) {
+      window.clearTimeout(patientPickerSearchTimerRef.current);
+      patientPickerSearchTimerRef.current = null;
+    }
+    patientPickerSearchRequestSeqRef.current += 1;
+    setPatientPickerSearchInput('');
+    setPatientPickerSearchResults([]);
+    setPatientPickerSearchLoading(false);
+    setPatientPickerSelectedPatient(null);
+    setPatientCreateModalOpen(false);
+    setPatientEditModalOpen(false);
+    patientCreateForm.resetFields();
+    patientEditForm.resetFields();
+    setPatientPickerModalOpen(true);
+  };
+
+  const openPatientCreateModal = () => {
+    patientCreateForm.setFieldsValue(getPatientFormInitialValues());
+    setPatientCreateModalOpen(true);
+  };
+
+  const openPatientEditModal = () => {
+    if (!patientPickerSelectedPatient) return;
+    patientEditForm.setFieldsValue(
+      getPatientFormInitialValues(patientPickerSelectedPatient),
+    );
+    setPatientEditModalOpen(true);
+  };
+
+  const handlePatientPickerCreate = async (values: PatientFormValues) => {
+    setPatientCreateSubmitting(true);
+    try {
+      const createdPatient = await createPatient(
+        normalizePatientFormPayload(values),
+      );
+      message.success('Patient registered');
+      setPatientPickerSelectedPatient(createdPatient);
+      setPatientPickerSearchInput(createdPatient.fullName ?? '');
+      setPatientPickerSearchResults([createdPatient]);
+      setPatientCreateModalOpen(false);
+      patientCreateForm.resetFields();
+    } catch (error: unknown) {
+      message.error(getPatientMutationErrorMessage(error, 'Registration failed'));
+    } finally {
+      setPatientCreateSubmitting(false);
+    }
+  };
+
+  const handlePatientPickerEdit = async (values: PatientFormValues) => {
+    if (!patientPickerSelectedPatient) return;
+    setPatientEditSubmitting(true);
+    try {
+      const updatedPatient = await updatePatient(
+        patientPickerSelectedPatient.id,
+        normalizePatientFormPayload(values),
+      );
+      syncPatientReferences(updatedPatient);
+      message.success('Patient updated');
+      setPatientEditModalOpen(false);
+      patientEditForm.resetFields();
+    } catch (error: unknown) {
+      message.error(getPatientMutationErrorMessage(error, 'Update failed'));
+    } finally {
+      setPatientEditSubmitting(false);
+    }
+  };
+
+  const handlePatientPickerGoToOrder = () => {
+    if (!patientPickerSelectedPatient) return;
+    addNewOrderForPatient(patientPickerSelectedPatient);
+    closePatientPickerModal();
+  };
+
   const openPrint = async (order: OrderDto, type: 'receipt' | 'labels') => {
     if (lockedOrderActionsBusy) return;
     setPrintingAction(type);
@@ -1400,10 +1639,6 @@ export function OrdersPage() {
     } finally {
       setPrintingAction((current) => (current === type ? null : current));
     }
-  };
-
-  const openNewPatientInPatientsTab = () => {
-    navigate('/patients', { state: { openNewPatient: true } });
   };
 
   const handleLockedEditTests = () => {
@@ -1909,7 +2144,7 @@ export function OrdersPage() {
                   type="dashed"
                   size="small"
                   icon={<PlusOutlined />}
-                  onClick={openNewPatientInPatientsTab}
+                  onClick={openPatientPickerModal}
                   disabled={patientBootstrapLoading}
                 >
                   New
@@ -2581,6 +2816,242 @@ export function OrdersPage() {
           </Card>
         </Col>
       </Row>
+
+      <Modal
+        title="Find patient"
+        open={patientPickerModalOpen}
+        width={840}
+        footer={null}
+        destroyOnClose={false}
+        keyboard={!patientPickerModalBusy}
+        maskClosable={!patientPickerModalBusy}
+        onCancel={closePatientPickerModal}
+        className={`orders-patient-picker-modal${isDark ? ' orders-patient-picker-modal-dark' : ''}`}
+      >
+        <div className="orders-patient-picker-shell">
+          <div className="orders-patient-picker-toolbar">
+            <div className="orders-patient-picker-toolbar-copy">
+              <Text strong className="orders-patient-picker-heading">
+                Search existing patients
+              </Text>
+              <Text type="secondary">
+                Type a name, phone number, national ID, or patient ID.
+              </Text>
+            </div>
+            <Button icon={<PlusOutlined />} onClick={openPatientCreateModal}>
+              New patient
+            </Button>
+          </div>
+
+          <Input
+            size="large"
+            allowClear
+            autoFocus
+            prefix={<SearchOutlined />}
+            placeholder="Start typing to search patients"
+            value={patientPickerSearchInput}
+            onChange={(event) => setPatientPickerSearchInput(event.target.value)}
+          />
+
+          <div className="orders-patient-picker-results-panel">
+            {patientPickerSearchLoading ? (
+              <div className="orders-patient-picker-empty-state">
+                <Spin size="small" />
+                <Text type="secondary">Searching patients...</Text>
+              </div>
+            ) : patientPickerQuery.length < 1 ? (
+              <div className="orders-patient-picker-empty-state">
+                <Text type="secondary">
+                  Type the first letter to show matching patients here.
+                </Text>
+              </div>
+            ) : patientPickerSearchResults.length === 0 ? (
+              <div className="orders-patient-picker-empty-state">
+                <Empty
+                  image={Empty.PRESENTED_IMAGE_SIMPLE}
+                  description="No matching patients found"
+                />
+              </div>
+            ) : (
+              <div className="orders-patient-picker-results-table">
+                <div className="orders-patient-picker-results-header" aria-hidden="true">
+                  <span>Name</span>
+                  <span>Phone</span>
+                  <span>National ID</span>
+                  <span>Gender</span>
+                  <span>DOB</span>
+                  <span>Patient ID</span>
+                </div>
+                <div className="orders-patient-picker-results-list" role="listbox">
+                  {patientPickerSearchResults.map((patient) => {
+                    const isSelected = patientPickerSelectedPatient?.id === patient.id;
+                    return (
+                      <button
+                        key={patient.id}
+                        type="button"
+                        className={`orders-patient-picker-result-row${isSelected ? ' is-selected' : ''}`}
+                        onClick={() => setPatientPickerSelectedPatient(patient)}
+                      >
+                        <span className="orders-patient-picker-result-cell orders-patient-picker-result-cell--name">
+                          {formatPatientPickerValue(getPatientName(patient))}
+                        </span>
+                        <span className="orders-patient-picker-result-cell">
+                          {formatPatientPickerValue(patient.phone)}
+                        </span>
+                        <span className="orders-patient-picker-result-cell">
+                          {formatPatientPickerValue(patient.nationalId)}
+                        </span>
+                        <span className="orders-patient-picker-result-cell">
+                          {formatPatientPickerSex(patient.sex)}
+                        </span>
+                        <span className="orders-patient-picker-result-cell">
+                          {formatPatientPickerValue(patient.dateOfBirth)}
+                        </span>
+                        <span className="orders-patient-picker-result-cell orders-patient-picker-result-cell--id">
+                          {formatPatientPickerValue(patient.patientNumber)}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {patientPickerSelectedPatient ? (
+            <div className="orders-patient-picker-selected-card">
+              <div className="orders-patient-picker-selected-copy">
+                <Text className="orders-patient-picker-selected-label" type="secondary">
+                  Selected patient
+                </Text>
+                <Text strong className="orders-patient-picker-selected-name">
+                  {formatPatientPickerValue(getPatientName(patientPickerSelectedPatient))}
+                </Text>
+                <div className="orders-patient-picker-selected-meta">
+                  <span>
+                    <strong>Patient ID:</strong> {formatPatientPickerValue(patientPickerSelectedPatient.patientNumber)}
+                  </span>
+                  <span>
+                    <strong>Phone:</strong> {formatPatientPickerValue(patientPickerSelectedPatient.phone)}
+                  </span>
+                  <span>
+                    <strong>National ID:</strong> {formatPatientPickerValue(patientPickerSelectedPatient.nationalId)}
+                  </span>
+                  <span>
+                    <strong>Gender:</strong> {formatPatientPickerSex(patientPickerSelectedPatient.sex)}
+                  </span>
+                  <span>
+                    <strong>DOB:</strong> {formatPatientPickerValue(patientPickerSelectedPatient.dateOfBirth)}
+                  </span>
+                </div>
+              </div>
+              <Space wrap className="orders-patient-picker-selected-actions">
+                <Button
+                  icon={<EditOutlined />}
+                  onClick={openPatientEditModal}
+                >
+                  Edit
+                </Button>
+                <Button
+                  type="primary"
+                  icon={<ShoppingCartOutlined />}
+                  onClick={handlePatientPickerGoToOrder}
+                >
+                  Go to order
+                </Button>
+              </Space>
+            </div>
+          ) : null}
+        </div>
+      </Modal>
+
+      <Modal
+        title="Register patient"
+        open={patientCreateModalOpen}
+        footer={null}
+        destroyOnClose
+        keyboard={!patientCreateSubmitting}
+        maskClosable={!patientCreateSubmitting}
+        onCancel={() => {
+          if (patientCreateSubmitting) return;
+          setPatientCreateModalOpen(false);
+          patientCreateForm.resetFields();
+        }}
+        className={`orders-patient-form-modal${isDark ? ' orders-patient-form-modal-dark' : ''}`}
+      >
+        <Form
+          form={patientCreateForm}
+          layout="vertical"
+          initialValues={getPatientFormInitialValues()}
+          onFinish={handlePatientPickerCreate}
+        >
+          <PatientFormFields />
+          <Form.Item>
+            <Space>
+              <Button type="primary" htmlType="submit" loading={patientCreateSubmitting}>
+                Register
+              </Button>
+              <Button
+                onClick={() => {
+                  if (patientCreateSubmitting) return;
+                  setPatientCreateModalOpen(false);
+                  patientCreateForm.resetFields();
+                }}
+              >
+                Cancel
+              </Button>
+            </Space>
+          </Form.Item>
+        </Form>
+      </Modal>
+
+      <Modal
+        title="Edit patient"
+        open={patientEditModalOpen}
+        footer={null}
+        destroyOnClose
+        keyboard={!patientEditSubmitting}
+        maskClosable={!patientEditSubmitting}
+        onCancel={() => {
+          if (patientEditSubmitting) return;
+          setPatientEditModalOpen(false);
+          patientEditForm.resetFields();
+        }}
+        className={`orders-patient-form-modal${isDark ? ' orders-patient-form-modal-dark' : ''}`}
+      >
+        <Form
+          form={patientEditForm}
+          layout="vertical"
+          initialValues={getPatientFormInitialValues(patientPickerSelectedPatient)}
+          onFinish={handlePatientPickerEdit}
+        >
+          {patientPickerSelectedPatient ? (
+            <Form.Item label="Patient ID">
+              <Text strong>{patientPickerSelectedPatient.patientNumber}</Text>
+              <Text type="secondary" style={{ marginLeft: 8 }}>
+                (cannot be changed)
+              </Text>
+            </Form.Item>
+          ) : null}
+          <PatientFormFields />
+          <Form.Item>
+            <Space>
+              <Button type="primary" htmlType="submit" loading={patientEditSubmitting}>
+                Save
+              </Button>
+              <Button
+                onClick={() => {
+                  if (patientEditSubmitting) return;
+                  setPatientEditModalOpen(false);
+                  patientEditForm.resetFields();
+                }}
+              >
+                Cancel
+              </Button>
+            </Space>
+          </Form.Item>
+        </Form>
+      </Modal>
 
       <Modal
         title="Partially paid"

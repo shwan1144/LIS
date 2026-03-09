@@ -10,7 +10,6 @@ import {
   Form,
   Typography,
   Tag,
-  Radio,
 } from 'antd';
 import { SearchOutlined, PlusOutlined, ShoppingCartOutlined, EditOutlined } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
@@ -22,11 +21,14 @@ import {
   type PatientDto,
   type CreatePatientDto,
 } from '../api/client';
+import {
+  PatientFormFields,
+  getPatientFormInitialValues,
+  normalizePatientFormPayload,
+  type PatientFormValues,
+} from '../components/patients/PatientFormFields';
 
 const { Title, Text } = Typography;
-const TODAY_ISO = new Date(Date.now() - new Date().getTimezoneOffset() * 60_000)
-  .toISOString()
-  .slice(0, 10);
 
 export function PatientsPage() {
   const navigate = useNavigate();
@@ -40,8 +42,8 @@ export function PatientsPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [editingPatient, setEditingPatient] = useState<PatientDto | null>(null);
-  const [form] = Form.useForm();
-  const [editForm] = Form.useForm();
+  const [form] = Form.useForm<PatientFormValues>();
+  const [editForm] = Form.useForm<PatientFormValues>();
   const [submitting, setSubmitting] = useState(false);
 
   const load = useCallback(async () => {
@@ -74,15 +76,8 @@ export function PatientsPage() {
 
   const onSearch = () => load();
 
-  const handleCreate = async (values: CreatePatientDto) => {
-    const payload: CreatePatientDto = {
-      fullName: values.fullName,
-      nationalId: values.nationalId || undefined,
-      phone: values.phone || undefined,
-      sex: values.sex || undefined,
-      address: values.address || undefined,
-      dateOfBirth: values.dateOfBirth || undefined,
-    };
+  const handleCreate = async (values: PatientFormValues) => {
+    const payload: CreatePatientDto = normalizePatientFormPayload(values);
     setSubmitting(true);
     try {
       await createPatient(payload);
@@ -103,29 +98,15 @@ export function PatientsPage() {
 
   const handleEdit = (patient: PatientDto) => {
     setEditingPatient(patient);
-    editForm.setFieldsValue({
-      fullName: patient.fullName,
-      nationalId: patient.nationalId ?? '',
-      phone: patient.phone ?? '',
-      dateOfBirth: patient.dateOfBirth ?? undefined,
-      sex: patient.sex ?? undefined,
-      address: patient.address ?? '',
-    });
+    editForm.setFieldsValue(getPatientFormInitialValues(patient));
     setEditModalOpen(true);
   };
 
-  const handleUpdate = async (values: { fullName: string; nationalId?: string; phone?: string; dateOfBirth?: string; sex?: string; address?: string }) => {
+  const handleUpdate = async (values: PatientFormValues) => {
     if (!editingPatient) return;
     setSubmitting(true);
     try {
-      await updatePatient(editingPatient.id, {
-        fullName: values.fullName,
-        nationalId: values.nationalId || undefined,
-        phone: values.phone || undefined,
-        dateOfBirth: values.dateOfBirth || undefined,
-        sex: values.sex || undefined,
-        address: values.address || undefined,
-      });
+      await updatePatient(editingPatient.id, normalizePatientFormPayload(values));
       message.success('Patient updated');
       setEditModalOpen(false);
       setEditingPatient(null);
@@ -241,7 +222,7 @@ export function PatientsPage() {
           form={editForm}
           layout="vertical"
           onFinish={handleUpdate}
-          initialValues={{ sex: undefined }}
+          initialValues={getPatientFormInitialValues(editingPatient)}
         >
           {editingPatient && (
             <Form.Item label="Patient ID">
@@ -249,32 +230,7 @@ export function PatientsPage() {
               <Text type="secondary" style={{ marginLeft: 8 }}>(cannot be changed)</Text>
             </Form.Item>
           )}
-          <Form.Item
-            name="fullName"
-            label="Full name"
-            rules={[{ required: true, message: 'Required' }]}
-          >
-            <Input placeholder="Full name" />
-          </Form.Item>
-          <Form.Item name="nationalId" label="National ID">
-            <Input placeholder="National ID" />
-          </Form.Item>
-          <Form.Item name="phone" label="Phone">
-            <Input placeholder="Phone" />
-          </Form.Item>
-          <Form.Item name="dateOfBirth" label="Date of birth">
-            <Input type="date" max={TODAY_ISO} />
-          </Form.Item>
-          <Form.Item name="sex" label="Sex">
-            <Radio.Group buttonStyle="solid">
-              <Radio.Button value="M">Male</Radio.Button>
-              <Radio.Button value="F">Female</Radio.Button>
-              <Radio.Button value="O">Other</Radio.Button>
-            </Radio.Group>
-          </Form.Item>
-          <Form.Item name="address" label="Address">
-            <Input.TextArea rows={2} placeholder="Address" />
-          </Form.Item>
+          <PatientFormFields />
           <Form.Item>
             <Space>
               <Button type="primary" htmlType="submit" loading={submitting}>
@@ -299,34 +255,9 @@ export function PatientsPage() {
           form={form}
           layout="vertical"
           onFinish={handleCreate}
-          initialValues={{ sex: undefined, dateOfBirth: undefined }}
+          initialValues={getPatientFormInitialValues()}
         >
-          <Form.Item
-            name="fullName"
-            label="Full name"
-            rules={[{ required: true, message: 'Required' }]}
-          >
-            <Input placeholder="Full name" />
-          </Form.Item>
-          <Form.Item name="nationalId" label="National ID">
-            <Input placeholder="National ID" />
-          </Form.Item>
-          <Form.Item name="phone" label="Phone">
-            <Input placeholder="Phone" />
-          </Form.Item>
-          <Form.Item name="dateOfBirth" label="Date of birth">
-            <Input type="date" max={TODAY_ISO} />
-          </Form.Item>
-          <Form.Item name="sex" label="Sex">
-            <Radio.Group buttonStyle="solid">
-              <Radio.Button value="M">Male</Radio.Button>
-              <Radio.Button value="F">Female</Radio.Button>
-              <Radio.Button value="O">Other</Radio.Button>
-            </Radio.Group>
-          </Form.Item>
-          <Form.Item name="address" label="Address">
-            <Input.TextArea rows={2} placeholder="Address" />
-          </Form.Item>
+          <PatientFormFields />
           <Form.Item>
             <Space>
               <Button type="primary" htmlType="submit" loading={submitting}>
