@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Card, Row, Col, Typography, Statistic, Table, Spin, message, Space } from 'antd';
+import { Card, Row, Col, Typography, Table, Spin, message, Space } from 'antd';
 import {
   FileTextOutlined,
   ClockCircleOutlined,
@@ -63,6 +63,37 @@ export function DashboardPage() {
     totalPatients: 0,
   };
 
+  const kpiCards = [
+    {
+      key: 'orders',
+      label: 'Orders today',
+      value: String(k.ordersToday),
+      icon: <FileTextOutlined />,
+      tone: 'blue',
+    },
+    {
+      key: 'verification',
+      label: 'Pending verification',
+      value: String(k.pendingVerification),
+      icon: <ClockCircleOutlined />,
+      tone: 'teal',
+    },
+    {
+      key: 'patients',
+      label: 'Total patients',
+      value: String(k.totalPatients),
+      icon: <TeamOutlined />,
+      tone: 'orange',
+    },
+    {
+      key: 'tat',
+      label: 'Avg TAT (hours)',
+      value: k.avgTatHours === null ? '—' : String(k.avgTatHours),
+      icon: <ThunderboltOutlined />,
+      tone: 'purple',
+    },
+  ] as const;
+
   return (
     <div className="dashboard-page">
       {dashboardAnnouncement ? (
@@ -81,42 +112,19 @@ export function DashboardPage() {
       <Title level={4}>Dashboard</Title>
 
       <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
-        <Col xs={24} sm={12} lg={6}>
-          <Card>
-            <Statistic
-              title="Orders today"
-              value={k.ordersToday}
-              prefix={<FileTextOutlined />}
-            />
-          </Card>
-        </Col>
-        <Col xs={24} sm={12} lg={6}>
-          <Card>
-            <Statistic
-              title="Pending verification"
-              value={k.pendingVerification}
-              prefix={<ClockCircleOutlined />}
-            />
-          </Card>
-        </Col>
-        <Col xs={24} sm={12} lg={6}>
-          <Card>
-            <Statistic
-              title="Total patients"
-              value={k.totalPatients}
-              prefix={<TeamOutlined />}
-            />
-          </Card>
-        </Col>
-        <Col xs={24} sm={12} lg={6}>
-          <Card>
-            <Statistic
-              title="Avg TAT (hours)"
-              value={k.avgTatHours ?? '—'}
-              prefix={<ThunderboltOutlined />}
-            />
-          </Card>
-        </Col>
+        {kpiCards.map((item) => (
+          <Col key={item.key} xs={24} sm={12} lg={6}>
+            <Card className={`dashboard-kpi-card dashboard-kpi-card--${item.tone}`}>
+              <div className="dashboard-kpi-label">{item.label}</div>
+              <div className="dashboard-kpi-body">
+                <div className="dashboard-kpi-icon" aria-hidden="true">
+                  {item.icon}
+                </div>
+                <div className="dashboard-kpi-value">{item.value}</div>
+              </div>
+            </Card>
+          </Col>
+        ))}
       </Row>
 
       <Row gutter={[16, 16]}>
