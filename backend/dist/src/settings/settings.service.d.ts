@@ -14,7 +14,7 @@ type ReportBrandingUpdate = {
     watermarkDataUrl?: string | null;
 };
 type LabPrintingUpdate = {
-    mode?: 'browser' | 'direct_qz' | string;
+    mode?: 'browser' | 'direct_qz' | 'direct_gateway' | string;
     receiptPrinterName?: string | null;
     labelsPrinterName?: string | null;
     reportPrinterName?: string | null;

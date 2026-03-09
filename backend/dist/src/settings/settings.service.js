@@ -72,7 +72,7 @@ let SettingsService = class SettingsService {
             onlineResultWatermarkDataUrl: lab.onlineResultWatermarkDataUrl ?? null,
             onlineResultWatermarkText: lab.onlineResultWatermarkText ?? null,
             printing: {
-                mode: lab.printMethod === 'direct_qz' ? 'direct_qz' : 'browser',
+                mode: lab.printMethod === 'direct_gateway' ? 'direct_gateway' : (lab.printMethod === 'direct_qz' ? 'direct_qz' : 'browser'),
                 receiptPrinterName: lab.receiptPrinterName ?? null,
                 labelsPrinterName: lab.labelsPrinterName ?? null,
                 reportPrinterName: lab.reportPrinterName ?? null,
@@ -242,8 +242,8 @@ let SettingsService = class SettingsService {
     normalizePrintMethod(value) {
         if (value === undefined)
             return 'browser';
-        if (value !== 'browser' && value !== 'direct_qz') {
-            throw new common_1.BadRequestException('printing.mode must be browser or direct_qz');
+        if (value !== 'browser' && value !== 'direct_qz' && value !== 'direct_gateway') {
+            throw new common_1.BadRequestException('printing.mode must be browser, direct_qz or direct_gateway');
         }
         return value;
     }
