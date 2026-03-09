@@ -150,11 +150,7 @@ const SHIFT_COLOR_PALETTE = [
   'purple',
 ] as const;
 const ONLY_TODAYS_ORDERS_EDITABLE_MESSAGE = "Only today's orders can be edited.";
-const PATIENT_SEX_LABELS: Record<string, string> = {
-  M: 'Male',
-  F: 'Female',
-  O: 'Other',
-};
+
 
 function normalizeReferringDoctorList(values: string[] | null | undefined): string[] {
   if (!Array.isArray(values)) return [];
@@ -2975,6 +2971,7 @@ export function OrdersPage() {
         title="Register patient"
         open={patientCreateModalOpen}
         footer={null}
+        width={840}
         destroyOnClose
         keyboard={!patientCreateSubmitting}
         maskClosable={!patientCreateSubmitting}
@@ -3015,6 +3012,7 @@ export function OrdersPage() {
         title="Edit patient"
         open={patientEditModalOpen}
         footer={null}
+        width={840}
         destroyOnClose
         keyboard={!patientEditSubmitting}
         maskClosable={!patientEditSubmitting}
