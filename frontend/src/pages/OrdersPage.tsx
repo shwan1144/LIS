@@ -21,6 +21,7 @@ import {
   Tag,
   Modal,
   Table,
+  Tooltip,
 } from 'antd';
 import {
   ShoppingCartOutlined,
@@ -69,6 +70,7 @@ import {
   directPrintReceipt,
   getDirectPrintErrorMessage,
 } from '../printing/direct-print';
+import { formatDateKeyForTimeZone } from '../utils/lab-timezone';
 import { buildKeyboardSearchVariants } from '../utils/keyboard-map';
 import './OrdersPage.css';
 
@@ -134,6 +136,7 @@ const SHIFT_COLOR_PALETTE = [
   'geekblue',
   'purple',
 ] as const;
+const ONLY_TODAYS_ORDERS_EDITABLE_MESSAGE = "Only today's orders can be edited.";
 
 function normalizeReferringDoctorList(values: string[] | null | undefined): string[] {
   if (!Array.isArray(values)) return [];
@@ -378,6 +381,20 @@ export function OrdersPage() {
     if (!selectedCreatedOrderSummary) return null;
     return orderDetailsCache[selectedCreatedOrderSummary.id] ?? null;
   }, [orderDetailsCache, selectedCreatedOrderSummary]);
+  const selectedOrderIsToday = useMemo(() => {
+    if (!selectedCreatedOrder) return null;
+    return (
+      formatDateKeyForTimeZone(
+        new Date(selectedCreatedOrder.registeredAt),
+        selectedCreatedOrder.lab?.timezone,
+      ) ===
+      formatDateKeyForTimeZone(new Date(), selectedCreatedOrder.lab?.timezone)
+    );
+  }, [
+    selectedCreatedOrder?.id,
+    selectedCreatedOrder?.registeredAt,
+    selectedCreatedOrder?.lab?.timezone,
+  ]);
   const isSelectedLocked = selectedRow != null && selectedRow.createdOrder != null;
   const selectedOrderDetailsLoading =
     selectedCreatedOrderSummary != null && orderDetailsLoadingId === selectedCreatedOrderSummary.id;
@@ -394,6 +411,11 @@ export function OrdersPage() {
   const lockedOrderBaseActionsDisabled = lockedOrderActionsBusy || !lockedOrderContextActive;
   const lockedOrderDetailActionsDisabled =
     lockedOrderActionsBusy || !lockedOrderContextActive || !selectedCreatedOrder;
+  const lockedOrderEditTestsDisabled =
+    lockedOrderActionsBusy ||
+    !lockedOrderContextActive ||
+    !selectedCreatedOrder ||
+    selectedOrderIsToday === false;
   const lockedOrderBaseActionDisabledTitle = lockedOrderActionsBusy
     ? 'Please wait until the current action finishes.'
     : !lockedOrderContextActive
@@ -406,6 +428,15 @@ export function OrdersPage() {
       : !selectedCreatedOrder
         ? 'Order details are still loading.'
         : undefined;
+  const lockedOrderEditTestsDisabledReason = lockedOrderActionsBusy
+    ? 'Please wait until the current action finishes.'
+    : !lockedOrderContextActive
+      ? 'Select a locked order to use these actions.'
+      : !selectedCreatedOrder
+        ? 'Order details are still loading.'
+        : selectedOrderIsToday === false
+          ? ONLY_TODAYS_ORDERS_EDITABLE_MESSAGE
+          : undefined;
   const canAdminOverrideLockedTestRemoval =
     Boolean(user?.isImpersonation) ||
     user?.role === 'LAB_ADMIN' ||
@@ -1106,6 +1137,10 @@ export function OrdersPage() {
       message.error('At least one test is required');
       return;
     }
+    if (selectedOrderIsToday === false) {
+      message.error(ONLY_TODAYS_ORDERS_EDITABLE_MESSAGE);
+      return;
+    }
 
     setSavingEditedTests(true);
     try {
@@ -1378,6 +1413,10 @@ export function OrdersPage() {
       message.info('Order details are still loading. Please try again in a moment.');
       return;
     }
+    if (selectedOrderIsToday === false) {
+      message.info(ONLY_TODAYS_ORDERS_EDITABLE_MESSAGE);
+      return;
+    }
     openEditTestsModal();
   };
 
@@ -1630,16 +1669,19 @@ export function OrdersPage() {
             >
               New order for this patient
             </Button>
-            <Button
-              icon={<PlusOutlined />}
-              onClick={handleLockedEditTests}
-              size="large"
-              loading={savingEditedTests}
-              disabled={lockedOrderDetailActionsDisabled}
-              title={lockedOrderDetailActionDisabledTitle}
-            >
-              Edit tests
-            </Button>
+            <Tooltip title={lockedOrderEditTestsDisabledReason}>
+              <span>
+                <Button
+                  icon={<PlusOutlined />}
+                  onClick={handleLockedEditTests}
+                  size="large"
+                  loading={savingEditedTests}
+                  disabled={lockedOrderEditTestsDisabled}
+                >
+                  Edit tests
+                </Button>
+              </span>
+            </Tooltip>
             <Button
               type="primary"
               icon={<PrinterOutlined />}

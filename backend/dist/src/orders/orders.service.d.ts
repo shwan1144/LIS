@@ -139,6 +139,7 @@ export declare class OrdersService {
     private resolveOrderHistoryPerfLogThresholdMs;
     private resolveOrderTestInsertChunkSize;
     private elapsedMs;
+    private assertOrderTestsEditableToday;
     private stripHeavyOrderPayload;
     private stripHeavyOrderTestsPayload;
     private normalizeDeliveryMethods;

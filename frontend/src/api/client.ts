@@ -89,6 +89,7 @@ export interface LabDto {
   id: string;
   code: string;
   name: string;
+  timezone?: string;
   labelSequenceBy?: 'tube_type' | 'department';
   sequenceResetBy?: 'day' | 'shift';
   enableOnlineResults?: boolean;

@@ -459,6 +459,7 @@ let OrdersService = OrdersService_1 = class OrdersService {
             if (order.status === order_entity_1.OrderStatus.CANCELLED) {
                 throw new common_1.BadRequestException('Cancelled order cannot be edited');
             }
+            this.assertOrderTestsEditableToday(order);
             const allOrderTests = order.samples.flatMap((sample) => sample.orderTests ?? []);
             const rootOrderTests = allOrderTests.filter((orderTest) => !orderTest.parentOrderTestId);
             const existingRootTestIdSet = new Set(rootOrderTests.map((orderTest) => orderTest.testId));
@@ -1368,6 +1369,14 @@ let OrdersService = OrdersService_1 = class OrdersService {
     }
     elapsedMs(startedAt) {
         return Number(process.hrtime.bigint() - startedAt) / 1_000_000;
+    }
+    assertOrderTestsEditableToday(order) {
+        const timeZone = (0, lab_timezone_util_1.normalizeLabTimeZone)(order.lab?.timezone);
+        const todayDateKey = (0, lab_timezone_util_1.formatDateKeyForTimeZone)(new Date(), timeZone);
+        const orderDateKey = (0, lab_timezone_util_1.formatDateKeyForTimeZone)(new Date(order.registeredAt), timeZone);
+        if (orderDateKey !== todayDateKey) {
+            throw new common_1.BadRequestException("Only today's orders can be edited.");
+        }
     }
     stripHeavyOrderPayload(order, detailView = create_order_response_dto_1.OrderDetailView.COMPACT) {
         if (!order?.lab) {

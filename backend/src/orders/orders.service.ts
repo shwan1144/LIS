@@ -667,6 +667,7 @@ export class OrdersService {
       if (order.status === OrderStatus.CANCELLED) {
         throw new BadRequestException('Cancelled order cannot be edited');
       }
+      this.assertOrderTestsEditableToday(order);
 
       const allOrderTests = order.samples.flatMap((sample) => sample.orderTests ?? []);
       const rootOrderTests = allOrderTests.filter((orderTest) => !orderTest.parentOrderTestId);
@@ -1907,6 +1908,15 @@ export class OrdersService {
 
   private elapsedMs(startedAt: bigint): number {
     return Number(process.hrtime.bigint() - startedAt) / 1_000_000;
+  }
+
+  private assertOrderTestsEditableToday(order: Order): void {
+    const timeZone = normalizeLabTimeZone(order.lab?.timezone);
+    const todayDateKey = formatDateKeyForTimeZone(new Date(), timeZone);
+    const orderDateKey = formatDateKeyForTimeZone(new Date(order.registeredAt), timeZone);
+    if (orderDateKey !== todayDateKey) {
+      throw new BadRequestException("Only today's orders can be edited.");
+    }
   }
 
   /**
