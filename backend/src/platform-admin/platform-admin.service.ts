@@ -13,11 +13,21 @@ import { AuditService } from '../audit/audit.service';
 import { AuditAction, AuditActorType } from '../entities/audit-log.entity';
 import { OrderTest, OrderTestStatus } from '../entities/order-test.entity';
 import { Patient } from '../entities/patient.entity';
+import {
+  Test,
+  type TestParameterDefinition,
+  type TestResultEntryType,
+  type TestResultTextOption,
+  TestType,
+  type TestNumericAgeRange,
+} from '../entities/test.entity';
+import { Pricing } from '../entities/pricing.entity';
+import { TestComponent } from '../entities/test-component.entity';
 import { ReportsService } from '../reports/reports.service';
 import type { ReportBrandingOverride } from '../reports/reports.service';
 import { type ReportStyleConfig, validateAndNormalizeReportStyleConfig } from '../reports/report-style.config';
 import { PlatformSetting } from '../entities/platform-setting.entity';
-import { EntityManager, In, SelectQueryBuilder } from 'typeorm';
+import { EntityManager, In, IsNull, SelectQueryBuilder } from 'typeorm';
 import { AdminAuthService } from '../admin-auth/admin-auth.service';
 import { AuthService } from '../auth/auth.service';
 import {
@@ -25,6 +35,7 @@ import {
   REFRESH_TOKEN_TTL_DAYS,
 } from '../config/auth-session.config';
 import { normalizeOrderTestFlag } from '../order-tests/order-test-flag.util';
+import { normalizeNumericAgeRanges } from '../tests/normal-range.util';
 
 const MAX_REPORT_IMAGE_DATA_URL_LENGTH = 4 * 1024 * 1024;
 const REPORT_IMAGE_DATA_URL_PATTERN = /^data:image\/(png|jpeg|jpg|webp);base64,[a-zA-Z0-9+/=]+$/;
@@ -32,6 +43,7 @@ const UUID_V4_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const MAX_DASHBOARD_ANNOUNCEMENT_TEXT_LENGTH = 255;
 const GLOBAL_DASHBOARD_ANNOUNCEMENT_KEY = 'dashboard.announcement.all_labs';
+const DEFAULT_CREATE_LAB_TIMEZONE = 'Asia/Baghdad';
 
 export interface PlatformActorContext {
   platformUserId: string;
@@ -104,6 +116,36 @@ export interface AdminLabReportDesign {
   reportStyle: ReportStyleConfig | null;
   onlineResultWatermarkDataUrl: string | null;
   onlineResultWatermarkText: string | null;
+}
+
+export interface AdminTestsTransferLabRef {
+  id: string;
+  code: string;
+  name: string;
+}
+
+export interface AdminTestsTransferDepartmentIssue {
+  testCode: string;
+  departmentCode: string | null;
+}
+
+export interface AdminTestsTransferShiftPriceIssue {
+  testCode: string;
+  shiftCode: string | null;
+}
+
+export interface AdminLabTestsTransferResult {
+  dryRun: boolean;
+  sourceLab: AdminTestsTransferLabRef;
+  targetLab: AdminTestsTransferLabRef;
+  totalSourceTests: number;
+  createCount: number;
+  updateCount: number;
+  pricingRowsCopied: number;
+  pricingRowsSkipped: number;
+  unmatchedDepartments: AdminTestsTransferDepartmentIssue[];
+  unmatchedShiftPrices: AdminTestsTransferShiftPriceIssue[];
+  warnings: string[];
 }
 
 export interface AdminSystemHealth {
@@ -250,6 +292,19 @@ export interface AdminImpersonationStatus {
   } | null;
 }
 
+type TransferPricingPlanRow = {
+  shiftId: string | null;
+  price: number;
+};
+
+type AnalyzedTestTransferItem = {
+  sourceTest: Test;
+  normalizedCode: string;
+  existingTargetTest: Test | null;
+  mappedDepartmentId: string | null;
+  pricingPlan: TransferPricingPlanRow[];
+};
+
 @Injectable()
 export class PlatformAdminService {
   private readonly logger = new Logger(PlatformAdminService.name);
@@ -354,7 +409,7 @@ export class PlatformAdminService {
       const code = dto.code.trim().toUpperCase();
       const name = dto.name.trim();
       const subdomain = (dto.subdomain?.trim().toLowerCase() || this.toSubdomainFromCode(code));
-      const timezone = dto.timezone?.trim() || 'UTC';
+      const timezone = dto.timezone?.trim() || DEFAULT_CREATE_LAB_TIMEZONE;
 
       const existing = await labRepo.findOne({
         where: [{ code }, { subdomain }],
@@ -1945,6 +2000,571 @@ export class PlatformAdminService {
 
   async getLabDepartments(labId: string): Promise<Department[]> {
     return this.settingsService.getDepartmentsForLab(labId);
+  }
+
+  async transferLabTests(
+    targetLabId: string,
+    payload: { sourceLabId: string; dryRun?: boolean },
+    actor?: PlatformActorContext,
+  ): Promise<AdminLabTestsTransferResult> {
+    const sourceLabId = this.normalizeUuidV4(payload.sourceLabId, 'sourceLabId');
+    if (sourceLabId === targetLabId) {
+      throw new BadRequestException('sourceLabId must be different from the target lab');
+    }
+
+    const dryRun = payload.dryRun !== false;
+
+    return this.rlsSessionService.withPlatformAdminContext(async (manager) => {
+      const labRepo = manager.getRepository(Lab);
+      const [sourceLab, targetLab] = await Promise.all([
+        labRepo.findOne({
+          where: { id: sourceLabId },
+          select: { id: true, code: true, name: true },
+        }),
+        labRepo.findOne({
+          where: { id: targetLabId },
+          select: { id: true, code: true, name: true },
+        }),
+      ]);
+
+      if (!sourceLab) {
+        throw new NotFoundException('Source lab not found');
+      }
+      if (!targetLab) {
+        throw new NotFoundException('Target lab not found');
+      }
+
+      const result = await this.buildAndMaybeApplyTestTransfer(
+        manager,
+        sourceLab,
+        targetLab,
+        dryRun,
+      );
+
+      if (actor?.platformUserId) {
+        await this.auditService.log({
+          actorType: AuditActorType.PLATFORM_USER,
+          actorId: actor.platformUserId,
+          action: AuditAction.PLATFORM_TEST_TRANSFER,
+          entityType: 'lab',
+          entityId: targetLab.id,
+          labId: targetLab.id,
+          description: `${
+            dryRun ? 'Previewed' : 'Transferred'
+          } test configuration from ${sourceLab.name} (${sourceLab.code}) to ${targetLab.name} (${targetLab.code})`,
+          newValues: {
+            sourceLabId: sourceLab.id,
+            targetLabId: targetLab.id,
+            dryRun,
+            totalSourceTests: result.totalSourceTests,
+            createdCount: result.createCount,
+            updatedCount: result.updateCount,
+            pricingRowsCopied: result.pricingRowsCopied,
+            unmatchedDepartmentCount: result.unmatchedDepartments.length,
+            unmatchedShiftPriceCount: result.unmatchedShiftPrices.length,
+          },
+          ipAddress: actor.ipAddress ?? null,
+          userAgent: actor.userAgent ?? null,
+        }, manager);
+      }
+
+      return result;
+    });
+  }
+
+  private async buildAndMaybeApplyTestTransfer(
+    manager: EntityManager,
+    sourceLab: Pick<Lab, 'id' | 'code' | 'name'>,
+    targetLab: Pick<Lab, 'id' | 'code' | 'name'>,
+    dryRun: boolean,
+  ): Promise<AdminLabTestsTransferResult> {
+    const testRepo = manager.getRepository(Test);
+    const pricingRepo = manager.getRepository(Pricing);
+    const testComponentRepo = manager.getRepository(TestComponent);
+    const departmentRepo = manager.getRepository(Department);
+    const shiftRepo = manager.getRepository(Shift);
+
+    const [sourceTests, targetTests, sourceDepartments, targetDepartments, targetShifts] =
+      await Promise.all([
+        testRepo.find({
+          where: { labId: sourceLab.id },
+          order: { code: 'ASC', name: 'ASC' },
+        }),
+        testRepo.find({
+          where: { labId: targetLab.id },
+          order: { code: 'ASC', name: 'ASC' },
+        }),
+        departmentRepo.find({ where: { labId: sourceLab.id } }),
+        departmentRepo.find({ where: { labId: targetLab.id } }),
+        shiftRepo.find({ where: { labId: targetLab.id } }),
+      ]);
+
+    this.assertNoNormalizedTestCodeCollisions(sourceTests, sourceLab.code);
+    this.assertNoNormalizedTestCodeCollisions(targetTests, targetLab.code);
+
+    const sourcePanelIds = sourceTests
+      .filter((test) => test.type === TestType.PANEL)
+      .map((test) => test.id);
+    const sourceTestIds = sourceTests.map((test) => test.id);
+
+    const [sourceComponents, sourcePricingRows] = await Promise.all([
+      sourcePanelIds.length
+        ? testComponentRepo.find({
+            where: { panelTestId: In(sourcePanelIds) },
+            relations: ['childTest'],
+            order: { panelTestId: 'ASC', sortOrder: 'ASC' },
+          })
+        : Promise.resolve([] as TestComponent[]),
+      sourceTestIds.length
+        ? pricingRepo.find({
+            where: {
+              labId: sourceLab.id,
+              testId: In(sourceTestIds),
+              patientType: IsNull(),
+              isActive: true,
+            },
+            relations: ['shift'],
+          })
+        : Promise.resolve([] as Pricing[]),
+    ]);
+
+    const sourceDepartmentCodeById = new Map(
+      sourceDepartments.map((department) => [department.id, department.code]),
+    );
+    const targetDepartmentByCode = new Map(
+      targetDepartments.map((department) => [
+        this.normalizeTransferCodeKey(department.code),
+        department,
+      ]),
+    );
+    const targetShiftByCode = new Map(
+      targetShifts.map((shift) => [this.normalizeTransferCodeKey(shift.code), shift]),
+    );
+    const targetTestByCode = new Map(
+      targetTests.map((test) => [this.normalizeTransferCodeKey(test.code), test]),
+    );
+    const sourcePricingByTestId = new Map<string, Pricing[]>();
+    for (const row of sourcePricingRows) {
+      const existing = sourcePricingByTestId.get(row.testId) ?? [];
+      existing.push(row);
+      sourcePricingByTestId.set(row.testId, existing);
+    }
+    const sourceComponentsByPanelId = new Map<string, TestComponent[]>();
+    for (const component of sourceComponents) {
+      const existing = sourceComponentsByPanelId.get(component.panelTestId) ?? [];
+      existing.push(component);
+      sourceComponentsByPanelId.set(component.panelTestId, existing);
+    }
+
+    const unmatchedDepartments: AdminTestsTransferDepartmentIssue[] = [];
+    const unmatchedShiftPrices: AdminTestsTransferShiftPriceIssue[] = [];
+
+    const transferItems: AnalyzedTestTransferItem[] = sourceTests.map((sourceTest) => {
+      const normalizedCode = this.normalizeTransferCode(sourceTest.code);
+      const sourceDepartmentCode = sourceTest.departmentId
+        ? sourceDepartmentCodeById.get(sourceTest.departmentId) ?? null
+        : null;
+      const mappedDepartment = sourceDepartmentCode
+        ? targetDepartmentByCode.get(this.normalizeTransferCodeKey(sourceDepartmentCode)) ?? null
+        : null;
+
+      if (sourceDepartmentCode && !mappedDepartment) {
+        unmatchedDepartments.push({
+          testCode: normalizedCode,
+          departmentCode: sourceDepartmentCode,
+        });
+      }
+
+      const pricingPlan: TransferPricingPlanRow[] = [];
+      for (const pricingRow of sourcePricingByTestId.get(sourceTest.id) ?? []) {
+        const price = this.toTransferPrice(pricingRow.price);
+        if (price === null) continue;
+
+        if (!pricingRow.shiftId) {
+          pricingPlan.push({ shiftId: null, price });
+          continue;
+        }
+
+        const shiftCode = pricingRow.shift?.code?.trim() || null;
+        const matchedShift =
+          shiftCode ? targetShiftByCode.get(this.normalizeTransferCodeKey(shiftCode)) ?? null : null;
+
+        if (!matchedShift) {
+          unmatchedShiftPrices.push({
+            testCode: normalizedCode,
+            shiftCode,
+          });
+          continue;
+        }
+
+        pricingPlan.push({
+          shiftId: matchedShift.id,
+          price,
+        });
+      }
+
+      return {
+        sourceTest,
+        normalizedCode,
+        existingTargetTest: targetTestByCode.get(this.normalizeTransferCodeKey(normalizedCode)) ?? null,
+        mappedDepartmentId: mappedDepartment?.id ?? null,
+        pricingPlan,
+      };
+    });
+
+    if (!dryRun) {
+      await this.applyTestTransferPlan(
+        manager,
+        targetLab.id,
+        transferItems,
+        sourceComponentsByPanelId,
+      );
+    }
+
+    const pricingRowsCopied = transferItems.reduce(
+      (total, item) => total + item.pricingPlan.length,
+      0,
+    );
+
+    const result: AdminLabTestsTransferResult = {
+      dryRun,
+      sourceLab: {
+        id: sourceLab.id,
+        code: sourceLab.code,
+        name: sourceLab.name,
+      },
+      targetLab: {
+        id: targetLab.id,
+        code: targetLab.code,
+        name: targetLab.name,
+      },
+      totalSourceTests: transferItems.length,
+      createCount: transferItems.filter((item) => !item.existingTargetTest).length,
+      updateCount: transferItems.filter((item) => Boolean(item.existingTargetTest)).length,
+      pricingRowsCopied,
+      pricingRowsSkipped: unmatchedShiftPrices.length,
+      unmatchedDepartments,
+      unmatchedShiftPrices,
+      warnings: [],
+    };
+
+    result.warnings = this.buildTestTransferWarnings(result);
+    return result;
+  }
+
+  private async applyTestTransferPlan(
+    manager: EntityManager,
+    targetLabId: string,
+    transferItems: AnalyzedTestTransferItem[],
+    sourceComponentsByPanelId: Map<string, TestComponent[]>,
+  ): Promise<void> {
+    const testRepo = manager.getRepository(Test);
+    const pricingRepo = manager.getRepository(Pricing);
+    const testComponentRepo = manager.getRepository(TestComponent);
+
+    const resolvedTargetByCode = new Map<string, Test>();
+
+    for (const item of transferItems) {
+      const payload = this.buildTransferredTestPayload(
+        targetLabId,
+        item.sourceTest,
+        item.mappedDepartmentId,
+      );
+      const entity = item.existingTargetTest
+        ? Object.assign(item.existingTargetTest, payload)
+        : testRepo.create(payload);
+      const saved = await testRepo.save(entity);
+      resolvedTargetByCode.set(item.normalizedCode, saved);
+    }
+
+    for (const targetTest of resolvedTargetByCode.values()) {
+      await testComponentRepo.delete({ panelTestId: targetTest.id });
+    }
+
+    const componentRows: TestComponent[] = [];
+    for (const item of transferItems) {
+      const targetPanel = resolvedTargetByCode.get(item.normalizedCode);
+      if (!targetPanel || item.sourceTest.type !== TestType.PANEL) {
+        continue;
+      }
+
+      const sourceComponents = sourceComponentsByPanelId.get(item.sourceTest.id) ?? [];
+      for (const component of sourceComponents) {
+        const childCode = component.childTest?.code?.trim();
+        if (!childCode) {
+          continue;
+        }
+        const targetChild = resolvedTargetByCode.get(this.normalizeTransferCodeKey(childCode));
+        if (!targetChild) {
+          continue;
+        }
+        componentRows.push(
+          testComponentRepo.create({
+            panelTestId: targetPanel.id,
+            childTestId: targetChild.id,
+            required: component.required,
+            sortOrder: component.sortOrder,
+            reportSection: component.reportSection ?? null,
+            reportGroup: component.reportGroup ?? null,
+            effectiveFrom: component.effectiveFrom ?? null,
+            effectiveTo: component.effectiveTo ?? null,
+          }),
+        );
+      }
+    }
+
+    if (componentRows.length) {
+      await testComponentRepo.save(componentRows);
+    }
+
+    const pricingRowsToInsert: Pricing[] = [];
+    for (const item of transferItems) {
+      const targetTest = resolvedTargetByCode.get(item.normalizedCode);
+      if (!targetTest) continue;
+
+      await pricingRepo.delete({
+        labId: targetLabId,
+        testId: targetTest.id,
+        patientType: IsNull(),
+      });
+
+      for (const priceRow of item.pricingPlan) {
+        pricingRowsToInsert.push(
+          pricingRepo.create({
+            labId: targetLabId,
+            testId: targetTest.id,
+            shiftId: priceRow.shiftId,
+            patientType: null,
+            price: priceRow.price,
+            isActive: true,
+          }),
+        );
+      }
+    }
+
+    if (pricingRowsToInsert.length) {
+      await pricingRepo.save(pricingRowsToInsert);
+    }
+  }
+
+  private buildTransferredTestPayload(
+    targetLabId: string,
+    sourceTest: Test,
+    mappedDepartmentId: string | null,
+  ): Partial<Test> {
+    return {
+      labId: targetLabId,
+      code: this.normalizeTransferCode(sourceTest.code),
+      name: sourceTest.name.trim(),
+      abbreviation: this.toNullableTrimmedText(sourceTest.abbreviation),
+      type: sourceTest.type === TestType.PANEL ? TestType.PANEL : TestType.SINGLE,
+      tubeType: sourceTest.tubeType,
+      unit: this.toNullableTrimmedText(sourceTest.unit),
+      category: this.toNullableTrimmedText(sourceTest.category),
+      normalMin: this.toNullableNumber(sourceTest.normalMin),
+      normalMax: this.toNullableNumber(sourceTest.normalMax),
+      normalMinMale: this.toNullableNumber(sourceTest.normalMinMale),
+      normalMaxMale: this.toNullableNumber(sourceTest.normalMaxMale),
+      normalMinFemale: this.toNullableNumber(sourceTest.normalMinFemale),
+      normalMaxFemale: this.toNullableNumber(sourceTest.normalMaxFemale),
+      normalText: this.toNullableRawText(sourceTest.normalText),
+      normalTextMale: this.toNullableRawText(sourceTest.normalTextMale),
+      normalTextFemale: this.toNullableRawText(sourceTest.normalTextFemale),
+      resultEntryType: this.normalizeTransferResultEntryType(sourceTest.resultEntryType),
+      resultTextOptions: this.cloneTransferredResultTextOptions(sourceTest.resultTextOptions),
+      allowCustomResultText: Boolean(sourceTest.allowCustomResultText),
+      numericAgeRanges: this.cloneTransferredNumericAgeRanges(sourceTest.numericAgeRanges),
+      description: this.toNullableTrimmedText(sourceTest.description),
+      childTestIds: sourceTest.type === TestType.PANEL ? null : this.toNullableTrimmedText(sourceTest.childTestIds),
+      parameterDefinitions: this.cloneTransferredParameterDefinitions(sourceTest.parameterDefinitions),
+      departmentId: mappedDepartmentId,
+      isActive: Boolean(sourceTest.isActive),
+      sortOrder: this.toIntegerOrZero(sourceTest.sortOrder),
+      expectedCompletionMinutes: this.toNullableInteger(sourceTest.expectedCompletionMinutes),
+    };
+  }
+
+  private buildTestTransferWarnings(result: AdminLabTestsTransferResult): string[] {
+    const warnings: string[] = [];
+
+    if (result.totalSourceTests === 0) {
+      warnings.push('Source lab has no tests to transfer.');
+    }
+    if (result.unmatchedDepartments.length > 0) {
+      warnings.push(
+        `${result.unmatchedDepartments.length} transferred tests will have no department because the target lab has no department with the same code.`,
+      );
+    }
+    if (result.pricingRowsSkipped > 0) {
+      warnings.push(
+        `${result.pricingRowsSkipped} shift-specific pricing rows were skipped because the target lab has no shift with the same code.`,
+      );
+    }
+
+    return warnings;
+  }
+
+  private assertNoNormalizedTestCodeCollisions(tests: Test[], labCode: string): void {
+    const seen = new Set<string>();
+    for (const test of tests) {
+      const key = this.normalizeTransferCodeKey(test.code);
+      if (seen.has(key)) {
+        throw new BadRequestException(
+          `Lab ${labCode} contains multiple tests that normalize to the same code (${key}).`,
+        );
+      }
+      seen.add(key);
+    }
+  }
+
+  private normalizeTransferCode(value: string): string {
+    return value.trim().toUpperCase();
+  }
+
+  private normalizeTransferCodeKey(value: string | null | undefined): string {
+    return String(value ?? '').trim().toUpperCase();
+  }
+
+  private toNullableTrimmedText(value: string | null | undefined): string | null {
+    if (value === null || value === undefined) return null;
+    const trimmed = value.trim();
+    return trimmed.length ? trimmed : null;
+  }
+
+  private toNullableRawText(value: string | null | undefined): string | null {
+    if (value === null || value === undefined) return null;
+    return value.length > 0 ? value : null;
+  }
+
+  private toNullableNumber(value: unknown): number | null {
+    if (value === null || value === undefined || value === '') return null;
+    const numeric = typeof value === 'number' ? value : Number(value);
+    return Number.isFinite(numeric) ? numeric : null;
+  }
+
+  private toNullableInteger(value: unknown): number | null {
+    const numeric = this.toNullableNumber(value);
+    if (numeric === null) return null;
+    return Math.trunc(numeric);
+  }
+
+  private toIntegerOrZero(value: unknown): number {
+    return this.toNullableInteger(value) ?? 0;
+  }
+
+  private toTransferPrice(value: unknown): number | null {
+    const numeric = this.toNullableNumber(value);
+    if (numeric === null || numeric < 0) return null;
+    return Math.round(numeric * 100) / 100;
+  }
+
+  private normalizeTransferResultEntryType(value: unknown): TestResultEntryType {
+    const normalized = String(value ?? '').trim().toUpperCase();
+    if (normalized === 'QUALITATIVE' || normalized === 'TEXT') {
+      return normalized;
+    }
+    return 'NUMERIC';
+  }
+
+  private cloneTransferredNumericAgeRanges(
+    ranges: TestNumericAgeRange[] | null | undefined,
+  ): TestNumericAgeRange[] | null {
+    return (
+      normalizeNumericAgeRanges(ranges)?.map((range) => ({
+        sex: range.sex,
+        ageUnit: range.ageUnit,
+        minAge: range.minAge,
+        maxAge: range.maxAge,
+        normalMin: range.normalMin,
+        normalMax: range.normalMax,
+      })) ?? null
+    );
+  }
+
+  private cloneTransferredResultTextOptions(
+    options: TestResultTextOption[] | null | undefined,
+  ): TestResultTextOption[] | null {
+    if (!options?.length) return null;
+
+    const seen = new Set<string>();
+    let defaultAssigned = false;
+    const normalized: TestResultTextOption[] = [];
+
+    for (const option of options) {
+      const value = option?.value?.trim();
+      if (!value) continue;
+
+      const dedupeKey = value.toLowerCase();
+      if (seen.has(dedupeKey)) continue;
+      seen.add(dedupeKey);
+
+      const isDefault = Boolean(option?.isDefault) && !defaultAssigned;
+      if (isDefault) defaultAssigned = true;
+
+      normalized.push({
+        value,
+        flag: this.normalizeTransferredResultFlag(option?.flag ?? null),
+        isDefault,
+      });
+    }
+
+    return normalized.length ? normalized : null;
+  }
+
+  private cloneTransferredParameterDefinitions(
+    definitions: TestParameterDefinition[] | null | undefined,
+  ): TestParameterDefinition[] | null {
+    if (!definitions?.length) return null;
+
+    const normalized: TestParameterDefinition[] = [];
+    for (const definition of definitions) {
+      const code = definition?.code?.trim();
+      const label = definition?.label?.trim();
+      if (!code || !label) continue;
+
+      const type = definition.type === 'select' ? 'select' : 'text';
+      const options =
+        type === 'select'
+          ? (definition.options ?? [])
+              .map((option) => option?.trim())
+              .filter((option): option is string => Boolean(option))
+          : undefined;
+      const normalOptions =
+        type === 'select'
+          ? (definition.normalOptions ?? [])
+              .map((option) => option?.trim())
+              .filter((option): option is string => Boolean(option))
+          : undefined;
+      const defaultValue = this.toNullableTrimmedText(definition.defaultValue);
+
+      normalized.push({
+        code,
+        label,
+        type,
+        options: options?.length ? options : undefined,
+        normalOptions: normalOptions?.length ? normalOptions : undefined,
+        defaultValue: defaultValue ?? undefined,
+      });
+    }
+
+    return normalized.length ? normalized : null;
+  }
+
+  private normalizeTransferredResultFlag(
+    value: TestResultTextOption['flag'] | string | null | undefined,
+  ): TestResultTextOption['flag'] | null {
+    const normalized = normalizeOrderTestFlag(value ?? null);
+    if (
+      normalized === 'N' ||
+      normalized === 'H' ||
+      normalized === 'L' ||
+      normalized === 'POS' ||
+      normalized === 'NEG' ||
+      normalized === 'ABN'
+    ) {
+      return normalized;
+    }
+    return null;
   }
 
   private async toAdminLabListItems(

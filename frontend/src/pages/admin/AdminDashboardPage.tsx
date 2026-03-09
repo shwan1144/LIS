@@ -47,6 +47,7 @@ import {
 } from '../../utils/admin-ui';
 
 const { Title, Text } = Typography;
+const DEFAULT_CREATE_LAB_TIMEZONE = 'Asia/Baghdad';
 
 interface CreateLabFormValues {
   code: string;
@@ -446,7 +447,7 @@ export function AdminDashboardPage() {
         <Form<CreateLabFormValues>
           form={form}
           layout="vertical"
-          initialValues={{ timezone: 'UTC', isActive: true }}
+          initialValues={{ timezone: DEFAULT_CREATE_LAB_TIMEZONE, isActive: true }}
         >
           <Form.Item
             name="name"
@@ -482,7 +483,7 @@ export function AdminDashboardPage() {
             <Input placeholder="lab02" maxLength={63} />
           </Form.Item>
           <Form.Item name="timezone" label="Timezone">
-            <Input placeholder="UTC" maxLength={64} />
+            <Input placeholder={DEFAULT_CREATE_LAB_TIMEZONE} maxLength={64} />
           </Form.Item>
           <Form.Item name="isActive" label="Active" valuePropName="checked">
             <Switch />

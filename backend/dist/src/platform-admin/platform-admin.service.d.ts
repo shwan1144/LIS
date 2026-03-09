@@ -82,6 +82,32 @@ export interface AdminLabReportDesign {
     onlineResultWatermarkDataUrl: string | null;
     onlineResultWatermarkText: string | null;
 }
+export interface AdminTestsTransferLabRef {
+    id: string;
+    code: string;
+    name: string;
+}
+export interface AdminTestsTransferDepartmentIssue {
+    testCode: string;
+    departmentCode: string | null;
+}
+export interface AdminTestsTransferShiftPriceIssue {
+    testCode: string;
+    shiftCode: string | null;
+}
+export interface AdminLabTestsTransferResult {
+    dryRun: boolean;
+    sourceLab: AdminTestsTransferLabRef;
+    targetLab: AdminTestsTransferLabRef;
+    totalSourceTests: number;
+    createCount: number;
+    updateCount: number;
+    pricingRowsCopied: number;
+    pricingRowsSkipped: number;
+    unmatchedDepartments: AdminTestsTransferDepartmentIssue[];
+    unmatchedShiftPrices: AdminTestsTransferShiftPriceIssue[];
+    warnings: string[];
+}
 export interface AdminSystemHealth {
     status: 'ok' | 'degraded';
     checkedAt: string;
@@ -459,6 +485,28 @@ export declare class PlatformAdminService {
     }>;
     getLabShifts(labId: string): Promise<Shift[]>;
     getLabDepartments(labId: string): Promise<Department[]>;
+    transferLabTests(targetLabId: string, payload: {
+        sourceLabId: string;
+        dryRun?: boolean;
+    }, actor?: PlatformActorContext): Promise<AdminLabTestsTransferResult>;
+    private buildAndMaybeApplyTestTransfer;
+    private applyTestTransferPlan;
+    private buildTransferredTestPayload;
+    private buildTestTransferWarnings;
+    private assertNoNormalizedTestCodeCollisions;
+    private normalizeTransferCode;
+    private normalizeTransferCodeKey;
+    private toNullableTrimmedText;
+    private toNullableRawText;
+    private toNullableNumber;
+    private toNullableInteger;
+    private toIntegerOrZero;
+    private toTransferPrice;
+    private normalizeTransferResultEntryType;
+    private cloneTransferredNumericAgeRanges;
+    private cloneTransferredResultTextOptions;
+    private cloneTransferredParameterDefinitions;
+    private normalizeTransferredResultFlag;
     private toAdminLabListItems;
     private toAdminLabSettingsSummary;
     private toAdminLabSettingsUpdateResponse;

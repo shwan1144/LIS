@@ -328,6 +328,40 @@ export interface AdminLabReportDesignDto {
   onlineResultWatermarkText: string | null;
 }
 
+export interface AdminLabTestsTransferIssueDto {
+  testCode: string;
+  departmentCode?: string | null;
+  shiftCode?: string | null;
+}
+
+export interface AdminLabTestsTransferResultDto {
+  dryRun: boolean;
+  sourceLab: {
+    id: string;
+    code: string;
+    name: string;
+  };
+  targetLab: {
+    id: string;
+    code: string;
+    name: string;
+  };
+  totalSourceTests: number;
+  createCount: number;
+  updateCount: number;
+  pricingRowsCopied: number;
+  pricingRowsSkipped: number;
+  unmatchedDepartments: Array<{
+    testCode: string;
+    departmentCode: string | null;
+  }>;
+  unmatchedShiftPrices: Array<{
+    testCode: string;
+    shiftCode: string | null;
+  }>;
+  warnings: string[];
+}
+
 export interface AdminSummaryDto {
   labsCount: number;
   activeLabsCount: number;
@@ -921,6 +955,23 @@ export async function getAdminLabShifts(labId: string): Promise<ShiftDto[]> {
 
 export async function getAdminLabDepartments(labId: string): Promise<DepartmentDto[]> {
   const res = await api.get<DepartmentDto[]>(`/admin/api/labs/${labId}/departments`);
+  return res.data;
+}
+
+export async function transferAdminLabTests(
+  labId: string,
+  data: {
+    sourceLabId: string;
+    dryRun?: boolean;
+  },
+): Promise<AdminLabTestsTransferResultDto> {
+  const res = await api.post<AdminLabTestsTransferResultDto>(
+    `/admin/api/labs/${labId}/tests-transfer`,
+    data,
+    {
+      timeout: ADMIN_WRITE_TIMEOUT_MS,
+    },
+  );
   return res.data;
 }
 

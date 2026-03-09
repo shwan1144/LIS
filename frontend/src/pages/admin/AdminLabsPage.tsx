@@ -42,6 +42,7 @@ import { ADMIN_LAB_SCOPE_EVENT, ADMIN_SELECTED_LAB_KEY } from '../../utils/admin
 
 const { Title, Text } = Typography;
 const DEFAULT_PAGE_SIZE = 25;
+const DEFAULT_CREATE_LAB_TIMEZONE = 'Asia/Baghdad';
 
 type StatusFilter = 'all' | 'active' | 'disabled';
 
@@ -127,7 +128,7 @@ export function AdminLabsPage() {
   const openCreateLab = () => {
     setEditingLab(null);
     form.resetFields();
-    form.setFieldsValue({ timezone: 'UTC', isActive: true });
+    form.setFieldsValue({ timezone: DEFAULT_CREATE_LAB_TIMEZONE, isActive: true });
     setLabModalOpen(true);
   };
 
@@ -138,7 +139,7 @@ export function AdminLabsPage() {
       name: lab.name,
       code: lab.code,
       subdomain: lab.subdomain ?? undefined,
-      timezone: lab.timezone || 'UTC',
+      timezone: lab.timezone || DEFAULT_CREATE_LAB_TIMEZONE,
     });
     setLabModalOpen(true);
   };
@@ -492,7 +493,7 @@ export function AdminLabsPage() {
         <Form<LabFormValues>
           form={form}
           layout="vertical"
-          initialValues={{ timezone: 'UTC', isActive: true }}
+          initialValues={{ timezone: DEFAULT_CREATE_LAB_TIMEZONE, isActive: true }}
         >
           <Form.Item
             name="name"
@@ -528,7 +529,7 @@ export function AdminLabsPage() {
             <Input maxLength={63} />
           </Form.Item>
           <Form.Item name="timezone" label="Timezone">
-            <Input maxLength={64} />
+            <Input placeholder={DEFAULT_CREATE_LAB_TIMEZONE} maxLength={64} />
           </Form.Item>
           {!editingLab ? (
             <Form.Item name="isActive" label="Active on create" valuePropName="checked">

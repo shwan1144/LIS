@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
+  Alert,
   Button,
   Card,
   Descriptions,
   Empty,
   Input,
+  Modal,
   Select,
   Space,
   Statistic,
@@ -27,11 +29,14 @@ import {
 } from '@ant-design/icons';
 import {
   getAdminLab,
+  getAdminLabs,
   getAdminLabSettings,
+  transferAdminLabTests,
   getAdminLabUsers,
   getAdminOrderResultsPdf,
   getAdminOrders,
   getAdminSummary,
+  type AdminLabTestsTransferResultDto,
   type AdminLabSettingsSummaryDto,
   type AdminLabDto,
   type AdminOrderListItem,
@@ -69,6 +74,13 @@ export function AdminLabDetailsPage() {
   const [settings, setSettings] = useState<AdminLabSettingsSummaryDto | null>(null);
   const [loadingSettings, setLoadingSettings] = useState(false);
   const [settingsLoaded, setSettingsLoaded] = useState(false);
+  const [transferModalOpen, setTransferModalOpen] = useState(false);
+  const [transferSourceLabId, setTransferSourceLabId] = useState('');
+  const [transferSourceLabs, setTransferSourceLabs] = useState<AdminLabDto[]>([]);
+  const [transferLabsLoading, setTransferLabsLoading] = useState(false);
+  const [transferPreview, setTransferPreview] = useState<AdminLabTestsTransferResultDto | null>(null);
+  const [transferPreviewLoading, setTransferPreviewLoading] = useState(false);
+  const [transferApplyLoading, setTransferApplyLoading] = useState(false);
 
   const [orders, setOrders] = useState<AdminOrderListItem[]>([]);
   const [ordersLoading, setOrdersLoading] = useState(false);
@@ -224,6 +236,21 @@ export function AdminLabDetailsPage() {
     return summary.ordersByLab[0] ?? null;
   }, [summary]);
 
+  const availableTransferSourceLabs = useMemo(
+    () => transferSourceLabs.filter((candidate) => candidate.id !== labId),
+    [labId, transferSourceLabs],
+  );
+  const selectedTransferSourceLab = useMemo(
+    () => availableTransferSourceLabs.find((candidate) => candidate.id === transferSourceLabId) ?? null,
+    [availableTransferSourceLabs, transferSourceLabId],
+  );
+  const canApplyTransfer =
+    Boolean(labId) &&
+    Boolean(transferSourceLabId) &&
+    transferPreview?.dryRun === true &&
+    transferPreview.sourceLab.id === transferSourceLabId &&
+    transferPreview.targetLab.id === labId;
+
   const userColumns: ColumnsType<SettingsUserDto> = [
     {
       title: 'Username',
@@ -321,6 +348,38 @@ export function AdminLabDetailsPage() {
     },
   ];
 
+  const unmatchedDepartmentColumns: ColumnsType<AdminLabTestsTransferResultDto['unmatchedDepartments'][number]> = [
+    {
+      title: 'Test Code',
+      dataIndex: 'testCode',
+      key: 'testCode',
+      width: 160,
+      render: (value: string) => <Text code>{value}</Text>,
+    },
+    {
+      title: 'Department Code',
+      dataIndex: 'departmentCode',
+      key: 'departmentCode',
+      render: (value: string | null) => value || '-',
+    },
+  ];
+
+  const unmatchedShiftColumns: ColumnsType<AdminLabTestsTransferResultDto['unmatchedShiftPrices'][number]> = [
+    {
+      title: 'Test Code',
+      dataIndex: 'testCode',
+      key: 'testCode',
+      width: 160,
+      render: (value: string) => <Text code>{value}</Text>,
+    },
+    {
+      title: 'Shift Code',
+      dataIndex: 'shiftCode',
+      key: 'shiftCode',
+      render: (value: string | null) => value || '-',
+    },
+  ];
+
   const handleOpenPdf = async (orderId: string) => {
     if (!canExportResults) {
       message.warning('Export is disabled for AUDITOR');
@@ -337,6 +396,70 @@ export function AdminLabDetailsPage() {
       message.error(blobMessage || getErrorMessage(error) || 'Failed to open results PDF');
     } finally {
       setDownloadingOrderId(null);
+    }
+  };
+
+  const loadTransferSourceLabs = async () => {
+    setTransferLabsLoading(true);
+    try {
+      const data = await getAdminLabs();
+      setTransferSourceLabs(data);
+    } catch (error) {
+      message.error(getErrorMessage(error) || 'Failed to load labs for transfer');
+    } finally {
+      setTransferLabsLoading(false);
+    }
+  };
+
+  const openTransferModal = () => {
+    setTransferModalOpen(true);
+    setTransferSourceLabId('');
+    setTransferPreview(null);
+    void loadTransferSourceLabs();
+  };
+
+  const closeTransferModal = () => {
+    setTransferModalOpen(false);
+    setTransferSourceLabId('');
+    setTransferPreview(null);
+  };
+
+  const handlePreviewTransfer = async () => {
+    if (!labId) return;
+    if (!transferSourceLabId) {
+      message.warning('Select a source lab first');
+      return;
+    }
+
+    setTransferPreviewLoading(true);
+    try {
+      const result = await transferAdminLabTests(labId, {
+        sourceLabId: transferSourceLabId,
+        dryRun: true,
+      });
+      setTransferPreview(result);
+    } catch (error) {
+      message.error(getErrorMessage(error) || 'Failed to preview test transfer');
+    } finally {
+      setTransferPreviewLoading(false);
+    }
+  };
+
+  const handleApplyTransfer = async () => {
+    if (!labId || !transferSourceLabId) return;
+
+    setTransferApplyLoading(true);
+    try {
+      const result = await transferAdminLabTests(labId, {
+        sourceLabId: transferSourceLabId,
+        dryRun: false,
+      });
+      setTransferPreview(result);
+      message.success('Test configuration transferred');
+    } catch (error) {
+      message.error(getErrorMessage(error) || 'Failed to transfer test configuration');
+    } finally {
+      setTransferApplyLoading(false);
     }
   };
 
@@ -603,6 +726,13 @@ export function AdminLabDetailsPage() {
                     >
                       Configure Report Design
                     </Button>
+                    <Button
+                      type="primary"
+                      onClick={openTransferModal}
+                      disabled={!canMutate}
+                    >
+                      Transfer Tests Config
+                    </Button>
                   </Space>
                 </Space>
               ),
@@ -610,6 +740,148 @@ export function AdminLabDetailsPage() {
           ]}
         />
       </Card>
+
+      <Modal
+        title="Transfer Tests Configuration"
+        open={transferModalOpen}
+        onCancel={closeTransferModal}
+        destroyOnClose
+        width={820}
+        footer={[
+          <Button key="close" onClick={closeTransferModal} disabled={transferPreviewLoading || transferApplyLoading}>
+            Close
+          </Button>,
+          <Button
+            key="preview"
+            onClick={() => void handlePreviewTransfer()}
+            loading={transferPreviewLoading}
+            disabled={!transferSourceLabId || transferApplyLoading}
+          >
+            Preview
+          </Button>,
+          <Button
+            key="apply"
+            type="primary"
+            onClick={() => void handleApplyTransfer()}
+            loading={transferApplyLoading}
+            disabled={!canApplyTransfer || transferPreviewLoading}
+          >
+            Transfer Now
+          </Button>,
+        ]}
+      >
+        <Space direction="vertical" size={16} style={{ width: '100%' }}>
+          <Alert
+            type="info"
+            showIcon
+            message="This transfers test configuration only"
+            description="Patients, orders, results, and instrument result history are not copied."
+          />
+
+          <Descriptions bordered size="small" column={1}>
+            <Descriptions.Item label="Target Lab">
+              {lab ? `${lab.name} (${lab.code})` : '-'}
+            </Descriptions.Item>
+            <Descriptions.Item label="Source Lab">
+              <Select
+                showSearch
+                placeholder="Select source lab"
+                optionFilterProp="label"
+                loading={transferLabsLoading}
+                value={transferSourceLabId || undefined}
+                onChange={(value) => {
+                  setTransferSourceLabId(value);
+                  setTransferPreview(null);
+                }}
+                options={availableTransferSourceLabs.map((candidate) => ({
+                  value: candidate.id,
+                  label: `${candidate.name} (${candidate.code})`,
+                }))}
+              />
+            </Descriptions.Item>
+          </Descriptions>
+
+          {selectedTransferSourceLab && !transferPreview ? (
+            <Text type="secondary">
+              Preview the transfer from {selectedTransferSourceLab.name} ({selectedTransferSourceLab.code}) to
+              {' '}{lab?.name || 'this lab'} before applying it.
+            </Text>
+          ) : null}
+
+          {transferPreview ? (
+            <Space direction="vertical" size={12} style={{ width: '100%' }}>
+              <Alert
+                type={transferPreview.dryRun ? 'warning' : 'success'}
+                showIcon
+                message={transferPreview.dryRun ? 'Preview ready' : 'Transfer applied'}
+                description={
+                  transferPreview.dryRun
+                    ? 'Review the counts and warnings below, then click Transfer Now to apply the changes.'
+                    : 'The target lab test catalog has been updated from the selected source lab.'
+                }
+              />
+
+              <Descriptions bordered size="small" column={2}>
+                <Descriptions.Item label="Source">
+                  {transferPreview.sourceLab.name} ({transferPreview.sourceLab.code})
+                </Descriptions.Item>
+                <Descriptions.Item label="Target">
+                  {transferPreview.targetLab.name} ({transferPreview.targetLab.code})
+                </Descriptions.Item>
+                <Descriptions.Item label="Source Tests">{transferPreview.totalSourceTests}</Descriptions.Item>
+                <Descriptions.Item label="Create">{transferPreview.createCount}</Descriptions.Item>
+                <Descriptions.Item label="Update">{transferPreview.updateCount}</Descriptions.Item>
+                <Descriptions.Item label="Pricing Copied">{transferPreview.pricingRowsCopied}</Descriptions.Item>
+                <Descriptions.Item label="Pricing Skipped">{transferPreview.pricingRowsSkipped}</Descriptions.Item>
+                <Descriptions.Item label="Dept Warnings">
+                  {transferPreview.unmatchedDepartments.length}
+                </Descriptions.Item>
+              </Descriptions>
+
+              {transferPreview.warnings.length ? (
+                <Alert
+                  type="warning"
+                  showIcon
+                  message="Warnings"
+                  description={
+                    <ul style={{ margin: 0, paddingInlineStart: 18 }}>
+                      {transferPreview.warnings.map((warning) => (
+                        <li key={warning}>{warning}</li>
+                      ))}
+                    </ul>
+                  }
+                />
+              ) : null}
+
+              {transferPreview.unmatchedDepartments.length ? (
+                <Card size="small" title={`Unmatched Departments (${transferPreview.unmatchedDepartments.length})`}>
+                  <Table
+                    rowKey={(row) => `${row.testCode}:${row.departmentCode ?? 'none'}`}
+                    size="small"
+                    columns={unmatchedDepartmentColumns}
+                    dataSource={transferPreview.unmatchedDepartments}
+                    pagination={false}
+                    scroll={{ y: 180 }}
+                  />
+                </Card>
+              ) : null}
+
+              {transferPreview.unmatchedShiftPrices.length ? (
+                <Card size="small" title={`Skipped Shift Prices (${transferPreview.unmatchedShiftPrices.length})`}>
+                  <Table
+                    rowKey={(row) => `${row.testCode}:${row.shiftCode ?? 'none'}`}
+                    size="small"
+                    columns={unmatchedShiftColumns}
+                    dataSource={transferPreview.unmatchedShiftPrices}
+                    pagination={false}
+                    scroll={{ y: 180 }}
+                  />
+                </Card>
+              ) : null}
+            </Space>
+          ) : null}
+        </Space>
+      </Modal>
     </div>
   );
 }

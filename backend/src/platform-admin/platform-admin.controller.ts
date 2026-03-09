@@ -27,6 +27,7 @@ import { SetLabStatusDto } from './dto/set-lab-status.dto';
 import { ExportAuditLogsDto } from './dto/export-audit-logs.dto';
 import { ResetLabUserPasswordDto } from './dto/reset-lab-user-password.dto';
 import { StartImpersonationDto } from './dto/start-impersonation.dto';
+import { TransferLabTestsDto } from './dto/transfer-lab-tests.dto';
 import { RefreshTokenDto } from '../auth/dto/refresh-token.dto';
 import type { ReportStyleConfig } from '../reports/report-style.config';
 
@@ -298,6 +299,17 @@ export class PlatformAdminController {
   @Get('labs/:labId/departments')
   async getLabDepartments(@Param('labId', ParseUUIDPipe) labId: string) {
     return this.platformAdminService.getLabDepartments(labId);
+  }
+
+  @Post('labs/:labId/tests-transfer')
+  @Roles('SUPER_ADMIN')
+  @UsePipes(new ValidationPipe({ whitelist: true, transform: true }))
+  async transferLabTests(
+    @Req() req: RequestWithPlatformUser,
+    @Param('labId', ParseUUIDPipe) labId: string,
+    @Body() dto: TransferLabTestsDto,
+  ) {
+    return this.platformAdminService.transferLabTests(labId, dto, this.getActorContext(req));
   }
 
   @Get('orders')

@@ -6,6 +6,7 @@ import { SetLabStatusDto } from './dto/set-lab-status.dto';
 import { ExportAuditLogsDto } from './dto/export-audit-logs.dto';
 import { ResetLabUserPasswordDto } from './dto/reset-lab-user-password.dto';
 import { StartImpersonationDto } from './dto/start-impersonation.dto';
+import { TransferLabTestsDto } from './dto/transfer-lab-tests.dto';
 import { RefreshTokenDto } from '../auth/dto/refresh-token.dto';
 import type { ReportStyleConfig } from '../reports/report-style.config';
 interface RequestWithPlatformUser {
@@ -114,6 +115,7 @@ export declare class PlatformAdminController {
     }>;
     getLabShifts(labId: string): Promise<import("../entities/shift.entity").Shift[]>;
     getLabDepartments(labId: string): Promise<import("../entities/department.entity").Department[]>;
+    transferLabTests(req: RequestWithPlatformUser, labId: string, dto: TransferLabTestsDto): Promise<import("./platform-admin.service").AdminLabTestsTransferResult>;
     listOrders(req: RequestWithPlatformUser, labId?: string, status?: string, q?: string, dateFrom?: string, dateTo?: string, page?: string, size?: string): Promise<{
         items: import("./platform-admin.service").AdminOrderListItem[];
         total: number;

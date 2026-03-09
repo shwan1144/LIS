@@ -25,6 +25,7 @@ const set_lab_status_dto_1 = require("./dto/set-lab-status.dto");
 const export_audit_logs_dto_1 = require("./dto/export-audit-logs.dto");
 const reset_lab_user_password_dto_1 = require("./dto/reset-lab-user-password.dto");
 const start_impersonation_dto_1 = require("./dto/start-impersonation.dto");
+const transfer_lab_tests_dto_1 = require("./dto/transfer-lab-tests.dto");
 const refresh_token_dto_1 = require("../auth/dto/refresh-token.dto");
 let PlatformAdminController = class PlatformAdminController {
     constructor(platformAdminService) {
@@ -112,6 +113,9 @@ let PlatformAdminController = class PlatformAdminController {
     }
     async getLabDepartments(labId) {
         return this.platformAdminService.getLabDepartments(labId);
+    }
+    async transferLabTests(req, labId, dto) {
+        return this.platformAdminService.transferLabTests(labId, dto, this.getActorContext(req));
     }
     async listOrders(req, labId, status, q, dateFrom, dateTo, page, size) {
         return this.platformAdminService.listOrders({
@@ -439,6 +443,17 @@ __decorate([
     __metadata("design:paramtypes", [String]),
     __metadata("design:returntype", Promise)
 ], PlatformAdminController.prototype, "getLabDepartments", null);
+__decorate([
+    (0, common_1.Post)('labs/:labId/tests-transfer'),
+    (0, roles_decorator_1.Roles)('SUPER_ADMIN'),
+    (0, common_1.UsePipes)(new common_1.ValidationPipe({ whitelist: true, transform: true })),
+    __param(0, (0, common_1.Req)()),
+    __param(1, (0, common_1.Param)('labId', common_1.ParseUUIDPipe)),
+    __param(2, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, String, transfer_lab_tests_dto_1.TransferLabTestsDto]),
+    __metadata("design:returntype", Promise)
+], PlatformAdminController.prototype, "transferLabTests", null);
 __decorate([
     (0, common_1.Get)('orders'),
     __param(0, (0, common_1.Req)()),

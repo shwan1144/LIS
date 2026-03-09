@@ -5,6 +5,11 @@ import { AuditAction } from '../entities/audit-log.entity';
 import { Lab } from '../entities/lab.entity';
 import { UserLabAssignment } from '../entities/user-lab-assignment.entity';
 import { Order } from '../entities/order.entity';
+import { Department } from '../entities/department.entity';
+import { Shift } from '../entities/shift.entity';
+import { Pricing } from '../entities/pricing.entity';
+import { Test, TestType, TubeType } from '../entities/test.entity';
+import { TestComponent } from '../entities/test-component.entity';
 
 function createLabEntity(overrides: Partial<Lab> = {}): Lab {
   return {
@@ -39,6 +44,46 @@ function createLabEntity(overrides: Partial<Lab> = {}): Lab {
     tests: [],
     ...overrides,
   } as Lab;
+}
+
+function createTestEntity(overrides: Partial<Test> = {}): Test {
+  return {
+    id: 'test-id',
+    labId: 'lab-id',
+    lab: undefined as never,
+    code: 'TEST',
+    name: 'Test',
+    abbreviation: null,
+    type: TestType.SINGLE,
+    tubeType: TubeType.SERUM,
+    departmentId: null,
+    department: null,
+    category: null,
+    unit: null,
+    normalMin: null,
+    normalMax: null,
+    normalMinMale: null,
+    normalMaxMale: null,
+    normalMinFemale: null,
+    normalMaxFemale: null,
+    normalText: null,
+    normalTextMale: null,
+    normalTextFemale: null,
+    resultEntryType: 'NUMERIC',
+    resultTextOptions: null,
+    allowCustomResultText: false,
+    numericAgeRanges: null,
+    description: null,
+    childTestIds: null,
+    parameterDefinitions: null,
+    isActive: true,
+    sortOrder: 0,
+    expectedCompletionMinutes: null,
+    createdAt: new Date('2026-02-01T10:00:00.000Z'),
+    updatedAt: new Date('2026-02-01T10:00:00.000Z'),
+    orderTests: [],
+    ...overrides,
+  } as Test;
 }
 
 function createCountQueryBuilder<T>(rows: T) {
@@ -95,6 +140,285 @@ function createListLabsService(lab: Lab) {
   };
 }
 
+function createTransferService() {
+  const sourceLab = createLabEntity({
+    id: '11111111-1111-4111-8111-111111111111',
+    code: 'SRC',
+    name: 'Source Lab',
+  });
+  const targetLab = createLabEntity({
+    id: '22222222-2222-4222-8222-222222222222',
+    code: 'TGT',
+    name: 'Target Lab',
+  });
+
+  const sourceTests = [
+    createTestEntity({
+      id: 'source-cbc',
+      labId: sourceLab.id,
+      code: 'CBC',
+      name: 'Complete Blood Count',
+      type: TestType.PANEL,
+      departmentId: 'source-dept-hem',
+      category: 'Hematology',
+    }),
+    createTestEntity({
+      id: 'source-glu',
+      labId: sourceLab.id,
+      code: 'GLU',
+      name: 'Glucose',
+      departmentId: 'source-dept-chem',
+      category: 'Chemistry',
+      normalMin: 70,
+      normalMax: 100,
+      expectedCompletionMinutes: 30,
+    }),
+    createTestEntity({
+      id: 'source-wbc',
+      labId: sourceLab.id,
+      code: 'WBC',
+      name: 'White Blood Cells',
+      departmentId: 'source-dept-hem',
+      category: 'Hematology',
+      normalMin: 4,
+      normalMax: 11,
+    }),
+  ];
+
+  const targetTests: Test[] = [
+    createTestEntity({
+      id: 'target-glu',
+      labId: targetLab.id,
+      code: 'GLU',
+      name: 'Old Glucose',
+      category: 'Legacy',
+    }),
+  ];
+
+  const sourceDepartments: Department[] = [
+    { id: 'source-dept-chem', labId: sourceLab.id, code: 'CHEM', name: 'Chemistry', lab: sourceLab } as Department,
+    { id: 'source-dept-hem', labId: sourceLab.id, code: 'HEM', name: 'Hematology', lab: sourceLab } as Department,
+  ];
+  const targetDepartments: Department[] = [
+    { id: 'target-dept-chem', labId: targetLab.id, code: 'CHEM', name: 'Chemistry', lab: targetLab } as Department,
+  ];
+  const targetShifts: Shift[] = [
+    {
+      id: 'target-shift-day',
+      labId: targetLab.id,
+      code: 'DAY',
+      name: 'Day',
+      startTime: '08:00',
+      endTime: '16:00',
+      isEmergency: false,
+      lab: targetLab,
+      userAssignments: [],
+    } as Shift,
+  ];
+
+  const sourceComponents: TestComponent[] = [
+    {
+      panelTestId: 'source-cbc',
+      childTestId: 'source-wbc',
+      required: true,
+      sortOrder: 1,
+      reportSection: 'Basic',
+      reportGroup: 'WBC',
+      effectiveFrom: null,
+      effectiveTo: null,
+      createdAt: new Date('2026-02-01T10:00:00.000Z'),
+      updatedAt: new Date('2026-02-01T10:00:00.000Z'),
+      panelTest: sourceTests[0],
+      childTest: sourceTests[2],
+    } as TestComponent,
+  ];
+
+  const sourcePricingRows: Pricing[] = [
+    {
+      id: 'pricing-glu-default',
+      labId: sourceLab.id,
+      testId: 'source-glu',
+      shiftId: null,
+      patientType: null,
+      price: 1500,
+      isActive: true,
+      createdAt: new Date('2026-02-01T10:00:00.000Z'),
+      updatedAt: new Date('2026-02-01T10:00:00.000Z'),
+      lab: sourceLab,
+      test: sourceTests[1],
+      shift: null,
+    } as Pricing,
+    {
+      id: 'pricing-glu-day',
+      labId: sourceLab.id,
+      testId: 'source-glu',
+      shiftId: 'source-shift-day',
+      patientType: null,
+      price: 1700,
+      isActive: true,
+      createdAt: new Date('2026-02-01T10:00:00.000Z'),
+      updatedAt: new Date('2026-02-01T10:00:00.000Z'),
+      lab: sourceLab,
+      test: sourceTests[1],
+      shift: {
+        id: 'source-shift-day',
+        labId: sourceLab.id,
+        code: 'DAY',
+        name: 'Day',
+        startTime: '08:00',
+        endTime: '16:00',
+        isEmergency: false,
+        lab: sourceLab,
+        userAssignments: [],
+      } as Shift,
+    } as Pricing,
+    {
+      id: 'pricing-glu-night',
+      labId: sourceLab.id,
+      testId: 'source-glu',
+      shiftId: 'source-shift-night',
+      patientType: null,
+      price: 1900,
+      isActive: true,
+      createdAt: new Date('2026-02-01T10:00:00.000Z'),
+      updatedAt: new Date('2026-02-01T10:00:00.000Z'),
+      lab: sourceLab,
+      test: sourceTests[1],
+      shift: {
+        id: 'source-shift-night',
+        labId: sourceLab.id,
+        code: 'NIGHT',
+        name: 'Night',
+        startTime: '16:00',
+        endTime: '23:00',
+        isEmergency: false,
+        lab: sourceLab,
+        userAssignments: [],
+      } as Shift,
+    } as Pricing,
+    {
+      id: 'pricing-wbc-default',
+      labId: sourceLab.id,
+      testId: 'source-wbc',
+      shiftId: null,
+      patientType: null,
+      price: 1200,
+      isActive: true,
+      createdAt: new Date('2026-02-01T10:00:00.000Z'),
+      updatedAt: new Date('2026-02-01T10:00:00.000Z'),
+      lab: sourceLab,
+      test: sourceTests[2],
+      shift: null,
+    } as Pricing,
+    {
+      id: 'pricing-cbc-default',
+      labId: sourceLab.id,
+      testId: 'source-cbc',
+      shiftId: null,
+      patientType: null,
+      price: 3200,
+      isActive: true,
+      createdAt: new Date('2026-02-01T10:00:00.000Z'),
+      updatedAt: new Date('2026-02-01T10:00:00.000Z'),
+      lab: sourceLab,
+      test: sourceTests[0],
+      shift: null,
+    } as Pricing,
+  ];
+
+  let createdTestCounter = 0;
+  const labRepo = {
+    findOne: jest.fn().mockImplementation(async ({ where }: { where: { id: string } }) => {
+      if (where.id === sourceLab.id) return sourceLab;
+      if (where.id === targetLab.id) return targetLab;
+      return null;
+    }),
+  };
+  const testRepo = {
+    find: jest.fn().mockImplementation(async ({ where }: { where: { labId: string } }) => {
+      if (where.labId === sourceLab.id) return sourceTests;
+      if (where.labId === targetLab.id) return targetTests;
+      return [];
+    }),
+    create: jest.fn((payload: unknown) => payload),
+    save: jest.fn().mockImplementation(async (entity: Partial<Test>) => {
+      const saved = {
+        ...entity,
+        id: entity.id ?? `created-test-${++createdTestCounter}`,
+      } as Test;
+      const index = targetTests.findIndex((test) => test.id === saved.id);
+      if (index >= 0) targetTests[index] = saved;
+      else {
+        const existingIndex = targetTests.findIndex((test) => test.code === saved.code);
+        if (existingIndex >= 0) targetTests[existingIndex] = saved;
+        else targetTests.push(saved);
+      }
+      return saved;
+    }),
+  };
+  const pricingRepo = {
+    find: jest.fn().mockImplementation(async ({ where }: { where: { labId: string } }) => {
+      if (where.labId === sourceLab.id) return sourcePricingRows;
+      return [];
+    }),
+    create: jest.fn((payload: unknown) => payload),
+    save: jest.fn().mockResolvedValue([]),
+    delete: jest.fn().mockResolvedValue({ affected: 1 }),
+  };
+  const testComponentRepo = {
+    find: jest.fn().mockResolvedValue(sourceComponents),
+    create: jest.fn((payload: unknown) => payload),
+    save: jest.fn().mockResolvedValue([]),
+    delete: jest.fn().mockResolvedValue({ affected: 1 }),
+  };
+  const departmentRepo = {
+    find: jest.fn().mockImplementation(async ({ where }: { where: { labId: string } }) => {
+      if (where.labId === sourceLab.id) return sourceDepartments;
+      if (where.labId === targetLab.id) return targetDepartments;
+      return [];
+    }),
+  };
+  const shiftRepo = {
+    find: jest.fn().mockImplementation(async ({ where }: { where: { labId: string } }) => {
+      if (where.labId === targetLab.id) return targetShifts;
+      return [];
+    }),
+  };
+
+  const manager = {
+    getRepository: jest.fn((entity: unknown) => {
+      if (entity === Lab) return labRepo;
+      if (entity === Test) return testRepo;
+      if (entity === Pricing) return pricingRepo;
+      if (entity === TestComponent) return testComponentRepo;
+      if (entity === Department) return departmentRepo;
+      if (entity === Shift) return shiftRepo;
+      return {};
+    }),
+  };
+  const withPlatformAdminContext = jest.fn(async (fn: (manager: unknown) => Promise<unknown>) =>
+    fn(manager),
+  );
+  const auditLog = jest.fn().mockResolvedValue({ id: 'audit-id' });
+  const service = new PlatformAdminService(
+    { withPlatformAdminContext } as never,
+    {} as never,
+    { log: auditLog } as never,
+    {} as never,
+    {} as never,
+    {} as never,
+  );
+
+  return {
+    service,
+    auditLog,
+    testRepo,
+    pricingRepo,
+    testComponentRepo,
+    targetTests,
+  };
+}
+
 describe('PlatformAdminService', () => {
   it('requires explicit labId for drill-down orders endpoint', async () => {
     const service = new PlatformAdminService(
@@ -117,6 +441,7 @@ describe('PlatformAdminService', () => {
       code: 'LAB02',
       name: 'Lab 02',
       subdomain: 'lab02',
+      timezone: 'Asia/Baghdad',
     });
     const create = jest.fn((payload: unknown) => payload);
     const findOne = jest.fn().mockResolvedValue(null);
@@ -154,6 +479,7 @@ describe('PlatformAdminService', () => {
       expect.objectContaining({
         code: 'LAB02',
         subdomain: 'lab02',
+        timezone: 'Asia/Baghdad',
       }),
     );
     expect(save).toHaveBeenCalled();
@@ -593,5 +919,99 @@ describe('PlatformAdminService', () => {
       },
     );
     expect(result.refreshToken).toBe('refresh-normal');
+  });
+
+  it('previews test transfer without writing and reports mapping warnings', async () => {
+    const { service, auditLog, testRepo, pricingRepo, testComponentRepo } = createTransferService();
+
+    const result = await service.transferLabTests(
+      '22222222-2222-4222-8222-222222222222',
+      { sourceLabId: '11111111-1111-4111-8111-111111111111', dryRun: true },
+      {
+        platformUserId: 'platform-user-id',
+        role: 'SUPER_ADMIN',
+      },
+    );
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        dryRun: true,
+        totalSourceTests: 3,
+        createCount: 2,
+        updateCount: 1,
+        pricingRowsCopied: 4,
+        pricingRowsSkipped: 1,
+      }),
+    );
+    expect(result.unmatchedDepartments).toEqual([
+      { testCode: 'CBC', departmentCode: 'HEM' },
+      { testCode: 'WBC', departmentCode: 'HEM' },
+    ]);
+    expect(result.unmatchedShiftPrices).toEqual([
+      { testCode: 'GLU', shiftCode: 'NIGHT' },
+    ]);
+    expect(result.warnings).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining('no department'),
+        expect.stringContaining('shift-specific pricing rows were skipped'),
+      ]),
+    );
+    expect(testRepo.save).not.toHaveBeenCalled();
+    expect(pricingRepo.delete).not.toHaveBeenCalled();
+    expect(testComponentRepo.delete).not.toHaveBeenCalled();
+    expect(auditLog).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: AuditAction.PLATFORM_TEST_TRANSFER,
+        labId: '22222222-2222-4222-8222-222222222222',
+        entityId: '22222222-2222-4222-8222-222222222222',
+        newValues: expect.objectContaining({
+          sourceLabId: '11111111-1111-4111-8111-111111111111',
+          targetLabId: '22222222-2222-4222-8222-222222222222',
+          dryRun: true,
+          createdCount: 2,
+          updatedCount: 1,
+          unmatchedDepartmentCount: 2,
+          unmatchedShiftPriceCount: 1,
+        }),
+      }),
+      expect.anything(),
+    );
+  });
+
+  it('applies test transfer by upserting tests, rebuilding panels, and syncing pricing', async () => {
+    const { service, testRepo, pricingRepo, testComponentRepo, targetTests } = createTransferService();
+
+    const result = await service.transferLabTests(
+      '22222222-2222-4222-8222-222222222222',
+      { sourceLabId: '11111111-1111-4111-8111-111111111111', dryRun: false },
+      {
+        platformUserId: 'platform-user-id',
+        role: 'SUPER_ADMIN',
+      },
+    );
+
+    expect(result.dryRun).toBe(false);
+    expect(testRepo.save).toHaveBeenCalledTimes(3);
+    expect(pricingRepo.delete).toHaveBeenCalledTimes(3);
+    expect(pricingRepo.save).toHaveBeenCalledWith(
+      expect.arrayContaining([
+        expect.objectContaining({ testId: 'target-glu', shiftId: null, price: 1500 }),
+        expect.objectContaining({ testId: 'target-glu', shiftId: 'target-shift-day', price: 1700 }),
+      ]),
+    );
+
+    const targetCbc = targetTests.find((test) => test.code === 'CBC');
+    const targetWbc = targetTests.find((test) => test.code === 'WBC');
+    expect(targetCbc).toBeDefined();
+    expect(targetWbc).toBeDefined();
+    expect(testComponentRepo.delete).toHaveBeenCalled();
+    expect(testComponentRepo.save).toHaveBeenCalledWith([
+      expect.objectContaining({
+        panelTestId: targetCbc?.id,
+        childTestId: targetWbc?.id,
+        reportSection: 'Basic',
+        reportGroup: 'WBC',
+      }),
+    ]);
   });
 });
