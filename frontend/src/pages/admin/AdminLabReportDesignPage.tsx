@@ -37,8 +37,10 @@ const { Title, Text } = Typography;
 const MAX_BANNER_FOOTER_BYTES = Math.floor(2.75 * 1024 * 1024);
 const MIN_REPORT_BANNER_WIDTH = 2400;
 const MIN_REPORT_BANNER_HEIGHT = 600;
+const MIN_REPORT_FOOTER_WIDTH = 2400;
+const MIN_REPORT_FOOTER_HEIGHT = 220;
 const REPORT_BANNER_RECOMMENDED_SIZE_MM = '198 x 50 mm / 2400 x 600 px';
-const REPORT_FOOTER_RECOMMENDED_SIZE_MM = '198 x 18 mm / 2400 x 600 px';
+const REPORT_FOOTER_RECOMMENDED_SIZE_MM = '198 x 18 mm / 2400 x 220 px';
 
 type BrandingKey = keyof ReportBrandingDto;
 
@@ -48,6 +50,8 @@ type ImageSettingMeta = {
   recommendedSize: string;
   note: string;
   maxBytes: number;
+  minWidth?: number;
+  minHeight?: number;
 };
 
 const IMAGE_SETTINGS: ImageSettingMeta[] = [
@@ -57,6 +61,8 @@ const IMAGE_SETTINGS: ImageSettingMeta[] = [
     recommendedSize: REPORT_BANNER_RECOMMENDED_SIZE_MM,
     note: 'Wide image for the top of every report page (A4 printable width).',
     maxBytes: MAX_BANNER_FOOTER_BYTES,
+    minWidth: MIN_REPORT_BANNER_WIDTH,
+    minHeight: MIN_REPORT_BANNER_HEIGHT,
   },
   {
     key: 'footerDataUrl',
@@ -64,6 +70,8 @@ const IMAGE_SETTINGS: ImageSettingMeta[] = [
     recommendedSize: REPORT_FOOTER_RECOMMENDED_SIZE_MM,
     note: 'Wide image for the bottom of every report page (A4 printable width).',
     maxBytes: MAX_BANNER_FOOTER_BYTES,
+    minWidth: MIN_REPORT_FOOTER_WIDTH,
+    minHeight: MIN_REPORT_FOOTER_HEIGHT,
   },
   {
     key: 'logoDataUrl',
@@ -550,15 +558,11 @@ export function AdminLabReportDesignPage() {
         );
         return;
       }
-      if (key === 'bannerDataUrl' || key === 'footerDataUrl') {
+      if (setting.minWidth && setting.minHeight) {
         const { width, height } = await readImageDimensions(file);
-        if (width < MIN_REPORT_BANNER_WIDTH || height < MIN_REPORT_BANNER_HEIGHT) {
-          const recommendedSize =
-            key === 'bannerDataUrl'
-              ? REPORT_BANNER_RECOMMENDED_SIZE_MM
-              : REPORT_FOOTER_RECOMMENDED_SIZE_MM;
+        if (width < setting.minWidth || height < setting.minHeight) {
           message.error(
-            `${setting.title} resolution is too low for print. Upload a higher-resolution image designed for ${recommendedSize}.`,
+            `${setting.title} resolution is too low for print. Upload a higher-resolution image designed for ${setting.recommendedSize}.`,
           );
           return;
         }
