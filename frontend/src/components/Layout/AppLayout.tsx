@@ -40,7 +40,6 @@ const ADMIN_ROLES = ['LAB_ADMIN', 'SUPER_ADMIN'];
 function getMenuItems(role: string | undefined) {
   const items: { key: string; icon?: React.ReactNode; label: string; children?: { key: string; label: string }[] }[] = [
     { key: '/', icon: <DashboardOutlined />, label: 'Dashboard' },
-    { key: '/patients', icon: <UserOutlined />, label: 'Patients' },
     { key: '/orders', icon: <FileTextOutlined />, label: 'Orders' },
     { key: '/worklist', icon: <UnorderedListOutlined />, label: 'Worklist' },
     { key: '/verification', icon: <CheckCircleOutlined />, label: 'Verification' },
