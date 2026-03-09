@@ -298,7 +298,7 @@ export interface AdminLabSettingsSummaryDto {
   hasOnlineResultWatermarkImage: boolean;
   onlineResultWatermarkText: string | null;
   printing: {
-    mode: 'browser' | 'direct_qz';
+    mode: 'browser' | 'direct_qz' | 'direct_gateway';
     receiptPrinterName: string | null;
     labelsPrinterName: string | null;
     reportPrinterName: string | null;
@@ -850,7 +850,7 @@ export async function updateAdminLabSettings(
     onlineResultWatermarkDataUrl?: string | null;
     onlineResultWatermarkText?: string | null;
     printing?: {
-      mode?: 'browser' | 'direct_qz';
+      mode?: 'browser' | 'direct_qz' | 'direct_gateway';
       receiptPrinterName?: string | null;
       labelsPrinterName?: string | null;
       reportPrinterName?: string | null;
@@ -2170,7 +2170,7 @@ export interface LabSettingsDto {
   onlineResultWatermarkDataUrl: string | null;
   onlineResultWatermarkText: string | null;
   printing: {
-    mode: 'browser' | 'direct_qz';
+    mode: 'browser' | 'direct_qz' | 'direct_gateway';
     receiptPrinterName: string | null;
     labelsPrinterName: string | null;
     reportPrinterName: string | null;
@@ -2193,7 +2193,7 @@ export interface UpdateLabSettingsDto {
   onlineResultWatermarkDataUrl?: string | null;
   onlineResultWatermarkText?: string | null;
   printing?: {
-    mode?: 'browser' | 'direct_qz';
+    mode?: 'browser' | 'direct_qz' | 'direct_gateway';
     receiptPrinterName?: string | null;
     labelsPrinterName?: string | null;
     reportPrinterName?: string | null;

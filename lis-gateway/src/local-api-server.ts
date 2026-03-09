@@ -21,6 +21,12 @@ interface LocalControlFacade {
     stopBits?: string;
     timeoutMs?: number;
   }): Promise<Record<string, unknown>>;
+  listPrinters(): Promise<string[]>;
+  print(input: {
+    printerName: string;
+    pdfBase64: string;
+    jobName?: string;
+  }): Promise<Record<string, unknown>>;
 }
 
 function parseJsonBody(req: http.IncomingMessage): Promise<Record<string, unknown>> {
@@ -63,7 +69,7 @@ export class LocalApiServer {
     private readonly authToken: string,
     private readonly facade: LocalControlFacade,
     private readonly port: number,
-  ) {}
+  ) { }
 
   start(): void {
     if (this.server) return;
@@ -72,7 +78,21 @@ export class LocalApiServer {
       try {
         const url = new URL(req.url || '/', `http://${req.headers.host || '127.0.0.1'}`);
 
-        if (!this.isAuthorized(req)) {
+        // Add Basic CORS
+        res.setHeader('Access-Control-Allow-Origin', '*');
+        res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+        res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+
+        if (req.method === 'OPTIONS') {
+          res.writeHead(204);
+          res.end();
+          return;
+        }
+
+        const isPrintingEndpoint =
+          url.pathname === '/local/printers' || url.pathname === '/local/print';
+
+        if (!isPrintingEndpoint && !this.isAuthorized(req)) {
           sendJson(res, 401, { error: 'Unauthorized local API request' });
           return;
         }
@@ -138,6 +158,31 @@ export class LocalApiServer {
             parity: body.parity ? String(body.parity) : undefined,
             stopBits: body.stopBits ? String(body.stopBits) : undefined,
             timeoutMs: Number(body.timeoutMs) || undefined,
+          });
+          sendJson(res, 200, result);
+          return;
+        }
+
+        if (req.method === 'GET' && url.pathname === '/local/printers') {
+          sendJson(res, 200, { printers: await this.facade.listPrinters() });
+          return;
+        }
+
+        if (req.method === 'POST' && url.pathname === '/local/print') {
+          const body = await parseJsonBody(req);
+          const printerName = String(body.printerName || '').trim();
+          const pdfBase64 = String(body.pdfBase64 || '').trim();
+          const jobName = String(body.jobName || '').trim();
+
+          if (!printerName || !pdfBase64) {
+            sendJson(res, 400, { error: 'printerName and pdfBase64 are required' });
+            return;
+          }
+
+          const result = await this.facade.print({
+            printerName,
+            pdfBase64,
+            jobName: jobName || undefined,
           });
           sendJson(res, 200, result);
           return;

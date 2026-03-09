@@ -36,6 +36,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.GatewayAgent = void 0;
 const crypto_1 = require("crypto");
 const os = __importStar(require("os"));
+const path = __importStar(require("path"));
 const logger_1 = require("./logger");
 const local_config_store_1 = require("./local-config-store");
 const cloud_client_1 = require("./cloud-client");
@@ -45,6 +46,8 @@ const outbox_1 = require("./queue/outbox");
 const listener_manager_1 = require("./listener-manager");
 const local_api_server_1 = require("./local-api-server");
 const serialport_1 = require("serialport");
+const pdf_to_printer_1 = require("pdf-to-printer");
+const fs = __importStar(require("fs"));
 class GatewayAgent {
     configStore = new local_config_store_1.LocalConfigStore();
     cloudClient = new cloud_client_1.CloudClient();
@@ -392,6 +395,45 @@ class GatewayAgent {
             }, timeoutMs + 500);
             logger_1.logger.log(`Serial open test started for ${serialPort} @ ${baudRate} (${dataBitsRaw}${parityRaw[0] || 'N'}${stopBitsRaw})`, 'LocalAPI');
         });
+    }
+    async listPrinters() {
+        try {
+            const printers = await (0, pdf_to_printer_1.getPrinters)();
+            return printers.map((p) => p.name);
+        }
+        catch (error) {
+            logger_1.logger.error(`Failed to list printers: ${this.toErrorMessage(error)}`, 'LocalAPI');
+            return [];
+        }
+    }
+    async print(input) {
+        const tempDir = os.tmpdir();
+        const tempFileName = `print-${Date.now()}-${Math.floor(Math.random() * 10000)}.pdf`;
+        const tempPath = path.join(tempDir, tempFileName);
+        try {
+            const buffer = Buffer.from(input.pdfBase64, 'base64');
+            fs.writeFileSync(tempPath, buffer);
+            await (0, pdf_to_printer_1.print)(tempPath, {
+                printer: input.printerName,
+            });
+            logger_1.logger.log(`Print job sent to printer "${input.printerName}"`, 'LocalAPI');
+            return { success: true };
+        }
+        catch (error) {
+            const message = this.toErrorMessage(error);
+            logger_1.logger.error(`Print failed for "${input.jobName || 'unnamed'}": ${message}`, 'LocalAPI');
+            return { success: false, error: message };
+        }
+        finally {
+            try {
+                if (fs.existsSync(tempPath)) {
+                    fs.unlinkSync(tempPath);
+                }
+            }
+            catch (e) {
+                // ignore cleanup error
+            }
+        }
     }
     async deliverOutboxMessage(message) {
         const config = this.configStore.getConfig();

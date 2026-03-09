@@ -93,6 +93,7 @@ export declare class DashboardService {
     private readonly unmatchedService;
     constructor(patientRepo: Repository<Patient>, orderTestRepo: Repository<OrderTest>, orderRepo: Repository<Order>, labRepo: Repository<Lab>, platformSettingRepo: Repository<PlatformSetting>, shiftRepo: Repository<Shift>, departmentRepo: Repository<Department>, ordersService: OrdersService, unmatchedService: UnmatchedResultsService);
     getKpis(labId: string): Promise<DashboardKpis>;
+    private getTotalPatientsCount;
     getLabTimeZone(labId: string): Promise<string>;
     getAnnouncement(labId: string): Promise<DashboardAnnouncementDto>;
     getOrdersTrend(labId: string, days: number): Promise<OrdersTrendPoint[]>;

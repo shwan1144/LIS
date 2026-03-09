@@ -106,8 +106,8 @@ export class DashboardService {
   ) { }
 
   async getKpis(labId: string): Promise<DashboardKpis> {
-    const totalPatients = await this.patientRepo.count();
-    const [ordersToday, pendingVerification, avgTatHours] = await Promise.all([
+    const [totalPatients, ordersToday, pendingVerification, avgTatHours] = await Promise.all([
+      this.getTotalPatientsCount(labId),
       this.ordersService.getOrdersTodayCount(labId),
       this.orderTestRepo
         .createQueryBuilder('ot')
@@ -125,6 +125,24 @@ export class DashboardService {
       avgTatHours,
       totalPatients,
     };
+  }
+
+  private async getTotalPatientsCount(labId: string): Promise<number> {
+    const row = await this.orderRepo
+      .createQueryBuilder('o')
+      .select('COUNT(DISTINCT("o"."patientId"))', 'count')
+      .where('o.labId = :labId', { labId })
+      .getRawOne<{ count: string | number | null }>();
+
+    const rawCount = row?.count;
+    const parsedCount =
+      typeof rawCount === 'number'
+        ? rawCount
+        : typeof rawCount === 'string'
+          ? Number.parseInt(rawCount, 10)
+          : Number.NaN;
+
+    return Number.isFinite(parsedCount) && parsedCount >= 0 ? parsedCount : 0;
   }
 
   async getLabTimeZone(labId: string): Promise<string> {

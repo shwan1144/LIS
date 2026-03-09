@@ -42,8 +42,8 @@ let DashboardService = class DashboardService {
         this.unmatchedService = unmatchedService;
     }
     async getKpis(labId) {
-        const totalPatients = await this.patientRepo.count();
-        const [ordersToday, pendingVerification, avgTatHours] = await Promise.all([
+        const [totalPatients, ordersToday, pendingVerification, avgTatHours] = await Promise.all([
+            this.getTotalPatientsCount(labId),
             this.ordersService.getOrdersTodayCount(labId),
             this.orderTestRepo
                 .createQueryBuilder('ot')
@@ -61,6 +61,20 @@ let DashboardService = class DashboardService {
             avgTatHours,
             totalPatients,
         };
+    }
+    async getTotalPatientsCount(labId) {
+        const row = await this.orderRepo
+            .createQueryBuilder('o')
+            .select('COUNT(DISTINCT("o"."patientId"))', 'count')
+            .where('o.labId = :labId', { labId })
+            .getRawOne();
+        const rawCount = row?.count;
+        const parsedCount = typeof rawCount === 'number'
+            ? rawCount
+            : typeof rawCount === 'string'
+                ? Number.parseInt(rawCount, 10)
+                : Number.NaN;
+        return Number.isFinite(parsedCount) && parsedCount >= 0 ? parsedCount : 0;
     }
     async getLabTimeZone(labId) {
         const lab = await this.labRepo.findOne({ where: { id: labId } });

@@ -1,5 +1,6 @@
 import { createHash } from 'crypto';
 import * as os from 'os';
+import * as path from 'path';
 import { logger } from './logger';
 import { LocalConfigStore } from './local-config-store';
 import {
@@ -14,6 +15,8 @@ import type { OutboxRuntimeConfig } from './queue/types';
 import { ListenerManager, type ManagedInstrumentListenerConfig } from './listener-manager';
 import { LocalApiServer } from './local-api-server';
 import { SerialPort } from 'serialport';
+import { getPrinters, print as printPdf } from 'pdf-to-printer';
+import * as fs from 'fs';
 
 export class GatewayAgent {
   private readonly configStore = new LocalConfigStore();
@@ -282,23 +285,23 @@ export class GatewayAgent {
       listeners: this.listenerManager?.getStatus() || [],
       activeCloudConfig: this.activeCloudConfig
         ? {
-            gatewayId: this.activeCloudConfig.gatewayId,
-            pollIntervalSec: this.activeCloudConfig.pollIntervalSec,
-            heartbeatIntervalSec: this.activeCloudConfig.heartbeatIntervalSec,
-            instruments: this.activeCloudConfig.instruments.map((item) => ({
-              instrumentId: item.instrumentId,
-              name: item.name,
-              protocol: item.protocol,
-              connectionType: item.connectionType,
-              port: item.port ?? null,
-              serialPort: item.serialPort ?? null,
-              baudRate: item.baudRate ?? null,
-              dataBits: item.dataBits ?? null,
-              parity: item.parity ?? null,
-              stopBits: item.stopBits ?? null,
-              enabled: item.enabled,
-            })),
-          }
+          gatewayId: this.activeCloudConfig.gatewayId,
+          pollIntervalSec: this.activeCloudConfig.pollIntervalSec,
+          heartbeatIntervalSec: this.activeCloudConfig.heartbeatIntervalSec,
+          instruments: this.activeCloudConfig.instruments.map((item) => ({
+            instrumentId: item.instrumentId,
+            name: item.name,
+            protocol: item.protocol,
+            connectionType: item.connectionType,
+            port: item.port ?? null,
+            serialPort: item.serialPort ?? null,
+            baudRate: item.baudRate ?? null,
+            dataBits: item.dataBits ?? null,
+            parity: item.parity ?? null,
+            stopBits: item.stopBits ?? null,
+            enabled: item.enabled,
+          })),
+        }
         : null,
     };
   }
@@ -434,6 +437,50 @@ export class GatewayAgent {
         'LocalAPI',
       );
     });
+  }
+
+  async listPrinters(): Promise<string[]> {
+    try {
+      const printers = await getPrinters();
+      return printers.map((p) => p.name);
+    } catch (error) {
+      logger.error(`Failed to list printers: ${this.toErrorMessage(error)}`, 'LocalAPI');
+      return [];
+    }
+  }
+
+  async print(input: {
+    printerName: string;
+    pdfBase64: string;
+    jobName?: string;
+  }): Promise<Record<string, unknown>> {
+    const tempDir = os.tmpdir();
+    const tempFileName = `print-${Date.now()}-${Math.floor(Math.random() * 10000)}.pdf`;
+    const tempPath = path.join(tempDir, tempFileName);
+
+    try {
+      const buffer = Buffer.from(input.pdfBase64, 'base64');
+      fs.writeFileSync(tempPath, buffer);
+
+      await printPdf(tempPath, {
+        printer: input.printerName,
+      });
+
+      logger.log(`Print job sent to printer "${input.printerName}"`, 'LocalAPI');
+      return { success: true };
+    } catch (error) {
+      const message = this.toErrorMessage(error);
+      logger.error(`Print failed for "${input.jobName || 'unnamed'}": ${message}`, 'LocalAPI');
+      return { success: false, error: message };
+    } finally {
+      try {
+        if (fs.existsSync(tempPath)) {
+          fs.unlinkSync(tempPath);
+        }
+      } catch (e) {
+        // ignore cleanup error
+      }
+    }
   }
 
   private async deliverOutboxMessage(message: {
