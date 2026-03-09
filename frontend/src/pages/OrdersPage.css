@@ -1121,18 +1121,25 @@ html[data-theme='dark'] .orders-history-new-btn.ant-btn:disabled {
   margin-bottom: 0;
 }
 
-.orders-patient-picker-modal .ant-modal-body,
+.orders-patient-picker-modal .ant-modal-body {
+  padding: 16px 24px 24px;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+  /* Disable modal-level scroll for picker */
+}
+
 .orders-patient-form-modal .ant-modal-body {
   padding: 16px 24px 24px;
   flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
+  /* Keep form-level scroll for registration */
 }
 
-.orders-patient-picker-modal .ant-modal-body {
-  display: flex;
-  flex: 1 1 auto;
-  min-height: 0;
+.orders-patient-picker-modal .ant-modal-body>div:first-child {
+  height: 100%;
+  width: 100%;
 }
 
 .orders-patient-picker-modal .ant-modal-close,

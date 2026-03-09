@@ -108,6 +108,7 @@ export declare class DashboardService {
     private getOrderStatsForPeriod;
     private getTestsStatsForPeriod;
     private getTatForPeriod;
+    private getRecentAverageTatHours;
     private getQualityForPeriod;
     private normalizeAnnouncementText;
 }

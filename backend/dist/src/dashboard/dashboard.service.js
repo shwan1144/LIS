@@ -43,19 +43,22 @@ let DashboardService = class DashboardService {
     }
     async getKpis(labId) {
         const totalPatients = await this.patientRepo.count();
-        const ordersToday = await this.ordersService.getOrdersTodayCount(labId);
-        const pendingVerification = await this.orderTestRepo
-            .createQueryBuilder('ot')
-            .innerJoin('ot.sample', 's')
-            .innerJoin('s.order', 'o')
-            .where('o.labId = :labId', { labId })
-            .andWhere('ot.parentOrderTestId IS NULL')
-            .andWhere('ot.status = :status', { status: order_test_entity_1.OrderTestStatus.COMPLETED })
-            .getCount();
+        const [ordersToday, pendingVerification, avgTatHours] = await Promise.all([
+            this.ordersService.getOrdersTodayCount(labId),
+            this.orderTestRepo
+                .createQueryBuilder('ot')
+                .innerJoin('ot.sample', 's')
+                .innerJoin('s.order', 'o')
+                .where('o.labId = :labId', { labId })
+                .andWhere('ot.parentOrderTestId IS NULL')
+                .andWhere('ot.status = :status', { status: order_test_entity_1.OrderTestStatus.COMPLETED })
+                .getCount(),
+            this.getRecentAverageTatHours(labId, 7),
+        ]);
         return {
             ordersToday,
             pendingVerification,
-            avgTatHours: null,
+            avgTatHours,
             totalPatients,
         };
     }
@@ -445,6 +448,29 @@ let DashboardService = class DashboardService {
             withinTargetTotal: n,
             targetMinutes: TAT_TARGET_MINUTES,
         };
+    }
+    async getRecentAverageTatHours(labId, days) {
+        const timeZone = await this.getLabTimeZone(labId);
+        const todayDateKey = (0, lab_timezone_util_1.formatDateKeyForTimeZone)(new Date(), timeZone);
+        const startDateKey = (0, lab_timezone_util_1.addDaysToDateKey)(todayDateKey, -(Math.max(1, days) - 1));
+        const { startDate } = (0, lab_timezone_util_1.getUtcRangeForLabDate)(startDateKey, timeZone);
+        const { endDate } = (0, lab_timezone_util_1.getUtcRangeForLabDate)(todayDateKey, timeZone);
+        const row = await this.orderTestRepo
+            .createQueryBuilder('ot')
+            .innerJoin('ot.sample', 's')
+            .innerJoin('s.order', 'o')
+            .select('AVG(EXTRACT(EPOCH FROM (ot.verifiedAt - o.registeredAt)) / 3600.0)', 'avgHours')
+            .where('o.labId = :labId', { labId })
+            .andWhere('ot.verifiedAt IS NOT NULL')
+            .andWhere('ot.parentOrderTestId IS NULL')
+            .andWhere('o.registeredAt BETWEEN :startDate AND :endDate', { startDate, endDate })
+            .getRawOne();
+        const avgHoursRaw = row?.avgHours;
+        const avgHours = avgHoursRaw === null || avgHoursRaw === undefined ? Number.NaN : parseFloat(avgHoursRaw);
+        if (!Number.isFinite(avgHours) || avgHours < 0) {
+            return null;
+        }
+        return Math.round(avgHours * 10) / 10;
     }
     async getQualityForPeriod(labId, startDate, endDate, filters) {
         const base = this.orderTestRepo
