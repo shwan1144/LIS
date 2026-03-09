@@ -71,6 +71,7 @@ const { useBreakpoint } = Grid;
 const REPORT_PDF_CACHE_TTL_MS = 30 * 60 * 1000;
 const REPORT_PDF_CACHE_MAX_ENTRIES = 40;
 const REPORT_DESIGN_FINGERPRINT_STALE_MS = 60 * 1000;
+const REPORT_BROWSER_PREVIEW_URL_REVOKE_MS = 5 * 60 * 1000;
 
 type EditResultMode = 'SINGLE' | 'PANEL';
 type ReportStatusFilter = 'COMPLETED' | 'UNVERIFIED' | 'PENDING' | 'REJECTED';
@@ -167,6 +168,15 @@ function sanitizeFilenamePart(value: string | null | undefined, fallback: string
   return cleaned || fallback;
 }
 
+function escapeHtml(value: string): string {
+  return value
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;');
+}
+
 function buildResultsPdfFilename(
   order: Pick<OrderHistoryItemDto, 'orderNumber' | 'registeredAt' | 'patient'> | undefined,
   orderId: string,
@@ -176,6 +186,103 @@ function buildResultsPdfFilename(
   const datePart = orderDate.isValid() ? orderDate.format('YYYY-MM-DD') : 'unknown-date';
   const orderNumber = sanitizeFilenamePart(order?.orderNumber, orderId.substring(0, 8));
   return `${patientName} - ${datePart} - ${orderNumber}.pdf`;
+}
+
+function openResultsBrowserPreviewPlaceholder(filename: string): Window | null {
+  const previewWindow = window.open('', '_blank');
+  if (!previewWindow) {
+    return null;
+  }
+
+  try {
+    const escapedFilename = escapeHtml(filename);
+    previewWindow.document.write(`<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Preparing report...</title>
+    <style>
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: #f5f7fb;
+        color: #1f2937;
+        font-family: "Segoe UI", Tahoma, sans-serif;
+      }
+      .card {
+        width: min(92vw, 480px);
+        padding: 24px;
+        border-radius: 16px;
+        background: #ffffff;
+        box-shadow: 0 18px 40px rgba(15, 23, 42, 0.12);
+      }
+      h1 {
+        margin: 0 0 10px;
+        font-size: 20px;
+      }
+      p {
+        margin: 0;
+        line-height: 1.5;
+        color: #475569;
+      }
+      .name {
+        margin-top: 12px;
+        font-weight: 600;
+        color: #0f172a;
+        word-break: break-word;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <h1>Preparing report preview</h1>
+      <p>The PDF is loading in this browser tab so you can print or save it.</p>
+      <p class="name">${escapedFilename}</p>
+    </div>
+  </body>
+</html>`);
+    previewWindow.document.close();
+  } catch {
+    // ignore placeholder rendering issues and continue using the window handle
+  }
+
+  return previewWindow;
+}
+
+function closeResultsBrowserPreviewWindow(previewWindow: Window | null): void {
+  if (!previewWindow || previewWindow.closed) {
+    return;
+  }
+
+  try {
+    previewWindow.close();
+  } catch {
+    // ignore close failures
+  }
+}
+
+function openResultsPdfInBrowserPreview(
+  blob: Blob,
+  previewWindow: Window | null,
+): boolean {
+  const url = window.URL.createObjectURL(blob);
+  const targetWindow = previewWindow && !previewWindow.closed ? previewWindow : window.open('', '_blank');
+  if (!targetWindow) {
+    window.setTimeout(() => window.URL.revokeObjectURL(url), REPORT_BROWSER_PREVIEW_URL_REVOKE_MS);
+    return false;
+  }
+
+  try {
+    targetWindow.location.replace(url);
+    window.setTimeout(() => window.URL.revokeObjectURL(url), REPORT_BROWSER_PREVIEW_URL_REVOKE_MS);
+    return true;
+  } catch {
+    window.setTimeout(() => window.URL.revokeObjectURL(url), REPORT_BROWSER_PREVIEW_URL_REVOKE_MS);
+    return false;
+  }
 }
 
 function formatDisplayDecimal(value: string | number | null | undefined): string {
@@ -840,6 +947,7 @@ export function ReportsPage() {
     options?: { skipPaymentCheck?: boolean },
   ) => {
     const summaryOrder = order ?? getOrderSummaryById(orderId);
+    const resultsFilename = buildResultsPdfFilename(summaryOrder, orderId);
     const skipPaymentCheck = options?.skipPaymentCheck === true;
     if (!skipPaymentCheck && summaryOrder && !canReleaseResults(summaryOrder)) {
       setPaymentModalOrder(summaryOrder);
@@ -851,6 +959,8 @@ export function ReportsPage() {
     }
 
     setDownloading(`print-${orderId}`);
+    let browserPreviewWindow: Window | null = openResultsBrowserPreviewPlaceholder(resultsFilename);
+    let browserPreviewOpened = false;
     try {
       const [blob, settings] = await Promise.all([
         getResultsPdfBlob(orderId),
@@ -871,6 +981,7 @@ export function ReportsPage() {
                 blob,
                 printerName,
               });
+              closeResultsBrowserPreviewWindow(browserPreviewWindow);
               message.success(`Report sent to ${printerName}`);
               void trackReportAction(orderId, 'PRINT');
               return;
@@ -883,30 +994,16 @@ export function ReportsPage() {
         // continue with browser print fallback
       }
 
-      const url = window.URL.createObjectURL(blob);
-      const iframe = document.createElement('iframe');
-      iframe.style.position = 'fixed';
-      iframe.style.right = '0';
-      iframe.style.bottom = '0';
-      iframe.style.width = '1px';
-      iframe.style.height = '1px';
-      iframe.style.border = '0';
-      iframe.src = url;
-      const cleanup = () => {
-        window.URL.revokeObjectURL(url);
-        iframe.remove();
-      };
-      iframe.onload = () => {
-        try {
-          iframe.contentWindow?.focus();
-          iframe.contentWindow?.print();
-        } finally {
-          window.setTimeout(cleanup, 5000);
-        }
-      };
-      document.body.appendChild(iframe);
+      browserPreviewOpened = openResultsPdfInBrowserPreview(blob, browserPreviewWindow);
+      if (!browserPreviewOpened) {
+        closeResultsBrowserPreviewWindow(browserPreviewWindow);
+        browserPreviewWindow = null;
+        triggerPdfDownload(blob, resultsFilename);
+        message.warning('Browser preview was blocked, so the report was downloaded instead.');
+      }
       void trackReportAction(orderId, 'PRINT');
     } catch (error: unknown) {
+      closeResultsBrowserPreviewWindow(browserPreviewWindow);
       const is403 =
         error &&
         typeof error === 'object' &&
@@ -924,6 +1021,9 @@ export function ReportsPage() {
         message.error(backendMessage || 'Failed to load results for printing');
       }
     } finally {
+      if (!browserPreviewOpened) {
+        closeResultsBrowserPreviewWindow(browserPreviewWindow);
+      }
       setDownloading(null);
     }
   };
