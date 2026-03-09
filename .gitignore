@@ -5,6 +5,7 @@ coverage/
 backend/coverage/
 frontend/coverage/
 backend/dist-test/
+backend/.local-secrets/
 *.log
 *.tmp
 *.temp
