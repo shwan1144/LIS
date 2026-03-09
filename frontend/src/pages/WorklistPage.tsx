@@ -476,8 +476,8 @@ export function WorklistPage() {
 
   const showLoadAllTestsHint = Boolean(
     modalAppliedDepartmentId &&
-      modalOrder &&
-      editableTargetIds.length === 0,
+    modalOrder &&
+    editableTargetIds.length === 0,
   );
 
   const firstPanelIndex = useMemo(
@@ -958,59 +958,58 @@ export function WorklistPage() {
             return (
               <div
                 key={group.groupId}
-                className={`worklist-group-item ${
-                  group.groupKind === 'panel'
+                className={`worklist-group-item ${group.groupKind === 'panel'
                     ? 'worklist-group-item-panel'
                     : 'worklist-group-item-single'
-                }`}
+                  }`}
                 onClick={openGroup}
               >
-              <div className="worklist-group-main">
-                <div className="worklist-group-title-row">
-                  <Text strong style={{ fontSize: 12 }}>
-                    {group.label}
-                  </Text>
-                  {group.testsCount === 0 && (
-                    <Tag color="warning" style={{ margin: 0 }}>
-                      No child tests in this filter
-                    </Tag>
-                  )}
+                <div className="worklist-group-main">
+                  <div className="worklist-group-title-row">
+                    <Text strong style={{ fontSize: 12 }}>
+                      {group.label}
+                    </Text>
+                    {group.testsCount === 0 && (
+                      <Tag color="warning" style={{ margin: 0 }}>
+                        No child tests in this filter
+                      </Tag>
+                    )}
+                  </div>
+                  <Space size={[4, 4]} wrap>
+                    <Tag style={{ margin: 0 }}>{group.testsCount} tests</Tag>
+                    {group.pending > 0 && (
+                      <Tag style={{ margin: 0 }}>Pending {group.pending}</Tag>
+                    )}
+                    {group.completed > 0 && (
+                      <Tag color="processing" style={{ margin: 0 }}>
+                        Completed {group.completed}
+                      </Tag>
+                    )}
+                    {group.verified > 0 && (
+                      <Tag color="success" style={{ margin: 0 }}>
+                        Verified {group.verified}
+                      </Tag>
+                    )}
+                    {group.rejected > 0 && (
+                      <Tag color="error" style={{ margin: 0 }}>
+                        Rejected {group.rejected}
+                      </Tag>
+                    )}
+                  </Space>
                 </div>
-                <Space size={[4, 4]} wrap>
-                  <Tag style={{ margin: 0 }}>{group.testsCount} tests</Tag>
-                  {group.pending > 0 && (
-                    <Tag style={{ margin: 0 }}>Pending {group.pending}</Tag>
-                  )}
-                  {group.completed > 0 && (
-                    <Tag color="processing" style={{ margin: 0 }}>
-                      Completed {group.completed}
-                    </Tag>
-                  )}
-                  {group.verified > 0 && (
-                    <Tag color="success" style={{ margin: 0 }}>
-                      Verified {group.verified}
-                    </Tag>
-                  )}
-                  {group.rejected > 0 && (
-                    <Tag color="error" style={{ margin: 0 }}>
-                      Rejected {group.rejected}
-                    </Tag>
-                  )}
-                </Space>
-              </div>
-              <Button
-                type="primary"
-                ghost
-                size="small"
-                disabled={isEmptyPanel}
-                loading={entryLoadingGroupKey === `${record.orderId}:${group.groupId}`}
-                onClick={(event) => {
-                  event.stopPropagation();
-                  openGroup();
-                }}
-              >
-                Edit
-              </Button>
+                <Button
+                  type="primary"
+                  ghost
+                  size="small"
+                  disabled={isEmptyPanel}
+                  loading={entryLoadingGroupKey === `${record.orderId}:${group.groupId}`}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    openGroup();
+                  }}
+                >
+                  Edit
+                </Button>
               </div>
             );
           })}
@@ -1375,11 +1374,11 @@ export function WorklistPage() {
                   padding: '2px 6px',
                 }}
               >
-                <div style={{ flex: '1 1 40%' }}>Test</div>
-                <div style={{ flex: '1 1 26%' }}>Result</div>
+                <div style={{ flex: '1 1 40%', textAlign: 'center' }}>Test</div>
+                <div style={{ flex: '1 1 26%', textAlign: 'center' }}>Result</div>
                 <div style={{ flex: '1 1 8%', textAlign: 'center' }}>Unit</div>
                 <div style={{ flex: '1 1 10%', textAlign: 'center' }}>Flag</div>
-                <div style={{ flex: '1 1 16%', textAlign: 'right' }}>Ref. Range</div>
+                <div style={{ flex: '1 1 16%', textAlign: 'center' }}>Ref. Range</div>
               </div>
 
               {orderedModalItems.map((target, index) => {
@@ -1415,7 +1414,8 @@ export function WorklistPage() {
                     <div
                       style={{
                         display: 'flex',
-                        alignItems: 'flex-start',
+                        alignItems: 'center',
+                        justifyContent: 'center',
                         padding: '1px 6px',
                         borderBottom:
                           index < orderedModalItems.length - 1
@@ -1430,20 +1430,20 @@ export function WorklistPage() {
                           : 'transparent',
                       }}
                     >
-                      <div style={{ flex: '1 1 40%', paddingRight: 8 }}>
+                      <div style={{ flex: '1 1 40%', paddingRight: 8, textAlign: 'center' }}>
                         <Space size={6}>
                           {isPanelRoot ? (
-                            <Tag color="purple" style={{ margin: 0, fontSize: 10 }}>
+                            <Tag color="purple" style={{ margin: 0, fontSize: 11 }}>
                               Panel
                             </Tag>
                           ) : null}
                           {target.status === 'REJECTED' ? (
-                            <Tag color="error" style={{ margin: 0, fontSize: 10 }}>
+                            <Tag color="error" style={{ margin: 0, fontSize: 11 }}>
                               Rejected
                             </Tag>
                           ) : null}
                           {target.status === 'VERIFIED' && canAdminEditVerified ? (
-                            <Tag color="gold" style={{ margin: 0, fontSize: 10 }}>
+                            <Tag color="gold" style={{ margin: 0, fontSize: 11 }}>
                               Verified (admin edit)
                             </Tag>
                           ) : null}
@@ -1452,8 +1452,8 @@ export function WorklistPage() {
                           <Text
                             strong={isPanelRoot}
                             style={{
-                              fontSize: 11,
-                              lineHeight: '13px',
+                              fontSize: 12,
+                              lineHeight: '14px',
                               display: 'block',
                               whiteSpace: 'normal',
                               wordBreak: 'break-word',
@@ -1463,13 +1463,13 @@ export function WorklistPage() {
                           </Text>
                         </div>
                         {target.rejectionReason?.trim() && (
-                          <Text type="danger" style={{ display: 'block', fontSize: 10 }}>
+                          <Text type="danger" style={{ display: 'block', fontSize: 11 }}>
                             {target.rejectionReason}
                           </Text>
                         )}
                       </div>
 
-                      <div style={{ flex: '1 1 26%', paddingRight: 8 }}>
+                      <div style={{ flex: '1 1 26%', paddingRight: 8, textAlign: 'center' }}>
                         {isPanelRoot ? (
                           <Text type="secondary" style={{ fontSize: 11 }}>
                             Panel header
@@ -1530,7 +1530,7 @@ export function WorklistPage() {
                               <Input
                                 id={`result-input-${target.id}`}
                                 data-entry-target-id={target.id}
-                                style={{ width: '100%' }}
+                                style={{ width: '100%', textAlign: 'center' }}
                                 size="small"
                                 disabled={isReadOnly}
                                 inputMode="decimal"
@@ -1550,6 +1550,8 @@ export function WorklistPage() {
                                 showSearch
                                 size="small"
                                 disabled={isReadOnly}
+                                style={{ textAlign: 'center' }}
+                                dropdownStyle={{ textAlign: 'center' }}
                                 options={[
                                   ...(target.resultTextOptions ?? []).map((option) => ({
                                     label: option.value,
@@ -1572,6 +1574,7 @@ export function WorklistPage() {
                                 data-entry-target-id={target.id}
                                 size="small"
                                 disabled={isReadOnly}
+                                style={{ textAlign: 'center' }}
                                 onKeyDown={(event) => {
                                   if (event.key === 'ArrowDown') {
                                     event.preventDefault();
@@ -1584,19 +1587,19 @@ export function WorklistPage() {
                         )}
                       </div>
 
-                      <div style={{ flex: '1 1 8%', textAlign: 'center', fontSize: 10 }}>
+                      <div style={{ flex: '1 1 8%', textAlign: 'center', fontSize: 12 }}>
                         {target.testUnit || '-'}
                       </div>
                       <div style={{ flex: '1 1 10%', textAlign: 'center' }}>
                         {displayFlag ? (
                           <Tag
                             color={FLAG_COLOR[displayFlag] || 'default'}
-                            style={{ margin: 0, fontSize: 10 }}
+                            style={{ margin: 0, fontSize: 11 }}
                           >
                             {FLAG_LABEL[displayFlag] || displayFlag}
                           </Tag>
                         ) : (
-                          <Text type="secondary" style={{ fontSize: 10 }}>
+                          <Text type="secondary" style={{ fontSize: 12 }}>
                             -
                           </Text>
                         )}
@@ -1604,8 +1607,8 @@ export function WorklistPage() {
                       <div
                         style={{
                           flex: '1 1 16%',
-                          textAlign: 'right',
-                          fontSize: 10,
+                          textAlign: 'center',
+                          fontSize: 12,
                           whiteSpace: 'pre-wrap',
                           wordBreak: 'break-word',
                         }}

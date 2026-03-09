@@ -440,8 +440,7 @@ export function VerificationPage() {
       try {
         const result = await verifyMultipleResults(Array.from(new Set(ids)));
         message.success(
-          `Verified ${result.verified} result(s)${
-            result.failed > 0 ? `, ${result.failed} failed` : ''
+          `Verified ${result.verified} result(s)${result.failed > 0 ? `, ${result.failed} failed` : ''
           }`,
         );
         await refreshReviewAfterMutation(closeOnSuccess);
@@ -644,55 +643,54 @@ export function VerificationPage() {
             return (
               <div
                 key={group.groupId}
-                className={`verification-group-item ${
-                  group.groupKind === 'panel'
-                    ? 'verification-group-item-panel'
-                    : 'verification-group-item-single'
-                }`}
+                className={`verification-group-item ${group.groupKind === 'panel'
+                  ? 'verification-group-item-panel'
+                  : 'verification-group-item-single'
+                  }`}
                 onClick={openGroup}
               >
-              <div className="verification-group-main">
-                <div className="verification-group-title-row">
-                  <Text strong style={{ fontSize: 12 }}>
-                    {group.label}
-                  </Text>
-                  {group.testsCount === 0 && (
-                    <Tag color="warning" style={{ margin: 0 }}>
-                      No child tests in this filter
-                    </Tag>
-                  )}
+                <div className="verification-group-main">
+                  <div className="verification-group-title-row">
+                    <Text strong style={{ fontSize: 12 }}>
+                      {group.label}
+                    </Text>
+                    {group.testsCount === 0 && (
+                      <Tag color="warning" style={{ margin: 0 }}>
+                        No child tests in this filter
+                      </Tag>
+                    )}
+                  </div>
+                  <Space size={[4, 4]} wrap>
+                    <Tag style={{ margin: 0 }}>{group.testsCount} tests</Tag>
+                    {group.completed > 0 && (
+                      <Tag color="processing" style={{ margin: 0 }}>
+                        Completed {group.completed}
+                      </Tag>
+                    )}
+                    {group.verified > 0 && (
+                      <Tag color="success" style={{ margin: 0 }}>
+                        Verified {group.verified}
+                      </Tag>
+                    )}
+                    {group.rejected > 0 && (
+                      <Tag color="error" style={{ margin: 0 }}>
+                        Rejected {group.rejected}
+                      </Tag>
+                    )}
+                  </Space>
                 </div>
-                <Space size={[4, 4]} wrap>
-                  <Tag style={{ margin: 0 }}>{group.testsCount} tests</Tag>
-                  {group.completed > 0 && (
-                    <Tag color="processing" style={{ margin: 0 }}>
-                      Completed {group.completed}
-                    </Tag>
-                  )}
-                  {group.verified > 0 && (
-                    <Tag color="success" style={{ margin: 0 }}>
-                      Verified {group.verified}
-                    </Tag>
-                  )}
-                  {group.rejected > 0 && (
-                    <Tag color="error" style={{ margin: 0 }}>
-                      Rejected {group.rejected}
-                    </Tag>
-                  )}
-                </Space>
-              </div>
-              <Button
-                type="primary"
-                size="small"
-                disabled={isEmptyPanel}
-                loading={openingGroupKey === `${record.orderId}:${group.groupId}`}
-                onClick={(event) => {
-                  event.stopPropagation();
-                  openGroup();
-                }}
-              >
-                Review
-              </Button>
+                <Button
+                  type="primary"
+                  size="small"
+                  disabled={isEmptyPanel}
+                  loading={openingGroupKey === `${record.orderId}:${group.groupId}`}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    openGroup();
+                  }}
+                >
+                  Review
+                </Button>
               </div>
             );
           })}
@@ -980,12 +978,12 @@ export function VerificationPage() {
                 padding: '2px 6px',
               }}
             >
-              <div style={{ flex: '1 1 32%' }}>Test</div>
-              <div style={{ flex: '1 1 18%' }}>Result</div>
+              <div style={{ flex: '1 1 32%', textAlign: 'center' }}>Test</div>
+              <div style={{ flex: '1 1 18%', textAlign: 'center' }}>Result</div>
               <div style={{ flex: '1 1 8%', textAlign: 'center' }}>Unit</div>
               <div style={{ flex: '1 1 9%', textAlign: 'center' }}>Flag</div>
               <div style={{ flex: '1 1 8%', textAlign: 'center' }}>Status</div>
-              <div style={{ flex: '1 1 9%', textAlign: 'right' }}>Ref. Range</div>
+              <div style={{ flex: '1 1 9%', textAlign: 'center' }}>Ref. Range</div>
               {reviewGroup.groupKind === 'single' ? (
                 <div style={{ flex: '1 1 16%', textAlign: 'right' }}>Action</div>
               ) : null}
@@ -1020,7 +1018,7 @@ export function VerificationPage() {
                   <div
                     style={{
                       display: 'flex',
-                      alignItems: 'flex-start',
+                      alignItems: 'center',
                       padding: '1px 6px',
                       borderBottom:
                         index < orderedReviewItems.length - 1
@@ -1035,15 +1033,15 @@ export function VerificationPage() {
                         : 'transparent',
                     }}
                   >
-                    <div style={{ flex: '1 1 32%', paddingRight: 8 }}>
+                    <div style={{ flex: '1 1 32%', paddingRight: 8, textAlign: 'center' }}>
                       <Space size={6}>
                         {isPanelRoot && (
-                          <Tag color="purple" style={{ margin: 0, fontSize: 10 }}>
+                          <Tag color="purple" style={{ margin: 0, fontSize: 11 }}>
                             Panel
                           </Tag>
                         )}
                         {item.rejectionReason?.trim() && (
-                          <Tag color="error" style={{ margin: 0, fontSize: 10 }}>
+                          <Tag color="error" style={{ margin: 0, fontSize: 11 }}>
                             Rejected
                           </Tag>
                         )}
@@ -1052,8 +1050,8 @@ export function VerificationPage() {
                         <Text
                           strong={isPanelRoot}
                           style={{
-                            fontSize: 11,
-                            lineHeight: '13px',
+                            fontSize: 12,
+                            lineHeight: '14px',
                             display: 'block',
                             whiteSpace: 'normal',
                             wordBreak: 'break-word',
@@ -1063,34 +1061,34 @@ export function VerificationPage() {
                         </Text>
                       </div>
                       {item.rejectionReason?.trim() && (
-                        <Text type="danger" style={{ display: 'block', fontSize: 10 }}>
+                        <Text type="danger" style={{ display: 'block', fontSize: 11 }}>
                           {item.rejectionReason}
                         </Text>
                       )}
                     </div>
 
-                    <div style={{ flex: '1 1 18%', paddingRight: 8 }}>
-                      <Text style={{ fontSize: 11 }}>{isPanelRoot ? 'Panel group' : formatResult(item)}</Text>
+                    <div style={{ flex: '1 1 18%', paddingRight: 8, textAlign: 'center' }}>
+                      <Text style={{ fontSize: 12 }}>{isPanelRoot ? 'Panel group' : formatResult(item)}</Text>
                     </div>
 
-                    <div style={{ flex: '1 1 8%', textAlign: 'center', fontSize: 10 }}>
+                    <div style={{ flex: '1 1 8%', textAlign: 'center', fontSize: 12 }}>
                       {item.testUnit || '-'}
                     </div>
 
                     <div style={{ flex: '1 1 9%', textAlign: 'center' }}>
                       {item.flag ? (
-                        <Tag color={FLAG_COLOR[item.flag] || 'default'} style={{ margin: 0, fontSize: 10 }}>
+                        <Tag color={FLAG_COLOR[item.flag] || 'default'} style={{ margin: 0, fontSize: 11 }}>
                           {FLAG_LABEL[item.flag] || item.flag}
                         </Tag>
                       ) : (
-                        <Text type="secondary" style={{ fontSize: 10 }}>
+                        <Text type="secondary" style={{ fontSize: 12 }}>
                           -
                         </Text>
                       )}
                     </div>
 
                     <div style={{ flex: '1 1 8%', textAlign: 'center' }}>
-                      <Tag color={STATUS_COLOR[item.status] || 'default'} style={{ margin: 0, fontSize: 10 }}>
+                      <Tag color={STATUS_COLOR[item.status] || 'default'} style={{ margin: 0, fontSize: 11 }}>
                         {item.status.replace('_', ' ')}
                       </Tag>
                     </div>
@@ -1098,8 +1096,8 @@ export function VerificationPage() {
                     <div
                       style={{
                         flex: '1 1 9%',
-                        textAlign: 'right',
-                        fontSize: 10,
+                        textAlign: 'center',
+                        fontSize: 12,
                         whiteSpace: 'pre-wrap',
                         wordBreak: 'break-word',
                       }}
@@ -1144,9 +1142,9 @@ export function VerificationPage() {
                 </div>
               );
             })}
-          </div>
+          </div >
         ) : null}
-      </Modal>
+      </Modal >
 
       <Modal
         title="Reject reason"
@@ -1169,6 +1167,6 @@ export function VerificationPage() {
           maxLength={300}
         />
       </Modal>
-    </div>
+    </div >
   );
 }

@@ -2098,20 +2098,20 @@ export function ReportsPage() {
                       <div
                         className="panel-entry-grid-head"
                         style={{
-                        display: 'flex',
-                        backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : '#f5f5f5',
-                        borderRadius: '6px 6px 0 0',
-                        borderBottom: isDark ? '1px solid rgba(255,255,255,0.1)' : '1px solid #e8e8e8',
-                        fontWeight: 600,
-                        fontSize: 12,
-                        textTransform: 'uppercase',
-                        letterSpacing: '0.5px'
-                      }}
+                          display: 'flex',
+                          backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : '#f5f5f5',
+                          borderRadius: '6px 6px 0 0',
+                          borderBottom: isDark ? '1px solid rgba(255,255,255,0.1)' : '1px solid #e8e8e8',
+                          fontWeight: 600,
+                          fontSize: 12,
+                          textTransform: 'uppercase',
+                          letterSpacing: '0.5px'
+                        }}
                       >
-                        <div style={{ flex: '1 1 24%' }}>Test</div>
-                        <div style={{ flex: '1 1 40%' }}>Result</div>
+                        <div style={{ flex: '1 1 24%', textAlign: 'center' }}>Test</div>
+                        <div style={{ flex: '1 1 40%', textAlign: 'center' }}>Result</div>
                         <div style={{ flex: '1 1 14%', textAlign: 'center' }}>Unit</div>
-                        <div style={{ flex: '1 1 22%', textAlign: 'right' }}>Ref. Range</div>
+                        <div style={{ flex: '1 1 22%', textAlign: 'center' }}>Ref. Range</div>
                       </div>
                     )}
 
@@ -2130,22 +2130,24 @@ export function ReportsPage() {
                               className="panel-entry-grid-row"
                               style={{
                                 marginBottom: 0,
+                                alignItems: 'center',
                                 borderBottom: !isLastRow
                                   ? (isDark ? '1px solid rgba(255,255,255,0.05)' : '1px solid #f0f0f0')
                                   : 'none',
                               }}
                             >
                               <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap' }}>
-                                <div style={{ flex: '1 1 24%' }}>
-                                  <Text style={{ fontSize: 11, lineHeight: '15px' }}>{def.label}</Text>
+                                <div style={{ flex: '1 1 24%', textAlign: 'center' }}>
+                                  <Text style={{ fontSize: 12, lineHeight: '16px' }}>{def.label}</Text>
                                 </div>
-                                <div style={{ flex: '1 1 40%' }}>
+                                <div style={{ flex: '1 1 40%', textAlign: 'center' }}>
                                   <Form.Item name={[target.id, 'resultParameters', def.code]} noStyle>
                                     {def.type === 'select' ? (
                                       <Select
                                         allowClear
                                         showSearch
-                                        style={{ width: '100%' }}
+                                        style={{ width: '100%', textAlign: 'center' }}
+                                        dropdownStyle={{ textAlign: 'center' }}
                                         size="small"
                                         placeholder="Select"
                                         options={[
@@ -2154,7 +2156,7 @@ export function ReportsPage() {
                                         ]}
                                       />
                                     ) : (
-                                      <Input style={{ width: '100%' }} size="small" placeholder="Result" />
+                                      <Input style={{ width: '100%', textAlign: 'center' }} size="small" placeholder="Result" />
                                     )}
                                   </Form.Item>
                                   {def.type === 'select' && (
@@ -2165,16 +2167,16 @@ export function ReportsPage() {
                                           rules={[{ required: true, message: 'Enter custom value' }]}
                                           style={{ marginTop: 4, marginBottom: 0 }}
                                         >
-                                          <Input size="small" placeholder="Specify custom value..." />
+                                          <Input size="small" placeholder="Specify custom value..." style={{ textAlign: 'center' }} />
                                         </Form.Item>
                                       )}
                                     </Form.Item>
                                   )}
                                 </div>
-                                <div style={{ flex: '1 1 14%', textAlign: 'center', fontSize: 11 }}>
+                                <div style={{ flex: '1 1 14%', textAlign: 'center', fontSize: 12 }}>
                                   -
                                 </div>
-                                <div style={{ flex: '1 1 22%', textAlign: 'right', fontSize: 11, color: 'rgba(128,128,128,0.8)' }}>
+                                <div style={{ flex: '1 1 22%', textAlign: 'center', fontSize: 12, color: 'rgba(128,128,128,0.8)' }}>
                                   -
                                 </div>
                               </div>
@@ -2187,14 +2189,15 @@ export function ReportsPage() {
                         <div key={target.id} className={isPanel ? 'panel-entry-grid-row' : undefined} style={{
                           marginBottom: isPanel ? 0 : 10,
                           padding: isPanel ? undefined : 0,
+                          alignItems: 'center',
                           borderBottom: isPanel && idx < targetItems.length - 1 ? (isDark ? '1px solid rgba(255,255,255,0.05)' : '1px solid #f0f0f0') : 'none'
                         }}>
                           <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap' }}>
-                            <div style={{ flex: isPanel ? '1 1 24%' : '1 1 100%', marginBottom: isPanel ? 0 : 8 }}>
+                            <div style={{ flex: isPanel ? '1 1 24%' : '1 1 100%', marginBottom: isPanel ? 0 : 8, textAlign: isPanel ? 'center' : 'left' }}>
                               <Text strong={!isPanel} style={{ fontSize: isPanel ? 12 : 14 }}>{target.test?.name}</Text>
                             </div>
 
-                            <div style={{ flex: isPanel ? '1 1 40%' : '1 1 100%' }}>
+                            <div style={{ flex: isPanel ? '1 1 40%' : '1 1 100%', textAlign: 'center' }}>
                               {!hasParams ? (
                                 <Form.Item
                                   name={[target.id, 'resultText']}
@@ -2202,10 +2205,10 @@ export function ReportsPage() {
                                   rules={target.test?.resultEntryType === 'QUALITATIVE' ? [{ required: true, message: 'Required' }] : []}
                                 >
                                   {target.test?.resultEntryType === 'NUMERIC' ? (
-                                    <div style={{ display: 'flex', gap: 8, alignItems: 'center', width: isPanel ? '100%' : undefined }}>
+                                    <div style={{ display: 'flex', gap: 8, alignItems: 'center', justifyContent: isPanel ? 'center' : 'flex-start', width: isPanel ? '100%' : undefined }}>
                                       <Form.Item name={[target.id, 'resultValue']} noStyle>
                                         <InputNumber
-                                          style={{ width: '100%' }}
+                                          style={{ width: '100%', textAlign: 'center' }}
                                           placeholder="Value"
                                           precision={2}
                                           size={isPanel ? 'small' : 'large'}
@@ -2217,7 +2220,8 @@ export function ReportsPage() {
                                     <Select
                                       allowClear
                                       showSearch
-                                      style={panelResultControlStyle}
+                                      style={{ ...panelResultControlStyle, textAlign: 'center' }}
+                                      dropdownStyle={{ textAlign: 'center' }}
                                       size={isPanel ? 'small' : 'large'}
                                       placeholder="Select"
                                       options={[
@@ -2226,7 +2230,7 @@ export function ReportsPage() {
                                       ]}
                                     />
                                   ) : (
-                                    <Input style={panelResultControlStyle} size={isPanel ? 'small' : 'large'} placeholder="Result text" />
+                                    <Input style={{ ...panelResultControlStyle, textAlign: 'center' }} size={isPanel ? 'small' : 'large'} placeholder="Result text" />
                                   )}
                                 </Form.Item>
                               ) : (
@@ -2243,7 +2247,7 @@ export function ReportsPage() {
                                       rules={[{ required: true, message: 'Enter custom text' }]}
                                       label={isPanel ? null : 'Custom text'}
                                     >
-                                      <Input style={panelResultControlStyle} placeholder="Specify custom result..." size="small" />
+                                      <Input style={{ ...panelResultControlStyle, textAlign: 'center' }} placeholder="Specify custom result..." size="small" />
                                     </Form.Item>
                                   </div>
                                 )}
@@ -2252,14 +2256,14 @@ export function ReportsPage() {
 
                             {isPanel && (
                               <>
-                                <div style={{ flex: '1 1 14%', textAlign: 'center', fontSize: 11 }}>
+                                <div style={{ flex: '1 1 14%', textAlign: 'center', fontSize: 12 }}>
                                   {target.test?.unit || '-'}
                                 </div>
                                 <div
                                   style={{
                                     flex: '1 1 22%',
-                                    textAlign: 'right',
-                                    fontSize: 11,
+                                    textAlign: 'center',
+                                    fontSize: 12,
                                     color: 'rgba(128,128,128,0.8)',
                                     whiteSpace: 'pre-wrap',
                                     wordBreak: 'break-word',
@@ -2284,11 +2288,11 @@ export function ReportsPage() {
                             <div
                               className="panel-entry-params"
                               style={{
-                              marginTop: isPanel ? 12 : 16,
-                              padding: 16,
-                              backgroundColor: isDark ? 'rgba(255,255,255,0.02)' : '#fafafa',
-                              borderRadius: 8,
-                              border: isDark ? '1px solid rgba(255,255,255,0.05)' : '1px solid #f0f0f0'
+                                marginTop: isPanel ? 12 : 16,
+                                padding: 16,
+                                backgroundColor: isDark ? 'rgba(255,255,255,0.02)' : '#fafafa',
+                                borderRadius: 8,
+                                border: isDark ? '1px solid rgba(255,255,255,0.05)' : '1px solid #f0f0f0'
                               }}
                             >
                               <Row gutter={[16, 12]}>
@@ -2341,9 +2345,9 @@ export function ReportsPage() {
                 </Space>
               </Form.Item>
             </Form>
-          </div >
+          </div>
         )}
-      </Modal >
+      </Modal>
 
       <Title level={2} style={{ marginTop: 0, marginBottom: 10 }}>
         Reports
