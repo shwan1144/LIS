@@ -1,19 +1,26 @@
 import React from 'react';
 import { createRoot } from 'react-dom/client';
-import type { DepartmentDto, OrderDto } from '../api/client';
+import {
+  getQzCertificate,
+  signQzPayload,
+  type DepartmentDto,
+  type OrderDto,
+} from '../api/client';
 import { OrderReceipt } from '../components/Print/OrderReceipt';
 import { AllSampleLabels } from '../components/Print/SampleLabel';
 import printCss from '../components/Print/print.css?raw';
 import axios from 'axios';
 import { jsPDF } from 'jspdf';
 import html2canvas from 'html2canvas';
+import qzTrayScriptUrl from 'qz-tray/qz-tray.js?url';
 
 const GATEWAY_URL = 'http://localhost:17881';
 
-const QZ_SCRIPT_URL = 'https://cdn.jsdelivr.net/npm/qz-tray@2.2.4/qz-tray.js';
+const QZ_SCRIPT_URL = qzTrayScriptUrl;
 const QZ_SCRIPT_TIMEOUT_MS = 10000;
 const QZ_CONNECT_TIMEOUT_MS = 10000;
 const QZ_PRINTER_LOOKUP_TIMEOUT_MS = 7000;
+const QZ_SIGNATURE_ALGORITHM = 'SHA512';
 const VIRTUAL_SAVE_PRINTER_KEYWORDS = [
   'print to pdf',
   'pdfcreator',
@@ -38,8 +45,21 @@ declare global {
         setPromiseType: (factory: (resolver: (resolve: (value: unknown) => void, reject: (reason?: unknown) => void) => void) => Promise<unknown>) => void;
       };
       security?: {
-        setCertificatePromise?: (factory: (resolve: (certificate: string | null) => void) => void) => void;
-        setSignaturePromise?: (factory: () => (toSign: string) => Promise<string>) => void;
+        setCertificatePromise?: (
+          factory: (
+            resolve: (certificate: string) => void,
+            reject: (reason?: unknown) => void,
+          ) => void,
+        ) => void;
+        setSignaturePromise?: (
+          factory: (
+            toSign: string,
+          ) => (
+            resolve: (signature: string) => void,
+            reject: (reason?: unknown) => void,
+          ) => void,
+        ) => void;
+        setSignatureAlgorithm?: (algorithm: string) => void;
       };
       printers: {
         find: (name?: string) => Promise<string | string[]>;
@@ -105,7 +125,7 @@ async function loadQz(): Promise<NonNullable<Window['qz']>> {
           cleanup();
           reject(
             new Error(
-              'QZ Tray script load timed out. Check internet/firewall/ad-block and ensure CDN access.',
+              'QZ Tray script load timed out. Check that the LIS app assets loaded correctly.',
             ),
           );
         }, QZ_SCRIPT_TIMEOUT_MS);
@@ -123,7 +143,7 @@ async function loadQz(): Promise<NonNullable<Window['qz']>> {
         script.remove();
         reject(
           new Error(
-            'QZ Tray script load timed out. Check internet/firewall/ad-block and ensure CDN access.',
+            'QZ Tray script load timed out. Check that the LIS app assets loaded correctly.',
           ),
         );
       }, QZ_SCRIPT_TIMEOUT_MS);
@@ -153,8 +173,30 @@ async function loadQz(): Promise<NonNullable<Window['qz']>> {
 function configureQz(qz: NonNullable<Window['qz']>): void {
   if (qz.__medilisConfigured) return;
   qz.api.setPromiseType((resolver) => new Promise(resolver));
-  qz.security?.setCertificatePromise?.((resolve) => resolve(null));
-  qz.security?.setSignaturePromise?.(() => async () => '');
+  if (!qz.security?.setCertificatePromise || !qz.security?.setSignaturePromise) {
+    throw new Error('Installed QZ Tray version does not expose the required security API.');
+  }
+  qz.security.setSignatureAlgorithm?.(QZ_SIGNATURE_ALGORITHM);
+  qz.security.setCertificatePromise((resolve, reject) => {
+    void getQzCertificate()
+      .then((result) => {
+        resolve(result.certificate);
+      })
+      .catch((error) => {
+        reject(extractApiMessage(error) || 'Failed to fetch QZ certificate from the backend.');
+      });
+  });
+  qz.security.setSignaturePromise((toSign) => {
+    return (resolve, reject) => {
+      void signQzPayload(toSign)
+        .then((result) => {
+          resolve(result.signature);
+        })
+        .catch((error) => {
+          reject(extractApiMessage(error) || 'Failed to sign QZ request on the backend.');
+        });
+    };
+  });
   qz.__medilisConfigured = true;
 }
 
@@ -227,6 +269,16 @@ async function listInstalledPrinters(qz: NonNullable<Window['qz']>): Promise<str
   } catch {
     return [];
   }
+}
+
+function normalizePrinterList(printers: string[]): string[] {
+  return Array.from(
+    new Set(
+      printers
+        .map((value) => value.trim())
+        .filter((value) => value.length > 0),
+    ),
+  ).sort((left, right) => left.localeCompare(right, undefined, { sensitivity: 'base' }));
 }
 
 function buildDocumentHtml(contentHtml: string, title: string): string {
@@ -460,13 +512,30 @@ export async function checkDirectPrintConnection(
   }
 }
 
+export async function listDirectPrintPrinters(
+  mode: 'direct_qz' | 'direct_gateway',
+): Promise<string[]> {
+  if (mode === 'direct_gateway') {
+    const response = await axios.get<{ printers?: string[] }>(`${GATEWAY_URL}/local/printers`);
+    return normalizePrinterList(Array.isArray(response.data?.printers) ? response.data.printers : []);
+  }
+
+  const qz = await loadQz();
+  await ensureQzConnected(qz);
+  return normalizePrinterList(await listInstalledPrinters(qz));
+}
+
 export function getDirectPrintErrorMessage(error: unknown, mode?: string): string {
+  const apiMessage = extractApiMessage(error);
+  if (apiMessage) {
+    return apiMessage;
+  }
   if (error instanceof Error && error.message.trim()) {
     return error.message;
   }
   return mode === 'direct_gateway'
     ? 'Direct print via Gateway failed. Ensure LIS Gateway is running.'
-    : 'Direct print failed. Make sure QZ Tray is installed and running.';
+    : 'Direct print failed. Make sure QZ Tray is installed, running, and trusted by this backend.';
 }
 
 function withTimeout<T>(promise: Promise<T>, timeoutMs: number, timeoutMessage: string): Promise<T> {
@@ -492,4 +561,25 @@ function escapeHtml(value: string): string {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
+}
+
+function extractApiMessage(error: unknown): string | null {
+  if (!axios.isAxiosError(error)) {
+    return null;
+  }
+
+  const payload = error.response?.data as
+    | { message?: string | string[]; error?: string }
+    | undefined;
+  const messageValue = payload?.message;
+  if (Array.isArray(messageValue) && typeof messageValue[0] === 'string' && messageValue[0].trim()) {
+    return messageValue[0];
+  }
+  if (typeof messageValue === 'string' && messageValue.trim()) {
+    return messageValue;
+  }
+  if (typeof payload?.error === 'string' && payload.error.trim()) {
+    return payload.error;
+  }
+  return null;
 }

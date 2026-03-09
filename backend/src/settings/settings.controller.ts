@@ -53,7 +53,7 @@ export class SettingsController {
       onlineResultWatermarkDataUrl?: string | null;
       onlineResultWatermarkText?: string | null;
       printing?: {
-        mode?: 'browser' | 'direct_qz';
+        mode?: 'browser' | 'direct_qz' | 'direct_gateway';
         receiptPrinterName?: string | null;
         labelsPrinterName?: string | null;
         reportPrinterName?: string | null;

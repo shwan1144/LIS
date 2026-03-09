@@ -1044,7 +1044,7 @@ export async function searchPatients(params: PatientSearchParams): Promise<Patie
     const size = Number((payload as PatientSearchResult).size ?? params.size ?? 20);
     const total = Number((payload as PatientSearchResult).total ?? items.length);
     const totalPages = Number((payload as PatientSearchResult).totalPages ?? Math.max(1, Math.ceil(total / Math.max(1, size))));
-    return {
+  return {
       items,
       total,
       page,
@@ -1060,6 +1060,26 @@ export async function searchPatients(params: PatientSearchParams): Promise<Patie
     size: Number(params.size ?? 20),
     totalPages: 0,
   };
+}
+
+export interface QzCertificateDto {
+  certificate: string;
+  algorithm: string;
+}
+
+export interface QzSignatureDto {
+  signature: string;
+  algorithm: string;
+}
+
+export async function getQzCertificate(): Promise<QzCertificateDto> {
+  const res = await api.get<QzCertificateDto>('/printing/qz/certificate');
+  return res.data;
+}
+
+export async function signQzPayload(payload: string): Promise<QzSignatureDto> {
+  const res = await api.post<QzSignatureDto>('/printing/qz/sign', { payload });
+  return res.data;
 }
 
 export async function getPatient(id: string): Promise<PatientDto> {

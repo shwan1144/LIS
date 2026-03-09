@@ -1,30 +1,55 @@
 {
   "name": "lis-print-gateway",
-  "version": "1.0.0",
-  "main": "index.js",
+  "version": "1.1.0",
+  "main": "dist/main.js",
   "scripts": {
-    "start": "ts-node src/index.ts",
+    "start": "tsc && electron .",
+    "dev": "tsc && electron .",
     "build": "tsc",
-    "serve": "node dist/index.js",
-    "build:exe": "npm run build && pkg dist/index.js --targets node18-win-x64 --output dist/bin/lis-print-gateway.exe"
+    "dist": "npm run build && electron-builder",
+    "postinstall": "electron-builder install-app-deps"
   },
-  "pkg": {
-    "assets": [
-      "node_modules/pdf-to-printer/dist/SumatraPDF-3.4.6-32.exe"
+  "build": {
+    "appId": "com.medilis.printgateway",
+    "productName": "LIS Print Gateway",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "src/index.html",
+      "node_modules/**/*"
+    ],
+    "win": {
+      "target": "nsis",
+      "icon": "assets/icon.ico",
+      "forceCodeSigning": false
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "runAfterFinish": true
+    },
+    "asarUnpack": [
+      "**/node_modules/pdf-to-printer/dist/SumatraPDF-3.4.6-32.exe"
     ]
   },
   "keywords": [],
-  "author": "",
+  "author": "Medilis",
   "license": "ISC",
-  "description": "",
+  "description": "LIS Dedicated Print Gateway with GUI Monitor",
   "dependencies": {
     "cors": "^2.8.6",
     "dotenv": "^17.3.1",
+    "electron-is-dev": "^3.0.1",
     "pdf-to-printer": "^5.7.0"
   },
   "devDependencies": {
     "@types/cors": "^2.8.19",
     "@types/node": "^25.4.0",
+    "electron": "^34.3.0",
+    "electron-builder": "^25.1.8",
     "pkg": "^5.8.1",
     "ts-node": "^10.9.2",
     "typescript": "^5.9.3"

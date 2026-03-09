@@ -12,12 +12,12 @@ import {
   Typography,
   message,
 } from 'antd';
-import axios from 'axios';
 import { getLabSettings, updateLabSettings } from '../../api/client';
 import {
   checkDirectPrintConnection,
   getDirectPrintErrorMessage,
   isVirtualSavePrinterName,
+  listDirectPrintPrinters,
 } from '../../printing/direct-print';
 
 const { Title, Text } = Typography;
@@ -58,22 +58,33 @@ export function SettingsPrintingPage() {
   }, [form]);
 
   useEffect(() => {
-    if (currentMode === 'direct_gateway') {
-      const fetchPrinters = () => {
-        axios.get('http://localhost:17881/local/printers')
-          .then(res => {
-            if (res.data && Array.isArray(res.data.printers)) {
-              setAvailablePrinters(res.data.printers);
-            }
-          })
-          .catch(err => {
-            console.warn('Failed to fetch printers from gateway:', err);
-          });
-      };
-      fetchPrinters();
-    } else {
+    if (currentMode !== 'direct_qz' && currentMode !== 'direct_gateway') {
       setAvailablePrinters([]);
+      return;
     }
+
+    let cancelled = false;
+    void listDirectPrintPrinters(currentMode)
+      .then((printers) => {
+        if (!cancelled) {
+          setAvailablePrinters(printers);
+        }
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          setAvailablePrinters([]);
+          console.warn(
+            currentMode === 'direct_qz'
+              ? 'Failed to fetch printers from QZ Tray:'
+              : 'Failed to fetch printers from gateway:',
+            error,
+          );
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
   }, [currentMode]);
 
   const handleSave = async (values: FormValues) => {
@@ -161,7 +172,7 @@ export function SettingsPrintingPage() {
           showIcon
           style={{ marginBottom: 16 }}
           message="No-popup direct print"
-          description="Direct printing allows silent printing without browser dialogs. Choose between QZ Tray or the first-party LIS Gateway agent."
+          description="QZ Tray is the production direct-print path. The backend now signs QZ requests, and the gateway option remains available only as a fallback or experiment."
         />
 
         <Form
@@ -183,11 +194,21 @@ export function SettingsPrintingPage() {
             <Radio.Group>
               <Space direction="vertical">
                 <Radio value="browser">Browser print (shows print popup)</Radio>
-                <Radio value="direct_qz">Direct print with QZ Tray (needs Java)</Radio>
-                <Radio value="direct_gateway">Direct print with LIS Gateway (Recommended)</Radio>
+                <Radio value="direct_qz">Direct print with QZ Tray (Recommended)</Radio>
+                <Radio value="direct_gateway">Direct print with LIS Gateway (Experimental)</Radio>
               </Space>
             </Radio.Group>
           </Form.Item>
+
+          {currentMode === 'direct_qz' ? (
+            <Alert
+              type="success"
+              showIcon
+              style={{ marginBottom: 16 }}
+              message="QZ Tray setup"
+              description="Install and run QZ Tray on this workstation. If connection fails, verify the backend has QZ certificate and private-key configuration."
+            />
+          ) : null}
 
           <Divider style={{ margin: '12px 0 20px' }} />
 
@@ -196,7 +217,7 @@ export function SettingsPrintingPage() {
             label="Receipt printer name"
             tooltip="Example: EPSON TM-T82"
           >
-            {currentMode === 'direct_gateway' && availablePrinters.length > 0 ? (
+            {(currentMode === 'direct_qz' || currentMode === 'direct_gateway') && availablePrinters.length > 0 ? (
               <Select
                 showSearch
                 placeholder="Choose printer"
@@ -212,7 +233,7 @@ export function SettingsPrintingPage() {
             label="Label printer name"
             tooltip="Example: ZDesigner GK420d"
           >
-            {currentMode === 'direct_gateway' && availablePrinters.length > 0 ? (
+            {(currentMode === 'direct_qz' || currentMode === 'direct_gateway') && availablePrinters.length > 0 ? (
               <Select
                 showSearch
                 placeholder="Choose printer"
@@ -228,7 +249,7 @@ export function SettingsPrintingPage() {
             label="Report printer name"
             tooltip="Example: HP LaserJet"
           >
-            {currentMode === 'direct_gateway' && availablePrinters.length > 0 ? (
+            {(currentMode === 'direct_qz' || currentMode === 'direct_gateway') && availablePrinters.length > 0 ? (
               <Select
                 showSearch
                 placeholder="Choose printer"

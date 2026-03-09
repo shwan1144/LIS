@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>LIS Print Gateway</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-color: #0f172a;
+            --card-bg: #1e293b;
+            --text-main: #f8fafc;
+            --text-dim: #94a3b8;
+            --accent: #38bdf8;
+            --success: #22c55e;
+            --border: rgba(255, 255, 255, 0.1);
+        }
+
+        body {
+            margin: 0;
+            padding: 20px;
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            box-sizing: border-box;
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .title {
+            font-size: 18px;
+            font-weight: 600;
+            color: var(--accent);
+        }
+
+        .status-badge {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 13px;
+            font-weight: 500;
+            padding: 4px 12px;
+            background: rgba(34, 197, 94, 0.1);
+            color: var(--success);
+            border-radius: 20px;
+            border: 1px solid rgba(34, 197, 94, 0.2);
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            background: var(--success);
+            border-radius: 50%;
+            box-shadow: 0 0 8px var(--success);
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(1.2); opacity: 0.5; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .stat-card {
+            background: var(--card-bg);
+            padding: 15px;
+            border-radius: 12px;
+            border: 1px solid var(--border);
+        }
+
+        .stat-label {
+            font-size: 12px;
+            color: var(--text-dim);
+            margin-bottom: 4px;
+        }
+
+        .stat-value {
+            font-size: 20px;
+            font-weight: 600;
+        }
+
+        .logs-container {
+            flex: 1;
+            background: #020617;
+            border-radius: 12px;
+            border: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .logs-header {
+            padding: 10px 15px;
+            background: rgba(255, 255, 255, 0.03);
+            border-bottom: 1px solid var(--border);
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--text-dim);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        #logs {
+            flex: 1;
+            padding: 10px 15px;
+            font-family: 'JetBrains Mono', 'Consolas', monospace;
+            font-size: 12px;
+            overflow-y: auto;
+            color: #cbd5e1;
+            line-height: 1.6;
+        }
+
+        #logs div {
+            margin-bottom: 4px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.02);
+            padding-bottom: 2px;
+        }
+
+        .log-time { color: var(--text-dim); margin-right: 8px; }
+        .log-info { color: var(--accent); }
+        .log-error { color: #f43f5e; }
+        .log-success { color: var(--success); }
+
+        .settings {
+            margin-top: 15px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 13px;
+            color: var(--text-dim);
+        }
+
+        .switch {
+            position: relative;
+            display: inline-block;
+            width: 34px;
+            height: 20px;
+        }
+
+        .switch input { opacity: 0; width: 0; height: 0; }
+
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background-color: #334155;
+            transition: .4s;
+            border-radius: 20px;
+        }
+
+        .slider:before {
+            position: absolute;
+            content: "";
+            height: 14px; width: 14px;
+            left: 3px; bottom: 3px;
+            background-color: white;
+            transition: .4s;
+            border-radius: 50%;
+        }
+
+        input:checked + .slider { background-color: var(--accent); }
+        input:checked + .slider:before { transform: translateX(14px); }
+
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #334155; border-radius: 10px; }
+        ::-webkit-scrollbar-thumb:hover { background: #475569; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="title">LIS Gateway</div>
+        <div class="status-badge">
+            <div class="status-dot"></div>
+            Online
+        </div>
+    </div>
+
+    <div class="stats-grid">
+        <div class="stat-card">
+            <div class="stat-label">Port</div>
+            <div class="stat-value" id="port">17881</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">Printers</div>
+            <div class="stat-value" id="printer-count">0</div>
+        </div>
+    </div>
+
+    <div class="logs-container">
+        <div class="logs-header">Live Activity Logs</div>
+        <div id="logs">
+            <div><span class="log-time">23:15:01</span> <span class="log-info">Service initialized</span></div>
+        </div>
+    </div>
+
+    <div class="settings">
+        <label class="switch">
+            <input type="checkbox" id="autostart">
+            <span class="slider"></span>
+        </label>
+        <span>Auto-start on Windows login</span>
+    </div>
+
+    <script>
+        const logsEl = document.getElementById('logs');
+        const printerCountEl = document.getElementById('printer-count');
+        const portEl = document.getElementById('port');
+        const autostartEl = document.getElementById('autostart');
+
+        function addLog(text, type = 'info') {
+            const time = new Date().toLocaleTimeString([], { hour12: false });
+            const div = document.createElement('div');
+            div.innerHTML = `<span class="log-time">${time}</span><span class="log-${type}">${text}</span>`;
+            logsEl.appendChild(div);
+            logsEl.scrollTop = logsEl.scrollHeight;
+            
+            // Keep only last 100 logs
+            while (logsEl.children.length > 100) {
+                logsEl.removeChild(logsEl.firstChild);
+            }
+        }
+
+        // IPC Listeners (to be connected via preload)
+        window.api?.onStatus((status) => {
+            portEl.textContent = status.port;
+            printerCountEl.textContent = status.printers;
+            autostartEl.checked = status.autostart;
+        });
+
+        window.api?.onLog((msg) => {
+            addLog(msg.text, msg.type);
+        });
+
+        autostartEl.addEventListener('change', (e) => {
+            window.api?.setAutostart(e.target.checked);
+        });
+    </script>
+</body>
+</html>
