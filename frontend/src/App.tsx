@@ -44,15 +44,17 @@ function SettingsLayout() {
 }
 
 function AppTitleUpdater() {
-  const { lab } = useAuth();
+  const { lab, scope } = useAuth();
 
   useEffect(() => {
-    if (lab) {
+    if (scope === 'PLATFORM') {
+      document.title = 'LIS Admin Panel';
+    } else if (lab) {
       document.title = lab.name;
     } else {
       document.title = 'LIS';
     }
-  }, [lab]);
+  }, [lab, scope]);
 
   return null;
 }
