@@ -1,254 +1,590 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>LIS Print Gateway</title>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
     <style>
         :root {
-            --bg-color: #0f172a;
-            --card-bg: #1e293b;
-            --text-main: #f8fafc;
-            --text-dim: #94a3b8;
-            --accent: #38bdf8;
-            --success: #22c55e;
-            --border: rgba(255, 255, 255, 0.1);
+            --bg: #efe7da;
+            --panel: rgba(248, 243, 235, 0.92);
+            --panel-strong: rgba(255, 249, 242, 0.96);
+            --text: #1f2a32;
+            --muted: #6a7883;
+            --line: rgba(36, 48, 56, 0.12);
+            --accent: #0d7c66;
+            --shadow: 0 18px 40px rgba(42, 48, 59, 0.12);
+            --radius: 22px;
+        }
+
+        * {
+            box-sizing: border-box;
         }
 
         body {
             margin: 0;
-            padding: 20px;
-            font-family: 'Inter', sans-serif;
-            background-color: var(--bg-color);
-            color: var(--text-main);
+            min-height: 100vh;
+            font-family: "Aptos", "Segoe UI", sans-serif;
+            color: var(--text);
+            background:
+                radial-gradient(circle at top left, rgba(13, 124, 102, 0.14), transparent 34%),
+                radial-gradient(circle at top right, rgba(200, 112, 45, 0.17), transparent 32%),
+                linear-gradient(180deg, #f7f0e6 0%, #ebe3d4 100%);
             overflow: hidden;
-            display: flex;
-            flex-direction: column;
-            height: 100vh;
-            box-sizing: border-box;
         }
 
-        .header {
+        .shell {
+            display: grid;
+            grid-template-rows: auto auto auto 1fr auto;
+            gap: 16px;
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .hero,
+        .endpoint,
+        .card,
+        .footer {
+            backdrop-filter: blur(14px);
+            background: var(--panel);
+            border: 1px solid var(--line);
+            border-radius: var(--radius);
+            box-shadow: var(--shadow);
+        }
+
+        .hero {
+            overflow: hidden;
+            padding: 18px 18px 16px;
+            position: relative;
+        }
+
+        .hero::after {
+            content: "";
+            position: absolute;
+            inset: auto -60px -60px auto;
+            width: 180px;
+            height: 180px;
+            border-radius: 50%;
+            background: radial-gradient(circle, rgba(13, 124, 102, 0.2), transparent 70%);
+        }
+
+        .hero-top {
+            align-items: flex-start;
             display: flex;
             justify-content: space-between;
-            align-items: center;
-            margin-bottom: 20px;
+            gap: 16px;
         }
 
-        .title {
-            font-size: 18px;
-            font-weight: 600;
-            color: var(--accent);
+        .eyebrow {
+            color: var(--muted);
+            font-size: 12px;
+            font-weight: 700;
+            letter-spacing: 0.16em;
+            margin-bottom: 8px;
+            text-transform: uppercase;
         }
 
-        .status-badge {
-            display: flex;
-            align-items: center;
-            gap: 8px;
+        h1 {
+            font-family: "Bahnschrift", "Aptos", sans-serif;
+            font-size: 28px;
+            line-height: 1;
+            letter-spacing: 0.02em;
+            margin: 0;
+        }
+
+        .subtitle {
+            color: var(--muted);
             font-size: 13px;
-            font-weight: 500;
-            padding: 4px 12px;
-            background: rgba(34, 197, 94, 0.1);
-            color: var(--success);
-            border-radius: 20px;
-            border: 1px solid rgba(34, 197, 94, 0.2);
+            line-height: 1.5;
+            margin-top: 10px;
+            max-width: 320px;
+        }
+
+        .status-chip {
+            align-items: center;
+            background: rgba(13, 124, 102, 0.1);
+            border: 1px solid rgba(13, 124, 102, 0.2);
+            border-radius: 999px;
+            color: var(--accent);
+            display: inline-flex;
+            font-size: 12px;
+            font-weight: 700;
+            gap: 8px;
+            padding: 10px 14px;
+            white-space: nowrap;
         }
 
         .status-dot {
-            width: 8px;
-            height: 8px;
-            background: var(--success);
+            width: 10px;
+            height: 10px;
             border-radius: 50%;
-            box-shadow: 0 0 8px var(--success);
-            animation: pulse 2s infinite;
+            background: var(--accent);
+            box-shadow: 0 0 0 6px rgba(13, 124, 102, 0.12);
+            animation: pulse 1.8s infinite;
         }
 
-        @keyframes pulse {
-            0% { transform: scale(1); opacity: 1; }
-            50% { transform: scale(1.2); opacity: 0.5; }
-            100% { transform: scale(1); opacity: 1; }
+        .endpoint {
+            background: linear-gradient(135deg, rgba(255, 252, 247, 0.92), rgba(234, 244, 240, 0.92));
+            padding: 14px 16px;
         }
 
-        .stats-grid {
+        .endpoint-label,
+        .card-label {
+            color: var(--muted);
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+        }
+
+        .endpoint-value {
+            font-family: "Consolas", "Cascadia Mono", monospace;
+            font-size: 15px;
+            margin-top: 6px;
+            word-break: break-all;
+        }
+
+        .stats {
             display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 15px;
-            margin-bottom: 20px;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 12px;
         }
 
-        .stat-card {
-            background: var(--card-bg);
-            padding: 15px;
-            border-radius: 12px;
-            border: 1px solid var(--border);
+        .card {
+            background: var(--panel-strong);
+            min-height: 112px;
+            padding: 14px 14px 16px;
         }
 
-        .stat-label {
+        .card-value {
+            font-family: "Bahnschrift", "Aptos", sans-serif;
+            font-size: 24px;
+            line-height: 1.1;
+            margin-top: 10px;
+            word-break: break-word;
+        }
+
+        .card-meta {
+            color: var(--muted);
             font-size: 12px;
-            color: var(--text-dim);
-            margin-bottom: 4px;
+            line-height: 1.45;
+            margin-top: 8px;
         }
 
-        .stat-value {
-            font-size: 20px;
-            font-weight: 600;
+        .panels {
+            display: grid;
+            gap: 14px;
+            grid-template-columns: 1fr;
+            min-height: 0;
         }
 
-        .logs-container {
-            flex: 1;
-            background: #020617;
-            border-radius: 12px;
-            border: 1px solid var(--border);
+        .panel-title {
+            align-items: baseline;
+            display: flex;
+            justify-content: space-between;
+            gap: 12px;
+            margin-bottom: 14px;
+        }
+
+        .panel-title h2 {
+            font-family: "Bahnschrift", "Aptos", sans-serif;
+            font-size: 16px;
+            letter-spacing: 0.05em;
+            margin: 0;
+            text-transform: uppercase;
+        }
+
+        .panel-subtitle {
+            color: var(--muted);
+            font-size: 12px;
+        }
+
+        .list,
+        .logs {
+            min-height: 0;
+            overflow: auto;
+        }
+
+        .list {
             display: flex;
             flex-direction: column;
-            overflow: hidden;
+            gap: 8px;
+            max-height: 190px;
         }
 
-        .logs-header {
-            padding: 10px 15px;
-            background: rgba(255, 255, 255, 0.03);
-            border-bottom: 1px solid var(--border);
-            font-size: 12px;
-            font-weight: 600;
-            color: var(--text-dim);
-            text-transform: uppercase;
-            letter-spacing: 0.05em;
-        }
-
-        #logs {
-            flex: 1;
-            padding: 10px 15px;
-            font-family: 'JetBrains Mono', 'Consolas', monospace;
-            font-size: 12px;
-            overflow-y: auto;
-            color: #cbd5e1;
-            line-height: 1.6;
-        }
-
-        #logs div {
-            margin-bottom: 4px;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.02);
-            padding-bottom: 2px;
-        }
-
-        .log-time { color: var(--text-dim); margin-right: 8px; }
-        .log-info { color: var(--accent); }
-        .log-error { color: #f43f5e; }
-        .log-success { color: var(--success); }
-
-        .settings {
-            margin-top: 15px;
-            display: flex;
+        .list-item {
             align-items: center;
-            gap: 10px;
+            background: rgba(255, 255, 255, 0.52);
+            border: 1px solid rgba(36, 48, 56, 0.08);
+            border-radius: 14px;
+            display: flex;
             font-size: 13px;
-            color: var(--text-dim);
+            gap: 10px;
+            padding: 11px 12px;
+        }
+
+        .list-item::before {
+            content: "";
+            width: 9px;
+            height: 9px;
+            border-radius: 50%;
+            background: linear-gradient(180deg, var(--accent), #11a183);
+            flex: 0 0 auto;
+        }
+
+        .empty {
+            color: var(--muted);
+            font-size: 13px;
+            padding: 12px 2px 0;
+        }
+
+        .logs {
+            background: #1d252b;
+            border-radius: 18px;
+            color: #e8efe9;
+            font-family: "Cascadia Mono", "Consolas", monospace;
+            font-size: 12px;
+            max-height: 220px;
+            padding: 12px;
+        }
+
+        .log-row {
+            border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+            display: grid;
+            gap: 10px;
+            grid-template-columns: 84px 1fr;
+            line-height: 1.5;
+            padding: 6px 0;
+        }
+
+        .log-row:last-child {
+            border-bottom: none;
+        }
+
+        .log-time {
+            color: #8ea2a5;
+        }
+
+        .log-text.log-info {
+            color: #d9f0ea;
+        }
+
+        .log-text.log-success {
+            color: #86e7bb;
+        }
+
+        .log-text.log-error {
+            color: #ff9b88;
+        }
+
+        .footer {
+            align-items: center;
+            display: flex;
+            justify-content: space-between;
+            gap: 16px;
+            padding: 14px 16px;
+        }
+
+        .footer-copy {
+            color: var(--muted);
+            font-size: 13px;
+            line-height: 1.45;
         }
 
         .switch {
-            position: relative;
-            display: inline-block;
-            width: 34px;
-            height: 20px;
-        }
-
-        .switch input { opacity: 0; width: 0; height: 0; }
-
-        .slider {
-            position: absolute;
+            align-items: center;
             cursor: pointer;
-            top: 0; left: 0; right: 0; bottom: 0;
-            background-color: #334155;
-            transition: .4s;
-            border-radius: 20px;
+            display: inline-flex;
+            gap: 12px;
+            user-select: none;
         }
 
-        .slider:before {
-            position: absolute;
+        .switch input {
+            display: none;
+        }
+
+        .track {
+            position: relative;
+            width: 50px;
+            height: 28px;
+            background: rgba(31, 42, 50, 0.18);
+            border-radius: 999px;
+            transition: background 180ms ease;
+        }
+
+        .track::after {
             content: "";
-            height: 14px; width: 14px;
-            left: 3px; bottom: 3px;
-            background-color: white;
-            transition: .4s;
+            position: absolute;
+            top: 4px;
+            left: 4px;
+            width: 20px;
+            height: 20px;
             border-radius: 50%;
+            background: white;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.16);
+            transition: transform 180ms ease;
         }
 
-        input:checked + .slider { background-color: var(--accent); }
-        input:checked + .slider:before { transform: translateX(14px); }
+        .switch input:checked + .track {
+            background: var(--accent);
+        }
 
-        ::-webkit-scrollbar { width: 6px; }
-        ::-webkit-scrollbar-track { background: transparent; }
-        ::-webkit-scrollbar-thumb { background: #334155; border-radius: 10px; }
-        ::-webkit-scrollbar-thumb:hover { background: #475569; }
+        .switch input:checked + .track::after {
+            transform: translateX(22px);
+        }
+
+        .switch-copy {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+
+        .switch-label {
+            font-size: 13px;
+            font-weight: 700;
+        }
+
+        .switch-hint {
+            color: var(--muted);
+            font-size: 12px;
+        }
+
+        @keyframes pulse {
+            0% {
+                transform: scale(1);
+                opacity: 1;
+            }
+            50% {
+                transform: scale(1.1);
+                opacity: 0.72;
+            }
+            100% {
+                transform: scale(1);
+                opacity: 1;
+            }
+        }
+
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: rgba(60, 75, 84, 0.22);
+            border-radius: 999px;
+        }
+
+        @media (max-width: 560px) {
+            .shell {
+                padding: 16px;
+            }
+
+            .hero-top,
+            .footer {
+                align-items: flex-start;
+                flex-direction: column;
+            }
+        }
     </style>
 </head>
 <body>
-    <div class="header">
-        <div class="title">LIS Gateway</div>
-        <div class="status-badge">
-            <div class="status-dot"></div>
-            Online
-        </div>
-    </div>
+    <main class="shell">
+        <section class="hero">
+            <div class="hero-top">
+                <div>
+                    <div class="eyebrow">Local Print Service</div>
+                    <h1>LIS Gateway</h1>
+                    <div class="subtitle" id="subtitle">
+                        Desktop bridge for direct receipt, label, and report printing.
+                    </div>
+                </div>
+                <div class="status-chip">
+                    <span class="status-dot"></span>
+                    Running
+                </div>
+            </div>
+        </section>
 
-    <div class="stats-grid">
-        <div class="stat-card">
-            <div class="stat-label">Port</div>
-            <div class="stat-value" id="port">17881</div>
-        </div>
-        <div class="stat-card">
-            <div class="stat-label">Printers</div>
-            <div class="stat-value" id="printer-count">0</div>
-        </div>
-    </div>
+        <section class="endpoint">
+            <div class="endpoint-label">Gateway Endpoint</div>
+            <div class="endpoint-value" id="endpoint">http://localhost:17881/local/*</div>
+        </section>
 
-    <div class="logs-container">
-        <div class="logs-header">Live Activity Logs</div>
-        <div id="logs">
-            <div><span class="log-time">23:15:01</span> <span class="log-info">Service initialized</span></div>
-        </div>
-    </div>
+        <section class="stats">
+            <article class="card">
+                <div class="card-label">Port</div>
+                <div class="card-value" id="port">17881</div>
+                <div class="card-meta">Frontend and backend direct print requests target this local port.</div>
+            </article>
+            <article class="card">
+                <div class="card-label">Printers</div>
+                <div class="card-value" id="printer-count">0</div>
+                <div class="card-meta">Physical printer list reported by Windows through the local gateway.</div>
+            </article>
+            <article class="card">
+                <div class="card-label">Service</div>
+                <div class="card-value" id="service">lis-print-gateway</div>
+                <div class="card-meta" id="version">Version unknown</div>
+            </article>
+            <article class="card">
+                <div class="card-label">Started</div>
+                <div class="card-value" id="started-at">Waiting</div>
+                <div class="card-meta">Session start time for the currently running gateway process.</div>
+            </article>
+        </section>
 
-    <div class="settings">
-        <label class="switch">
-            <input type="checkbox" id="autostart">
-            <span class="slider"></span>
-        </label>
-        <span>Auto-start on Windows login</span>
-    </div>
+        <section class="panels">
+            <article class="card">
+                <div class="panel-title">
+                    <h2>Detected Printers</h2>
+                    <div class="panel-subtitle" id="printers-summary">No printers loaded yet</div>
+                </div>
+                <div class="list" id="printer-list"></div>
+            </article>
+
+            <article class="card">
+                <div class="panel-title">
+                    <h2>Activity Log</h2>
+                    <div class="panel-subtitle">Recent server events</div>
+                </div>
+                <div class="logs" id="logs"></div>
+            </article>
+        </section>
+
+        <section class="footer">
+            <div class="footer-copy">
+                Keep this gateway running on each workstation that needs local printer access.
+            </div>
+            <label class="switch" for="autostart">
+                <div class="switch-copy">
+                    <span class="switch-label">Launch on Windows sign-in</span>
+                    <span class="switch-hint">Recommended for dedicated lab stations</span>
+                </div>
+                <input type="checkbox" id="autostart">
+                <span class="track"></span>
+            </label>
+        </section>
+    </main>
 
     <script>
-        const logsEl = document.getElementById('logs');
-        const printerCountEl = document.getElementById('printer-count');
-        const portEl = document.getElementById('port');
+        const MAX_LOG_ROWS = 120;
         const autostartEl = document.getElementById('autostart');
+        const endpointEl = document.getElementById('endpoint');
+        const logsEl = document.getElementById('logs');
+        const portEl = document.getElementById('port');
+        const printerCountEl = document.getElementById('printer-count');
+        const printerListEl = document.getElementById('printer-list');
+        const printersSummaryEl = document.getElementById('printers-summary');
+        const serviceEl = document.getElementById('service');
+        const startedAtEl = document.getElementById('started-at');
+        const subtitleEl = document.getElementById('subtitle');
+        const versionEl = document.getElementById('version');
 
-        function addLog(text, type = 'info') {
-            const time = new Date().toLocaleTimeString([], { hour12: false });
-            const div = document.createElement('div');
-            div.innerHTML = `<span class="log-time">${time}</span><span class="log-${type}">${text}</span>`;
-            logsEl.appendChild(div);
+        function createEmptyState(text) {
+            const empty = document.createElement('div');
+            empty.className = 'empty';
+            empty.textContent = text;
+            return empty;
+        }
+
+        function formatTimestamp(value) {
+            if (!value) {
+                return 'Unknown';
+            }
+
+            const date = new Date(value);
+            if (Number.isNaN(date.getTime())) {
+                return value;
+            }
+
+            return date.toLocaleString([], {
+                day: '2-digit',
+                hour: '2-digit',
+                hour12: false,
+                minute: '2-digit',
+                month: 'short',
+                second: '2-digit',
+                year: 'numeric',
+            });
+        }
+
+        function renderPrinters(printers) {
+            printerListEl.replaceChildren();
+
+            if (!printers.length) {
+                printerListEl.appendChild(createEmptyState('No printers detected. Check the local Windows printer list.'));
+                printersSummaryEl.textContent = '0 printers available';
+                return;
+            }
+
+            printers.forEach((printer) => {
+                const row = document.createElement('div');
+                row.className = 'list-item';
+                row.textContent = printer;
+                printerListEl.appendChild(row);
+            });
+
+            printersSummaryEl.textContent = `${printers.length} printer${printers.length === 1 ? '' : 's'} available`;
+        }
+
+        function addLog(message) {
+            const row = document.createElement('div');
+            row.className = 'log-row';
+
+            const time = document.createElement('div');
+            time.className = 'log-time';
+            time.textContent = formatTimestamp(message.timestamp).split(', ').pop() || formatTimestamp(message.timestamp);
+
+            const text = document.createElement('div');
+            text.className = `log-text log-${message.type || 'info'}`;
+            text.textContent = message.text || 'Gateway event';
+
+            row.append(time, text);
+            logsEl.appendChild(row);
             logsEl.scrollTop = logsEl.scrollHeight;
-            
-            // Keep only last 100 logs
-            while (logsEl.children.length > 100) {
+
+            while (logsEl.children.length > MAX_LOG_ROWS) {
                 logsEl.removeChild(logsEl.firstChild);
             }
         }
 
-        // IPC Listeners (to be connected via preload)
-        window.api?.onStatus((status) => {
-            portEl.textContent = status.port;
-            printerCountEl.textContent = status.printers;
-            autostartEl.checked = status.autostart;
+        function updateStatus(status) {
+            portEl.textContent = String(status.port || 17881);
+            printerCountEl.textContent = String(status.printerCount || 0);
+            serviceEl.textContent = status.service || 'lis-print-gateway';
+            startedAtEl.textContent = formatTimestamp(status.startedAt);
+            versionEl.textContent = `Version ${status.version || 'unknown'}`;
+            endpointEl.textContent = `http://localhost:${status.port || 17881}/local/*`;
+            subtitleEl.textContent = `${status.service || 'LIS Gateway'} is ready for direct workstation printing.`;
+            autostartEl.checked = Boolean(status.autostart);
+            renderPrinters(Array.isArray(status.printers) ? status.printers : []);
+        }
+
+        renderPrinters([]);
+        addLog({
+            text: 'Gateway window ready. Waiting for local service status.',
+            timestamp: new Date().toISOString(),
+            type: 'info',
         });
 
-        window.api?.onLog((msg) => {
-            addLog(msg.text, msg.type);
-        });
+        if (window.api) {
+            window.api.onStatus((status) => {
+                updateStatus(status);
+            });
 
-        autostartEl.addEventListener('change', (e) => {
-            window.api?.setAutostart(e.target.checked);
+            window.api.onLog((message) => {
+                addLog(message);
+            });
+        } else {
+            addLog({
+                text: 'Electron preload bridge is unavailable. Restart the app.',
+                timestamp: new Date().toISOString(),
+                type: 'error',
+            });
+        }
+
+        autostartEl.addEventListener('change', (event) => {
+            window.api && window.api.setAutostart(Boolean(event.target.checked));
         });
     </script>
 </body>

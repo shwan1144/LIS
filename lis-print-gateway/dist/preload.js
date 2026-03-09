@@ -10,5 +10,5 @@ electron_1.contextBridge.exposeInMainWorld('api', {
     },
     setAutostart: (enabled) => {
         electron_1.ipcRenderer.send('set-autostart', enabled);
-    }
+    },
 });

@@ -1781,7 +1781,7 @@ let PlatformAdminService = PlatformAdminService_1 = class PlatformAdminService {
             onlineResultWatermarkText: settings.onlineResultWatermarkText,
             printing: {
                 ...settings.printing,
-                mode: settings.printing.mode === 'direct_qz' ? 'direct_qz' : 'browser',
+                mode: settings.printing.mode === 'direct_gateway' ? 'direct_gateway' : 'browser',
             },
             hasReportBanner: Boolean(settings.reportBranding?.bannerDataUrl),
             hasReportFooter: Boolean(settings.reportBranding?.footerDataUrl),

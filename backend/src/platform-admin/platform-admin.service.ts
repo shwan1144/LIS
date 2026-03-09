@@ -78,7 +78,7 @@ export interface AdminLabSettingsSummary {
   hasOnlineResultWatermarkImage: boolean;
   onlineResultWatermarkText: string | null;
   printing: {
-    mode: 'browser' | 'direct_qz';
+    mode: 'browser' | 'direct_gateway';
     receiptPrinterName: string | null;
     labelsPrinterName: string | null;
     reportPrinterName: string | null;
@@ -1679,7 +1679,7 @@ export class PlatformAdminService {
       onlineResultWatermarkDataUrl?: string | null;
       onlineResultWatermarkText?: string | null;
       printing?: {
-        mode?: 'browser' | 'direct_qz';
+        mode?: 'browser' | 'direct_gateway';
         receiptPrinterName?: string | null;
         labelsPrinterName?: string | null;
         reportPrinterName?: string | null;
@@ -2628,7 +2628,7 @@ export class PlatformAdminService {
       onlineResultWatermarkText: settings.onlineResultWatermarkText,
       printing: {
         ...settings.printing,
-        mode: settings.printing.mode === 'direct_qz' ? 'direct_qz' : 'browser',
+        mode: settings.printing.mode === 'direct_gateway' ? 'direct_gateway' : 'browser',
       },
       hasReportBanner: Boolean(settings.reportBranding?.bannerDataUrl),
       hasReportFooter: Boolean(settings.reportBranding?.footerDataUrl),

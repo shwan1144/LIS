@@ -1,165 +1,445 @@
-import http from 'http';
-import os from 'os';
+import { randomUUID } from 'crypto';
 import fs from 'fs';
+import http, { IncomingMessage, ServerResponse } from 'http';
+import os from 'os';
 import path from 'path';
-import { print as printPdf, getPrinters } from 'pdf-to-printer';
+import { getPrinters, print as printPdf, type PrintOptions } from 'pdf-to-printer';
 import 'dotenv/config';
 
-const PORT = process.env.PORT || 17881;
+const SERVICE_NAME = 'lis-print-gateway';
+const DEFAULT_PORT = 17881;
+const MAX_REQUEST_BYTES = 40 * 1024 * 1024;
+const SUMATRA_BINARY_NAME = 'SumatraPDF-3.4.6-32.exe';
+
+type LogType = 'error' | 'info' | 'success';
+
+export interface GatewayLogMessage {
+    text: string;
+    timestamp: string;
+    type: LogType;
+}
+
+export interface PrintRequestBody {
+    jobName?: string;
+    pdfBase64?: string;
+    printerName?: string;
+}
+
+export interface ServerStatusSnapshot {
+    port: number;
+    printerCount: number;
+    printers: string[];
+    service: string;
+    startedAt: string;
+    status: 'ok';
+    version: string;
+}
 
 export interface ServerEvent {
+    data: GatewayLogMessage | ServerStatusSnapshot;
     type: 'log' | 'status';
-    data: any;
+}
+
+type JsonError = {
+    error: string;
+    message: string;
+};
+
+class HttpError extends Error {
+    statusCode: number;
+
+    constructor(statusCode: number, message: string) {
+        super(message);
+        this.name = 'HttpError';
+        this.statusCode = statusCode;
+    }
+}
+
+function parsePort(value: string | undefined): number {
+    const parsed = Number.parseInt(value ?? '', 10);
+    if (Number.isInteger(parsed) && parsed > 0 && parsed <= 65535) {
+        return parsed;
+    }
+
+    return DEFAULT_PORT;
 }
 
 export class PrintServer {
+    private readonly onEvent: (event: ServerEvent) => void;
+
+    private readonly port = parsePort(process.env.PORT);
+
+    private readonly startedAt = new Date().toISOString();
+
+    private readonly tempSumatraPath = path.join(os.tmpdir(), SERVICE_NAME, SUMATRA_BINARY_NAME);
+
+    private readonly version: string;
+
     private server: http.Server | null = null;
-    private onEvent: (event: ServerEvent) => void;
-    private tempSumatraPath = path.join(os.tmpdir(), 'SumatraPDF-3.4.6-32.exe');
 
-    constructor(onEvent: (event: ServerEvent) => void) {
+    constructor(onEvent: (event: ServerEvent) => void, version = 'unknown') {
         this.onEvent = onEvent;
+        this.version = version;
     }
 
-    private log(text: string, type: 'info' | 'error' | 'success' = 'info') {
-        console.log(`[Server] ${text}`);
-        this.onEvent({ type: 'log', data: { text, type } });
-    }
+    async getStatusSnapshot(): Promise<ServerStatusSnapshot> {
+        let printers: string[] = [];
 
-    private ensureSumatraBinary() {
-        // In Electron, __dirname is different. We need to find SumatraPDF.
-        // During dev, it might be in node_modules. During prod, it's relative to app.GetAppPath() or similar.
-        // For simplicity, we'll try to find it in common locations.
-        const possiblePaths = [
-            path.join(__dirname, '../node_modules/pdf-to-printer/dist/SumatraPDF-3.4.6-32.exe'),
-            path.join(process.resourcesPath || '', 'app.asar.unpacked/node_modules/pdf-to-printer/dist/SumatraPDF-3.4.6-32.exe'),
-            path.join(process.resourcesPath || '', 'node_modules/pdf-to-printer/dist/SumatraPDF-3.4.6-32.exe')
-        ];
-
-        let foundPath = '';
-        for (const p of possiblePaths) {
-            if (fs.existsSync(p)) {
-                foundPath = p;
-                break;
-            }
-        }
-
-        if (foundPath) {
-            try {
-                this.log(`Extracting SumatraPDF to temp: ${this.tempSumatraPath}`);
-                fs.writeFileSync(this.tempSumatraPath, fs.readFileSync(foundPath));
-                fs.chmodSync(this.tempSumatraPath, 0o755);
-            } catch (err: any) {
-                this.log(`Failed to extract SumatraPDF: ${err.message}`, 'error');
-            }
-        } else {
-            this.log('SumatraPDF binary not found in expected locations. Local printing might fail.', 'error');
-        }
-    }
-
-    async getPrinterCount(): Promise<number> {
         try {
-            const printers = await getPrinters();
-            return printers.length;
-        } catch (e) {
-            return 0;
+            printers = await this.listPrinters();
+        } catch {
+            printers = [];
         }
+
+        return {
+            port: this.port,
+            printerCount: printers.length,
+            printers,
+            service: SERVICE_NAME,
+            startedAt: this.startedAt,
+            status: 'ok',
+            version: this.version,
+        };
     }
 
-    start() {
+    start(): void {
+        if (this.server) {
+            this.log(`Gateway already running on port ${this.port}.`);
+            return;
+        }
+
         this.ensureSumatraBinary();
 
-        this.server = http.createServer(async (req, res) => {
-            res.setHeader('Access-Control-Allow-Origin', '*');
-            res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-            res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+        this.server = http.createServer((req, res) => {
+            void this.handleRequest(req, res);
+        });
 
-            if (req.method === 'OPTIONS') {
-                res.writeHead(204);
-                res.end();
+        this.server.on('error', (error: Error) => {
+            this.log(`Gateway server error: ${error.message}`, 'error');
+        });
+
+        this.server.listen(this.port, () => {
+            this.log(`Gateway listening on http://localhost:${this.port}`, 'success');
+            void this.notifyStatus();
+        });
+    }
+
+    stop(): void {
+        if (!this.server) {
+            return;
+        }
+
+        const activeServer = this.server;
+        this.server = null;
+
+        activeServer.close(() => {
+            this.log('Gateway server stopped.');
+        });
+    }
+
+    private async handlePrintRequest(res: ServerResponse, payload: unknown): Promise<void> {
+        if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+            throw new HttpError(400, 'Request body must be a JSON object.');
+        }
+
+        const body = payload as PrintRequestBody;
+        const jobName = this.normalizeOptionalText(body.jobName, 'jobName') ?? 'LIS Print Job';
+        const requestedPrinterName = this.normalizeOptionalText(body.printerName, 'printerName');
+        const pdfBuffer = this.decodeBase64Pdf(body.pdfBase64);
+        const printerName = await this.resolvePrinterName(requestedPrinterName);
+        const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), `${SERVICE_NAME}-`));
+        const tempFilePath = path.join(tempDir, `${randomUUID()}.pdf`);
+
+        this.log(
+            `Print request received for ${jobName}${printerName ? ` on ${printerName}` : ' on default printer'}.`,
+        );
+
+        try {
+            fs.writeFileSync(tempFilePath, pdfBuffer);
+
+            const options: PrintOptions = {};
+            if (printerName) {
+                options.printer = printerName;
+            }
+            if (fs.existsSync(this.tempSumatraPath)) {
+                options.sumatraPdfPath = this.tempSumatraPath;
+            }
+
+            await printPdf(tempFilePath, options);
+
+            this.log(`Printed ${jobName}${printerName ? ` on ${printerName}` : ''}.`, 'success');
+            this.respondJson(res, 200, {
+                jobName,
+                printerName: printerName ?? null,
+                status: 'success',
+            });
+            void this.notifyStatus();
+        } catch (error) {
+            const message = error instanceof Error ? error.message : 'Print failed.';
+            this.log(`Print failed: ${message}`, 'error');
+            throw new HttpError(500, message);
+        } finally {
+            setTimeout(() => {
+                fs.rmSync(tempDir, { force: true, recursive: true });
+            }, 10_000);
+        }
+    }
+
+    private async handleRequest(req: IncomingMessage, res: ServerResponse): Promise<void> {
+        this.applyCorsHeaders(res);
+
+        if (req.method === 'OPTIONS') {
+            res.writeHead(204);
+            res.end();
+            return;
+        }
+
+        try {
+            const url = new URL(req.url ?? '/', `http://127.0.0.1:${this.port}`);
+
+            if (req.method === 'GET' && url.pathname === '/local/status') {
+                this.respondJson(res, 200, await this.getStatusSnapshot());
                 return;
             }
 
-            try {
-                const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
-
-                if (req.method === 'GET' && url.pathname === '/local/status') {
-                    res.writeHead(200, { 'Content-Type': 'application/json' });
-                    res.end(JSON.stringify({ status: 'ok', service: 'lis-print-gateway' }));
-                    return;
-                }
-
-                if (req.method === 'GET' && url.pathname === '/local/printers') {
-                    const printers = await getPrinters();
-                    res.writeHead(200, { 'Content-Type': 'application/json' });
-                    res.end(JSON.stringify({ printers: printers.map(p => p.name) }));
-                    return;
-                }
-
-                if (req.method === 'POST' && url.pathname === '/local/print') {
-                    let body = '';
-                    req.on('data', chunk => { body += chunk; });
-                    req.on('end', async () => {
-                        try {
-                            const data = JSON.parse(body);
-                            const { printerName, pdfBase64, jobName } = data;
-                            this.log(`Print Request: ${jobName || 'Reciept'} -> ${printerName || 'Default'}`);
-
-                            if (!pdfBase64) {
-                                res.writeHead(400, { 'Content-Type': 'application/json' });
-                                res.end(JSON.stringify({ error: 'pdfBase64 is required' }));
-                                return;
-                            }
-
-                            const tempFile = path.join(os.tmpdir(), `print_${Date.now()}.pdf`);
-                            fs.writeFileSync(tempFile, Buffer.from(pdfBase64, 'base64'));
-
-                            const options: any = {};
-                            if (printerName) options.printer = printerName;
-                            if (fs.existsSync(this.tempSumatraPath)) options.sumatraPdfPath = this.tempSumatraPath;
-
-                            try {
-                                await printPdf(tempFile, options);
-                                this.log(`Print successful: ${jobName || 'Reciept'}`, 'success');
-                                res.writeHead(200, { 'Content-Type': 'application/json' });
-                                res.end(JSON.stringify({ status: 'success' }));
-                            } catch (printErr: any) {
-                                this.log(`Print failed: ${printErr.message}`, 'error');
-                                res.writeHead(500, { 'Content-Type': 'application/json' });
-                                res.end(JSON.stringify({ error: printErr.message || 'Print failed' }));
-                            }
-
-                            setTimeout(() => {
-                                try { if (fs.existsSync(tempFile)) fs.unlinkSync(tempFile); } catch (e) { }
-                            }, 10000);
-                        } catch (err: any) {
-                            this.log(`Request Error: ${err.message}`, 'error');
-                            res.writeHead(500, { 'Content-Type': 'application/json' });
-                            res.end(JSON.stringify({ error: err.message }));
-                        }
-                    });
-                    return;
-                }
-
-                res.writeHead(404);
-                res.end();
-            } catch (err: any) {
-                this.log(`Global Error: ${err.message}`, 'error');
-                res.writeHead(500);
-                res.end(JSON.stringify({ error: err.message }));
+            if (req.method === 'GET' && url.pathname === '/local/printers') {
+                const printers = await this.listPrinters();
+                this.respondJson(res, 200, { printers });
+                return;
             }
-        });
 
-        this.server.listen(PORT, () => {
-            this.log(`Server listening on port ${PORT}`, 'success');
-            this.onEvent({ type: 'status', data: { port: PORT } });
+            if (req.method === 'POST' && url.pathname === '/local/print') {
+                const payload = await this.readJsonBody(req);
+                await this.handlePrintRequest(res, payload);
+                return;
+            }
+
+            throw new HttpError(404, 'Route not found.');
+        } catch (error) {
+            const statusCode = error instanceof HttpError ? error.statusCode : 500;
+            const message = error instanceof Error ? error.message : 'Unexpected gateway error.';
+
+            if (statusCode >= 500) {
+                this.log(message, 'error');
+            }
+
+            this.respondJson(res, statusCode, {
+                error: message,
+                message,
+            } satisfies JsonError);
+        }
+    }
+
+    private applyCorsHeaders(res: ServerResponse): void {
+        res.setHeader('Access-Control-Allow-Origin', '*');
+        res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+        res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+    }
+
+    private decodeBase64Pdf(value: unknown): Buffer {
+        const raw = this.normalizeRequiredText(value, 'pdfBase64');
+        const withoutPrefix = raw.replace(/^data:application\/pdf;base64,/i, '');
+        const normalized = withoutPrefix.replace(/\s+/g, '');
+
+        if (!/^[A-Za-z0-9+/=]+$/.test(normalized)) {
+            throw new HttpError(400, 'pdfBase64 must contain base64-encoded PDF data.');
+        }
+
+        const buffer = Buffer.from(normalized, 'base64');
+        if (buffer.length === 0) {
+            throw new HttpError(400, 'pdfBase64 could not be decoded.');
+        }
+
+        const fileSignature = buffer.subarray(0, 4).toString('ascii');
+        if (fileSignature !== '%PDF') {
+            throw new HttpError(400, 'pdfBase64 must contain a valid PDF document.');
+        }
+
+        return buffer;
+    }
+
+    private ensureSumatraBinary(): void {
+        const sourcePath = this.getPossibleSumatraPaths().find((candidate) => fs.existsSync(candidate));
+        if (!sourcePath) {
+            this.log('SumatraPDF binary was not found. Gateway printing may fail.', 'error');
+            return;
+        }
+
+        try {
+            fs.mkdirSync(path.dirname(this.tempSumatraPath), { recursive: true });
+            fs.copyFileSync(sourcePath, this.tempSumatraPath);
+            this.log(`Prepared SumatraPDF at ${this.tempSumatraPath}.`, 'success');
+        } catch (error) {
+            const message = error instanceof Error ? error.message : 'Unknown extraction error.';
+            this.log(`Failed to prepare SumatraPDF: ${message}`, 'error');
+        }
+    }
+
+    private getPossibleSumatraPaths(): string[] {
+        const electronProcess = process as NodeJS.Process & { resourcesPath?: string };
+        const resourcesPath = electronProcess.resourcesPath;
+
+        return [
+            path.join(__dirname, '../node_modules/pdf-to-printer/dist', SUMATRA_BINARY_NAME),
+            path.join(process.cwd(), 'node_modules/pdf-to-printer/dist', SUMATRA_BINARY_NAME),
+            path.join(process.cwd(), 'lis-print-gateway/node_modules/pdf-to-printer/dist', SUMATRA_BINARY_NAME),
+            ...(resourcesPath
+                ? [
+                    path.join(
+                        resourcesPath,
+                        'app.asar.unpacked/node_modules/pdf-to-printer/dist',
+                        SUMATRA_BINARY_NAME,
+                    ),
+                    path.join(resourcesPath, 'node_modules/pdf-to-printer/dist', SUMATRA_BINARY_NAME),
+                ]
+                : []),
+        ];
+    }
+
+    private async listPrinters(): Promise<string[]> {
+        const printers = await getPrinters();
+
+        return Array.from(
+            new Set(
+                printers
+                    .map((printer) => printer.name.trim())
+                    .filter((printerName) => printerName.length > 0),
+            ),
+        ).sort((left, right) => left.localeCompare(right, undefined, { sensitivity: 'base' }));
+    }
+
+    private log(text: string, type: LogType = 'info'): void {
+        const timestamp = new Date().toISOString();
+        const message: GatewayLogMessage = {
+            text,
+            timestamp,
+            type,
+        };
+
+        console.log(`[Gateway:${type}] ${text}`);
+        this.onEvent({ data: message, type: 'log' });
+    }
+
+    private normalizeOptionalText(value: unknown, fieldName: string): string | undefined {
+        if (value == null) {
+            return undefined;
+        }
+        if (typeof value !== 'string') {
+            throw new HttpError(400, `${fieldName} must be a string.`);
+        }
+
+        const trimmed = value.trim();
+        return trimmed.length > 0 ? trimmed : undefined;
+    }
+
+    private normalizeRequiredText(value: unknown, fieldName: string): string {
+        const normalized = this.normalizeOptionalText(value, fieldName);
+        if (!normalized) {
+            throw new HttpError(400, `${fieldName} is required.`);
+        }
+
+        return normalized;
+    }
+
+    private async notifyStatus(): Promise<void> {
+        this.onEvent({ data: await this.getStatusSnapshot(), type: 'status' });
+    }
+
+    private async readJsonBody(req: IncomingMessage): Promise<unknown> {
+        return new Promise<unknown>((resolve, reject) => {
+            const chunks: Buffer[] = [];
+            let receivedBytes = 0;
+            let settled = false;
+
+            req.on('data', (chunk: Buffer | string) => {
+                if (settled) {
+                    return;
+                }
+
+                const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+                receivedBytes += buffer.length;
+
+                if (receivedBytes > MAX_REQUEST_BYTES) {
+                    settled = true;
+                    reject(new HttpError(413, 'Request body exceeded the 40 MB limit.'));
+                    return;
+                }
+
+                chunks.push(buffer);
+            });
+
+            req.on('end', () => {
+                if (settled) {
+                    return;
+                }
+
+                const rawBody = Buffer.concat(chunks).toString('utf8').trim();
+                if (!rawBody) {
+                    reject(new HttpError(400, 'Request body is required.'));
+                    return;
+                }
+
+                try {
+                    resolve(JSON.parse(rawBody) as unknown);
+                } catch {
+                    reject(new HttpError(400, 'Request body must be valid JSON.'));
+                }
+            });
+
+            req.on('aborted', () => {
+                if (settled) {
+                    return;
+                }
+
+                settled = true;
+                reject(new HttpError(400, 'Request was aborted before completion.'));
+            });
+
+            req.on('error', (error: Error) => {
+                if (settled) {
+                    return;
+                }
+
+                settled = true;
+                reject(error);
+            });
         });
     }
 
-    stop() {
-        if (this.server) {
-            this.server.close();
-            this.log('Server stopped');
+    private respondJson(res: ServerResponse, statusCode: number, payload: object): void {
+        if (res.writableEnded) {
+            return;
         }
+
+        res.writeHead(statusCode, { 'Content-Type': 'application/json; charset=utf-8' });
+        res.end(JSON.stringify(payload));
+    }
+
+    private async resolvePrinterName(requestedPrinterName: string | undefined): Promise<string | undefined> {
+        if (!requestedPrinterName) {
+            return undefined;
+        }
+
+        const printers = await this.listPrinters();
+        const normalizedRequest = requestedPrinterName.toLocaleLowerCase();
+        const exactMatch = printers.find(
+            (printerName) => printerName.toLocaleLowerCase() === normalizedRequest,
+        );
+        if (exactMatch) {
+            return exactMatch;
+        }
+
+        const containsMatch = printers.find((printerName) => {
+            const normalizedPrinterName = printerName.toLocaleLowerCase();
+            return (
+                normalizedPrinterName.includes(normalizedRequest) ||
+                normalizedRequest.includes(normalizedPrinterName)
+            );
+        });
+        if (containsMatch) {
+            return containsMatch;
+        }
+
+        throw new HttpError(400, `Printer "${requestedPrinterName}" was not found on this machine.`);
     }
 }

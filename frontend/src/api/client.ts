@@ -298,7 +298,7 @@ export interface AdminLabSettingsSummaryDto {
   hasOnlineResultWatermarkImage: boolean;
   onlineResultWatermarkText: string | null;
   printing: {
-    mode: 'browser' | 'direct_qz' | 'direct_gateway';
+    mode: 'browser' | 'direct_gateway';
     receiptPrinterName: string | null;
     labelsPrinterName: string | null;
     reportPrinterName: string | null;
@@ -850,7 +850,7 @@ export async function updateAdminLabSettings(
     onlineResultWatermarkDataUrl?: string | null;
     onlineResultWatermarkText?: string | null;
     printing?: {
-      mode?: 'browser' | 'direct_qz' | 'direct_gateway';
+      mode?: 'browser' | 'direct_gateway';
       receiptPrinterName?: string | null;
       labelsPrinterName?: string | null;
       reportPrinterName?: string | null;
@@ -1060,26 +1060,6 @@ export async function searchPatients(params: PatientSearchParams): Promise<Patie
     size: Number(params.size ?? 20),
     totalPages: 0,
   };
-}
-
-export interface QzCertificateDto {
-  certificate: string;
-  algorithm: string;
-}
-
-export interface QzSignatureDto {
-  signature: string;
-  algorithm: string;
-}
-
-export async function getQzCertificate(): Promise<QzCertificateDto> {
-  const res = await api.get<QzCertificateDto>('/printing/qz/certificate');
-  return res.data;
-}
-
-export async function signQzPayload(payload: string): Promise<QzSignatureDto> {
-  const res = await api.post<QzSignatureDto>('/printing/qz/sign', { payload });
-  return res.data;
 }
 
 export async function getPatient(id: string): Promise<PatientDto> {
@@ -2190,7 +2170,7 @@ export interface LabSettingsDto {
   onlineResultWatermarkDataUrl: string | null;
   onlineResultWatermarkText: string | null;
   printing: {
-    mode: 'browser' | 'direct_qz' | 'direct_gateway';
+    mode: 'browser' | 'direct_gateway';
     receiptPrinterName: string | null;
     labelsPrinterName: string | null;
     reportPrinterName: string | null;
@@ -2213,7 +2193,7 @@ export interface UpdateLabSettingsDto {
   onlineResultWatermarkDataUrl?: string | null;
   onlineResultWatermarkText?: string | null;
   printing?: {
-    mode?: 'browser' | 'direct_qz' | 'direct_gateway';
+    mode?: 'browser' | 'direct_gateway';
     receiptPrinterName?: string | null;
     labelsPrinterName?: string | null;
     reportPrinterName?: string | null;

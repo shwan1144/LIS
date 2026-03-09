@@ -47,7 +47,8 @@ function AppTitleUpdater() {
   const { lab, scope } = useAuth();
 
   useEffect(() => {
-    const tabIconHref = scope === 'PLATFORM' ? '/icons/admin-panel-icon.svg' : '/icons/icon-192.png';
+    const tabIconHref =
+      scope === 'PLATFORM' ? '/icons/admin-panel-icon.svg' : '/icons/lab-tab-logo.svg';
     const applyIconHref = (rel: 'icon' | 'shortcut icon') => {
       const existing = document.querySelector(`link[rel="${rel}"]`) as HTMLLinkElement | null;
       if (existing) {

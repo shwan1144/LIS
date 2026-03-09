@@ -23,7 +23,7 @@ import {
 const { Title, Text } = Typography;
 
 type FormValues = {
-  mode: 'browser' | 'direct_qz' | 'direct_gateway';
+  mode: 'browser' | 'direct_gateway';
   receiptPrinterName: string;
   labelsPrinterName: string;
   reportPrinterName: string;
@@ -58,13 +58,13 @@ export function SettingsPrintingPage() {
   }, [form]);
 
   useEffect(() => {
-    if (currentMode !== 'direct_qz' && currentMode !== 'direct_gateway') {
+    if (currentMode !== 'direct_gateway') {
       setAvailablePrinters([]);
       return;
     }
 
     let cancelled = false;
-    void listDirectPrintPrinters(currentMode)
+    void listDirectPrintPrinters()
       .then((printers) => {
         if (!cancelled) {
           setAvailablePrinters(printers);
@@ -73,12 +73,7 @@ export function SettingsPrintingPage() {
       .catch((error) => {
         if (!cancelled) {
           setAvailablePrinters([]);
-          console.warn(
-            currentMode === 'direct_qz'
-              ? 'Failed to fetch printers from QZ Tray:'
-              : 'Failed to fetch printers from gateway:',
-            error,
-          );
+          console.warn('Failed to fetch printers from gateway:', error);
         }
       });
 
@@ -138,22 +133,18 @@ export function SettingsPrintingPage() {
         values.reportPrinterName.trim() ||
         undefined;
 
-      if (values.mode === 'direct_qz' && firstPrinter && isVirtualSavePrinterName(firstPrinter)) {
-        await checkDirectPrintConnection('direct_qz');
+      if (firstPrinter && isVirtualSavePrinterName(firstPrinter)) {
+        await checkDirectPrintConnection();
         message.info(
-          `QZ connection is ready. "${firstPrinter}" is a virtual PDF/XPS printer, so report print will use browser Save dialog.`,
+          `LIS Gateway is ready. "${firstPrinter}" is a virtual PDF/XPS printer, so report print will use browser Save dialog.`,
         );
         return;
       }
 
-      await checkDirectPrintConnection(values.mode, firstPrinter);
-      message.success(
-        values.mode === 'direct_gateway'
-          ? 'LIS Gateway is connected and ready'
-          : 'Direct print connection (QZ Tray) is ready on this computer',
-      );
+      await checkDirectPrintConnection(firstPrinter);
+      message.success('LIS Gateway is connected and ready');
     } catch (error) {
-      message.error(getDirectPrintErrorMessage(error, values.mode));
+      message.error(getDirectPrintErrorMessage(error));
     } finally {
       setTesting(false);
     }
@@ -172,7 +163,7 @@ export function SettingsPrintingPage() {
           showIcon
           style={{ marginBottom: 16 }}
           message="No-popup direct print"
-          description="QZ Tray is the production direct-print path. The backend now signs QZ requests, and the gateway option remains available only as a fallback or experiment."
+          description="LIS Gateway is the direct-print path for this workstation. Use browser mode if you want the normal print dialog."
         />
 
         <Form
@@ -194,19 +185,18 @@ export function SettingsPrintingPage() {
             <Radio.Group>
               <Space direction="vertical">
                 <Radio value="browser">Browser print (shows print popup)</Radio>
-                <Radio value="direct_qz">Direct print with QZ Tray (Recommended)</Radio>
-                <Radio value="direct_gateway">Direct print with LIS Gateway (Experimental)</Radio>
+                <Radio value="direct_gateway">Direct print with LIS Gateway</Radio>
               </Space>
             </Radio.Group>
           </Form.Item>
 
-          {currentMode === 'direct_qz' ? (
+          {currentMode === 'direct_gateway' ? (
             <Alert
               type="success"
               showIcon
               style={{ marginBottom: 16 }}
-              message="QZ Tray setup"
-              description="Install and run QZ Tray on this workstation. If connection fails, verify the backend has QZ certificate and private-key configuration."
+              message="Gateway setup"
+              description="Install and run LIS Gateway on this workstation. If connection fails, open the gateway app or restart the gateway service."
             />
           ) : null}
 
@@ -217,7 +207,7 @@ export function SettingsPrintingPage() {
             label="Receipt printer name"
             tooltip="Example: EPSON TM-T82"
           >
-            {(currentMode === 'direct_qz' || currentMode === 'direct_gateway') && availablePrinters.length > 0 ? (
+            {currentMode === 'direct_gateway' && availablePrinters.length > 0 ? (
               <Select
                 showSearch
                 placeholder="Choose printer"
@@ -233,7 +223,7 @@ export function SettingsPrintingPage() {
             label="Label printer name"
             tooltip="Example: ZDesigner GK420d"
           >
-            {(currentMode === 'direct_qz' || currentMode === 'direct_gateway') && availablePrinters.length > 0 ? (
+            {currentMode === 'direct_gateway' && availablePrinters.length > 0 ? (
               <Select
                 showSearch
                 placeholder="Choose printer"
@@ -249,7 +239,7 @@ export function SettingsPrintingPage() {
             label="Report printer name"
             tooltip="Example: HP LaserJet"
           >
-            {(currentMode === 'direct_qz' || currentMode === 'direct_gateway') && availablePrinters.length > 0 ? (
+            {currentMode === 'direct_gateway' && availablePrinters.length > 0 ? (
               <Select
                 showSearch
                 placeholder="Choose printer"

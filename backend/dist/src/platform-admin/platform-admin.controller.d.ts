@@ -66,7 +66,7 @@ export declare class PlatformAdminController {
         onlineResultWatermarkDataUrl?: string | null;
         onlineResultWatermarkText?: string | null;
         printing?: {
-            mode?: 'browser' | 'direct_qz';
+            mode?: 'browser' | 'direct_gateway';
             receiptPrinterName?: string | null;
             labelsPrinterName?: string | null;
             reportPrinterName?: string | null;

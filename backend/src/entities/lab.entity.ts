@@ -71,7 +71,7 @@ export class Lab {
   @Column({ type: 'varchar', length: 120, nullable: true })
   onlineResultWatermarkText: string | null;
 
-  /** Printing mode for this lab: browser popup or direct workstation print via QZ Tray. */
+  /** Printing mode for this lab: browser popup or direct workstation print via LIS Gateway. */
   @Column({ type: 'varchar', length: 16, default: 'browser' })
   printMethod: string;
 

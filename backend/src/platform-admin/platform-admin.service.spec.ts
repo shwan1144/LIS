@@ -685,7 +685,7 @@ describe('PlatformAdminService', () => {
       onlineResultWatermarkDataUrl: 'data:image/png;base64,ONLINE',
       onlineResultWatermarkText: 'ONLINE',
       printing: {
-        mode: 'direct_qz',
+        mode: 'direct_gateway',
         receiptPrinterName: 'Receipt',
         labelsPrinterName: 'Labels',
         reportPrinterName: 'Reports',
