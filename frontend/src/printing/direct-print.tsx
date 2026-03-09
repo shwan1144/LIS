@@ -1,8 +1,14 @@
+import React from 'react';
 import { createRoot } from 'react-dom/client';
 import type { DepartmentDto, OrderDto } from '../api/client';
 import { OrderReceipt } from '../components/Print/OrderReceipt';
 import { AllSampleLabels } from '../components/Print/SampleLabel';
 import printCss from '../components/Print/print.css?raw';
+import axios from 'axios';
+import { jsPDF } from 'jspdf';
+import html2canvas from 'html2canvas';
+
+const GATEWAY_URL = 'http://localhost:17880';
 
 const QZ_SCRIPT_URL = 'https://cdn.jsdelivr.net/npm/qz-tray@2.2.4/qz-tray.js';
 const QZ_SCRIPT_TIMEOUT_MS = 10000;
@@ -60,7 +66,7 @@ async function loadQz(): Promise<NonNullable<Window['qz']>> {
   }
 
   if (!qzLoadPromise) {
-    qzLoadPromise = new Promise((resolve, reject) => {
+    qzLoadPromise = new Promise<NonNullable<Window['qz']>>((resolve, reject) => {
       const existing = document.querySelector<HTMLScriptElement>('script[data-medilis-qz="1"]');
       if (existing) {
         let timeoutId: number | null = null;
@@ -169,11 +175,11 @@ async function ensurePrinter(qz: NonNullable<Window['qz']>, printerName: string)
 
   const requestedLower = normalized.toLowerCase();
   try {
-    return await withTimeout(
+    return (await withTimeout(
       qz.printers.find(normalized),
       QZ_PRINTER_LOOKUP_TIMEOUT_MS,
       `Printer lookup timed out for "${normalized}".`,
-    );
+    )) as string;
   } catch {
     const available = await listInstalledPrinters(qz);
     if (available.length > 0) {
@@ -238,7 +244,7 @@ function buildDocumentHtml(contentHtml: string, title: string): string {
 </html>`;
 }
 
-async function renderOffscreen(element: JSX.Element): Promise<string> {
+async function renderOffscreen(element: React.ReactElement): Promise<string> {
   const host = document.createElement('div');
   host.style.position = 'fixed';
   host.style.left = '-100000px';
@@ -271,6 +277,51 @@ async function qzPrintHtml(html: string, printerName: string, jobName: string): 
   const printer = await ensurePrinter(qz, printerName);
   const config = qz.configs.create(printer, { jobName });
   await qz.print(config, [{ type: 'html', format: 'plain', data: html }]);
+}
+
+async function gatewayPrintPdf(blob: Blob, printerName: string, jobName: string): Promise<void> {
+  const base64 = await blobToBase64(blob);
+  await axios.post(`${GATEWAY_URL}/local/print`, {
+    printerName,
+    pdfBase64: base64,
+    jobName,
+  });
+}
+
+async function convertHtmlToPdf(element: HTMLElement): Promise<Blob> {
+  const canvas = await html2canvas(element, {
+    scale: 2,
+    useCORS: true,
+    logging: false,
+  });
+  const imgData = canvas.toDataURL('image/png');
+  const pdf = new jsPDF({
+    orientation: canvas.width > canvas.height ? 'landscape' : 'portrait',
+    unit: 'px',
+    format: [canvas.width, canvas.height],
+  });
+  pdf.addImage(imgData, 'PNG', 0, 0, canvas.width, canvas.height);
+  return pdf.output('blob');
+}
+
+async function renderAndConvertOffscreen(element: React.ReactElement): Promise<Blob> {
+  const host = document.createElement('div');
+  host.style.position = 'fixed';
+  host.style.left = '-100000px';
+  host.style.top = '0';
+  host.style.width = '800px'; // Reasonable width for rendering
+  host.className = 'print-container-offscreen';
+  document.body.appendChild(host);
+
+  const root = createRoot(host);
+  try {
+    root.render(element);
+    await waitForRenderAndEffects();
+    return await convertHtmlToPdf(host);
+  } finally {
+    root.unmount();
+    host.remove();
+  }
 }
 
 async function qzPrintPdf(blob: Blob, printerName: string, jobName: string): Promise<void> {
@@ -310,14 +361,27 @@ export async function directPrintReceipt(params: {
   order: OrderDto;
   labName?: string;
   printerName: string;
+  mode?: 'direct_qz' | 'direct_gateway';
 }): Promise<void> {
+  const jobName = `Receipt-${params.order.orderNumber || params.order.id}`;
+
+  if (params.mode === 'direct_gateway') {
+    const blob = await renderAndConvertOffscreen(
+      <div className="print-container">
+        <OrderReceipt order={params.order} labName={params.labName} />
+      </div>,
+    );
+    await gatewayPrintPdf(blob, params.printerName, jobName);
+    return;
+  }
+
   const contentHtml = await renderOffscreen(
     <div className="print-container">
       <OrderReceipt order={params.order} labName={params.labName} />
     </div>,
   );
-  const html = buildDocumentHtml(contentHtml, `Receipt-${params.order.orderNumber || params.order.id}`);
-  await qzPrintHtml(html, params.printerName, `Receipt-${params.order.orderNumber || params.order.id}`);
+  const html = buildDocumentHtml(contentHtml, jobName);
+  await qzPrintHtml(html, params.printerName, jobName);
 }
 
 export async function directPrintLabels(params: {
@@ -325,7 +389,24 @@ export async function directPrintLabels(params: {
   printerName: string;
   labelSequenceBy?: 'tube_type' | 'department';
   departments?: DepartmentDto[];
+  mode?: 'direct_qz' | 'direct_gateway';
 }): Promise<void> {
+  const jobName = `Labels-${params.order.orderNumber || params.order.id}`;
+
+  if (params.mode === 'direct_gateway') {
+    const blob = await renderAndConvertOffscreen(
+      <div className="print-container">
+        <AllSampleLabels
+          order={params.order}
+          labelSequenceBy={params.labelSequenceBy}
+          departments={params.departments}
+        />
+      </div>,
+    );
+    await gatewayPrintPdf(blob, params.printerName, jobName);
+    return;
+  }
+
   const contentHtml = await renderOffscreen(
     <div className="print-container">
       <AllSampleLabels
@@ -335,19 +416,43 @@ export async function directPrintLabels(params: {
       />
     </div>,
   );
-  const html = buildDocumentHtml(contentHtml, `Labels-${params.order.orderNumber || params.order.id}`);
-  await qzPrintHtml(html, params.printerName, `Labels-${params.order.orderNumber || params.order.id}`);
+  const html = buildDocumentHtml(contentHtml, jobName);
+  await qzPrintHtml(html, params.printerName, jobName);
 }
 
 export async function directPrintReportPdf(params: {
   orderId: string;
   blob: Blob;
   printerName: string;
+  mode?: 'direct_qz' | 'direct_gateway';
 }): Promise<void> {
-  await qzPrintPdf(params.blob, params.printerName, `Report-${params.orderId}`);
+  const jobName = `Report-${params.orderId}`;
+  if (params.mode === 'direct_gateway') {
+    await gatewayPrintPdf(params.blob, params.printerName, jobName);
+    return;
+  }
+  await qzPrintPdf(params.blob, params.printerName, jobName);
 }
 
-export async function checkDirectPrintConnection(printerName?: string): Promise<void> {
+export async function checkDirectPrintConnection(
+  mode: 'direct_qz' | 'direct_gateway',
+  printerName?: string,
+): Promise<void> {
+  if (mode === 'direct_gateway') {
+    try {
+      await axios.get(`${GATEWAY_URL}/local/status`, { timeout: 3000 });
+      if (printerName?.trim()) {
+        const res = await axios.get<{ printers: string[] }>(`${GATEWAY_URL}/local/printers`);
+        if (!res.data.printers.includes(printerName.trim())) {
+          throw new Error(`Printer "${printerName}" not found in Gateway.`);
+        }
+      }
+      return;
+    } catch (error) {
+      throw new Error('LIS Gateway is not reachable. Ensure the Gateway service is running.');
+    }
+  }
+
   const qz = await loadQz();
   await ensureQzConnected(qz);
   if (printerName?.trim()) {
@@ -355,11 +460,13 @@ export async function checkDirectPrintConnection(printerName?: string): Promise<
   }
 }
 
-export function getDirectPrintErrorMessage(error: unknown): string {
+export function getDirectPrintErrorMessage(error: unknown, mode?: string): string {
   if (error instanceof Error && error.message.trim()) {
     return error.message;
   }
-  return 'Direct print failed. Make sure QZ Tray is installed and running.';
+  return mode === 'direct_gateway'
+    ? 'Direct print via Gateway failed. Ensure LIS Gateway is running.'
+    : 'Direct print failed. Make sure QZ Tray is installed and running.';
 }
 
 function withTimeout<T>(promise: Promise<T>, timeoutMs: number, timeoutMessage: string): Promise<T> {

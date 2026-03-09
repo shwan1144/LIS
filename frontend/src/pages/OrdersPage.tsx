@@ -1600,13 +1600,15 @@ export function OrdersPage() {
           type === 'receipt'
             ? printing?.receiptPrinterName?.trim()
             : printing?.labelsPrinterName?.trim();
-        if (printing?.mode === 'direct_qz' && printerName) {
+        const mode = printing?.mode;
+        if ((mode === 'direct_qz' || mode === 'direct_gateway') && printerName) {
           try {
             if (type === 'receipt') {
               await directPrintReceipt({
                 order,
                 labName: lab?.name,
                 printerName,
+                mode,
               });
             } else {
               await directPrintLabels({
@@ -1614,6 +1616,7 @@ export function OrdersPage() {
                 printerName,
                 labelSequenceBy: nextLabelSequenceBy,
                 departments,
+                mode,
               });
             }
             message.success(`${type === 'receipt' ? 'Receipt' : 'Labels'} sent to ${printerName}`);

@@ -7,10 +7,12 @@ import {
   Form,
   Input,
   Radio,
+  Select,
   Space,
   Typography,
   message,
 } from 'antd';
+import axios from 'axios';
 import { getLabSettings, updateLabSettings } from '../../api/client';
 import {
   checkDirectPrintConnection,
@@ -21,7 +23,7 @@ import {
 const { Title, Text } = Typography;
 
 type FormValues = {
-  mode: 'browser' | 'direct_qz';
+  mode: 'browser' | 'direct_qz' | 'direct_gateway';
   receiptPrinterName: string;
   labelsPrinterName: string;
   reportPrinterName: string;
@@ -32,6 +34,8 @@ export function SettingsPrintingPage() {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
+  const [availablePrinters, setAvailablePrinters] = useState<string[]>([]);
+  const currentMode = Form.useWatch('mode', form);
 
   useEffect(() => {
     const load = async () => {
@@ -39,7 +43,7 @@ export function SettingsPrintingPage() {
       try {
         const settings = await getLabSettings();
         form.setFieldsValue({
-          mode: settings.printing?.mode === 'direct_qz' ? 'direct_qz' : 'browser',
+          mode: settings.printing?.mode || 'browser',
           receiptPrinterName: settings.printing?.receiptPrinterName || '',
           labelsPrinterName: settings.printing?.labelsPrinterName || '',
           reportPrinterName: settings.printing?.reportPrinterName || '',
@@ -52,6 +56,24 @@ export function SettingsPrintingPage() {
     };
     void load();
   }, [form]);
+
+  useEffect(() => {
+    if (currentMode === 'direct_gateway') {
+      const fetchPrinters = async () => {
+        try {
+          const res = await axios.get('http://localhost:17880/local/printers', { timeout: 2000 });
+          if (Array.isArray(res.data.printers)) {
+            setAvailablePrinters(res.data.printers);
+          }
+        } catch {
+          // ignore or show hint
+        }
+      };
+      void fetchPrinters();
+    } else {
+      setAvailablePrinters([]);
+    }
+  }, [currentMode]);
 
   const handleSave = async (values: FormValues) => {
     setSaving(true);
@@ -91,8 +113,8 @@ export function SettingsPrintingPage() {
 
   const handleTestConnection = async () => {
     const values = form.getFieldsValue();
-    if (values.mode !== 'direct_qz') {
-      message.info('Switch mode to Direct (QZ Tray) first');
+    if (values.mode === 'browser') {
+      message.info('Choose a direct printing mode first');
       return;
     }
 
@@ -104,18 +126,22 @@ export function SettingsPrintingPage() {
         values.reportPrinterName.trim() ||
         undefined;
 
-      if (firstPrinter && isVirtualSavePrinterName(firstPrinter)) {
-        await checkDirectPrintConnection();
+      if (values.mode === 'direct_qz' && firstPrinter && isVirtualSavePrinterName(firstPrinter)) {
+        await checkDirectPrintConnection('direct_qz');
         message.info(
           `QZ connection is ready. "${firstPrinter}" is a virtual PDF/XPS printer, so report print will use browser Save dialog.`,
         );
         return;
       }
 
-      await checkDirectPrintConnection(firstPrinter);
-      message.success('Direct print connection is ready on this computer');
+      await checkDirectPrintConnection(values.mode, firstPrinter);
+      message.success(
+        values.mode === 'direct_gateway'
+          ? 'LIS Gateway is connected and ready'
+          : 'Direct print connection (QZ Tray) is ready on this computer',
+      );
     } catch (error) {
-      message.error(getDirectPrintErrorMessage(error));
+      message.error(getDirectPrintErrorMessage(error, values.mode));
     } finally {
       setTesting(false);
     }
@@ -133,8 +159,8 @@ export function SettingsPrintingPage() {
           type="info"
           showIcon
           style={{ marginBottom: 16 }}
-          message="No-popup direct print needs QZ Tray"
-          description="Browser security blocks silent print by default. For no-popup printing, install and run QZ Tray on each workstation."
+          message="No-popup direct print"
+          description="Direct printing allows silent printing without browser dialogs. Choose between QZ Tray or the first-party LIS Gateway agent."
         />
 
         <Form
@@ -156,7 +182,8 @@ export function SettingsPrintingPage() {
             <Radio.Group>
               <Space direction="vertical">
                 <Radio value="browser">Browser print (shows print popup)</Radio>
-                <Radio value="direct_qz">Direct print with QZ Tray (no popup)</Radio>
+                <Radio value="direct_qz">Direct print with QZ Tray (needs Java)</Radio>
+                <Radio value="direct_gateway">Direct print with LIS Gateway (Recommended)</Radio>
               </Space>
             </Radio.Group>
           </Form.Item>
@@ -168,7 +195,15 @@ export function SettingsPrintingPage() {
             label="Receipt printer name"
             tooltip="Example: EPSON TM-T82"
           >
-            <Input placeholder="EPSON TM-T82 Receipt" maxLength={128} />
+            {currentMode === 'direct_gateway' && availablePrinters.length > 0 ? (
+              <Select
+                showSearch
+                placeholder="Choose printer"
+                options={availablePrinters.map((p) => ({ value: p, label: p }))}
+              />
+            ) : (
+              <Input placeholder="EPSON TM-T82 Receipt" maxLength={128} />
+            )}
           </Form.Item>
 
           <Form.Item
@@ -176,7 +211,15 @@ export function SettingsPrintingPage() {
             label="Label printer name"
             tooltip="Example: ZDesigner GK420d"
           >
-            <Input placeholder="ZDesigner Label" maxLength={128} />
+            {currentMode === 'direct_gateway' && availablePrinters.length > 0 ? (
+              <Select
+                showSearch
+                placeholder="Choose printer"
+                options={availablePrinters.map((p) => ({ value: p, label: p }))}
+              />
+            ) : (
+              <Input placeholder="ZDesigner Label" maxLength={128} />
+            )}
           </Form.Item>
 
           <Form.Item
@@ -184,7 +227,15 @@ export function SettingsPrintingPage() {
             label="Report printer name"
             tooltip="Example: HP LaserJet"
           >
-            <Input placeholder="HP LaserJet A4" maxLength={128} />
+            {currentMode === 'direct_gateway' && availablePrinters.length > 0 ? (
+              <Select
+                showSearch
+                placeholder="Choose printer"
+                options={availablePrinters.map((p) => ({ value: p, label: p }))}
+              />
+            ) : (
+              <Input placeholder="HP LaserJet A4" maxLength={128} />
+            )}
           </Form.Item>
 
           <Space wrap>

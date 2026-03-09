@@ -858,7 +858,8 @@ export function ReportsPage() {
       ]);
       try {
         const printerName = settings?.printing?.reportPrinterName?.trim();
-        if (settings?.printing?.mode === 'direct_qz' && printerName) {
+        const mode = settings?.printing?.mode;
+        if ((mode === 'direct_qz' || mode === 'direct_gateway') && printerName) {
           if (isVirtualSavePrinterName(printerName)) {
             message.info(
               `Report printer "${printerName}" is a virtual PDF/XPS printer. Using browser print so Save dialog can appear.`,
@@ -869,6 +870,7 @@ export function ReportsPage() {
                 orderId,
                 blob,
                 printerName,
+                mode,
               });
               message.success(`Report sent to ${printerName}`);
               void trackReportAction(orderId, 'PRINT');
@@ -939,13 +941,15 @@ export function ReportsPage() {
       try {
         const settings = await getLabSettings();
         const printerName = settings.printing?.receiptPrinterName?.trim();
-        if (settings.printing?.mode === 'direct_qz' && printerName) {
+        const mode = settings.printing?.mode;
+        if ((mode === 'direct_qz' || mode === 'direct_gateway') && printerName) {
           if (!isVirtualSavePrinterName(printerName)) {
             try {
               await directPrintReceipt({
                 order: fullOrder,
                 labName: lab?.name,
                 printerName,
+                mode,
               });
               message.success(`Receipt sent to ${printerName}`);
               return;
