@@ -26,6 +26,7 @@ export interface PrintRequestBody {
     printOptions?: {
         orientation?: 'portrait' | 'landscape';
         scale?: 'noscale' | 'shrink' | 'fit';
+        paperSize?: string;
     };
 }
 
@@ -381,6 +382,11 @@ export class PrintServer {
                 );
             }
             options.scale = scale;
+        }
+
+        const paperSize = this.normalizeOptionalText(value.paperSize, 'printOptions.paperSize');
+        if (paperSize) {
+            options.paperSize = paperSize;
         }
     }
 

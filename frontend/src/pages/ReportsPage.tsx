@@ -64,6 +64,7 @@ import {
   getDirectPrintErrorMessage,
   isVirtualSavePrinterName,
 } from '../printing/direct-print';
+import './QueuePages.css';
 
 const { RangePicker } = DatePicker;
 const { Title, Text } = Typography;
@@ -1816,26 +1817,6 @@ export function ReportsPage() {
   return (
     <div>
       <style>{`
-        .reports-orders-table .ant-table-thead {
-          display: table-header-group !important;
-          visibility: visible !important;
-        }
-        .reports-orders-table .ant-table-thead > tr {
-          display: table-row !important;
-        }
-        .reports-orders-table .ant-table-thead > tr > th {
-          background: ${isDark ? 'rgba(255,255,255,0.06)' : '#f5f8ff'} !important;
-          color: ${isDark ? 'rgba(255,255,255,0.9)' : 'rgba(0,0,0,0.88)'} !important;
-          border-bottom: 1px solid ${isDark ? 'rgba(255,255,255,0.14)' : '#d9e5ff'} !important;
-          font-weight: 700;
-          font-size: 12px;
-          padding-top: 5px !important;
-          padding-bottom: 5px !important;
-        }
-        .reports-orders-table .ant-table-tbody > tr > td {
-          padding-top: 5px !important;
-          padding-bottom: 5px !important;
-        }
         .reports-orders-table .reports-order-row-expanded > td {
           background: #f7fbff !important;
           border-top: 1px solid #91caff !important;
@@ -2436,9 +2417,9 @@ export function ReportsPage() {
         Reports
       </Title>
       <WorklistStatusDashboard stats={worklistStats} style={{ marginBottom: 12 }} />
-      <Card>
-        <Space direction="vertical" style={{ width: '100%' }} size="large">
-          <Space wrap>
+      <Card className="queue-main-card">
+        <div className="queue-filters-block">
+          <Space wrap size={[10, 10]} className="queue-filter-toolbar">
             <RangePicker
               value={dateRange}
               onChange={(dates) => {
@@ -2489,7 +2470,9 @@ export function ReportsPage() {
               Search
             </Button>
           </Space>
+        </div>
 
+        <div className="queue-table-block">
           {loading ? (
             <div style={{ textAlign: 'center', padding: 40 }}>
               <Spin size="large" />
@@ -2498,7 +2481,7 @@ export function ReportsPage() {
             <Empty description="No orders found" />
           ) : (
             <Table
-              className="reports-orders-table"
+              className="reports-orders-table queue-orders-table"
               columns={columns}
               dataSource={orders}
               rowKey="id"
@@ -2529,7 +2512,7 @@ export function ReportsPage() {
               }}
             />
           )}
-        </Space>
+        </div>
       </Card>
     </div >
   );

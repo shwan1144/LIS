@@ -702,19 +702,6 @@ export function VerificationPage() {
   return (
     <div>
       <style>{`
-        .verification-orders-table .ant-table-thead > tr > th {
-          background: ${isDark ? 'rgba(255,255,255,0.06)' : '#f5f8ff'} !important;
-          color: ${isDark ? 'rgba(255,255,255,0.9)' : 'rgba(0,0,0,0.88)'} !important;
-          border-bottom: 1px solid ${isDark ? 'rgba(255,255,255,0.14)' : '#d9e5ff'} !important;
-          font-weight: 700;
-          font-size: 12px;
-          padding-top: 4px !important;
-          padding-bottom: 4px !important;
-        }
-        .verification-orders-table .ant-table-tbody > tr > td {
-          padding-top: 4px !important;
-          padding-bottom: 4px !important;
-        }
         .verification-orders-table .ant-table-expanded-row > td {
           background: ${isDark ? 'rgba(16,24,39,0.55)' : '#f8fbff'} !important;
           border-top: none !important;
@@ -792,7 +779,7 @@ export function VerificationPage() {
       >
         <Card className="queue-main-card">
           <div className="queue-filters-block">
-            <Space wrap>
+            <Space wrap size={[10, 10]} className="queue-filter-toolbar">
               <Input
                 placeholder="Search order #, patient, test..."
                 value={search}
@@ -846,7 +833,7 @@ export function VerificationPage() {
 
           <div className="queue-table-block">
             <Table<WorklistOrderSummaryDto>
-              className="verification-orders-table"
+              className="verification-orders-table queue-orders-table"
               rowKey="orderId"
               columns={orderColumns}
               dataSource={rows}

@@ -26,6 +26,7 @@ const LABEL_RENDER_SCALE = 3;
 type GatewayPrintOptions = {
   orientation?: 'portrait' | 'landscape';
   scale?: 'noscale' | 'shrink' | 'fit';
+  paperSize?: string;
 };
 
 type GatewayPrintersResponse = {
@@ -236,7 +237,8 @@ export async function directPrintLabels(params: {
   );
   await gatewayPrintPdf(blob, params.printerName, jobName, {
     orientation: 'landscape',
-    scale: 'fit',
+    scale: 'noscale',
+    paperSize: 'Custom',
   });
 }
 
