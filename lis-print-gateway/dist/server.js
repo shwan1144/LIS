@@ -272,6 +272,10 @@ class PrintServer {
             }
             options.scale = scale;
         }
+        const paperSize = this.normalizeOptionalText(value.paperSize, 'printOptions.paperSize');
+        if (paperSize) {
+            options.paperSize = paperSize;
+        }
     }
     async readJsonBody(req) {
         return new Promise((resolve, reject) => {
