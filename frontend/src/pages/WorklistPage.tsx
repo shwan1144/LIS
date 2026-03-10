@@ -939,6 +939,11 @@ export function WorklistPage() {
         <div className="worklist-group-list">
           {cached.groups.map((group) => {
             const isEmptyPanel = group.groupKind === 'panel' && group.testsCount === 0;
+            const groupStateClass = isEmptyPanel
+              ? ''
+              : group.isFullyEntered
+                ? 'worklist-group-item-state-entered'
+                : 'worklist-group-item-state-pending';
             const openGroup = () => {
               if (isEmptyPanel) {
                 message.warning(
@@ -955,7 +960,7 @@ export function WorklistPage() {
                 className={`worklist-group-item ${group.groupKind === 'panel'
                     ? 'worklist-group-item-panel'
                     : 'worklist-group-item-single'
-                  }`}
+                  } ${groupStateClass}`}
                 onClick={openGroup}
               >
                 <div className="worklist-group-main">
@@ -995,6 +1000,7 @@ export function WorklistPage() {
                   type="primary"
                   ghost
                   size="small"
+                  className="worklist-group-action-btn"
                   disabled={isEmptyPanel}
                   loading={entryLoadingGroupKey === `${record.orderId}:${group.groupId}`}
                   onClick={(event) => {
@@ -1077,12 +1083,36 @@ export function WorklistPage() {
           border: 1px solid ${isDark ? 'rgba(148,163,184,0.2)' : '#d9e8ff'};
           padding: 8px 10px;
           cursor: pointer;
+          transition:
+            background-color 0.18s ease,
+            border-color 0.18s ease,
+            box-shadow 0.18s ease;
         }
         .worklist-group-item-single {
           background: ${isDark ? 'rgba(30,58,138,0.16)' : '#eef5ff'};
         }
         .worklist-group-item-panel {
           background: ${isDark ? 'rgba(88,28,135,0.16)' : '#f5efff'};
+        }
+        .worklist-group-item-state-entered {
+          border-color: ${isDark ? 'rgba(74,222,128,0.46)' : '#86efac'};
+          background:
+            ${isDark
+              ? 'linear-gradient(135deg, rgba(20,83,45,0.62) 0%, rgba(21,128,61,0.2) 100%)'
+              : 'linear-gradient(135deg, #ecfdf3 0%, #dcfce7 100%)'};
+          box-shadow: ${isDark
+            ? '0 8px 18px rgba(20,83,45,0.18)'
+            : '0 8px 16px rgba(34,197,94,0.12)'};
+        }
+        .worklist-group-item-state-pending {
+          border-color: ${isDark ? 'rgba(248,113,113,0.42)' : '#fda4af'};
+          background:
+            ${isDark
+              ? 'linear-gradient(135deg, rgba(127,29,29,0.54) 0%, rgba(127,29,29,0.18) 100%)'
+              : 'linear-gradient(135deg, #fff1f2 0%, #ffe4e6 100%)'};
+          box-shadow: ${isDark
+            ? '0 8px 18px rgba(127,29,29,0.18)'
+            : '0 8px 16px rgba(248,113,113,0.12)'};
         }
         .worklist-group-main {
           min-width: 0;
@@ -1095,6 +1125,37 @@ export function WorklistPage() {
           align-items: center;
           gap: 8px;
           flex-wrap: wrap;
+        }
+        .worklist-group-action-btn.ant-btn.ant-btn-primary.ant-btn-background-ghost {
+          border-radius: 999px;
+        }
+        .worklist-group-item-state-entered
+          .worklist-group-action-btn.ant-btn.ant-btn-primary.ant-btn-background-ghost {
+          border-color: ${isDark ? 'rgba(74,222,128,0.72)' : '#16a34a'};
+          color: ${isDark ? '#bbf7d0' : '#166534'};
+          background: ${isDark ? 'rgba(15,23,42,0.24)' : 'rgba(255,255,255,0.72)'};
+        }
+        .worklist-group-item-state-entered
+          .worklist-group-action-btn.ant-btn.ant-btn-primary.ant-btn-background-ghost:not(:disabled):hover,
+        .worklist-group-item-state-entered
+          .worklist-group-action-btn.ant-btn.ant-btn-primary.ant-btn-background-ghost:not(:disabled):focus {
+          border-color: ${isDark ? '#86efac' : '#15803d'};
+          color: ${isDark ? '#dcfce7' : '#14532d'};
+          background: ${isDark ? 'rgba(20,83,45,0.32)' : 'rgba(240,253,244,0.92)'};
+        }
+        .worklist-group-item-state-pending
+          .worklist-group-action-btn.ant-btn.ant-btn-primary.ant-btn-background-ghost {
+          border-color: ${isDark ? 'rgba(248,113,113,0.72)' : '#dc2626'};
+          color: ${isDark ? '#fecaca' : '#991b1b'};
+          background: ${isDark ? 'rgba(15,23,42,0.24)' : 'rgba(255,255,255,0.72)'};
+        }
+        .worklist-group-item-state-pending
+          .worklist-group-action-btn.ant-btn.ant-btn-primary.ant-btn-background-ghost:not(:disabled):hover,
+        .worklist-group-item-state-pending
+          .worklist-group-action-btn.ant-btn.ant-btn-primary.ant-btn-background-ghost:not(:disabled):focus {
+          border-color: ${isDark ? '#fca5a5' : '#b91c1c'};
+          color: ${isDark ? '#fee2e2' : '#7f1d1d'};
+          background: ${isDark ? 'rgba(127,29,29,0.3)' : 'rgba(255,241,242,0.94)'};
         }
         .panel-entry-modal .ant-modal {
           max-width: calc(100vw - 32px) !important;
