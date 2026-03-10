@@ -19,8 +19,8 @@ const VIRTUAL_SAVE_PRINTER_KEYWORDS = [
   'xps document writer',
   'onenote',
 ];
-const LABEL_PAGE_WIDTH_MM = 50;
-const LABEL_PAGE_HEIGHT_MM = 25;
+const LABEL_DESIGN_WIDTH_MM = 50;
+const LABEL_DESIGN_HEIGHT_MM = 25;
 const LABEL_RENDER_SCALE = 3;
 
 type GatewayPrintOptions = {
@@ -36,6 +36,14 @@ type GatewayPrintersResponse = {
 type GatewayStatusResponse = {
   status?: string;
   service?: string;
+};
+
+type GatewayPrinterConfigResponse = {
+  mediaHeightMm?: number | null;
+  mediaWidthMm?: number | null;
+  orientation?: 'portrait' | 'landscape' | null;
+  paperSize?: string | null;
+  printerName?: string;
 };
 
 export function isVirtualSavePrinterName(name: string): boolean {
@@ -67,6 +75,14 @@ async function fetchGatewayPrinters(): Promise<string[]> {
   return normalizePrinterList(
     Array.isArray(response.data?.printers) ? response.data.printers : [],
   );
+}
+
+async function fetchGatewayPrinterConfig(printerName: string): Promise<GatewayPrinterConfigResponse> {
+  const response = await axios.get<GatewayPrinterConfigResponse>(`${GATEWAY_URL}/local/printer-config`, {
+    params: { printerName },
+    timeout: GATEWAY_PRINTER_TIMEOUT_MS,
+  });
+  return response.data ?? {};
 }
 
 async function gatewayPrintPdf(
@@ -105,12 +121,16 @@ async function convertHtmlToPdf(element: HTMLElement): Promise<Blob> {
   return pdf.output('blob');
 }
 
-async function renderLabelsToPdf(element: React.ReactElement): Promise<Blob> {
+async function renderLabelsToPdf(
+  element: React.ReactElement,
+  pageWidthMm: number,
+  pageHeightMm: number,
+): Promise<Blob> {
   const host = document.createElement('div');
   host.style.position = 'fixed';
   host.style.left = '-100000px';
   host.style.top = '0';
-  host.style.width = `${LABEL_PAGE_WIDTH_MM}mm`;
+  host.style.width = `${LABEL_DESIGN_WIDTH_MM}mm`;
   host.style.background = '#ffffff';
   host.className = 'print-container-offscreen';
   document.body.appendChild(host);
@@ -128,12 +148,12 @@ async function renderLabelsToPdf(element: React.ReactElement): Promise<Blob> {
     const pdf = new jsPDF({
       orientation: 'landscape',
       unit: 'mm',
-      format: [LABEL_PAGE_WIDTH_MM, LABEL_PAGE_HEIGHT_MM],
+      format: [pageWidthMm, pageHeightMm],
     });
 
     for (const [index, label] of labels.entries()) {
       if (index > 0) {
-        pdf.addPage([LABEL_PAGE_WIDTH_MM, LABEL_PAGE_HEIGHT_MM], 'landscape');
+        pdf.addPage([pageWidthMm, pageHeightMm], 'landscape');
       }
 
       const canvas = await html2canvas(label, {
@@ -148,8 +168,8 @@ async function renderLabelsToPdf(element: React.ReactElement): Promise<Blob> {
         'PNG',
         0,
         0,
-        LABEL_PAGE_WIDTH_MM,
-        LABEL_PAGE_HEIGHT_MM,
+        pageWidthMm,
+        pageHeightMm,
       );
     }
 
@@ -225,6 +245,25 @@ export async function directPrintLabels(params: {
   departments?: DepartmentDto[];
 }): Promise<void> {
   const jobName = `Labels-${params.order.orderNumber || params.order.id}`;
+  let pageWidthMm = LABEL_DESIGN_WIDTH_MM;
+  let pageHeightMm = LABEL_DESIGN_HEIGHT_MM;
+  let paperSize = 'Custom';
+
+  try {
+    const printerConfig = await fetchGatewayPrinterConfig(params.printerName);
+    const mediaWidthMm = Number(printerConfig.mediaWidthMm ?? 0);
+    const mediaHeightMm = Number(printerConfig.mediaHeightMm ?? 0);
+    if (mediaWidthMm > 0 && mediaHeightMm > 0) {
+      pageWidthMm = Math.max(mediaWidthMm, mediaHeightMm);
+      pageHeightMm = Math.min(mediaWidthMm, mediaHeightMm);
+    }
+    if (typeof printerConfig.paperSize === 'string' && printerConfig.paperSize.trim()) {
+      paperSize = printerConfig.paperSize.trim();
+    }
+  } catch {
+    // fall back to default label size when printer details cannot be read
+  }
+
   const blob = await renderLabelsToPdf(
     <div className="print-container">
       <style>{printCss}</style>
@@ -234,11 +273,13 @@ export async function directPrintLabels(params: {
         departments={params.departments}
       />
     </div>,
+    pageWidthMm,
+    pageHeightMm,
   );
   await gatewayPrintPdf(blob, params.printerName, jobName, {
     orientation: 'landscape',
     scale: 'noscale',
-    paperSize: 'Custom',
+    paperSize,
   });
 }
 

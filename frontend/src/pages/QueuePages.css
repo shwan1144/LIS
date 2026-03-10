@@ -118,7 +118,7 @@
   color: #173b6c !important;
   border-bottom: 1px solid #bfd9ff !important;
   font-weight: 700;
-  font-size: 13px;
+  font-size: 14px;
   letter-spacing: 0.01em;
   padding-top: 10px !important;
   padding-bottom: 10px !important;
@@ -211,7 +211,7 @@ html[data-theme='dark'] .queue-orders-table .ant-table-thead > tr > th {
   }
 
   .queue-orders-table .ant-table-thead > tr > th {
-    font-size: 12px;
+    font-size: 13px;
     padding-top: 9px !important;
     padding-bottom: 9px !important;
   }

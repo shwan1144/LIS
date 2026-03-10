@@ -494,13 +494,7 @@ export function VerificationPage() {
 
   const handleExpandRow = useCallback(
     (expanded: boolean, record: WorklistOrderSummaryDto) => {
-      setExpandedOrderKeys((previous) => {
-        if (expanded) {
-          if (previous.includes(record.orderId)) return previous;
-          return [...previous, record.orderId];
-        }
-        return previous.filter((key) => key !== record.orderId);
-      });
+      setExpandedOrderKeys(expanded ? [record.orderId] : []);
       if (expanded) {
         void loadOrderGroups(record.orderId);
       }
@@ -702,10 +696,36 @@ export function VerificationPage() {
   return (
     <div>
       <style>{`
+        .verification-orders-table .verification-order-row > td {
+          cursor: pointer;
+          transition:
+            background-color 0.18s ease,
+            border-color 0.18s ease;
+        }
+        .verification-orders-table .verification-order-row:hover > td {
+          background: ${isDark ? 'rgba(34,197,94,0.08)' : 'rgba(34,197,94,0.05)'} !important;
+        }
+        .verification-orders-table .verification-order-row-expanded > td {
+          background: ${isDark ? 'rgba(34,197,94,0.12)' : '#effdf5'} !important;
+          border-top: 1px solid ${isDark ? 'rgba(74,222,128,0.46)' : '#86efac'} !important;
+          border-bottom: 0 !important;
+        }
+        .verification-orders-table .verification-order-row-expanded > td:first-child {
+          border-left: 2px solid ${isDark ? '#22c55e' : '#16a34a'} !important;
+          border-top-left-radius: 10px !important;
+        }
+        .verification-orders-table .verification-order-row-expanded > td:last-child {
+          border-right: 1px solid ${isDark ? 'rgba(74,222,128,0.46)' : '#bbf7d0'} !important;
+          border-top-right-radius: 10px !important;
+        }
         .verification-orders-table .ant-table-expanded-row > td {
-          background: ${isDark ? 'rgba(16,24,39,0.55)' : '#f8fbff'} !important;
-          border-top: none !important;
-          padding: 8px 10px !important;
+          padding: 6px 10px 10px !important;
+          background: transparent !important;
+          border-left: 2px solid ${isDark ? '#22c55e' : '#16a34a'} !important;
+          border-right: 1px solid ${isDark ? 'rgba(74,222,128,0.46)' : '#bbf7d0'} !important;
+          border-bottom: 1px solid ${isDark ? 'rgba(74,222,128,0.46)' : '#bbf7d0'} !important;
+          border-bottom-left-radius: 10px !important;
+          border-bottom-right-radius: 10px !important;
         }
         .verification-group-list {
           margin-top: 6px;
@@ -839,10 +859,16 @@ export function VerificationPage() {
               dataSource={rows}
               loading={loading}
               showHeader
+              rowClassName={(record) =>
+                expandedOrderKeys.includes(record.orderId)
+                  ? 'verification-order-row verification-order-row-expanded'
+                  : 'verification-order-row'
+              }
               expandable={{
                 expandedRowRender: renderExpandedRow,
                 expandedRowKeys: expandedOrderKeys,
-                expandRowByClick: false,
+                expandRowByClick: true,
+                showExpandColumn: false,
                 onExpand: handleExpandRow,
               }}
               pagination={{

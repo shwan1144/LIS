@@ -800,13 +800,7 @@ export function WorklistPage() {
 
   const handleExpandRow = useCallback(
     (expanded: boolean, record: WorklistOrderSummaryDto) => {
-      setExpandedOrderKeys((previous) => {
-        if (expanded) {
-          if (previous.includes(record.orderId)) return previous;
-          return [...previous, record.orderId];
-        }
-        return previous.filter((key) => key !== record.orderId);
-      });
+      setExpandedOrderKeys(expanded ? [record.orderId] : []);
       if (expanded) {
         void loadOrderGroups(record.orderId);
       }
@@ -1021,10 +1015,36 @@ export function WorklistPage() {
   return (
     <div>
       <style>{`
+        .worklist-orders-table .worklist-order-row > td {
+          cursor: pointer;
+          transition:
+            background-color 0.18s ease,
+            border-color 0.18s ease;
+        }
+        .worklist-orders-table .worklist-order-row:hover > td {
+          background: ${isDark ? 'rgba(59,130,246,0.08)' : 'rgba(59,130,246,0.05)'} !important;
+        }
+        .worklist-orders-table .worklist-order-row-expanded > td {
+          background: ${isDark ? 'rgba(37,99,235,0.12)' : '#eff6ff'} !important;
+          border-top: 1px solid ${isDark ? 'rgba(96,165,250,0.48)' : '#93c5fd'} !important;
+          border-bottom: 0 !important;
+        }
+        .worklist-orders-table .worklist-order-row-expanded > td:first-child {
+          border-left: 2px solid ${isDark ? '#3b82f6' : '#2563eb'} !important;
+          border-top-left-radius: 10px !important;
+        }
+        .worklist-orders-table .worklist-order-row-expanded > td:last-child {
+          border-right: 1px solid ${isDark ? 'rgba(96,165,250,0.48)' : '#bfdbfe'} !important;
+          border-top-right-radius: 10px !important;
+        }
         .worklist-orders-table .ant-table-expanded-row > td {
-          background: ${isDark ? 'rgba(16,24,39,0.55)' : '#f8fbff'} !important;
-          border-top: none !important;
-          padding: 8px 10px !important;
+          padding: 6px 10px 10px !important;
+          background: transparent !important;
+          border-left: 2px solid ${isDark ? '#3b82f6' : '#2563eb'} !important;
+          border-right: 1px solid ${isDark ? 'rgba(96,165,250,0.48)' : '#bfdbfe'} !important;
+          border-bottom: 1px solid ${isDark ? 'rgba(96,165,250,0.48)' : '#bfdbfe'} !important;
+          border-bottom-left-radius: 10px !important;
+          border-bottom-right-radius: 10px !important;
         }
         .worklist-group-list {
           margin-top: 6px;
@@ -1189,10 +1209,16 @@ export function WorklistPage() {
               dataSource={rows}
               loading={loading}
               showHeader
+              rowClassName={(record) =>
+                expandedOrderKeys.includes(record.orderId)
+                  ? 'worklist-order-row worklist-order-row-expanded'
+                  : 'worklist-order-row'
+              }
               expandable={{
                 expandedRowRender: renderExpandedRow,
                 expandedRowKeys: expandedOrderKeys,
-                expandRowByClick: false,
+                expandRowByClick: true,
+                showExpandColumn: false,
                 onExpand: handleExpandRow,
               }}
               pagination={{

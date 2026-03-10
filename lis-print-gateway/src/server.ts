@@ -3,6 +3,8 @@ import fs from 'fs';
 import http, { IncomingMessage, ServerResponse } from 'http';
 import os from 'os';
 import path from 'path';
+import { execFile } from 'child_process';
+import { promisify } from 'util';
 import { getPrinters, print as printPdf, type PrintOptions } from 'pdf-to-printer';
 import 'dotenv/config';
 
@@ -10,6 +12,7 @@ const SERVICE_NAME = 'lis-print-gateway';
 const DEFAULT_PORT = 17881;
 const MAX_REQUEST_BYTES = 40 * 1024 * 1024;
 const SUMATRA_BINARY_NAME = 'SumatraPDF-3.4.6-32.exe';
+const execFileAsync = promisify(execFile);
 
 type LogType = 'error' | 'info' | 'success';
 
@@ -38,6 +41,14 @@ export interface ServerStatusSnapshot {
     startedAt: string;
     status: 'ok';
     version: string;
+}
+
+export interface PrinterConfigSnapshot {
+    mediaHeightMm: number | null;
+    mediaWidthMm: number | null;
+    orientation: 'landscape' | 'portrait' | null;
+    paperSize: string | null;
+    printerName: string;
 }
 
 export interface ServerEvent {
@@ -214,6 +225,16 @@ export class PrintServer {
                 return;
             }
 
+            if (req.method === 'GET' && url.pathname === '/local/printer-config') {
+                const requestedPrinterName = this.normalizeRequiredText(
+                    url.searchParams.get('printerName'),
+                    'printerName',
+                );
+                const printerConfig = await this.getPrinterConfig(requestedPrinterName);
+                this.respondJson(res, 200, printerConfig);
+                return;
+            }
+
             if (req.method === 'POST' && url.pathname === '/local/print') {
                 const payload = await this.readJsonBody(req);
                 await this.handlePrintRequest(res, payload);
@@ -312,6 +333,60 @@ export class PrintServer {
                     .filter((printerName) => printerName.length > 0),
             ),
         ).sort((left, right) => left.localeCompare(right, undefined, { sensitivity: 'base' }));
+    }
+
+    private async getPrinterConfig(requestedPrinterName: string): Promise<PrinterConfigSnapshot> {
+        const printerName = await this.resolvePrinterName(requestedPrinterName);
+        if (!printerName) {
+            throw new HttpError(400, 'printerName is required.');
+        }
+
+        const escapedPrinterName = printerName.replace(/'/g, "''");
+        const command = [
+            `$cfg = Get-PrintConfiguration -PrinterName '${escapedPrinterName}';`,
+            'if (-not $cfg) { throw "Printer configuration not found." }',
+            '$cfg | Select-Object PaperSize, PrintCapabilitiesXML | ConvertTo-Json -Compress -Depth 4',
+        ].join(' ');
+
+        try {
+            const { stdout } = await execFileAsync(
+                'Powershell.exe',
+                ['-NoProfile', '-Command', command],
+                { windowsHide: true },
+            );
+            const raw = stdout.trim();
+            if (!raw) {
+                throw new Error('Printer configuration command returned no data.');
+            }
+
+            const parsed = JSON.parse(raw) as {
+                PaperSize?: string | null;
+                PrintCapabilitiesXML?: string | null;
+            };
+
+            const xml = typeof parsed.PrintCapabilitiesXML === 'string'
+                ? parsed.PrintCapabilitiesXML
+                : '';
+
+            const widthMatch = xml.match(/MediaSizeWidth"><psf:Value[^>]*>(\d+)<\/psf:Value>/i);
+            const heightMatch = xml.match(/MediaSizeHeight"><psf:Value[^>]*>(\d+)<\/psf:Value>/i);
+            const orientationMatch = xml.match(/Feature name="psk:PageOrientation"><psf:Option name="psk:(Portrait|Landscape)"/i);
+
+            return {
+                mediaHeightMm: heightMatch ? Number(heightMatch[1]) / 1000 : null,
+                mediaWidthMm: widthMatch ? Number(widthMatch[1]) / 1000 : null,
+                orientation: orientationMatch
+                    ? orientationMatch[1].toLowerCase() as 'landscape' | 'portrait'
+                    : null,
+                paperSize: typeof parsed.PaperSize === 'string' && parsed.PaperSize.trim()
+                    ? parsed.PaperSize.trim()
+                    : null,
+                printerName,
+            };
+        } catch (error) {
+            const message = error instanceof Error ? error.message : 'Failed to read printer configuration.';
+            throw new HttpError(500, `Failed to read printer configuration: ${message}`);
+        }
     }
 
     private log(text: string, type: LogType = 'info'): void {
