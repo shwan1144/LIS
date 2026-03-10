@@ -101,6 +101,7 @@ class PrintServer {
             if (printerName) {
                 options.printer = printerName;
             }
+            this.applyRequestedPrintOptions(body.printOptions, options);
             if (fs_1.default.existsSync(this.tempSumatraPath)) {
                 options.sumatraPdfPath = this.tempSumatraPath;
             }
@@ -249,6 +250,28 @@ class PrintServer {
     }
     async notifyStatus() {
         this.onEvent({ data: await this.getStatusSnapshot(), type: 'status' });
+    }
+    applyRequestedPrintOptions(value, options) {
+        if (value == null) {
+            return;
+        }
+        if (typeof value !== 'object' || Array.isArray(value)) {
+            throw new HttpError(400, 'printOptions must be an object.');
+        }
+        const orientation = this.normalizeOptionalText(value.orientation, 'printOptions.orientation');
+        if (orientation) {
+            if (orientation !== 'portrait' && orientation !== 'landscape') {
+                throw new HttpError(400, 'printOptions.orientation must be portrait or landscape.');
+            }
+            options.orientation = orientation;
+        }
+        const scale = this.normalizeOptionalText(value.scale, 'printOptions.scale');
+        if (scale) {
+            if (scale !== 'noscale' && scale !== 'shrink' && scale !== 'fit') {
+                throw new HttpError(400, 'printOptions.scale must be noscale, shrink, or fit.');
+            }
+            options.scale = scale;
+        }
     }
     async readJsonBody(req) {
         return new Promise((resolve, reject) => {

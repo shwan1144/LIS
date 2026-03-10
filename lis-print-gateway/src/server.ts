@@ -23,6 +23,10 @@ export interface PrintRequestBody {
     jobName?: string;
     pdfBase64?: string;
     printerName?: string;
+    printOptions?: {
+        orientation?: 'portrait' | 'landscape';
+        scale?: 'noscale' | 'shrink' | 'fit';
+    };
 }
 
 export interface ServerStatusSnapshot {
@@ -161,6 +165,7 @@ export class PrintServer {
             if (printerName) {
                 options.printer = printerName;
             }
+            this.applyRequestedPrintOptions(body.printOptions, options);
             if (fs.existsSync(this.tempSumatraPath)) {
                 options.sumatraPdfPath = this.tempSumatraPath;
             }
@@ -343,6 +348,40 @@ export class PrintServer {
 
     private async notifyStatus(): Promise<void> {
         this.onEvent({ data: await this.getStatusSnapshot(), type: 'status' });
+    }
+
+    private applyRequestedPrintOptions(
+        value: PrintRequestBody['printOptions'],
+        options: PrintOptions,
+    ): void {
+        if (value == null) {
+            return;
+        }
+        if (typeof value !== 'object' || Array.isArray(value)) {
+            throw new HttpError(400, 'printOptions must be an object.');
+        }
+
+        const orientation = this.normalizeOptionalText(value.orientation, 'printOptions.orientation');
+        if (orientation) {
+            if (orientation !== 'portrait' && orientation !== 'landscape') {
+                throw new HttpError(
+                    400,
+                    'printOptions.orientation must be portrait or landscape.',
+                );
+            }
+            options.orientation = orientation;
+        }
+
+        const scale = this.normalizeOptionalText(value.scale, 'printOptions.scale');
+        if (scale) {
+            if (scale !== 'noscale' && scale !== 'shrink' && scale !== 'fit') {
+                throw new HttpError(
+                    400,
+                    'printOptions.scale must be noscale, shrink, or fit.',
+                );
+            }
+            options.scale = scale;
+        }
     }
 
     private async readJsonBody(req: IncomingMessage): Promise<unknown> {

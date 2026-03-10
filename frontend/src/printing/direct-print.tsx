@@ -19,6 +19,14 @@ const VIRTUAL_SAVE_PRINTER_KEYWORDS = [
   'xps document writer',
   'onenote',
 ];
+const LABEL_PAGE_WIDTH_MM = 50;
+const LABEL_PAGE_HEIGHT_MM = 25;
+const LABEL_RENDER_SCALE = 3;
+
+type GatewayPrintOptions = {
+  orientation?: 'portrait' | 'landscape';
+  scale?: 'noscale' | 'shrink' | 'fit';
+};
 
 type GatewayPrintersResponse = {
   printers?: string[];
@@ -60,7 +68,12 @@ async function fetchGatewayPrinters(): Promise<string[]> {
   );
 }
 
-async function gatewayPrintPdf(blob: Blob, printerName: string, jobName: string): Promise<void> {
+async function gatewayPrintPdf(
+  blob: Blob,
+  printerName: string,
+  jobName: string,
+  printOptions?: GatewayPrintOptions,
+): Promise<void> {
   const base64 = await blobToBase64(blob);
   await axios.post(
     `${GATEWAY_URL}/local/print`,
@@ -68,6 +81,7 @@ async function gatewayPrintPdf(blob: Blob, printerName: string, jobName: string)
       printerName,
       pdfBase64: base64,
       jobName,
+      printOptions,
     },
     { timeout: GATEWAY_PRINT_TIMEOUT_MS },
   );
@@ -78,6 +92,7 @@ async function convertHtmlToPdf(element: HTMLElement): Promise<Blob> {
     scale: 2,
     useCORS: true,
     logging: false,
+    backgroundColor: '#ffffff',
   });
   const imgData = canvas.toDataURL('image/png');
   const pdf = new jsPDF({
@@ -87,6 +102,61 @@ async function convertHtmlToPdf(element: HTMLElement): Promise<Blob> {
   });
   pdf.addImage(imgData, 'PNG', 0, 0, canvas.width, canvas.height);
   return pdf.output('blob');
+}
+
+async function renderLabelsToPdf(element: React.ReactElement): Promise<Blob> {
+  const host = document.createElement('div');
+  host.style.position = 'fixed';
+  host.style.left = '-100000px';
+  host.style.top = '0';
+  host.style.width = `${LABEL_PAGE_WIDTH_MM}mm`;
+  host.style.background = '#ffffff';
+  host.className = 'print-container-offscreen';
+  document.body.appendChild(host);
+
+  const root = createRoot(host);
+  try {
+    root.render(element);
+    await waitForRenderAndEffects();
+
+    const labels = Array.from(host.querySelectorAll<HTMLElement>('.sample-label'));
+    if (labels.length === 0) {
+      throw new Error('No sample labels available to print.');
+    }
+
+    const pdf = new jsPDF({
+      orientation: 'landscape',
+      unit: 'mm',
+      format: [LABEL_PAGE_WIDTH_MM, LABEL_PAGE_HEIGHT_MM],
+    });
+
+    for (const [index, label] of labels.entries()) {
+      if (index > 0) {
+        pdf.addPage([LABEL_PAGE_WIDTH_MM, LABEL_PAGE_HEIGHT_MM], 'landscape');
+      }
+
+      const canvas = await html2canvas(label, {
+        scale: LABEL_RENDER_SCALE,
+        useCORS: true,
+        logging: false,
+        backgroundColor: '#ffffff',
+      });
+
+      pdf.addImage(
+        canvas.toDataURL('image/png'),
+        'PNG',
+        0,
+        0,
+        LABEL_PAGE_WIDTH_MM,
+        LABEL_PAGE_HEIGHT_MM,
+      );
+    }
+
+    return pdf.output('blob');
+  } finally {
+    root.unmount();
+    host.remove();
+  }
 }
 
 async function renderAndConvertOffscreen(element: React.ReactElement): Promise<Blob> {
@@ -154,7 +224,7 @@ export async function directPrintLabels(params: {
   departments?: DepartmentDto[];
 }): Promise<void> {
   const jobName = `Labels-${params.order.orderNumber || params.order.id}`;
-  const blob = await renderAndConvertOffscreen(
+  const blob = await renderLabelsToPdf(
     <div className="print-container">
       <style>{printCss}</style>
       <AllSampleLabels
@@ -164,7 +234,10 @@ export async function directPrintLabels(params: {
       />
     </div>,
   );
-  await gatewayPrintPdf(blob, params.printerName, jobName);
+  await gatewayPrintPdf(blob, params.printerName, jobName, {
+    orientation: 'landscape',
+    scale: 'fit',
+  });
 }
 
 export async function directPrintReportPdf(params: {
