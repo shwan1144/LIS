@@ -21,7 +21,10 @@ const VIRTUAL_SAVE_PRINTER_KEYWORDS = [
 ];
 const LABEL_DESIGN_WIDTH_MM = 50;
 const LABEL_DESIGN_HEIGHT_MM = 25;
-const LABEL_RENDER_SCALE = 3;
+const LABEL_RENDER_MIN_SCALE = 3;
+const LABEL_RENDER_MAX_SCALE = 8;
+const LABEL_TARGET_DPI = 300;
+const LABEL_THRESHOLD = 208;
 
 type GatewayPrintOptions = {
   orientation?: 'portrait' | 'landscape';
@@ -156,12 +159,61 @@ async function renderLabelsToPdf(
         pdf.addPage([pageWidthMm, pageHeightMm], 'landscape');
       }
 
-      const canvas = await html2canvas(label, {
-        scale: LABEL_RENDER_SCALE,
-        useCORS: true,
-        logging: false,
-        backgroundColor: '#ffffff',
-      });
+      const captureTarget = document.createElement('div');
+      const uniformScale = Math.min(
+        pageWidthMm / LABEL_DESIGN_WIDTH_MM,
+        pageHeightMm / LABEL_DESIGN_HEIGHT_MM,
+      );
+      const scaledWidthMm = LABEL_DESIGN_WIDTH_MM * uniformScale;
+      const scaledHeightMm = LABEL_DESIGN_HEIGHT_MM * uniformScale;
+      const offsetLeftMm = Math.max(0, (pageWidthMm - scaledWidthMm) / 2);
+      const offsetTopMm = Math.max(0, (pageHeightMm - scaledHeightMm) / 2);
+      const scaledLabel = label.cloneNode(true) as HTMLElement;
+
+      captureTarget.style.position = 'fixed';
+      captureTarget.style.left = '-100000px';
+      captureTarget.style.top = '0';
+      captureTarget.style.width = `${pageWidthMm}mm`;
+      captureTarget.style.height = `${pageHeightMm}mm`;
+      captureTarget.style.boxSizing = 'border-box';
+      captureTarget.style.background = '#ffffff';
+      captureTarget.style.overflow = 'hidden';
+
+      scaledLabel.style.position = 'absolute';
+      scaledLabel.style.left = `${offsetLeftMm}mm`;
+      scaledLabel.style.top = `${offsetTopMm}mm`;
+      scaledLabel.style.margin = '0';
+      scaledLabel.style.transformOrigin = 'top left';
+      scaledLabel.style.transform = `scale(${uniformScale})`;
+
+      captureTarget.appendChild(scaledLabel);
+      document.body.appendChild(captureTarget);
+
+      let canvas: HTMLCanvasElement;
+      try {
+        const targetRect = captureTarget.getBoundingClientRect();
+        const targetWidthPx = Math.max(1, Math.round((pageWidthMm / 25.4) * LABEL_TARGET_DPI));
+        const targetHeightPx = Math.max(1, Math.round((pageHeightMm / 25.4) * LABEL_TARGET_DPI));
+        const renderScale = Math.max(
+          LABEL_RENDER_MIN_SCALE,
+          Math.min(
+            LABEL_RENDER_MAX_SCALE,
+            targetWidthPx / Math.max(targetRect.width, 1),
+            targetHeightPx / Math.max(targetRect.height, 1),
+          ),
+        );
+
+        canvas = await html2canvas(captureTarget, {
+          scale: renderScale,
+          useCORS: true,
+          logging: false,
+          backgroundColor: '#ffffff',
+        });
+      } finally {
+        captureTarget.remove();
+      }
+
+      thresholdCanvasForThermalPrint(canvas);
 
       pdf.addImage(
         canvas.toDataURL('image/png'),
@@ -178,6 +230,35 @@ async function renderLabelsToPdf(
     root.unmount();
     host.remove();
   }
+}
+
+function thresholdCanvasForThermalPrint(canvas: HTMLCanvasElement): void {
+  const context = canvas.getContext('2d', { willReadFrequently: true });
+  if (!context) {
+    return;
+  }
+
+  const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
+  const data = imageData.data;
+  for (let index = 0; index < data.length; index += 4) {
+    const alpha = data[index + 3];
+    if (alpha === 0) {
+      data[index] = 255;
+      data[index + 1] = 255;
+      data[index + 2] = 255;
+      data[index + 3] = 255;
+      continue;
+    }
+
+    const luminance = (0.299 * data[index]) + (0.587 * data[index + 1]) + (0.114 * data[index + 2]);
+    const value = luminance < LABEL_THRESHOLD ? 0 : 255;
+    data[index] = value;
+    data[index + 1] = value;
+    data[index + 2] = value;
+    data[index + 3] = 255;
+  }
+
+  context.putImageData(imageData, 0, 0);
 }
 
 async function renderAndConvertOffscreen(element: React.ReactElement): Promise<Blob> {
