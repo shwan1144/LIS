@@ -190,7 +190,27 @@ let PublicReportsController = class PublicReportsController {
         try {
             const status = await this.reportsService.getPublicResultStatus(orderId);
             if (status.ready) {
-                return res.redirect(`/public/results/${orderId}/pdf`);
+                const pdfUrl = `/public/results/${orderId}/pdf`;
+                res.setHeader('Content-Type', 'text/html; charset=utf-8');
+                return res.status(200).send(`
+        <!doctype html>
+        <html>
+        <head><title>Result Ready</title></head>
+        <body>
+          <script>
+            try {
+              if (window.top) {
+                window.top.location.href = '${pdfUrl}';
+              } else {
+                window.location.href = '${pdfUrl}';
+              }
+            } catch (e) {
+              window.location.href = '${pdfUrl}';
+            }
+          </script>
+        </body>
+        </html>
+      `);
             }
             res.setHeader('Content-Type', 'text/html; charset=utf-8');
             return res.status(200).send(renderPendingPage(status));
