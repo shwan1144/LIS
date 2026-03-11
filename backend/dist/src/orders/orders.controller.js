@@ -23,7 +23,10 @@ const update_order_discount_dto_1 = require("./dto/update-order-discount.dto");
 const update_order_delivery_methods_dto_1 = require("./dto/update-order-delivery-methods.dto");
 const create_order_response_dto_1 = require("./dto/create-order-response.dto");
 const jwt_auth_guard_1 = require("../auth/jwt-auth.guard");
+const roles_guard_1 = require("../auth/roles.guard");
+const roles_decorator_1 = require("../auth/roles.decorator");
 const lab_actor_context_1 = require("../types/lab-actor-context");
+const lab_role_matrix_1 = require("../auth/lab-role-matrix");
 let OrdersController = OrdersController_1 = class OrdersController {
     constructor(ordersService) {
         this.ordersService = ordersService;
@@ -167,6 +170,7 @@ let OrdersController = OrdersController_1 = class OrdersController {
 exports.OrdersController = OrdersController;
 __decorate([
     (0, common_1.Post)(),
+    (0, roles_decorator_1.Roles)(...lab_role_matrix_1.LAB_ROLE_GROUPS.ORDERS_WORKFLOW),
     (0, common_1.UsePipes)(new common_1.ValidationPipe({ whitelist: true })),
     __param(0, (0, common_1.Req)()),
     __param(1, (0, common_1.Body)()),
@@ -177,6 +181,7 @@ __decorate([
 ], OrdersController.prototype, "create", null);
 __decorate([
     (0, common_1.Get)(),
+    (0, roles_decorator_1.Roles)(...lab_role_matrix_1.LAB_ROLE_GROUPS.ORDERS_WORKFLOW),
     __param(0, (0, common_1.Req)()),
     __param(1, (0, common_1.Query)('page')),
     __param(2, (0, common_1.Query)('size')),
@@ -192,6 +197,7 @@ __decorate([
 ], OrdersController.prototype, "findAll", null);
 __decorate([
     (0, common_1.Get)('estimate-price'),
+    (0, roles_decorator_1.Roles)(...lab_role_matrix_1.LAB_ROLE_GROUPS.ORDERS_WORKFLOW),
     __param(0, (0, common_1.Req)()),
     __param(1, (0, common_1.Query)('testIds')),
     __param(2, (0, common_1.Query)('shiftId')),
@@ -201,6 +207,7 @@ __decorate([
 ], OrdersController.prototype, "estimatePrice", null);
 __decorate([
     (0, common_1.Get)('today-patients'),
+    (0, roles_decorator_1.Roles)(...lab_role_matrix_1.LAB_ROLE_GROUPS.ORDERS_WORKFLOW),
     __param(0, (0, common_1.Req)()),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [Object]),
@@ -208,6 +215,7 @@ __decorate([
 ], OrdersController.prototype, "getTodayPatients", null);
 __decorate([
     (0, common_1.Get)('next-order-number'),
+    (0, roles_decorator_1.Roles)(...lab_role_matrix_1.LAB_ROLE_GROUPS.ORDERS_WORKFLOW),
     __param(0, (0, common_1.Req)()),
     __param(1, (0, common_1.Query)('shiftId')),
     __metadata("design:type", Function),
@@ -216,6 +224,7 @@ __decorate([
 ], OrdersController.prototype, "getNextOrderNumber", null);
 __decorate([
     (0, common_1.Get)('worklist'),
+    (0, roles_decorator_1.Roles)(...lab_role_matrix_1.LAB_ROLE_GROUPS.ORDERS_WORKFLOW),
     __param(0, (0, common_1.Req)()),
     __param(1, (0, common_1.Query)('shiftId')),
     __metadata("design:type", Function),
@@ -224,6 +233,7 @@ __decorate([
 ], OrdersController.prototype, "getWorklist", null);
 __decorate([
     (0, common_1.Post)('worklist'),
+    (0, roles_decorator_1.Roles)(...lab_role_matrix_1.LAB_ROLE_GROUPS.ORDERS_WORKFLOW),
     __param(0, (0, common_1.Req)()),
     __param(1, (0, common_1.Body)()),
     __metadata("design:type", Function),
@@ -232,6 +242,7 @@ __decorate([
 ], OrdersController.prototype, "saveWorklist", null);
 __decorate([
     (0, common_1.Get)('history'),
+    (0, roles_decorator_1.Roles)(...lab_role_matrix_1.LAB_ROLE_GROUPS.ORDERS_HISTORY_READ),
     __param(0, (0, common_1.Req)()),
     __param(1, (0, common_1.Query)('page')),
     __param(2, (0, common_1.Query)('size')),
@@ -248,6 +259,7 @@ __decorate([
 ], OrdersController.prototype, "findHistory", null);
 __decorate([
     (0, common_1.Get)(':id'),
+    (0, roles_decorator_1.Roles)(...lab_role_matrix_1.LAB_ROLE_GROUPS.ORDERS_HISTORY_READ),
     __param(0, (0, common_1.Req)()),
     __param(1, (0, common_1.Param)('id', common_1.ParseUUIDPipe)),
     __param(2, (0, common_1.Query)('view', new common_1.ParseEnumPipe(create_order_response_dto_1.OrderDetailView, { optional: true }))),
@@ -257,6 +269,7 @@ __decorate([
 ], OrdersController.prototype, "findOne", null);
 __decorate([
     (0, common_1.Patch)(':id/payment'),
+    (0, roles_decorator_1.Roles)(...lab_role_matrix_1.LAB_ROLE_GROUPS.ORDERS_WORKFLOW),
     (0, common_1.UsePipes)(new common_1.ValidationPipe({ whitelist: true })),
     __param(0, (0, common_1.Req)()),
     __param(1, (0, common_1.Param)('id', common_1.ParseUUIDPipe)),
@@ -267,6 +280,7 @@ __decorate([
 ], OrdersController.prototype, "updatePayment", null);
 __decorate([
     (0, common_1.Patch)(':id/discount'),
+    (0, roles_decorator_1.Roles)(...lab_role_matrix_1.LAB_ROLE_GROUPS.ORDERS_WORKFLOW),
     (0, common_1.UsePipes)(new common_1.ValidationPipe({ whitelist: true })),
     __param(0, (0, common_1.Req)()),
     __param(1, (0, common_1.Param)('id', common_1.ParseUUIDPipe)),
@@ -277,6 +291,7 @@ __decorate([
 ], OrdersController.prototype, "updateDiscount", null);
 __decorate([
     (0, common_1.Patch)(':id/tests'),
+    (0, roles_decorator_1.Roles)(...lab_role_matrix_1.LAB_ROLE_GROUPS.ORDERS_WORKFLOW),
     (0, common_1.UsePipes)(new common_1.ValidationPipe({ whitelist: true })),
     __param(0, (0, common_1.Req)()),
     __param(1, (0, common_1.Param)('id', common_1.ParseUUIDPipe)),
@@ -287,6 +302,7 @@ __decorate([
 ], OrdersController.prototype, "updateOrderTests", null);
 __decorate([
     (0, common_1.Patch)(':id/delivery-methods'),
+    (0, roles_decorator_1.Roles)(...lab_role_matrix_1.LAB_ROLE_GROUPS.ORDERS_WORKFLOW),
     (0, common_1.UsePipes)(new common_1.ValidationPipe({ whitelist: true })),
     __param(0, (0, common_1.Req)()),
     __param(1, (0, common_1.Param)('id', common_1.ParseUUIDPipe)),
@@ -297,7 +313,7 @@ __decorate([
 ], OrdersController.prototype, "updateOrderDeliveryMethods", null);
 exports.OrdersController = OrdersController = OrdersController_1 = __decorate([
     (0, common_1.Controller)('orders'),
-    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
+    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard, roles_guard_1.RolesGuard),
     __metadata("design:paramtypes", [orders_service_1.OrdersService])
 ], OrdersController);
 //# sourceMappingURL=orders.controller.js.map

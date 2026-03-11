@@ -16,9 +16,12 @@ exports.ReportsController = void 0;
 const common_1 = require("@nestjs/common");
 const reports_service_1 = require("./reports.service");
 const jwt_auth_guard_1 = require("../auth/jwt-auth.guard");
+const roles_guard_1 = require("../auth/roles.guard");
+const roles_decorator_1 = require("../auth/roles.decorator");
 const audit_service_1 = require("../audit/audit.service");
 const audit_log_entity_1 = require("../entities/audit-log.entity");
 const lab_actor_context_1 = require("../types/lab-actor-context");
+const lab_role_matrix_1 = require("../auth/lab-role-matrix");
 let ReportsController = class ReportsController {
     constructor(reportsService, auditService) {
         this.reportsService = reportsService;
@@ -235,7 +238,8 @@ __decorate([
 ], ReportsController.prototype, "logReportDelivery", null);
 exports.ReportsController = ReportsController = __decorate([
     (0, common_1.Controller)('reports'),
-    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
+    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard, roles_guard_1.RolesGuard),
+    (0, roles_decorator_1.Roles)(...lab_role_matrix_1.LAB_ROLE_GROUPS.REPORTS),
     __metadata("design:paramtypes", [reports_service_1.ReportsService,
         audit_service_1.AuditService])
 ], ReportsController);

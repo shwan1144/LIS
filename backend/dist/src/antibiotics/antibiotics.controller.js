@@ -20,6 +20,7 @@ const create_antibiotic_dto_1 = require("./dto/create-antibiotic.dto");
 const update_antibiotic_dto_1 = require("./dto/update-antibiotic.dto");
 const roles_guard_1 = require("../auth/roles.guard");
 const roles_decorator_1 = require("../auth/roles.decorator");
+const lab_role_matrix_1 = require("../auth/lab-role-matrix");
 let AntibioticsController = class AntibioticsController {
     constructor(antibioticsService) {
         this.antibioticsService = antibioticsService;
@@ -59,6 +60,7 @@ let AntibioticsController = class AntibioticsController {
 exports.AntibioticsController = AntibioticsController;
 __decorate([
     (0, common_1.Get)(),
+    (0, roles_decorator_1.Roles)(...lab_role_matrix_1.LAB_ROLE_GROUPS.ANTIBIOTICS_READ),
     __param(0, (0, common_1.Req)()),
     __param(1, (0, common_1.Query)('includeInactive')),
     __metadata("design:type", Function),
@@ -67,6 +69,7 @@ __decorate([
 ], AntibioticsController.prototype, "findAll", null);
 __decorate([
     (0, common_1.Get)(':id'),
+    (0, roles_decorator_1.Roles)(...lab_role_matrix_1.LAB_ROLE_GROUPS.ANTIBIOTICS_READ),
     __param(0, (0, common_1.Req)()),
     __param(1, (0, common_1.Param)('id', common_1.ParseUUIDPipe)),
     __metadata("design:type", Function),
@@ -75,7 +78,7 @@ __decorate([
 ], AntibioticsController.prototype, "findOne", null);
 __decorate([
     (0, common_1.Post)(),
-    (0, roles_decorator_1.Roles)('LAB_ADMIN', 'SUPER_ADMIN'),
+    (0, roles_decorator_1.Roles)(...lab_role_matrix_1.LAB_ROLE_GROUPS.ADMIN),
     (0, common_1.UsePipes)(new common_1.ValidationPipe({ whitelist: true, transform: true })),
     __param(0, (0, common_1.Req)()),
     __param(1, (0, common_1.Body)()),
@@ -85,7 +88,7 @@ __decorate([
 ], AntibioticsController.prototype, "create", null);
 __decorate([
     (0, common_1.Patch)(':id'),
-    (0, roles_decorator_1.Roles)('LAB_ADMIN', 'SUPER_ADMIN'),
+    (0, roles_decorator_1.Roles)(...lab_role_matrix_1.LAB_ROLE_GROUPS.ADMIN),
     (0, common_1.UsePipes)(new common_1.ValidationPipe({ whitelist: true, transform: true })),
     __param(0, (0, common_1.Req)()),
     __param(1, (0, common_1.Param)('id', common_1.ParseUUIDPipe)),
@@ -96,7 +99,7 @@ __decorate([
 ], AntibioticsController.prototype, "update", null);
 __decorate([
     (0, common_1.Delete)(':id'),
-    (0, roles_decorator_1.Roles)('LAB_ADMIN', 'SUPER_ADMIN'),
+    (0, roles_decorator_1.Roles)(...lab_role_matrix_1.LAB_ROLE_GROUPS.ADMIN),
     __param(0, (0, common_1.Req)()),
     __param(1, (0, common_1.Param)('id', common_1.ParseUUIDPipe)),
     __metadata("design:type", Function),

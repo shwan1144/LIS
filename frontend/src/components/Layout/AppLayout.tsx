@@ -5,6 +5,11 @@ import { useEffect, useState } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import { getShifts, type ShiftDto } from '../../api/client';
+import {
+  canAccessPath,
+  getDefaultRouteForRole,
+  isAdminRole,
+} from '../../auth/lab-role-policy';
 
 const { Header, Content, Sider } = AntLayout;
 const { Text } = Typography;
@@ -35,37 +40,68 @@ function getCurrentShiftByTime(shifts: ShiftDto[], now: Date): ShiftDto | null {
   return null;
 }
 
-const ADMIN_ROLES = ['LAB_ADMIN', 'SUPER_ADMIN'];
-
 function getMenuItems(role: string | undefined) {
-  const items: { key: string; icon?: React.ReactNode; label: string; children?: { key: string; label: string }[] }[] = [
-    { key: '/', icon: <DashboardOutlined />, label: 'Dashboard' },
-    { key: '/orders', icon: <FileTextOutlined />, label: 'Orders' },
-    { key: '/worklist', icon: <UnorderedListOutlined />, label: 'Worklist' },
-    { key: '/verification', icon: <CheckCircleOutlined />, label: 'Verification' },
-    { key: '/reports', icon: <FilePdfOutlined />, label: 'Reports' },
-  ];
-  if (role && ADMIN_ROLES.includes(role)) {
-    items.push({ key: '/statistics', icon: <BarChartOutlined />, label: 'Statistics' });
-    items.push({
-      key: 'settings',
-      icon: <SettingOutlined />,
-      label: 'Settings',
-      children: [
-        { key: '/settings/shifts', label: 'Shifts' },
-        { key: '/settings/departments', label: 'Departments' },
-        { key: '/settings/label', label: 'Label & sequence' },
-        { key: '/settings/printing', label: 'Printing' },
-        { key: '/settings/referring-doctors', label: 'Referring doctors' },
-        { key: '/settings/instruments', label: 'Instruments' },
-        { key: '/settings/test-groups', label: 'Test Groups' },
-        { key: '/settings/tests', label: 'Test management' },
-        { key: '/unmatched', label: 'Unmatched Results' },
-        { key: '/settings/audit', label: 'Audit Log' },
-      ],
-    });
+  if (isAdminRole(role)) {
+    return [
+      { key: '/', icon: <DashboardOutlined />, label: 'Dashboard' },
+      { key: '/orders', icon: <FileTextOutlined />, label: 'Orders' },
+      { key: '/worklist', icon: <UnorderedListOutlined />, label: 'Worklist' },
+      { key: '/verification', icon: <CheckCircleOutlined />, label: 'Verification' },
+      { key: '/reports', icon: <FilePdfOutlined />, label: 'Reports' },
+      { key: '/statistics', icon: <BarChartOutlined />, label: 'Statistics' },
+      {
+        key: 'settings',
+        icon: <SettingOutlined />,
+        label: 'Settings',
+        children: [
+          { key: '/settings/shifts', label: 'Shifts' },
+          { key: '/settings/departments', label: 'Departments' },
+          { key: '/settings/label', label: 'Label & sequence' },
+          { key: '/settings/printing', label: 'Printing' },
+          { key: '/settings/referring-doctors', label: 'Referring doctors' },
+          { key: '/settings/instruments', label: 'Instruments' },
+          { key: '/settings/test-groups', label: 'Test Groups' },
+          { key: '/settings/tests', label: 'Test management' },
+          { key: '/unmatched', label: 'Unmatched Results' },
+          { key: '/settings/audit', label: 'Audit Log' },
+        ],
+      },
+    ];
   }
-  return items;
+
+  if (role === 'RECEPTION') {
+    return [
+      { key: '/orders', icon: <FileTextOutlined />, label: 'Orders' },
+      { key: '/patients', icon: <UserOutlined />, label: 'Patients' },
+    ];
+  }
+
+  if (role === 'TECHNICIAN') {
+    return [{ key: '/worklist', icon: <UnorderedListOutlined />, label: 'Worklist' }];
+  }
+
+  if (role === 'VERIFIER') {
+    return [{ key: '/verification', icon: <CheckCircleOutlined />, label: 'Verification' }];
+  }
+
+  if (role === 'DOCTOR') {
+    return [{ key: '/reports', icon: <FilePdfOutlined />, label: 'Reports' }];
+  }
+
+  if (role === 'INSTRUMENT_SERVICE') {
+    return [
+      {
+        key: 'settings',
+        icon: <SettingOutlined />,
+        label: 'Settings',
+        children: [
+          { key: '/settings/instruments', label: 'Instruments' },
+        ],
+      },
+    ];
+  }
+
+  return [];
 }
 
 export function AppLayout() {
@@ -74,8 +110,9 @@ export function AppLayout() {
   const navigate = useNavigate();
   const location = useLocation();
   const [shifts, setShifts] = useState<ShiftDto[]>([]);
-  const menuItems = getMenuItems(user?.role);
-  const isAdmin = user?.role && ADMIN_ROLES.includes(user.role);
+  const role = user?.role;
+  const menuItems = getMenuItems(role);
+  const defaultRoute = getDefaultRouteForRole(role);
   const isImpersonationMode = Boolean(user?.isImpersonation);
 
   useEffect(() => {
@@ -98,13 +135,11 @@ export function AppLayout() {
     return () => clearInterval(interval);
   }, [shifts, setCurrentShift]);
 
-  if (
-    (location.pathname.startsWith('/settings') ||
-      location.pathname === '/statistics' ||
-      location.pathname === '/unmatched') &&
-    !isAdmin
-  ) {
-    return <Navigate to="/" replace />;
+  if (!canAccessPath(role, location.pathname)) {
+    if (location.pathname !== defaultRoute) {
+      return <Navigate to={defaultRoute} replace />;
+    }
+    return <Navigate to="/login" replace />;
   }
 
   const handleLogout = () => {

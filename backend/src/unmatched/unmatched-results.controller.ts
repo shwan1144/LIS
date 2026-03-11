@@ -14,6 +14,7 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { buildLabActorContext } from '../types/lab-actor-context';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
+import { LAB_ROLE_GROUPS } from '../auth/lab-role-matrix';
 
 interface RequestWithUser {
   user: {
@@ -27,6 +28,7 @@ interface RequestWithUser {
 
 @Controller('unmatched-results')
 @UseGuards(JwtAuthGuard, RolesGuard)
+@Roles(...LAB_ROLE_GROUPS.ADMIN)
 export class UnmatchedResultsController {
   constructor(private readonly unmatchedService: UnmatchedResultsService) {}
 
@@ -66,7 +68,6 @@ export class UnmatchedResultsController {
   }
 
   @Post(':id/resolve')
-  @Roles('LAB_ADMIN', 'SUPER_ADMIN')
   async resolve(
     @Req() req: RequestWithUser,
     @Param('id', ParseUUIDPipe) id: string,

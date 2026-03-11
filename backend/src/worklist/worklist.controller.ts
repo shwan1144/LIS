@@ -1,6 +1,7 @@
 import {
   Controller,
   Get,
+  ForbiddenException,
   Patch,
   Post,
   Body,
@@ -19,8 +20,15 @@ import {
   WorklistView,
 } from './worklist.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { RolesGuard } from '../auth/roles.guard';
+import { Roles } from '../auth/roles.decorator';
 import { CultureResultPayload, OrderTestStatus } from '../entities/order-test.entity';
 import { buildLabActorContext } from '../types/lab-actor-context';
+import {
+  assertWorklistModeAllowed,
+  assertWorklistViewAllowed,
+  LAB_ROLE_GROUPS,
+} from '../auth/lab-role-matrix';
 
 interface RequestWithUser {
   user: {
@@ -34,11 +42,12 @@ interface RequestWithUser {
 }
 
 @Controller('worklist')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, RolesGuard)
 export class WorklistController {
   constructor(private readonly worklistService: WorklistService) { }
 
   @Get()
+  @Roles(...LAB_ROLE_GROUPS.WORKLIST_LANE_READ)
   async getWorklist(
     @Req() req: RequestWithUser,
     @Query('status') status?: string,
@@ -52,9 +61,14 @@ export class WorklistController {
   ) {
     const labId = req.user?.labId;
     const actor = buildLabActorContext(req.user);
+    const selectedView = view ?? WorklistView.FULL;
     if (!labId) {
       throw new Error('Lab ID not found in token');
     }
+    if (!req.user?.role) {
+      throw new ForbiddenException('Missing role in token');
+    }
+    assertWorklistViewAllowed(req.user.role, selectedView);
 
     // Parse status filter
     let statuses: OrderTestStatus[] | undefined;
@@ -73,13 +87,14 @@ export class WorklistController {
         departmentId,
         page: page ? parseInt(page, 10) : undefined,
         size: size ? parseInt(size, 10) : undefined,
-        view: view ?? WorklistView.FULL,
+        view: selectedView,
       },
       actor.userId ?? undefined,
     );
   }
 
   @Get('orders')
+  @Roles(...LAB_ROLE_GROUPS.WORKLIST_LANE_READ)
   async getWorklistOrders(
     @Req() req: RequestWithUser,
     @Query('search') search?: string,
@@ -99,9 +114,14 @@ export class WorklistController {
   ) {
     const labId = req.user?.labId;
     const actor = buildLabActorContext(req.user);
+    const selectedMode = mode ?? WorklistOrderMode.ENTRY;
     if (!labId) {
       throw new Error('Lab ID not found in token');
     }
+    if (!req.user?.role) {
+      throw new ForbiddenException('Missing role in token');
+    }
+    assertWorklistModeAllowed(req.user.role, selectedMode);
 
     return this.worklistService.getWorklistOrders(
       labId,
@@ -111,7 +131,7 @@ export class WorklistController {
         departmentId,
         page: page ? parseInt(page, 10) : undefined,
         size: size ? parseInt(size, 10) : undefined,
-        mode: mode ?? WorklistOrderMode.ENTRY,
+        mode: selectedMode,
         entryStatus,
         verificationStatus,
       },
@@ -120,6 +140,7 @@ export class WorklistController {
   }
 
   @Get('orders/:orderId/tests')
+  @Roles(...LAB_ROLE_GROUPS.WORKLIST_LANE_READ)
   async getWorklistOrderTests(
     @Req() req: RequestWithUser,
     @Param('orderId', ParseUUIDPipe) orderId: string,
@@ -129,22 +150,28 @@ export class WorklistController {
   ) {
     const labId = req.user?.labId;
     const actor = buildLabActorContext(req.user);
+    const selectedMode = mode ?? WorklistOrderMode.ENTRY;
     if (!labId) {
       throw new Error('Lab ID not found in token');
     }
+    if (!req.user?.role) {
+      throw new ForbiddenException('Missing role in token');
+    }
+    assertWorklistModeAllowed(req.user.role, selectedMode);
 
     return this.worklistService.getWorklistOrderTests(
       orderId,
       labId,
       {
         departmentId,
-        mode: mode ?? WorklistOrderMode.ENTRY,
+        mode: selectedMode,
       },
       actor.userId ?? undefined,
     );
   }
 
   @Get('culture-entry-history')
+  @Roles(...LAB_ROLE_GROUPS.WORKLIST_LANE_READ)
   async getCultureEntryHistory(@Req() req: RequestWithUser) {
     const labId = req.user?.labId;
     if (!labId) {
@@ -154,6 +181,7 @@ export class WorklistController {
   }
 
   @Get(':id/detail')
+  @Roles(...LAB_ROLE_GROUPS.WORKLIST_LANE_READ)
   async getWorklistItemDetail(
     @Req() req: RequestWithUser,
     @Param('id', ParseUUIDPipe) id: string,
@@ -167,6 +195,7 @@ export class WorklistController {
   }
 
   @Get('stats')
+  @Roles(...LAB_ROLE_GROUPS.WORKLIST_STATS_READ)
   async getStats(@Req() req: RequestWithUser) {
     const labId = req.user?.labId;
     if (!labId) {
@@ -176,6 +205,7 @@ export class WorklistController {
   }
 
   @Patch(':id/result')
+  @Roles(...LAB_ROLE_GROUPS.WORKLIST_ENTRY)
   async enterResult(
     @Req() req: RequestWithUser,
     @Param('id', ParseUUIDPipe) id: string,
@@ -198,6 +228,7 @@ export class WorklistController {
   }
 
   @Patch('batch-result')
+  @Roles(...LAB_ROLE_GROUPS.WORKLIST_ENTRY)
   async batchEnterResults(
     @Req() req: RequestWithUser,
     @Body()
@@ -222,6 +253,7 @@ export class WorklistController {
   }
 
   @Patch(':id/verify')
+  @Roles(...LAB_ROLE_GROUPS.WORKLIST_VERIFY)
   async verifyResult(
     @Req() req: RequestWithUser,
     @Param('id', ParseUUIDPipe) id: string,
@@ -235,6 +267,7 @@ export class WorklistController {
   }
 
   @Post('verify-multiple')
+  @Roles(...LAB_ROLE_GROUPS.WORKLIST_VERIFY)
   async verifyMultiple(
     @Req() req: RequestWithUser,
     @Body() body: { ids: string[] },
@@ -248,6 +281,7 @@ export class WorklistController {
   }
 
   @Patch(':id/reject')
+  @Roles(...LAB_ROLE_GROUPS.WORKLIST_VERIFY)
   async rejectResult(
     @Req() req: RequestWithUser,
     @Param('id', ParseUUIDPipe) id: string,

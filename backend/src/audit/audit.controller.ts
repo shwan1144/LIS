@@ -7,14 +7,18 @@ import {
 } from '@nestjs/common';
 import { AuditService } from './audit.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { RolesGuard } from '../auth/roles.guard';
+import { Roles } from '../auth/roles.decorator';
 import { AuditAction } from '../entities/audit-log.entity';
+import { LAB_ROLE_GROUPS } from '../auth/lab-role-matrix';
 
 interface RequestWithUser {
   user: { userId: string; username: string; labId: string };
 }
 
 @Controller('audit')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, RolesGuard)
+@Roles(...LAB_ROLE_GROUPS.ADMIN)
 export class AuditController {
   constructor(private readonly auditService: AuditService) {}
 

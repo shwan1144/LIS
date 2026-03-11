@@ -20,6 +20,7 @@ const update_test_dto_1 = require("./dto/update-test.dto");
 const jwt_auth_guard_1 = require("../auth/jwt-auth.guard");
 const roles_guard_1 = require("../auth/roles.guard");
 const roles_decorator_1 = require("../auth/roles.decorator");
+const lab_role_matrix_1 = require("../auth/lab-role-matrix");
 let TestsController = class TestsController {
     constructor(testsService) {
         this.testsService = testsService;
@@ -114,6 +115,7 @@ let TestsController = class TestsController {
 exports.TestsController = TestsController;
 __decorate([
     (0, common_1.Get)(),
+    (0, roles_decorator_1.Roles)(...lab_role_matrix_1.LAB_ROLE_GROUPS.TESTS_READ),
     __param(0, (0, common_1.Req)()),
     __param(1, (0, common_1.Query)('active')),
     __metadata("design:type", Function),
@@ -122,7 +124,7 @@ __decorate([
 ], TestsController.prototype, "findAll", null);
 __decorate([
     (0, common_1.Post)('seed/all'),
-    (0, roles_decorator_1.Roles)('LAB_ADMIN', 'SUPER_ADMIN'),
+    (0, roles_decorator_1.Roles)(...lab_role_matrix_1.LAB_ROLE_GROUPS.ADMIN),
     __param(0, (0, common_1.Req)()),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [Object]),
@@ -130,7 +132,7 @@ __decorate([
 ], TestsController.prototype, "seedAll", null);
 __decorate([
     (0, common_1.Post)('seed/cbc'),
-    (0, roles_decorator_1.Roles)('LAB_ADMIN', 'SUPER_ADMIN'),
+    (0, roles_decorator_1.Roles)(...lab_role_matrix_1.LAB_ROLE_GROUPS.ADMIN),
     __param(0, (0, common_1.Req)()),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [Object]),
@@ -138,7 +140,7 @@ __decorate([
 ], TestsController.prototype, "seedCBC", null);
 __decorate([
     (0, common_1.Post)('seed/chemistry'),
-    (0, roles_decorator_1.Roles)('LAB_ADMIN', 'SUPER_ADMIN'),
+    (0, roles_decorator_1.Roles)(...lab_role_matrix_1.LAB_ROLE_GROUPS.ADMIN),
     __param(0, (0, common_1.Req)()),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [Object]),
@@ -146,7 +148,7 @@ __decorate([
 ], TestsController.prototype, "seedChemistry", null);
 __decorate([
     (0, common_1.Post)('seed/urinalysis'),
-    (0, roles_decorator_1.Roles)('LAB_ADMIN', 'SUPER_ADMIN'),
+    (0, roles_decorator_1.Roles)(...lab_role_matrix_1.LAB_ROLE_GROUPS.ADMIN),
     __param(0, (0, common_1.Req)()),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [Object]),
@@ -154,6 +156,7 @@ __decorate([
 ], TestsController.prototype, "seedUrinalysis", null);
 __decorate([
     (0, common_1.Get)(':id/pricing'),
+    (0, roles_decorator_1.Roles)(...lab_role_matrix_1.LAB_ROLE_GROUPS.TESTS_READ),
     __param(0, (0, common_1.Req)()),
     __param(1, (0, common_1.Param)('id', common_1.ParseUUIDPipe)),
     __metadata("design:type", Function),
@@ -162,7 +165,7 @@ __decorate([
 ], TestsController.prototype, "getPricing", null);
 __decorate([
     (0, common_1.Patch)(':id/pricing'),
-    (0, roles_decorator_1.Roles)('LAB_ADMIN', 'SUPER_ADMIN'),
+    (0, roles_decorator_1.Roles)(...lab_role_matrix_1.LAB_ROLE_GROUPS.ADMIN),
     __param(0, (0, common_1.Req)()),
     __param(1, (0, common_1.Param)('id', common_1.ParseUUIDPipe)),
     __param(2, (0, common_1.Body)()),
@@ -172,6 +175,7 @@ __decorate([
 ], TestsController.prototype, "setPricing", null);
 __decorate([
     (0, common_1.Get)(':id'),
+    (0, roles_decorator_1.Roles)(...lab_role_matrix_1.LAB_ROLE_GROUPS.TESTS_READ),
     __param(0, (0, common_1.Req)()),
     __param(1, (0, common_1.Param)('id', common_1.ParseUUIDPipe)),
     __metadata("design:type", Function),
@@ -180,7 +184,7 @@ __decorate([
 ], TestsController.prototype, "findOne", null);
 __decorate([
     (0, common_1.Post)(),
-    (0, roles_decorator_1.Roles)('LAB_ADMIN', 'SUPER_ADMIN'),
+    (0, roles_decorator_1.Roles)(...lab_role_matrix_1.LAB_ROLE_GROUPS.ADMIN),
     (0, common_1.UsePipes)(new common_1.ValidationPipe({ whitelist: true, transform: true })),
     __param(0, (0, common_1.Req)()),
     __param(1, (0, common_1.Body)()),
@@ -190,7 +194,7 @@ __decorate([
 ], TestsController.prototype, "create", null);
 __decorate([
     (0, common_1.Patch)(':id'),
-    (0, roles_decorator_1.Roles)('LAB_ADMIN', 'SUPER_ADMIN'),
+    (0, roles_decorator_1.Roles)(...lab_role_matrix_1.LAB_ROLE_GROUPS.ADMIN),
     (0, common_1.UsePipes)(new common_1.ValidationPipe({ whitelist: true, transform: true })),
     __param(0, (0, common_1.Req)()),
     __param(1, (0, common_1.Param)('id', common_1.ParseUUIDPipe)),
@@ -201,7 +205,7 @@ __decorate([
 ], TestsController.prototype, "update", null);
 __decorate([
     (0, common_1.Delete)(':id'),
-    (0, roles_decorator_1.Roles)('LAB_ADMIN', 'SUPER_ADMIN'),
+    (0, roles_decorator_1.Roles)(...lab_role_matrix_1.LAB_ROLE_GROUPS.ADMIN),
     __param(0, (0, common_1.Req)()),
     __param(1, (0, common_1.Param)('id', common_1.ParseUUIDPipe)),
     __metadata("design:type", Function),
@@ -210,7 +214,7 @@ __decorate([
 ], TestsController.prototype, "delete", null);
 __decorate([
     (0, common_1.Patch)(':id/toggle-active'),
-    (0, roles_decorator_1.Roles)('LAB_ADMIN', 'SUPER_ADMIN'),
+    (0, roles_decorator_1.Roles)(...lab_role_matrix_1.LAB_ROLE_GROUPS.ADMIN),
     __param(0, (0, common_1.Req)()),
     __param(1, (0, common_1.Param)('id', common_1.ParseUUIDPipe)),
     __metadata("design:type", Function),

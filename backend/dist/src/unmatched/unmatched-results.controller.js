@@ -19,6 +19,7 @@ const jwt_auth_guard_1 = require("../auth/jwt-auth.guard");
 const lab_actor_context_1 = require("../types/lab-actor-context");
 const roles_guard_1 = require("../auth/roles.guard");
 const roles_decorator_1 = require("../auth/roles.decorator");
+const lab_role_matrix_1 = require("../auth/lab-role-matrix");
 let UnmatchedResultsController = class UnmatchedResultsController {
     constructor(unmatchedService) {
         this.unmatchedService = unmatchedService;
@@ -85,7 +86,6 @@ __decorate([
 ], UnmatchedResultsController.prototype, "findOne", null);
 __decorate([
     (0, common_1.Post)(':id/resolve'),
-    (0, roles_decorator_1.Roles)('LAB_ADMIN', 'SUPER_ADMIN'),
     __param(0, (0, common_1.Req)()),
     __param(1, (0, common_1.Param)('id', common_1.ParseUUIDPipe)),
     __param(2, (0, common_1.Body)()),
@@ -96,6 +96,7 @@ __decorate([
 exports.UnmatchedResultsController = UnmatchedResultsController = __decorate([
     (0, common_1.Controller)('unmatched-results'),
     (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard, roles_guard_1.RolesGuard),
+    (0, roles_decorator_1.Roles)(...lab_role_matrix_1.LAB_ROLE_GROUPS.ADMIN),
     __metadata("design:paramtypes", [unmatched_results_service_1.UnmatchedResultsService])
 ], UnmatchedResultsController);
 //# sourceMappingURL=unmatched-results.controller.js.map

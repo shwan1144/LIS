@@ -83,6 +83,7 @@ import {
 } from '../printing/direct-print';
 import { formatDateKeyForTimeZone } from '../utils/lab-timezone';
 import { buildKeyboardSearchVariants } from '../utils/keyboard-map';
+import { canAccessAction } from '../auth/lab-role-policy';
 import './OrdersPage.css';
 
 const { Title, Text } = Typography;
@@ -513,8 +514,7 @@ export function OrdersPage() {
   const patientPickerModalBusy = patientCreateSubmitting || patientEditSubmitting;
   const canAdminOverrideLockedTestRemoval =
     Boolean(user?.isImpersonation) ||
-    user?.role === 'LAB_ADMIN' ||
-    user?.role === 'SUPER_ADMIN';
+    canAccessAction(user?.role, 'orders.force_remove_locked_tests');
   const editTestsOrderNumber =
     selectedCreatedOrder?.orderNumber ?? selectedCreatedOrderSummary?.orderNumber ?? null;
 

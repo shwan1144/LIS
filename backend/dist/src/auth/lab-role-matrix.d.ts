@@ -1,0 +1,26 @@
+export declare const LAB_ROLES: readonly ["SUPER_ADMIN", "LAB_ADMIN", "RECEPTION", "TECHNICIAN", "VERIFIER", "DOCTOR", "INSTRUMENT_SERVICE"];
+export type LabRole = (typeof LAB_ROLES)[number];
+export declare const LAB_ROLE_GROUPS: {
+    readonly ADMIN: readonly ["LAB_ADMIN", "SUPER_ADMIN"];
+    readonly ORDERS_WORKFLOW: readonly ["RECEPTION", "LAB_ADMIN", "SUPER_ADMIN"];
+    readonly ORDERS_HISTORY_READ: readonly ["DOCTOR", "RECEPTION", "LAB_ADMIN", "SUPER_ADMIN"];
+    readonly PATIENTS: readonly ["RECEPTION", "LAB_ADMIN", "SUPER_ADMIN"];
+    readonly WORKLIST_ENTRY: readonly ["TECHNICIAN", "LAB_ADMIN", "SUPER_ADMIN"];
+    readonly WORKLIST_VERIFY: readonly ["VERIFIER", "LAB_ADMIN", "SUPER_ADMIN"];
+    readonly WORKLIST_LANE_READ: readonly ["TECHNICIAN", "VERIFIER", "LAB_ADMIN", "SUPER_ADMIN"];
+    readonly WORKLIST_STATS_READ: readonly ["TECHNICIAN", "VERIFIER", "DOCTOR", "LAB_ADMIN", "SUPER_ADMIN"];
+    readonly REPORTS: readonly ["DOCTOR", "LAB_ADMIN", "SUPER_ADMIN"];
+    readonly INSTRUMENTS: readonly ["INSTRUMENT_SERVICE", "LAB_ADMIN", "SUPER_ADMIN"];
+    readonly TESTS_READ: readonly ["RECEPTION", "INSTRUMENT_SERVICE", "LAB_ADMIN", "SUPER_ADMIN"];
+    readonly DEPARTMENTS_READ: readonly ["RECEPTION", "TECHNICIAN", "VERIFIER", "LAB_ADMIN", "SUPER_ADMIN"];
+    readonly SHIFTS_READ: readonly ["RECEPTION", "LAB_ADMIN", "SUPER_ADMIN"];
+    readonly ANTIBIOTICS_READ: readonly ["TECHNICIAN", "VERIFIER", "LAB_ADMIN", "SUPER_ADMIN"];
+    readonly SETTINGS_LAB_READ: readonly ["RECEPTION", "DOCTOR", "LAB_ADMIN", "SUPER_ADMIN"];
+};
+export type WorklistLane = 'entry' | 'verify';
+export declare function hasLabRole(role: string | null | undefined, allowedRoles: readonly string[]): boolean;
+export declare function resolveWorklistLaneFromMode(mode: string | null | undefined): WorklistLane;
+export declare function resolveWorklistLaneFromView(view: string | null | undefined): WorklistLane;
+export declare function canAccessWorklistLane(role: string | null | undefined, lane: WorklistLane): boolean;
+export declare function assertWorklistModeAllowed(role: string | null | undefined, mode: string | null | undefined): void;
+export declare function assertWorklistViewAllowed(role: string | null | undefined, view: string | null | undefined): void;

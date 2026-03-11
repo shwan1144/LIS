@@ -166,9 +166,7 @@ async function ensureReportBrandingColumns(dataSource: DataSource): Promise<void
     'ALTER TABLE IF EXISTS "labs" ADD COLUMN IF NOT EXISTS "labelsPrinterName" varchar(128)',
     'ALTER TABLE IF EXISTS "labs" ADD COLUMN IF NOT EXISTS "reportPrinterName" varchar(128)',
     'ALTER TABLE IF EXISTS "labs" ADD COLUMN IF NOT EXISTS "uiTestGroups" jsonb',
-    `ALTER TABLE IF EXISTS "labs" ADD COLUMN IF NOT EXISTS "cultureEntryHistory" jsonb NOT NULL DEFAULT '{}'::jsonb`,
     `UPDATE "labs" SET "printMethod" = 'browser' WHERE "printMethod" IS NULL`,
-    `UPDATE "labs" SET "cultureEntryHistory" = '{}'::jsonb WHERE "cultureEntryHistory" IS NULL`,
     `
       DO $$
       BEGIN
@@ -795,12 +793,11 @@ async function bootstrap() {
           styleSrc: ["'self'", "'unsafe-inline'"],
           imgSrc: ["'self'", 'data:'],
           objectSrc: ["'none'"],
-          frameAncestors: ["*"],
+          frameAncestors: ["'none'"],
           baseUri: ["'self'"],
         },
       },
       crossOriginEmbedderPolicy: false,
-      frameguard: false,
     }),
   );
   const apiBodyLimit = resolveApiBodyLimit();

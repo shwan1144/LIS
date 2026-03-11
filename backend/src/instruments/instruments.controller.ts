@@ -20,6 +20,7 @@ import {
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
+import { LAB_ROLE_GROUPS } from '../auth/lab-role-matrix';
 
 interface RequestWithUser {
   user: { userId: string; username: string; labId: string };
@@ -27,6 +28,7 @@ interface RequestWithUser {
 
 @Controller('instruments')
 @UseGuards(JwtAuthGuard, RolesGuard)
+@Roles(...LAB_ROLE_GROUPS.INSTRUMENTS)
 export class InstrumentsController {
   constructor(private readonly instrumentsService: InstrumentsService) {}
 
@@ -55,7 +57,6 @@ export class InstrumentsController {
   }
 
   @Post()
-  @Roles('LAB_ADMIN', 'SUPER_ADMIN')
   async create(@Req() req: RequestWithUser, @Body() dto: CreateInstrumentDto) {
     const labId = req.user?.labId;
     if (!labId) throw new Error('Lab ID not found');
@@ -63,7 +64,6 @@ export class InstrumentsController {
   }
 
   @Patch(':id')
-  @Roles('LAB_ADMIN', 'SUPER_ADMIN')
   async update(
     @Req() req: RequestWithUser,
     @Param('id', ParseUUIDPipe) id: string,
@@ -75,7 +75,6 @@ export class InstrumentsController {
   }
 
   @Delete(':id')
-  @Roles('LAB_ADMIN', 'SUPER_ADMIN')
   async delete(@Req() req: RequestWithUser, @Param('id', ParseUUIDPipe) id: string) {
     const labId = req.user?.labId;
     if (!labId) throw new Error('Lab ID not found');
@@ -83,7 +82,6 @@ export class InstrumentsController {
   }
 
   @Patch(':id/toggle-active')
-  @Roles('LAB_ADMIN', 'SUPER_ADMIN')
   async toggleActive(@Req() req: RequestWithUser, @Param('id', ParseUUIDPipe) id: string) {
     const labId = req.user?.labId;
     if (!labId) throw new Error('Lab ID not found');
@@ -91,7 +89,6 @@ export class InstrumentsController {
   }
 
   @Post(':id/restart')
-  @Roles('LAB_ADMIN', 'SUPER_ADMIN')
   async restartConnection(@Req() req: RequestWithUser, @Param('id', ParseUUIDPipe) id: string) {
     const labId = req.user?.labId;
     if (!labId) throw new Error('Lab ID not found');
@@ -100,7 +97,6 @@ export class InstrumentsController {
   }
 
   @Post(':id/send-test-order')
-  @Roles('LAB_ADMIN', 'SUPER_ADMIN')
   async sendTestOrder(
     @Req() req: RequestWithUser,
     @Param('id', ParseUUIDPipe) id: string,
@@ -120,7 +116,6 @@ export class InstrumentsController {
   }
 
   @Post(':id/mappings')
-  @Roles('LAB_ADMIN', 'SUPER_ADMIN')
   async createMapping(
     @Req() req: RequestWithUser,
     @Param('id', ParseUUIDPipe) id: string,
@@ -132,7 +127,6 @@ export class InstrumentsController {
   }
 
   @Patch(':id/mappings/:mappingId')
-  @Roles('LAB_ADMIN', 'SUPER_ADMIN')
   async updateMapping(
     @Req() req: RequestWithUser,
     @Param('id', ParseUUIDPipe) id: string,
@@ -145,7 +139,6 @@ export class InstrumentsController {
   }
 
   @Delete(':id/mappings/:mappingId')
-  @Roles('LAB_ADMIN', 'SUPER_ADMIN')
   async deleteMapping(
     @Req() req: RequestWithUser,
     @Param('id', ParseUUIDPipe) id: string,
@@ -176,7 +169,6 @@ export class InstrumentsController {
 
   // Simulate receiving a message (for testing)
   @Post(':id/simulate')
-  @Roles('LAB_ADMIN', 'SUPER_ADMIN')
   async simulateMessage(
     @Req() req: RequestWithUser,
     @Param('id', ParseUUIDPipe) id: string,

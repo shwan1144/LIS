@@ -16,7 +16,10 @@ exports.AuditController = void 0;
 const common_1 = require("@nestjs/common");
 const audit_service_1 = require("./audit.service");
 const jwt_auth_guard_1 = require("../auth/jwt-auth.guard");
+const roles_guard_1 = require("../auth/roles.guard");
+const roles_decorator_1 = require("../auth/roles.decorator");
 const audit_log_entity_1 = require("../entities/audit-log.entity");
+const lab_role_matrix_1 = require("../auth/lab-role-matrix");
 let AuditController = class AuditController {
     constructor(auditService) {
         this.auditService = auditService;
@@ -86,7 +89,8 @@ __decorate([
 ], AuditController.prototype, "getEntityTypes", null);
 exports.AuditController = AuditController = __decorate([
     (0, common_1.Controller)('audit'),
-    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
+    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard, roles_guard_1.RolesGuard),
+    (0, roles_decorator_1.Roles)(...lab_role_matrix_1.LAB_ROLE_GROUPS.ADMIN),
     __metadata("design:paramtypes", [audit_service_1.AuditService])
 ], AuditController);
 //# sourceMappingURL=audit.controller.js.map

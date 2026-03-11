@@ -26,8 +26,11 @@ import {
   OrderResultStatus,
 } from './dto/create-order-response.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { RolesGuard } from '../auth/roles.guard';
+import { Roles } from '../auth/roles.decorator';
 import { OrderStatus } from '../entities/order.entity';
 import { buildLabActorContext } from '../types/lab-actor-context';
+import { LAB_ROLE_GROUPS } from '../auth/lab-role-matrix';
 
 interface RequestWithUser {
   user: {
@@ -41,13 +44,14 @@ interface RequestWithUser {
 }
 
 @Controller('orders')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, RolesGuard)
 export class OrdersController {
   private readonly logger = new Logger(OrdersController.name);
 
   constructor(private readonly ordersService: OrdersService) {}
 
   @Post()
+  @Roles(...LAB_ROLE_GROUPS.ORDERS_WORKFLOW)
   @UsePipes(new ValidationPipe({ whitelist: true }))
   async create(
     @Req() req: RequestWithUser,
@@ -77,6 +81,7 @@ export class OrdersController {
   }
 
   @Get()
+  @Roles(...LAB_ROLE_GROUPS.ORDERS_WORKFLOW)
   async findAll(
     @Req() req: RequestWithUser,
     @Query('page') page?: string,
@@ -105,6 +110,7 @@ export class OrdersController {
   }
 
   @Get('estimate-price')
+  @Roles(...LAB_ROLE_GROUPS.ORDERS_WORKFLOW)
   async estimatePrice(
     @Req() req: RequestWithUser,
     @Query('testIds') testIds?: string,
@@ -119,6 +125,7 @@ export class OrdersController {
   }
 
   @Get('today-patients')
+  @Roles(...LAB_ROLE_GROUPS.ORDERS_WORKFLOW)
   async getTodayPatients(@Req() req: RequestWithUser) {
     const labId = req.user?.labId;
     if (!labId) {
@@ -128,6 +135,7 @@ export class OrdersController {
   }
 
   @Get('next-order-number')
+  @Roles(...LAB_ROLE_GROUPS.ORDERS_WORKFLOW)
   async getNextOrderNumber(@Req() req: RequestWithUser, @Query('shiftId') shiftId?: string) {
     const labId = req.user?.labId;
     if (!labId) {
@@ -138,6 +146,7 @@ export class OrdersController {
   }
 
   @Get('worklist')
+  @Roles(...LAB_ROLE_GROUPS.ORDERS_WORKFLOW)
   async getWorklist(@Req() req: RequestWithUser, @Query('shiftId') shiftId?: string) {
     const labId = req.user?.labId;
     if (!labId) {
@@ -147,6 +156,7 @@ export class OrdersController {
   }
 
   @Post('worklist')
+  @Roles(...LAB_ROLE_GROUPS.ORDERS_WORKFLOW)
   async saveWorklist(
     @Req() req: RequestWithUser,
     @Body() body: { shiftId?: string; items: { rowId: string; patientId: string; orderId?: string }[] },
@@ -161,6 +171,7 @@ export class OrdersController {
   }
 
   @Get('history')
+  @Roles(...LAB_ROLE_GROUPS.ORDERS_HISTORY_READ)
   async findHistory(
     @Req() req: RequestWithUser,
     @Query('page') page?: string,
@@ -192,6 +203,7 @@ export class OrdersController {
   }
 
   @Get(':id')
+  @Roles(...LAB_ROLE_GROUPS.ORDERS_HISTORY_READ)
   async findOne(
     @Req() req: RequestWithUser,
     @Param('id', ParseUUIDPipe) id: string,
@@ -206,6 +218,7 @@ export class OrdersController {
   }
 
   @Patch(':id/payment')
+  @Roles(...LAB_ROLE_GROUPS.ORDERS_WORKFLOW)
   @UsePipes(new ValidationPipe({ whitelist: true }))
   async updatePayment(
     @Req() req: RequestWithUser,
@@ -223,6 +236,7 @@ export class OrdersController {
   }
 
   @Patch(':id/discount')
+  @Roles(...LAB_ROLE_GROUPS.ORDERS_WORKFLOW)
   @UsePipes(new ValidationPipe({ whitelist: true }))
   async updateDiscount(
     @Req() req: RequestWithUser,
@@ -237,6 +251,7 @@ export class OrdersController {
   }
 
   @Patch(':id/tests')
+  @Roles(...LAB_ROLE_GROUPS.ORDERS_WORKFLOW)
   @UsePipes(new ValidationPipe({ whitelist: true }))
   async updateOrderTests(
     @Req() req: RequestWithUser,
@@ -255,6 +270,7 @@ export class OrdersController {
   }
 
   @Patch(':id/delivery-methods')
+  @Roles(...LAB_ROLE_GROUPS.ORDERS_WORKFLOW)
   @UsePipes(new ValidationPipe({ whitelist: true }))
   async updateOrderDeliveryMethods(
     @Req() req: RequestWithUser,

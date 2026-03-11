@@ -19,6 +19,7 @@ import { CreateAntibioticDto } from './dto/create-antibiotic.dto';
 import { UpdateAntibioticDto } from './dto/update-antibiotic.dto';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
+import { LAB_ROLE_GROUPS } from '../auth/lab-role-matrix';
 
 interface RequestWithUser {
   user: { userId: string; username: string; labId: string };
@@ -30,6 +31,7 @@ export class AntibioticsController {
   constructor(private readonly antibioticsService: AntibioticsService) {}
 
   @Get()
+  @Roles(...LAB_ROLE_GROUPS.ANTIBIOTICS_READ)
   async findAll(
     @Req() req: RequestWithUser,
     @Query('includeInactive') includeInactive?: string,
@@ -40,6 +42,7 @@ export class AntibioticsController {
   }
 
   @Get(':id')
+  @Roles(...LAB_ROLE_GROUPS.ANTIBIOTICS_READ)
   async findOne(@Req() req: RequestWithUser, @Param('id', ParseUUIDPipe) id: string) {
     const labId = req.user?.labId;
     if (!labId) throw new Error('Lab ID not found in token');
@@ -47,7 +50,7 @@ export class AntibioticsController {
   }
 
   @Post()
-  @Roles('LAB_ADMIN', 'SUPER_ADMIN')
+  @Roles(...LAB_ROLE_GROUPS.ADMIN)
   @UsePipes(new ValidationPipe({ whitelist: true, transform: true }))
   async create(@Req() req: RequestWithUser, @Body() dto: CreateAntibioticDto) {
     const labId = req.user?.labId;
@@ -56,7 +59,7 @@ export class AntibioticsController {
   }
 
   @Patch(':id')
-  @Roles('LAB_ADMIN', 'SUPER_ADMIN')
+  @Roles(...LAB_ROLE_GROUPS.ADMIN)
   @UsePipes(new ValidationPipe({ whitelist: true, transform: true }))
   async update(
     @Req() req: RequestWithUser,
@@ -69,7 +72,7 @@ export class AntibioticsController {
   }
 
   @Delete(':id')
-  @Roles('LAB_ADMIN', 'SUPER_ADMIN')
+  @Roles(...LAB_ROLE_GROUPS.ADMIN)
   async remove(@Req() req: RequestWithUser, @Param('id', ParseUUIDPipe) id: string) {
     const labId = req.user?.labId;
     if (!labId) throw new Error('Lab ID not found in token');

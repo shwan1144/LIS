@@ -17,6 +17,7 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
 import type { ReportStyleConfig } from '../reports/report-style.config';
+import { LAB_ROLE_GROUPS } from '../auth/lab-role-matrix';
 
 interface RequestWithUser {
   user: { userId: string; username: string; labId: string; role: string };
@@ -24,11 +25,11 @@ interface RequestWithUser {
 
 @Controller('settings')
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles('LAB_ADMIN', 'SUPER_ADMIN')
 export class SettingsController {
   constructor(private readonly settingsService: SettingsService) { }
 
   @Get('roles')
+  @Roles(...LAB_ROLE_GROUPS.ADMIN)
   getRoles() {
     throw new ForbiddenException(
       'Lab user management moved to admin panel. Use admin endpoints.',
@@ -36,6 +37,7 @@ export class SettingsController {
   }
 
   @Get('lab')
+  @Roles(...LAB_ROLE_GROUPS.SETTINGS_LAB_READ)
   async getLabSettings(@Req() req: RequestWithUser) {
     const labId = req.user?.labId;
     if (!labId) throw new Error('Lab ID not found in token');
@@ -43,6 +45,7 @@ export class SettingsController {
   }
 
   @Patch('lab')
+  @Roles(...LAB_ROLE_GROUPS.ADMIN)
   async updateLabSettings(
     @Req() req: RequestWithUser,
     @Body()
@@ -101,6 +104,7 @@ export class SettingsController {
   }
 
   @Get('users')
+  @Roles(...LAB_ROLE_GROUPS.ADMIN)
   async getUsers(@Req() req: RequestWithUser) {
     throw new ForbiddenException(
       'Lab user management moved to admin panel. Use admin endpoints.',
@@ -108,6 +112,7 @@ export class SettingsController {
   }
 
   @Get('users/:id')
+  @Roles(...LAB_ROLE_GROUPS.ADMIN)
   async getUser(@Req() req: RequestWithUser, @Param('id', ParseUUIDPipe) id: string) {
     throw new ForbiddenException(
       'Lab user management moved to admin panel. Use admin endpoints.',
@@ -115,6 +120,7 @@ export class SettingsController {
   }
 
   @Post('users')
+  @Roles(...LAB_ROLE_GROUPS.ADMIN)
   async createUser(@Req() req: RequestWithUser, @Body() body: {
     username: string;
     password: string;
@@ -130,6 +136,7 @@ export class SettingsController {
   }
 
   @Patch('users/:id')
+  @Roles(...LAB_ROLE_GROUPS.ADMIN)
   async updateUser(
     @Req() req: RequestWithUser,
     @Param('id', ParseUUIDPipe) id: string,
@@ -150,6 +157,7 @@ export class SettingsController {
   }
 
   @Delete('users/:id')
+  @Roles(...LAB_ROLE_GROUPS.ADMIN)
   async deleteUser(
     @Req() req: RequestWithUser,
     @Param('id', ParseUUIDPipe) id: string,

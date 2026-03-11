@@ -44,7 +44,6 @@ export interface PublicResultTestItem {
   resultValue: string | null;
   unit: string | null;
   verifiedAt: string | null;
-  expectedCompletionMinutes: number | null;
 }
 
 export interface PublicResultStatus {
@@ -550,17 +549,8 @@ export class ReportsService implements OnModuleInit, OnModuleDestroy {
   }
 
   private resolveOrderQrValue(order: Order): string {
-    const orderId = encodeURIComponent(order.id);
-
-    // Prefer lab-specific subdomain URL (e.g. labname.medilis.net)
-    const labSubdomain = (order.lab as { subdomain?: string | null } | undefined)?.subdomain?.trim().toLowerCase();
-    const baseDomain = String(process.env.APP_BASE_DOMAIN ?? '').trim().toLowerCase();
-    if (labSubdomain && baseDomain) {
-      return `https://${labSubdomain}.${baseDomain}/public/results/${orderId}`;
-    }
-
-    // Fallback to API-based URL
     const baseUrl = this.resolvePublicResultsBaseUrl();
+    const orderId = encodeURIComponent(order.id);
     return `${baseUrl}/public/results/${orderId}`;
   }
 
@@ -1076,7 +1066,6 @@ export class ReportsService implements OnModuleInit, OnModuleDestroy {
           resultValue,
           unit: test?.unit || null,
           verifiedAt: ot.verifiedAt ? ot.verifiedAt.toISOString() : null,
-          expectedCompletionMinutes: typeof test?.expectedCompletionMinutes === 'number' ? test.expectedCompletionMinutes : null,
         };
       })
       .sort((a, b) => {

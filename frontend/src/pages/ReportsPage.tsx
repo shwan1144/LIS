@@ -339,20 +339,7 @@ function buildResultsMessage(
   const displayLabName = (labName ?? '').trim() || 'تاقیگەی ئێمە';
 
   const apiBase = (import.meta.env.VITE_API_URL || window.location.origin).replace(/\/+$/, '');
-  let resultUrl: string;
-  const labSubdomain = (order.lab as { subdomain?: string | null } | undefined)?.subdomain?.trim().toLowerCase();
-  if (labSubdomain) {
-    try {
-      const apiUrl = new URL(apiBase);
-      const apiHost = apiUrl.hostname.toLowerCase();
-      const baseDomain = apiHost.startsWith('api.') ? apiHost.slice(4) : apiHost;
-      resultUrl = `https://${labSubdomain}.${baseDomain}/public/results/${order.id}`;
-    } catch {
-      resultUrl = `${apiBase}/public/results/${order.id}`;
-    }
-  } else {
-    resultUrl = `${apiBase}/public/results/${order.id}`;
-  }
+  const resultUrl = `${apiBase}/public/results/${order.id}`;
 
   return [
     `سڵاو بەێز ${patientName}`,

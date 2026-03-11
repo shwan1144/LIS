@@ -57,6 +57,7 @@ import {
   buildWorklistOrderGroups,
   type WorklistOrderGroupSummary,
 } from './worklistGrouping';
+import { canAccessAction } from '../auth/lab-role-policy';
 import './QueuePages.css';
 
 const { Title, Text } = Typography;
@@ -289,7 +290,7 @@ export function WorklistPage() {
   const isDark = useTheme().theme === 'dark';
   const { containerRef, filledMinHeightPx } = useFillToViewportBottom();
   const canAdminEditVerified =
-    user?.role === 'LAB_ADMIN' || user?.role === 'SUPER_ADMIN';
+    canAccessAction(user?.role, 'worklist.edit_verified_result');
 
   const [loading, setLoading] = useState(false);
   const [rows, setRows] = useState<WorklistOrderSummaryDto[]>([]);

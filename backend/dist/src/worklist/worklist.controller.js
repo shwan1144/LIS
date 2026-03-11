@@ -16,8 +16,11 @@ exports.WorklistController = void 0;
 const common_1 = require("@nestjs/common");
 const worklist_service_1 = require("./worklist.service");
 const jwt_auth_guard_1 = require("../auth/jwt-auth.guard");
+const roles_guard_1 = require("../auth/roles.guard");
+const roles_decorator_1 = require("../auth/roles.decorator");
 const order_test_entity_1 = require("../entities/order-test.entity");
 const lab_actor_context_1 = require("../types/lab-actor-context");
+const lab_role_matrix_1 = require("../auth/lab-role-matrix");
 let WorklistController = class WorklistController {
     constructor(worklistService) {
         this.worklistService = worklistService;
@@ -25,9 +28,14 @@ let WorklistController = class WorklistController {
     async getWorklist(req, status, search, date, departmentId, page, size, view) {
         const labId = req.user?.labId;
         const actor = (0, lab_actor_context_1.buildLabActorContext)(req.user);
+        const selectedView = view ?? worklist_service_1.WorklistView.FULL;
         if (!labId) {
             throw new Error('Lab ID not found in token');
         }
+        if (!req.user?.role) {
+            throw new common_1.ForbiddenException('Missing role in token');
+        }
+        (0, lab_role_matrix_1.assertWorklistViewAllowed)(req.user.role, selectedView);
         let statuses;
         if (status) {
             statuses = status.split(',').filter((s) => Object.values(order_test_entity_1.OrderTestStatus).includes(s));
@@ -39,22 +47,27 @@ let WorklistController = class WorklistController {
             departmentId,
             page: page ? parseInt(page, 10) : undefined,
             size: size ? parseInt(size, 10) : undefined,
-            view: view ?? worklist_service_1.WorklistView.FULL,
+            view: selectedView,
         }, actor.userId ?? undefined);
     }
     async getWorklistOrders(req, search, date, departmentId, page, size, mode, entryStatus, verificationStatus) {
         const labId = req.user?.labId;
         const actor = (0, lab_actor_context_1.buildLabActorContext)(req.user);
+        const selectedMode = mode ?? worklist_service_1.WorklistOrderMode.ENTRY;
         if (!labId) {
             throw new Error('Lab ID not found in token');
         }
+        if (!req.user?.role) {
+            throw new common_1.ForbiddenException('Missing role in token');
+        }
+        (0, lab_role_matrix_1.assertWorklistModeAllowed)(req.user.role, selectedMode);
         return this.worklistService.getWorklistOrders(labId, {
             search,
             date,
             departmentId,
             page: page ? parseInt(page, 10) : undefined,
             size: size ? parseInt(size, 10) : undefined,
-            mode: mode ?? worklist_service_1.WorklistOrderMode.ENTRY,
+            mode: selectedMode,
             entryStatus,
             verificationStatus,
         }, actor.userId ?? undefined);
@@ -62,12 +75,17 @@ let WorklistController = class WorklistController {
     async getWorklistOrderTests(req, orderId, departmentId, mode) {
         const labId = req.user?.labId;
         const actor = (0, lab_actor_context_1.buildLabActorContext)(req.user);
+        const selectedMode = mode ?? worklist_service_1.WorklistOrderMode.ENTRY;
         if (!labId) {
             throw new Error('Lab ID not found in token');
         }
+        if (!req.user?.role) {
+            throw new common_1.ForbiddenException('Missing role in token');
+        }
+        (0, lab_role_matrix_1.assertWorklistModeAllowed)(req.user.role, selectedMode);
         return this.worklistService.getWorklistOrderTests(orderId, labId, {
             departmentId,
-            mode: mode ?? worklist_service_1.WorklistOrderMode.ENTRY,
+            mode: selectedMode,
         }, actor.userId ?? undefined);
     }
     async getCultureEntryHistory(req) {
@@ -136,6 +154,7 @@ let WorklistController = class WorklistController {
 exports.WorklistController = WorklistController;
 __decorate([
     (0, common_1.Get)(),
+    (0, roles_decorator_1.Roles)(...lab_role_matrix_1.LAB_ROLE_GROUPS.WORKLIST_LANE_READ),
     __param(0, (0, common_1.Req)()),
     __param(1, (0, common_1.Query)('status')),
     __param(2, (0, common_1.Query)('search')),
@@ -150,6 +169,7 @@ __decorate([
 ], WorklistController.prototype, "getWorklist", null);
 __decorate([
     (0, common_1.Get)('orders'),
+    (0, roles_decorator_1.Roles)(...lab_role_matrix_1.LAB_ROLE_GROUPS.WORKLIST_LANE_READ),
     __param(0, (0, common_1.Req)()),
     __param(1, (0, common_1.Query)('search')),
     __param(2, (0, common_1.Query)('date')),
@@ -165,6 +185,7 @@ __decorate([
 ], WorklistController.prototype, "getWorklistOrders", null);
 __decorate([
     (0, common_1.Get)('orders/:orderId/tests'),
+    (0, roles_decorator_1.Roles)(...lab_role_matrix_1.LAB_ROLE_GROUPS.WORKLIST_LANE_READ),
     __param(0, (0, common_1.Req)()),
     __param(1, (0, common_1.Param)('orderId', common_1.ParseUUIDPipe)),
     __param(2, (0, common_1.Query)('departmentId')),
@@ -175,6 +196,7 @@ __decorate([
 ], WorklistController.prototype, "getWorklistOrderTests", null);
 __decorate([
     (0, common_1.Get)('culture-entry-history'),
+    (0, roles_decorator_1.Roles)(...lab_role_matrix_1.LAB_ROLE_GROUPS.WORKLIST_LANE_READ),
     __param(0, (0, common_1.Req)()),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [Object]),
@@ -182,6 +204,7 @@ __decorate([
 ], WorklistController.prototype, "getCultureEntryHistory", null);
 __decorate([
     (0, common_1.Get)(':id/detail'),
+    (0, roles_decorator_1.Roles)(...lab_role_matrix_1.LAB_ROLE_GROUPS.WORKLIST_LANE_READ),
     __param(0, (0, common_1.Req)()),
     __param(1, (0, common_1.Param)('id', common_1.ParseUUIDPipe)),
     __metadata("design:type", Function),
@@ -190,6 +213,7 @@ __decorate([
 ], WorklistController.prototype, "getWorklistItemDetail", null);
 __decorate([
     (0, common_1.Get)('stats'),
+    (0, roles_decorator_1.Roles)(...lab_role_matrix_1.LAB_ROLE_GROUPS.WORKLIST_STATS_READ),
     __param(0, (0, common_1.Req)()),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [Object]),
@@ -197,6 +221,7 @@ __decorate([
 ], WorklistController.prototype, "getStats", null);
 __decorate([
     (0, common_1.Patch)(':id/result'),
+    (0, roles_decorator_1.Roles)(...lab_role_matrix_1.LAB_ROLE_GROUPS.WORKLIST_ENTRY),
     __param(0, (0, common_1.Req)()),
     __param(1, (0, common_1.Param)('id', common_1.ParseUUIDPipe)),
     __param(2, (0, common_1.Body)()),
@@ -206,6 +231,7 @@ __decorate([
 ], WorklistController.prototype, "enterResult", null);
 __decorate([
     (0, common_1.Patch)('batch-result'),
+    (0, roles_decorator_1.Roles)(...lab_role_matrix_1.LAB_ROLE_GROUPS.WORKLIST_ENTRY),
     __param(0, (0, common_1.Req)()),
     __param(1, (0, common_1.Body)()),
     __metadata("design:type", Function),
@@ -214,6 +240,7 @@ __decorate([
 ], WorklistController.prototype, "batchEnterResults", null);
 __decorate([
     (0, common_1.Patch)(':id/verify'),
+    (0, roles_decorator_1.Roles)(...lab_role_matrix_1.LAB_ROLE_GROUPS.WORKLIST_VERIFY),
     __param(0, (0, common_1.Req)()),
     __param(1, (0, common_1.Param)('id', common_1.ParseUUIDPipe)),
     __metadata("design:type", Function),
@@ -222,6 +249,7 @@ __decorate([
 ], WorklistController.prototype, "verifyResult", null);
 __decorate([
     (0, common_1.Post)('verify-multiple'),
+    (0, roles_decorator_1.Roles)(...lab_role_matrix_1.LAB_ROLE_GROUPS.WORKLIST_VERIFY),
     __param(0, (0, common_1.Req)()),
     __param(1, (0, common_1.Body)()),
     __metadata("design:type", Function),
@@ -230,6 +258,7 @@ __decorate([
 ], WorklistController.prototype, "verifyMultiple", null);
 __decorate([
     (0, common_1.Patch)(':id/reject'),
+    (0, roles_decorator_1.Roles)(...lab_role_matrix_1.LAB_ROLE_GROUPS.WORKLIST_VERIFY),
     __param(0, (0, common_1.Req)()),
     __param(1, (0, common_1.Param)('id', common_1.ParseUUIDPipe)),
     __param(2, (0, common_1.Body)()),
@@ -239,7 +268,7 @@ __decorate([
 ], WorklistController.prototype, "rejectResult", null);
 exports.WorklistController = WorklistController = __decorate([
     (0, common_1.Controller)('worklist'),
-    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
+    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard, roles_guard_1.RolesGuard),
     __metadata("design:paramtypes", [worklist_service_1.WorklistService])
 ], WorklistController);
 //# sourceMappingURL=worklist.controller.js.map

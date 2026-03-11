@@ -27,6 +27,7 @@ import {
   formatDateKeyForTimeZone,
   getUtcRangeForLabDate,
 } from '../database/lab-timezone.util';
+import { LAB_ROLE_GROUPS } from '../auth/lab-role-matrix';
 
 interface RequestWithUser {
   user: {
@@ -42,7 +43,8 @@ interface RequestWithUser {
 }
 
 @Controller('dashboard')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, RolesGuard)
+@Roles(...LAB_ROLE_GROUPS.ADMIN)
 export class DashboardController {
   constructor(
     private readonly dashboardService: DashboardService,
@@ -86,8 +88,6 @@ export class DashboardController {
   }
 
   @Get('statistics')
-  @UseGuards(RolesGuard)
-  @Roles('LAB_ADMIN', 'SUPER_ADMIN')
   async getStatistics(
     @Req() req: RequestWithUser,
     @Query() query: StatisticsQueryDto,
@@ -105,8 +105,6 @@ export class DashboardController {
   }
 
   @Get('statistics/pdf')
-  @UseGuards(RolesGuard)
-  @Roles('LAB_ADMIN', 'SUPER_ADMIN')
   async getStatisticsPdf(
     @Req() req: RequestWithUser,
     @Query() query: StatisticsQueryDto,

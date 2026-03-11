@@ -14,6 +14,7 @@ import { ShiftsService } from './shifts.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
+import { LAB_ROLE_GROUPS } from '../auth/lab-role-matrix';
 
 interface RequestWithUser {
   user: { userId: string; username: string; labId: string };
@@ -25,6 +26,7 @@ export class ShiftsController {
   constructor(private readonly shiftsService: ShiftsService) {}
 
   @Get()
+  @Roles(...LAB_ROLE_GROUPS.SHIFTS_READ)
   async findAll(@Req() req: RequestWithUser) {
     const labId = req.user?.labId;
     if (!labId) throw new Error('Lab ID not found in token');
@@ -32,6 +34,7 @@ export class ShiftsController {
   }
 
   @Get(':id')
+  @Roles(...LAB_ROLE_GROUPS.SHIFTS_READ)
   async findOne(@Req() req: RequestWithUser, @Param('id', ParseUUIDPipe) id: string) {
     const labId = req.user?.labId;
     if (!labId) throw new Error('Lab ID not found in token');
@@ -39,7 +42,7 @@ export class ShiftsController {
   }
 
   @Post()
-  @Roles('LAB_ADMIN', 'SUPER_ADMIN')
+  @Roles(...LAB_ROLE_GROUPS.ADMIN)
   async create(@Req() req: RequestWithUser, @Body() body: { code: string; name?: string; startTime?: string; endTime?: string; isEmergency?: boolean }) {
     const labId = req.user?.labId;
     if (!labId) throw new Error('Lab ID not found in token');
@@ -47,7 +50,7 @@ export class ShiftsController {
   }
 
   @Patch(':id')
-  @Roles('LAB_ADMIN', 'SUPER_ADMIN')
+  @Roles(...LAB_ROLE_GROUPS.ADMIN)
   async update(
     @Req() req: RequestWithUser,
     @Param('id', ParseUUIDPipe) id: string,
@@ -59,7 +62,7 @@ export class ShiftsController {
   }
 
   @Delete(':id')
-  @Roles('LAB_ADMIN', 'SUPER_ADMIN')
+  @Roles(...LAB_ROLE_GROUPS.ADMIN)
   async delete(@Req() req: RequestWithUser, @Param('id', ParseUUIDPipe) id: string) {
     const labId = req.user?.labId;
     if (!labId) throw new Error('Lab ID not found in token');

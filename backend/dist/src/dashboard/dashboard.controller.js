@@ -23,6 +23,7 @@ const audit_service_1 = require("../audit/audit.service");
 const audit_log_entity_1 = require("../entities/audit-log.entity");
 const lab_actor_context_1 = require("../types/lab-actor-context");
 const lab_timezone_util_1 = require("../database/lab-timezone.util");
+const lab_role_matrix_1 = require("../auth/lab-role-matrix");
 let DashboardController = class DashboardController {
     constructor(dashboardService, auditService) {
         this.dashboardService = dashboardService;
@@ -191,8 +192,6 @@ __decorate([
 ], DashboardController.prototype, "getAnnouncement", null);
 __decorate([
     (0, common_1.Get)('statistics'),
-    (0, common_1.UseGuards)(roles_guard_1.RolesGuard),
-    (0, roles_decorator_1.Roles)('LAB_ADMIN', 'SUPER_ADMIN'),
     __param(0, (0, common_1.Req)()),
     __param(1, (0, common_1.Query)()),
     __metadata("design:type", Function),
@@ -201,8 +200,6 @@ __decorate([
 ], DashboardController.prototype, "getStatistics", null);
 __decorate([
     (0, common_1.Get)('statistics/pdf'),
-    (0, common_1.UseGuards)(roles_guard_1.RolesGuard),
-    (0, roles_decorator_1.Roles)('LAB_ADMIN', 'SUPER_ADMIN'),
     __param(0, (0, common_1.Req)()),
     __param(1, (0, common_1.Query)()),
     __param(2, (0, common_1.Res)()),
@@ -212,7 +209,8 @@ __decorate([
 ], DashboardController.prototype, "getStatisticsPdf", null);
 exports.DashboardController = DashboardController = __decorate([
     (0, common_1.Controller)('dashboard'),
-    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
+    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard, roles_guard_1.RolesGuard),
+    (0, roles_decorator_1.Roles)(...lab_role_matrix_1.LAB_ROLE_GROUPS.ADMIN),
     __metadata("design:paramtypes", [dashboard_service_1.DashboardService,
         audit_service_1.AuditService])
 ], DashboardController);

@@ -8,6 +8,7 @@ interface RequestWithUser {
         isImpersonation?: boolean;
         username: string;
         labId: string;
+        role?: string;
     };
 }
 export declare class ReportsController {

@@ -14,9 +14,12 @@ import {
 import { Response } from 'express';
 import { ReportActionKind, ReportsService } from './reports.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { RolesGuard } from '../auth/roles.guard';
+import { Roles } from '../auth/roles.decorator';
 import { AuditService } from '../audit/audit.service';
 import { AuditAction } from '../entities/audit-log.entity';
 import { buildLabActorContext } from '../types/lab-actor-context';
+import { LAB_ROLE_GROUPS } from '../auth/lab-role-matrix';
 
 interface RequestWithUser {
   user: {
@@ -25,11 +28,13 @@ interface RequestWithUser {
     isImpersonation?: boolean;
     username: string;
     labId: string;
+    role?: string;
   };
 }
 
 @Controller('reports')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, RolesGuard)
+@Roles(...LAB_ROLE_GROUPS.REPORTS)
 export class ReportsController {
   constructor(
     private readonly reportsService: ReportsService,
