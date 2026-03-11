@@ -33,6 +33,7 @@ import {
   PlusOutlined,
   ReloadOutlined,
   SearchOutlined,
+  EditOutlined,
 } from '@ant-design/icons';
 import { useLocation } from 'react-router-dom';
 import dayjs from 'dayjs';
@@ -2851,6 +2852,17 @@ export function OrdersPage() {
             </div>
             <Space>
               <Button onClick={closePatientPickerModal}>Cancel</Button>
+              <Button
+                icon={<EditOutlined />}
+                disabled={!patientPickerSelectedPatient}
+                onClick={() => {
+                  if (!patientPickerSelectedPatient) return;
+                  patientEditForm.setFieldsValue(getPatientFormInitialValues(patientPickerSelectedPatient));
+                  setPatientEditModalOpen(true);
+                }}
+              >
+                Edit
+              </Button>
               <Button
                 type="primary"
                 icon={<ShoppingCartOutlined />}

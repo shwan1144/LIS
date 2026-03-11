@@ -2192,6 +2192,14 @@ html[data-theme='dark'] .orders-patient-picker-footer-placeholder,
   background: rgba(15, 23, 42, 0.54);
 }
 
+html[data-theme='dark'] .orders-patient-picker-footer,
+html[data-theme='dark'] .orders-patient-form-footer,
+.orders-patient-picker-modal-dark .orders-patient-picker-footer,
+.orders-patient-form-modal-dark .orders-patient-form-footer {
+  border-top-color: rgba(148, 163, 184, 0.14);
+  background: rgba(15, 23, 42, 0.6);
+}
+
 html[data-theme='dark'] .orders-patient-picker-footer-placeholder-title.ant-typography,
 .orders-patient-picker-modal-dark .orders-patient-picker-footer-placeholder-title.ant-typography {
   color: rgba(248, 250, 252, 0.9);
