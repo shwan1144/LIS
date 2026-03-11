@@ -1,12 +1,16 @@
-import { useEffect } from 'react';
+import { useCallback, useEffect, useMemo, useState, type FocusEvent } from 'react';
 import { AutoComplete, Button, Card, Form, Input, Select, Space, Switch, Typography } from 'antd';
 import { DeleteOutlined, PlusOutlined } from '@ant-design/icons';
 import { useTheme } from '../contexts/ThemeContext';
+import {
+  getCultureHistoryValues,
+  rememberCultureHistoryValue,
+} from '../utils/culture-sensitivity';
 
 const { Text } = Typography;
 const DEFAULT_NO_GROWTH_RESULT = 'No growth of microorganizm';
 
-const CULTURE_SOURCE_OPTIONS = [
+const CULTURE_SOURCE_VALUES = [
   'Urine',
   'Blood',
   'Stool',
@@ -18,25 +22,26 @@ const CULTURE_SOURCE_OPTIONS = [
   'CSF',
   'Aspirate',
   'Semen',
-].map((value) => ({ value }));
+];
+const CULTURE_SOURCE_OPTIONS = CULTURE_SOURCE_VALUES.map((value) => ({ value }));
 
-const CULTURE_CONDITION_OPTIONS = [
+const CULTURE_CONDITION_VALUES = [
   'Pure growth',
   'Mixed growth',
   'Scanty growth',
   'Moderate growth',
   'Heavy growth',
   'Contaminated sample',
-].map((value) => ({ value }));
+];
 
-const CULTURE_COLONY_COUNT_OPTIONS = [
+const CULTURE_COLONY_COUNT_VALUES = [
   '<10^3 CFU/mL',
   '10^3 CFU/mL',
   '10^4 CFU/mL',
   '10^5 CFU/mL',
   '>10^5 CFU/mL',
   'No significant growth',
-].map((value) => ({ value }));
+];
 
 const NO_GROWTH_RESULT_OPTIONS = [
   DEFAULT_NO_GROWTH_RESULT,
@@ -44,6 +49,23 @@ const NO_GROWTH_RESULT_OPTIONS = [
   'No pathogenic growth',
   'Sterile culture',
 ].map((value) => ({ value }));
+
+function mergeAutoCompleteOptions(
+  seededValues: string[],
+  rememberedValues: string[],
+): Array<{ value: string }> {
+  const seen = new Set<string>();
+  const merged: Array<{ value: string }> = [];
+  for (const value of [...seededValues, ...rememberedValues]) {
+    const trimmed = value.trim();
+    if (!trimmed) continue;
+    const normalized = trimmed.toLowerCase();
+    if (seen.has(normalized)) continue;
+    seen.add(normalized);
+    merged.push({ value: trimmed });
+  }
+  return merged;
+}
 
 export interface CultureAntibioticOption {
   value: string;
@@ -71,6 +93,54 @@ export function CultureSensitivityEditor({
   const form = Form.useFormInstance();
   const noGrowth = Form.useWatch([...baseName, 'noGrowth']);
   const noGrowthResult = Form.useWatch([...baseName, 'noGrowthResult']);
+  const [organismHistory, setOrganismHistory] = useState<string[]>(
+    () => getCultureHistoryValues('organism'),
+  );
+  const [conditionHistory, setConditionHistory] = useState<string[]>(
+    () => getCultureHistoryValues('condition'),
+  );
+  const [colonyCountHistory, setColonyCountHistory] = useState<string[]>(
+    () => getCultureHistoryValues('colonyCount'),
+  );
+  const organismOptions = useMemo(
+    () => mergeAutoCompleteOptions([], organismHistory),
+    [organismHistory],
+  );
+  const conditionOptions = useMemo(
+    () =>
+      mergeAutoCompleteOptions(CULTURE_CONDITION_VALUES, conditionHistory),
+    [conditionHistory],
+  );
+  const colonyCountOptions = useMemo(
+    () =>
+      mergeAutoCompleteOptions(CULTURE_COLONY_COUNT_VALUES, colonyCountHistory),
+    [colonyCountHistory],
+  );
+  const rememberHistoryForField = useCallback(
+    (field: 'organism' | 'condition' | 'colonyCount', rawValue: string) => {
+      const next = rememberCultureHistoryValue(field, rawValue);
+      if (field === 'organism') {
+        setOrganismHistory(next);
+        return;
+      }
+      if (field === 'condition') {
+        setConditionHistory(next);
+        return;
+      }
+      setColonyCountHistory(next);
+    },
+    [],
+  );
+  const rememberHistoryFromBlur = useCallback(
+    (
+      field: 'organism' | 'condition' | 'colonyCount',
+      event: FocusEvent<HTMLElement>,
+    ) => {
+      const value = (event.target as HTMLInputElement | null)?.value ?? '';
+      rememberHistoryForField(field, value);
+    },
+    [rememberHistoryForField],
+  );
   const palette = isDark
     ? {
         containerBorder: 'rgba(96, 165, 250, 0.4)',
@@ -310,7 +380,27 @@ export function CultureSensitivityEditor({
                         ]}
                         style={{ marginBottom: 0 }}
                       >
-                        <Input disabled={disabled} placeholder="e.g., E. coli" />
+                        <AutoComplete
+                          options={organismOptions}
+                          disabled={disabled}
+                          placeholder="e.g., E. coli"
+                          filterOption={(inputValue, option) =>
+                            String(option?.value ?? '')
+                              .toLowerCase()
+                              .includes(inputValue.toLowerCase())
+                          }
+                          onSelect={(value) =>
+                            rememberHistoryForField('organism', String(value))
+                          }
+                        >
+                          <Input
+                            disabled={disabled}
+                            placeholder="e.g., E. coli"
+                            onBlur={(event) =>
+                              rememberHistoryFromBlur('organism', event)
+                            }
+                          />
+                        </AutoComplete>
                       </Form.Item>
                       <Form.Item
                         name={[isolateField.name, 'source']}
@@ -334,13 +424,19 @@ export function CultureSensitivityEditor({
                         style={{ marginBottom: 0 }}
                       >
                         <AutoComplete
-                          options={CULTURE_CONDITION_OPTIONS}
+                          options={conditionOptions}
                           disabled={disabled}
                           placeholder="Select or type condition"
                           filterOption={(inputValue, option) =>
                             String(option?.value ?? '')
                               .toLowerCase()
                               .includes(inputValue.toLowerCase())
+                          }
+                          onSelect={(value) =>
+                            rememberHistoryForField('condition', String(value))
+                          }
+                          onBlur={(event) =>
+                            rememberHistoryFromBlur('condition', event)
                           }
                         />
                       </Form.Item>
@@ -350,13 +446,19 @@ export function CultureSensitivityEditor({
                         style={{ marginBottom: 0 }}
                       >
                         <AutoComplete
-                          options={CULTURE_COLONY_COUNT_OPTIONS}
+                          options={colonyCountOptions}
                           disabled={disabled}
                           placeholder="Select or type colony count"
                           filterOption={(inputValue, option) =>
                             String(option?.value ?? '')
                               .toLowerCase()
                               .includes(inputValue.toLowerCase())
+                          }
+                          onSelect={(value) =>
+                            rememberHistoryForField('colonyCount', String(value))
+                          }
+                          onBlur={(event) =>
+                            rememberHistoryFromBlur('colonyCount', event)
                           }
                         />
                       </Form.Item>
