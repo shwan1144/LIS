@@ -1,4 +1,4 @@
-import { forwardRef, useEffect, useRef } from 'react';
+import { forwardRef, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import JsBarcode from 'jsbarcode';
 import type { DepartmentDto, OrderDto } from '../../api/client';
 import {
@@ -7,9 +7,11 @@ import {
   type SampleLabelViewModel,
 } from '../../printing/label-view-model';
 import {
+  DEFAULT_LABEL_LAYOUT_SPEC,
   createPreviewLabelStyleVariables,
   getPreviewBarcodeOptions,
 } from '../../printing/label-printing-spec';
+import { fitSingleLineFontSize } from '../../printing/label-text-fit';
 import './print.css';
 
 interface SampleLabelProps {
@@ -21,6 +23,31 @@ const sampleLabelStyle = createPreviewLabelStyleVariables();
 export const SampleLabel = forwardRef<HTMLDivElement, SampleLabelProps>(
   ({ label }, ref) => {
     const barcodeRef = useRef<SVGSVGElement>(null);
+    const nameRef = useRef<HTMLDivElement>(null);
+    const [nameFontSizePx, setNameFontSizePx] = useState(DEFAULT_LABEL_LAYOUT_SPEC.previewHeaderNameFontPx);
+
+    useLayoutEffect(() => {
+      const nameElement = nameRef.current;
+      const patientName = label.patientName || 'Name here';
+      if (!nameElement) {
+        return;
+      }
+
+      const updateFontSize = () => {
+        const nextFontSize = fitSingleLineFontSize({
+          fontFamily: DEFAULT_LABEL_LAYOUT_SPEC.previewFontFamily,
+          fontSize: DEFAULT_LABEL_LAYOUT_SPEC.previewHeaderNameFontPx,
+          fontWeight: 700,
+          maxWidth: Math.max(1, nameElement.clientWidth - 1),
+          minFontSize: 6.2,
+          text: patientName,
+        });
+        setNameFontSizePx((current) => (Math.abs(current - nextFontSize) < 0.01 ? current : nextFontSize));
+      };
+
+      updateFontSize();
+      document.fonts?.ready.then(updateFontSize).catch(() => undefined);
+    }, [label.patientName]);
 
     useEffect(() => {
       if (barcodeRef.current) {
@@ -50,7 +77,13 @@ export const SampleLabel = forwardRef<HTMLDivElement, SampleLabelProps>(
 
         <div className="label-main">
           <div className="label-header-row">
-            <div className="label-name-cell">{label.patientName || 'Name here'}</div>
+            <div
+              ref={nameRef}
+              className="label-name-cell"
+              style={{ fontSize: `${nameFontSizePx}px` }}
+            >
+              {label.patientName || 'Name here'}
+            </div>
             <div className="label-sex-cell">{label.sexLabel}</div>
           </div>
 

@@ -16,6 +16,7 @@ import {
   type LabelPrinterConfig as ZebraLabelPrinterConfig,
   type ZebraLabelGeometry,
 } from './label-printing-spec';
+import { fitSingleLineFontSize, singleLineTextNeedsShrink } from './label-text-fit';
 
 const TEXT_THRESHOLD = 232;
 const ARABIC_TEXT_THRESHOLD = 246;
@@ -33,7 +34,9 @@ type TextGraphicOptions = {
   height: number;
   lineHeight?: number;
   maxLines?: number;
+  minFontSize?: number;
   rotation?: 0 | 90 | 180 | 270;
+  shrinkToFitWidth?: boolean;
   text: string;
   width: number;
 };
@@ -114,6 +117,18 @@ async function buildZplDocument(
   const registeredAtText = label.registeredAtLabel || '-';
   const patientIdText = label.patientGlobalId || '-';
   const sexText = collapseWhitespace(label.sexLabel) || '-';
+  const patientNameFontSize = Math.max(15, Math.round(geometry.heightDots * 0.098));
+  const patientNameMinFontSize = Math.max(11, Math.round(patientNameFontSize * 0.72));
+  const patientNameShouldRenderGraphic =
+    needsRasterText(patientNameText) ||
+    singleLineTextNeedsShrink({
+      fontFamily: getCanvasFontFamily(patientNameText),
+      fontSize: patientNameFontSize,
+      fontWeight: 700,
+      maxWidth: Math.max(1, layout.nameWidth - Math.max(2, Math.round(layout.nameWidth * 0.05))),
+      minFontSize: patientNameMinFontSize,
+      text: patientNameText,
+    });
 
   if (requiresCompositeRasterLabelLayer([
     patientNameText,
@@ -147,12 +162,14 @@ async function buildZplDocument(
     sequenceGraphic,
     patientIdGraphic,
   ] = await Promise.all([
-    needsRasterText(patientNameText)
+    patientNameShouldRenderGraphic
       ? renderTextGraphic({
         align: 'start',
-        fontSize: Math.max(15, Math.round(geometry.heightDots * 0.098)),
+        fontSize: patientNameFontSize,
         fontWeight: 700,
         height: layout.nameHeight,
+        minFontSize: patientNameMinFontSize,
+        shrinkToFitWidth: true,
         text: patientNameText,
         width: layout.nameWidth,
       })
@@ -425,11 +442,13 @@ async function renderCompositeRasterLabelLayer(params: {
   });
   appendTextBox(root, {
     align: 'start',
+    autoShrinkToFit: true,
     fontFamily: getCanvasFontFamily(params.patientNameText),
     fontSize: Math.max(19, Math.round(params.geometry.heightDots * 0.122)),
     fontWeight: 700,
     height: params.layout.nameHeight,
     left: params.layout.textLeftX,
+    minFontSize: Math.max(11, Math.round(Math.max(19, Math.round(params.geometry.heightDots * 0.122)) * 0.72)),
     text: params.patientNameText,
     top: Math.max(0, params.layout.paddingY - 1),
     width: params.layout.nameWidth,
@@ -520,6 +539,7 @@ function appendTextBox(
   parent: HTMLElement,
   options: {
     align: TextAlignMode;
+    autoShrinkToFit?: boolean;
     fontFamily: string;
     fontSize: number;
     fontWeight: number;
@@ -527,6 +547,7 @@ function appendTextBox(
     lineHeight?: number;
     left: number;
     maxLines?: number;
+    minFontSize?: number;
     rotateVertical?: boolean;
     text: string;
     top: number;
@@ -542,6 +563,16 @@ function appendTextBox(
   const isMultiline = !options.rotateVertical && maxLines > 1;
   const lineHeight = options.lineHeight ?? 1.05;
   const textAlign = resolveCssTextAlign(options.align, isRtl);
+  const fittedFontSize = options.autoShrinkToFit && !options.rotateVertical && maxLines === 1
+    ? fitSingleLineFontSize({
+      fontFamily: options.fontFamily,
+      fontSize: options.fontSize,
+      fontWeight: options.fontWeight,
+      maxWidth: Math.max(1, options.width - (horizontalPadding * 2)),
+      minFontSize: options.minFontSize ?? Math.max(8, options.fontSize * 0.72),
+      text: normalizedText,
+    })
+    : options.fontSize;
 
   applyInlineStyles(box, {
     height: `${Math.max(1, options.height)}px`,
@@ -557,7 +588,7 @@ function appendTextBox(
     direction: isRtl ? 'rtl' : 'ltr',
     display: isMultiline ? '-webkit-box' : 'flex',
     fontFamily: options.fontFamily,
-    fontSize: `${Math.max(8, Math.round(options.fontSize))}px`,
+    fontSize: `${Math.max(8, fittedFontSize)}px`,
     fontWeight: String(options.fontWeight),
     height: '100%',
     justifyContent: isMultiline ? 'initial' : resolveCssJustifyContent(options.align, isRtl),
@@ -728,7 +759,9 @@ async function renderTextGraphic(options: TextGraphicOptions): Promise<GfaGraphi
     height: Math.floor(options.height),
     lineHeight: options.lineHeight ?? 1,
     maxLines: options.maxLines ?? 1,
+    minFontSize: options.minFontSize ?? null,
     rotation: options.rotation ?? 0,
+    shrinkToFitWidth: options.shrinkToFitWidth ?? false,
     text: collapseWhitespace(options.text),
     width: Math.floor(options.width),
   });
@@ -771,6 +804,8 @@ async function renderTextGraphicUncached(options: TextGraphicOptions): Promise<G
     height: sourceHeight,
     lineHeight: options.lineHeight ?? 1,
     maxLines: options.maxLines ?? 1,
+    minFontSize: options.minFontSize ? options.minFontSize * TEXT_RENDER_SCALE : undefined,
+    shrinkToFitWidth: options.shrinkToFitWidth ?? false,
     text: options.text,
     width: sourceWidth,
   } as const;
@@ -846,6 +881,8 @@ async function drawSvgTextToCanvas(
     height: number;
     lineHeight?: number;
     maxLines?: number;
+    minFontSize?: number;
+    shrinkToFitWidth?: boolean;
     text: string;
     width: number;
   },
@@ -869,6 +906,16 @@ async function drawSvgTextToCanvas(
   const isMultiline = maxLines > 1;
   const lineHeight = options.lineHeight ?? 1.05;
   const textAlign = resolveCssTextAlign(options.align, isRtl);
+  const fittedFontSize = options.shrinkToFitWidth && maxLines === 1
+    ? fitSingleLineFontSize({
+      fontFamily: getCanvasFontFamily(normalizedText),
+      fontSize: options.fontSize,
+      fontWeight: options.fontWeight,
+      maxWidth: Math.max(1, options.width - (horizontalPadding * 2)),
+      minFontSize: options.minFontSize ?? Math.max(8, options.fontSize * 0.72),
+      text: normalizedText,
+    })
+    : options.fontSize;
   const html = [
     `<div xmlns="http://www.w3.org/1999/xhtml" style="`,
     `width:${options.width}px;`,
@@ -877,7 +924,7 @@ async function drawSvgTextToCanvas(
     isMultiline ? '' : 'align-items:center;',
     isMultiline ? '' : `justify-content:${justifyContent};`,
     `padding:0 ${horizontalPadding}px;`,
-    `font:${options.fontWeight} ${Math.max(8, Math.round(options.fontSize))}px ${getCanvasFontFamily(normalizedText)};`,
+    `font:${options.fontWeight} ${Math.max(8, fittedFontSize)}px ${getCanvasFontFamily(normalizedText)};`,
     `line-height:${lineHeight};`,
     'color:#000;',
     'background:#fff;',
@@ -919,6 +966,8 @@ async function drawDomTextToCanvas(
     height: number;
     lineHeight?: number;
     maxLines?: number;
+    minFontSize?: number;
+    shrinkToFitWidth?: boolean;
     text: string;
     width: number;
   },
@@ -938,6 +987,16 @@ async function drawDomTextToCanvas(
   const isMultiline = maxLines > 1;
   const lineHeight = options.lineHeight ?? 1.05;
   const textAlign = resolveCssTextAlign(options.align, isRtl);
+  const fittedFontSize = options.shrinkToFitWidth && maxLines === 1
+    ? fitSingleLineFontSize({
+      fontFamily: getCanvasFontFamily(normalizedText),
+      fontSize: options.fontSize,
+      fontWeight: options.fontWeight,
+      maxWidth: Math.max(1, options.width - (horizontalPadding * 2)),
+      minFontSize: options.minFontSize ?? Math.max(8, options.fontSize * 0.72),
+      text: normalizedText,
+    })
+    : options.fontSize;
 
   host.style.position = 'fixed';
   host.style.left = '-100000px';
@@ -975,7 +1034,7 @@ async function drawDomTextToCanvas(
   content.style.unicodeBidi = 'plaintext';
   content.style.textRendering = 'optimizeLegibility';
   content.style.fontKerning = 'normal';
-  content.style.font = `${options.fontWeight} ${Math.max(8, Math.round(options.fontSize))}px ${getCanvasFontFamily(normalizedText)}`;
+  content.style.font = `${options.fontWeight} ${Math.max(8, fittedFontSize)}px ${getCanvasFontFamily(normalizedText)}`;
   content.textContent = normalizedText;
 
   host.appendChild(content);
@@ -1002,6 +1061,8 @@ function drawTextToFit(
     height: number;
     lineHeight?: number;
     maxLines?: number;
+    minFontSize?: number;
+    shrinkToFitWidth?: boolean;
     text: string;
     width: number;
   },
@@ -1016,12 +1077,16 @@ function drawTextToFit(
   const availableHeight = Math.max(1, options.height - 2);
   const maxLines = Math.max(1, options.maxLines ?? 1);
   const lineHeightMultiplier = options.lineHeight ?? 1.05;
+  const shrinkToFitWidth = options.shrinkToFitWidth ?? false;
   const isRtl = containsArabic(normalizedText);
   const direction = isRtl ? 'rtl' : 'ltr';
   const resolvedAlign = resolveTextAlign(options.align, isRtl);
   const canvasDirectionContext = context as CanvasRenderingContext2D & { direction?: CanvasDirection };
   let fontSize = Math.max(8, Math.min(options.fontSize, availableHeight));
-  const minFontSize = Math.max(8, Math.round(fontSize * 0.65));
+  const minFontSize = Math.max(
+    8,
+    Math.min(fontSize, options.minFontSize ?? Math.round(fontSize * 0.65)),
+  );
   let fittedLines = [normalizedText];
 
   while (fontSize >= minFontSize) {
@@ -1029,19 +1094,28 @@ function drawTextToFit(
     context.textAlign = resolvedAlign;
     context.textBaseline = 'middle';
     canvasDirectionContext.direction = direction;
-    fittedLines = maxLines > 1
-      ? wrapTextToLines(context, normalizedText, availableWidth, maxLines)
-      : [truncateToWidth(context, normalizedText, availableWidth)];
+    if (maxLines > 1) {
+      fittedLines = wrapTextToLines(context, normalizedText, availableWidth, maxLines);
+    } else if (shrinkToFitWidth) {
+      fittedLines = [normalizedText];
+    } else {
+      fittedLines = [truncateToWidth(context, normalizedText, availableWidth)];
+    }
     const textHeight = maxLines > 1
       ? Math.ceil(fittedLines.length * Math.max(fontSize, fontSize * lineHeightMultiplier))
       : Math.max(
         fontSize,
         Math.ceil((context.measureText(fittedLines[0]).actualBoundingBoxAscent ?? fontSize * 0.8) + (context.measureText(fittedLines[0]).actualBoundingBoxDescent ?? fontSize * 0.2)),
       );
-    if (textHeight <= availableHeight) {
+    const widthFits = maxLines > 1 || !shrinkToFitWidth || context.measureText(fittedLines[0]).width <= availableWidth;
+    if (textHeight <= availableHeight && widthFits) {
       break;
     }
     fontSize -= 1;
+  }
+
+  if (maxLines === 1 && shrinkToFitWidth && context.measureText(fittedLines[0]).width > availableWidth) {
+    fittedLines = [truncateToWidth(context, normalizedText, availableWidth)];
   }
 
   const x = resolvedAlign === 'center'
