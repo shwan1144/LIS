@@ -113,17 +113,17 @@ function getNormalRange(
 function formatResultValue(ot: OrderTest): string {
   const cultureResult = (ot as { cultureResult?: unknown }).cultureResult as
     | {
-        noGrowth?: unknown;
-        noGrowthResult?: unknown;
-        isolates?: unknown;
-      }
+      noGrowth?: unknown;
+      noGrowthResult?: unknown;
+      isolates?: unknown;
+    }
     | null
     | undefined;
   if (cultureResult && typeof cultureResult === 'object') {
     if (cultureResult.noGrowth === true) {
       const noGrowthResult =
         typeof cultureResult.noGrowthResult === 'string' &&
-        cultureResult.noGrowthResult.trim().length > 0
+          cultureResult.noGrowthResult.trim().length > 0
           ? cultureResult.noGrowthResult.trim()
           : 'No growth';
       return noGrowthResult;
@@ -549,8 +549,17 @@ export class ReportsService implements OnModuleInit, OnModuleDestroy {
   }
 
   private resolveOrderQrValue(order: Order): string {
-    const baseUrl = this.resolvePublicResultsBaseUrl();
     const orderId = encodeURIComponent(order.id);
+
+    // Prefer lab-specific subdomain URL (e.g. labname.medilis.net)
+    const labSubdomain = (order.lab as { subdomain?: string | null } | undefined)?.subdomain?.trim().toLowerCase();
+    const baseDomain = String(process.env.APP_BASE_DOMAIN ?? '').trim().toLowerCase();
+    if (labSubdomain && baseDomain) {
+      return `https://${labSubdomain}.${baseDomain}/public/results/${orderId}`;
+    }
+
+    // Fallback to API-based URL
+    const baseUrl = this.resolvePublicResultsBaseUrl();
     return `${baseUrl}/public/results/${orderId}`;
   }
 
@@ -1302,9 +1311,9 @@ export class ReportsService implements OnModuleInit, OnModuleDestroy {
     const orderForRender = this.applyReportDesignOverride(order, options?.reportDesignOverride);
     const renderedOrderTests = cultureOnly
       ? reportableOrderTests.filter((ot) =>
-          String((ot.test as { resultEntryType?: unknown } | undefined)?.resultEntryType ?? '')
-            .toUpperCase() === 'CULTURE_SENSITIVITY',
-        )
+        String((ot.test as { resultEntryType?: unknown } | undefined)?.resultEntryType ?? '')
+          .toUpperCase() === 'CULTURE_SENSITIVITY',
+      )
       : reportableOrderTests;
     const renderedVerifiedTests = cultureOnly
       ? verifiedTests.filter((ot) => renderedOrderTests.some((candidate) => candidate.id === ot.id))
@@ -1713,25 +1722,25 @@ export class ReportsService implements OnModuleInit, OnModuleDestroy {
           backgroundColor: string;
           borderColor: string;
         }> = [
-          {
-            title: 'Sensitive',
-            values: columns.sensitive,
-            backgroundColor: '#F8FFFB',
-            borderColor: '#BBF7D0',
-          },
-          {
-            title: 'Intermediate',
-            values: columns.intermediate,
-            backgroundColor: '#FFFDF5',
-            borderColor: '#FDE68A',
-          },
-          {
-            title: 'Resistance',
-            values: columns.resistancePrimary,
-            backgroundColor: '#FFF8F8',
-            borderColor: '#FECACA',
-          },
-        ];
+            {
+              title: 'Sensitive',
+              values: columns.sensitive,
+              backgroundColor: '#F8FFFB',
+              borderColor: '#BBF7D0',
+            },
+            {
+              title: 'Intermediate',
+              values: columns.intermediate,
+              backgroundColor: '#FFFDF5',
+              borderColor: '#FDE68A',
+            },
+            {
+              title: 'Resistance',
+              values: columns.resistancePrimary,
+              backgroundColor: '#FFF8F8',
+              borderColor: '#FECACA',
+            },
+          ];
         if (columns.resistanceSecondary.length > 0) {
           columnDefs.push({
             title: 'Resistance',
@@ -1849,16 +1858,16 @@ export class ReportsService implements OnModuleInit, OnModuleDestroy {
         const cultureResult =
           ot.cultureResult && typeof ot.cultureResult === 'object'
             ? (ot.cultureResult as {
-                noGrowth?: unknown;
-                noGrowthResult?: unknown;
-                notes?: unknown;
-                isolates?: unknown;
-              })
+              noGrowth?: unknown;
+              noGrowthResult?: unknown;
+              notes?: unknown;
+              isolates?: unknown;
+            })
             : null;
         const noGrowth = cultureResult?.noGrowth === true;
         const noGrowthResult =
           typeof cultureResult?.noGrowthResult === 'string' &&
-          cultureResult.noGrowthResult.trim().length > 0
+            cultureResult.noGrowthResult.trim().length > 0
             ? cultureResult.noGrowthResult.trim()
             : 'No growth';
         const notes =
@@ -1892,12 +1901,12 @@ export class ReportsService implements OnModuleInit, OnModuleDestroy {
           const isolateObj =
             isolate && typeof isolate === 'object'
               ? (isolate as {
-                  organism?: unknown;
-                  source?: unknown;
-                  condition?: unknown;
-                  colonyCount?: unknown;
-                  comment?: unknown;
-                })
+                organism?: unknown;
+                source?: unknown;
+                condition?: unknown;
+                colonyCount?: unknown;
+                comment?: unknown;
+              })
               : {};
           const organism =
             String(isolateObj.organism ?? '').trim() || `Isolate ${isolateIndex + 1}`;
@@ -1907,12 +1916,12 @@ export class ReportsService implements OnModuleInit, OnModuleDestroy {
               : '';
           const isolateCondition =
             typeof isolateObj.condition === 'string' &&
-            isolateObj.condition.trim().length > 0
+              isolateObj.condition.trim().length > 0
               ? isolateObj.condition.trim()
               : '';
           const isolateColonyCount =
             typeof isolateObj.colonyCount === 'string' &&
-            isolateObj.colonyCount.trim().length > 0
+              isolateObj.colonyCount.trim().length > 0
               ? isolateObj.colonyCount.trim()
               : '';
           const isolateComment =

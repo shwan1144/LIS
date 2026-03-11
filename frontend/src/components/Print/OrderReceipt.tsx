@@ -29,7 +29,20 @@ export const OrderReceipt = forwardRef<HTMLDivElement, OrderReceiptProps>(
       order.registeredAt,
     );
     const apiBase = (import.meta.env.VITE_API_URL || window.location.origin).replace(/\/+$/, '');
-    const patientResultUrl = `${apiBase}/public/results/${order.id}`;
+    const labSubdomain = (order.lab as { subdomain?: string | null } | undefined)?.subdomain?.trim().toLowerCase();
+    let patientResultUrl: string;
+    if (labSubdomain) {
+      try {
+        const apiUrl = new URL(apiBase);
+        const apiHost = apiUrl.hostname.toLowerCase();
+        const baseDomain = apiHost.startsWith('api.') ? apiHost.slice(4) : apiHost;
+        patientResultUrl = `https://${labSubdomain}.${baseDomain}/public/results/${order.id}`;
+      } catch {
+        patientResultUrl = `${apiBase}/public/results/${order.id}`;
+      }
+    } else {
+      patientResultUrl = `${apiBase}/public/results/${order.id}`;
+    }
     const onlineResultsEnabled = order.lab?.enableOnlineResults !== false;
     const qrValue = onlineResultsEnabled ? patientResultUrl : (order.orderNumber || order.id);
     const qrNote = onlineResultsEnabled ? 'Scan to check result status' : 'QR shows order number';

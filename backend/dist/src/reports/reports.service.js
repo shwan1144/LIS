@@ -408,8 +408,13 @@ let ReportsService = ReportsService_1 = class ReportsService {
         return `http://localhost:${port}`;
     }
     resolveOrderQrValue(order) {
-        const baseUrl = this.resolvePublicResultsBaseUrl();
         const orderId = encodeURIComponent(order.id);
+        const labSubdomain = order.lab?.subdomain?.trim().toLowerCase();
+        const baseDomain = String(process.env.APP_BASE_DOMAIN ?? '').trim().toLowerCase();
+        if (labSubdomain && baseDomain) {
+            return `https://${labSubdomain}.${baseDomain}/public/results/${orderId}`;
+        }
+        const baseUrl = this.resolvePublicResultsBaseUrl();
         return `${baseUrl}/public/results/${orderId}`;
     }
     async generateOrderQrDataUrl(order) {

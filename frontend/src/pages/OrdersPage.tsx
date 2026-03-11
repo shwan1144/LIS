@@ -114,6 +114,16 @@ interface OrderListRow {
   createdOrder: OrderHistoryItemDto | null;
 }
 
+type PrintActionType = 'receipt' | 'labels';
+
+type PrintActionState = Record<PrintActionType, boolean>;
+
+type PrintPreviewJob = {
+  order: OrderDto;
+  sequence: number;
+  type: PrintActionType;
+};
+
 const ORDER_PAGE_SIZE = 25;
 const CREATE_ORDER_TIMEOUT_MS = 15_000;
 const CREATE_ORDER_SLOW_FEEDBACK_MS = 1_200;
@@ -388,12 +398,17 @@ export function OrdersPage() {
   const [discountPercent, setDiscountPercent] = useState(0);
 
   const [printModalOpen, setPrintModalOpen] = useState(false);
-  const [printType, setPrintType] = useState<'receipt' | 'labels'>('receipt');
+  const [printType, setPrintType] = useState<PrintActionType>('receipt');
   const [printOrder, setPrintOrder] = useState<OrderDto | null>(null);
+  const [printPreviewQueue, setPrintPreviewQueue] = useState<PrintPreviewJob[]>([]);
   const [printLabelSequenceBy, setPrintLabelSequenceBy] = useState<'tube_type' | 'department'>(
     lab?.labelSequenceBy ?? 'tube_type',
   );
-  const [printingAction, setPrintingAction] = useState<'receipt' | 'labels' | null>(null);
+  const [printingAction, setPrintingAction] = useState<PrintActionState>({
+    receipt: false,
+    labels: false,
+  });
+  const printRequestSequenceRef = useRef(0);
   const [nextOrderNumber, setNextOrderNumber] = useState<string | null>(null);
   const [updatingPayment, setUpdatingPayment] = useState(false);
   const [updatingDiscount, setUpdatingDiscount] = useState(false);
@@ -442,16 +457,19 @@ export function OrdersPage() {
   const selectedOrderDetailsError =
     selectedCreatedOrderSummary != null ? orderDetailsErrors[selectedCreatedOrderSummary.id] ?? null : null;
   const lockedOrderContextActive = isSelectedLocked && selectedCreatedOrderSummary != null;
-  const lockedOrderActionsBusy =
+  const anyPrintInFlight = printingAction.receipt || printingAction.labels;
+  const nonPrintBusy =
     submitting ||
     updatingPayment ||
     updatingDiscount ||
     savingDeliveryMethods ||
-    savingEditedTests ||
-    printingAction !== null;
+    savingEditedTests;
+  const lockedOrderActionsBusy =
+    nonPrintBusy ||
+    anyPrintInFlight;
   const lockedOrderBaseActionsDisabled = lockedOrderActionsBusy || !lockedOrderContextActive;
   const lockedOrderDetailActionsDisabled =
-    lockedOrderActionsBusy || !lockedOrderContextActive || !selectedCreatedOrder;
+    nonPrintBusy || !lockedOrderContextActive || !selectedCreatedOrder;
   const lockedOrderEditTestsDisabled =
     lockedOrderActionsBusy ||
     !lockedOrderContextActive ||
@@ -462,7 +480,7 @@ export function OrdersPage() {
     : !lockedOrderContextActive
       ? 'Select a locked order to use these actions.'
       : undefined;
-  const lockedOrderDetailActionDisabledTitle = lockedOrderActionsBusy
+  const lockedOrderDetailActionDisabledTitle = nonPrintBusy
     ? 'Please wait until the current action finishes.'
     : !lockedOrderContextActive
       ? 'Select a locked order to use these actions.'
@@ -478,6 +496,19 @@ export function OrdersPage() {
         : selectedOrderIsToday === false
           ? ONLY_TODAYS_ORDERS_EDITABLE_MESSAGE
           : undefined;
+  const isPrintPreviewActive = printModalOpen && printOrder !== null;
+
+  useEffect(() => {
+    if (isPrintPreviewActive || printPreviewQueue.length === 0) {
+      return;
+    }
+
+    const [nextJob, ...rest] = printPreviewQueue;
+    setPrintPreviewQueue(rest);
+    setPrintType(nextJob.type);
+    setPrintOrder(nextJob.order);
+    setPrintModalOpen(true);
+  }, [isPrintPreviewActive, printPreviewQueue]);
   const patientPickerQuery = patientPickerSearchInput.trim();
   const patientPickerModalBusy = patientCreateSubmitting || patientEditSubmitting;
   const canAdminOverrideLockedTestRemoval =
@@ -1600,9 +1631,13 @@ export function OrdersPage() {
     closePatientPickerModal();
   };
 
-  const openPrint = async (order: OrderDto, type: 'receipt' | 'labels') => {
-    if (lockedOrderActionsBusy) return;
-    setPrintingAction(type);
+  const openPrint = async (order: OrderDto, type: PrintActionType) => {
+    if (nonPrintBusy || printingAction[type]) return;
+    const sequence = ++printRequestSequenceRef.current;
+    setPrintingAction((current) => ({
+      ...current,
+      [type]: true,
+    }));
     try {
       try {
         const settings = await getLabSettings();
@@ -1643,11 +1678,16 @@ export function OrdersPage() {
         // if settings fail, continue with fallback preview
       }
 
-      setPrintType(type);
-      setPrintOrder(order);
-      setPrintModalOpen(true);
+      setPrintPreviewQueue((current) => {
+        const nextQueue = [...current, { order, sequence, type }];
+        nextQueue.sort((left, right) => left.sequence - right.sequence);
+        return nextQueue;
+      });
     } finally {
-      setPrintingAction((current) => (current === type ? null : current));
+      setPrintingAction((current) => ({
+        ...current,
+        [type]: false,
+      }));
     }
   };
 
@@ -1665,8 +1705,8 @@ export function OrdersPage() {
     openEditTestsModal();
   };
 
-  const handleLockedPrint = (type: 'receipt' | 'labels') => {
-    if (lockedOrderActionsBusy || !lockedOrderContextActive || !selectedCreatedOrderSummary) return;
+  const handleLockedPrint = (type: PrintActionType) => {
+    if (nonPrintBusy || printingAction[type] || !lockedOrderContextActive || !selectedCreatedOrderSummary) return;
     if (!selectedCreatedOrder) {
       void fetchOrderDetails(selectedCreatedOrderSummary.id, 'auto');
       message.info('Order details are still loading. Please try again in a moment.');
@@ -1932,9 +1972,9 @@ export function OrdersPage() {
               icon={<PrinterOutlined />}
               onClick={() => handleLockedPrint('receipt')}
               size="large"
-              loading={printingAction === 'receipt'}
-              disabled={lockedOrderDetailActionsDisabled}
-              title={lockedOrderDetailActionDisabledTitle}
+              loading={printingAction.receipt}
+              disabled={lockedOrderDetailActionsDisabled || printingAction.receipt}
+              title={printingAction.receipt ? 'Receipt print is already in progress.' : lockedOrderDetailActionDisabledTitle}
             >
               Receipt
             </Button>
@@ -1942,9 +1982,9 @@ export function OrdersPage() {
               icon={<PrinterOutlined />}
               onClick={() => handleLockedPrint('labels')}
               size="large"
-              loading={printingAction === 'labels'}
-              disabled={lockedOrderDetailActionsDisabled}
-              title={lockedOrderDetailActionDisabledTitle}
+              loading={printingAction.labels}
+              disabled={lockedOrderDetailActionsDisabled || printingAction.labels}
+              title={printingAction.labels ? 'Labels print is already in progress.' : lockedOrderDetailActionDisabledTitle}
             >
               Labels
             </Button>
