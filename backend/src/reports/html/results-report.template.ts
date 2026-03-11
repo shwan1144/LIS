@@ -1060,8 +1060,8 @@ export function buildResultsReportHtml(input: {
       flex-direction: column;
     }
     .culture-no-growth {
-      background: #ecfdf5;
-      border: 1px solid #86efac;
+      background: #f7fef9;
+      border: 1px solid #bbf7d0;
       color: #166534;
       font-weight: 700;
       padding: 8px 10px;
@@ -1107,17 +1107,17 @@ export function buildResultsReportHtml(input: {
       flex-direction: column;
     }
     .culture-ast-column-sensitive {
-      border-color: #86efac;
-      background: #f0fdf4;
+      border-color: #bbf7d0;
+      background: #f8fffb;
     }
     .culture-ast-column-intermediate {
-      border-color: #fcd34d;
-      background: #fffbeb;
+      border-color: #fde68a;
+      background: #fffdf5;
     }
     .culture-ast-column-resistance-primary,
     .culture-ast-column-resistance-secondary {
-      border-color: #fca5a5;
-      background: #fef2f2;
+      border-color: #fecaca;
+      background: #fff8f8;
     }
     .culture-ast-column-title {
       font-size: 11px;

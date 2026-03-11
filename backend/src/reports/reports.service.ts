@@ -1700,28 +1700,28 @@ export class ReportsService implements OnModuleInit, OnModuleDestroy {
           {
             title: 'Sensitive',
             values: columns.sensitive,
-            backgroundColor: '#F0FDF4',
-            borderColor: '#86EFAC',
+            backgroundColor: '#F8FFFB',
+            borderColor: '#BBF7D0',
           },
           {
             title: 'Intermediate',
             values: columns.intermediate,
-            backgroundColor: '#FFFBEB',
-            borderColor: '#FCD34D',
+            backgroundColor: '#FFFDF5',
+            borderColor: '#FDE68A',
           },
           {
             title: 'Resistance',
             values: columns.resistancePrimary,
-            backgroundColor: '#FEF2F2',
-            borderColor: '#FCA5A5',
+            backgroundColor: '#FFF8F8',
+            borderColor: '#FECACA',
           },
         ];
         if (columns.resistanceSecondary.length > 0) {
           columnDefs.push({
             title: 'Resistance',
             values: columns.resistanceSecondary,
-            backgroundColor: '#FEF2F2',
-            borderColor: '#FCA5A5',
+            backgroundColor: '#FFF8F8',
+            borderColor: '#FECACA',
           });
         }
         const cultureColumnWidth =

@@ -16,7 +16,7 @@ import {
   type LabelPrinterConfig as ZebraLabelPrinterConfig,
   type ZebraLabelGeometry,
 } from './label-printing-spec';
-import { fitSingleLineFontSize, singleLineTextNeedsShrink } from './label-text-fit';
+import { fitSingleLineFontSize } from './label-text-fit';
 
 const TEXT_THRESHOLD = 232;
 const ARABIC_TEXT_THRESHOLD = 246;
@@ -119,16 +119,14 @@ async function buildZplDocument(
   const sexText = collapseWhitespace(label.sexLabel) || '-';
   const patientNameFontSize = Math.max(15, Math.round(geometry.heightDots * 0.098));
   const patientNameMinFontSize = Math.max(11, Math.round(patientNameFontSize * 0.72));
-  const patientNameShouldRenderGraphic =
-    needsRasterText(patientNameText) ||
-    singleLineTextNeedsShrink({
-      fontFamily: getCanvasFontFamily(patientNameText),
-      fontSize: patientNameFontSize,
-      fontWeight: 700,
-      maxWidth: Math.max(1, layout.nameWidth - Math.max(2, Math.round(layout.nameWidth * 0.05))),
-      minFontSize: patientNameMinFontSize,
-      text: patientNameText,
-    });
+  const patientNameShouldRenderGraphic = true;
+  const useEnglishVerticalTweaks = !containsArabic(`${patientNameText} ${sexText}`);
+  const englishDownShiftDots = useEnglishVerticalTweaks
+    ? Math.max(1, mmToDots(0.3, geometry.dpiY))
+    : 0;
+  const englishUpShiftDots = useEnglishVerticalTweaks
+    ? Math.max(1, mmToDots(0.25, geometry.dpiY))
+    : 0;
 
   if (requiresCompositeRasterLabelLayer([
     patientNameText,
@@ -149,6 +147,9 @@ async function buildZplDocument(
         sequenceText,
         sexText,
         testCodesText,
+        patientIdTopOffset: -englishUpShiftDots,
+        nameTopOffset: englishDownShiftDots,
+        sexTopOffset: englishDownShiftDots,
       });
     } catch {
       // Fall back to field-by-field text graphics if the composite DOM layer fails.
@@ -183,7 +184,7 @@ async function buildZplDocument(
       text: registeredAtText,
       width: layout.sequenceMetaWidth,
     }),
-    testCodesText && needsRasterText(testCodesText)
+    testCodesText
       ? renderTextGraphic({
         align: 'center',
         fontSize: Math.max(11, Math.round(geometry.heightDots * 0.066)),
@@ -246,7 +247,11 @@ async function buildZplDocument(
 
     // Right Strip (Patient ID)
     patientIdGraphic
-      ? graphicToZpl(layout.patientIdX, layout.borderThickness, patientIdGraphic)
+      ? graphicToZpl(
+        layout.patientIdX,
+        Math.max(0, layout.borderThickness - englishUpShiftDots),
+        patientIdGraphic,
+      )
       : nativeTextField({
         align: 'C',
         fontHeight: Math.max(19, Math.round(geometry.heightDots * 0.086)),
@@ -255,12 +260,16 @@ async function buildZplDocument(
         text: patientIdText,
         width: geometry.heightDots,
         x: layout.patientIdX + Math.round(layout.rightStripWidth / 2) - 6,
-        y: layout.borderThickness,
+        y: Math.max(0, layout.borderThickness - englishUpShiftDots),
       }),
 
     // Patient Name
     patientNameGraphic
-      ? graphicToZpl(layout.textLeftX, layout.paddingY, patientNameGraphic)
+      ? graphicToZpl(
+        layout.textLeftX,
+        layout.paddingY + englishDownShiftDots,
+        patientNameGraphic,
+      )
       : nativeTextField({
         align: 'L',
         fontHeight: Math.max(19, Math.round(geometry.heightDots * 0.122)),
@@ -268,7 +277,7 @@ async function buildZplDocument(
         text: patientNameText,
         width: layout.nameWidth,
         x: layout.textLeftX,
-        y: Math.max(0, layout.paddingY - 1),
+        y: Math.max(0, layout.paddingY - 1 + englishDownShiftDots),
       }),
 
     // Sex
@@ -279,7 +288,7 @@ async function buildZplDocument(
       text: sexText,
       width: layout.sexWidth,
       x: layout.sexX,
-      y: Math.max(0, layout.paddingY),
+      y: Math.max(0, layout.paddingY + englishDownShiftDots),
     }),
 
     // Barcode
@@ -322,10 +331,13 @@ async function buildCompositeRasterLabelDocument(params: {
   label: SampleLabelViewModel;
   layout: LayoutMetrics;
   patientIdText: string;
+  patientIdTopOffset: number;
   patientNameText: string;
+  nameTopOffset: number;
   registeredAtText: string;
   sequenceText: string;
   sexText: string;
+  sexTopOffset: number;
   testCodesText: string;
 }): Promise<string> {
   const textLayerGraphic = await renderCompositeRasterLabelLayer(params);
@@ -363,10 +375,13 @@ async function renderCompositeRasterLabelLayer(params: {
   label: SampleLabelViewModel;
   layout: LayoutMetrics;
   patientIdText: string;
+  patientIdTopOffset: number;
   patientNameText: string;
+  nameTopOffset: number;
   registeredAtText: string;
   sequenceText: string;
   sexText: string;
+  sexTopOffset: number;
   testCodesText: string;
 }): Promise<GfaGraphic> {
   const allText = [
@@ -407,7 +422,7 @@ async function renderCompositeRasterLabelLayer(params: {
   appendTextBox(root, {
     align: 'center',
     fontFamily: getCanvasFontFamily(params.sequenceText),
-    fontSize: Math.max(13, Math.round(params.geometry.heightDots * 0.076)),
+    fontSize: Math.max(14, Math.round(params.geometry.heightDots * 0.08)),
     fontWeight: 700,
     height: params.geometry.heightDots - (lineWidth * 2),
     left: lineWidth,
@@ -431,13 +446,13 @@ async function renderCompositeRasterLabelLayer(params: {
   appendTextBox(root, {
     align: 'center',
     fontFamily: getCanvasFontFamily(params.patientIdText),
-    fontSize: Math.max(14, Math.round(params.geometry.heightDots * 0.078)),
+    fontSize: Math.max(15, Math.round(params.geometry.heightDots * 0.08)),
     fontWeight: 600,
     height: params.geometry.heightDots - (lineWidth * 2),
     left: params.geometry.widthDots - params.layout.rightStripWidth + lineWidth,
     rotateVertical: true,
     text: params.patientIdText,
-    top: lineWidth,
+    top: Math.max(0, lineWidth + params.patientIdTopOffset),
     width: params.layout.rightStripWidth - (lineWidth * 2),
   });
   appendTextBox(root, {
@@ -450,7 +465,7 @@ async function renderCompositeRasterLabelLayer(params: {
     left: params.layout.textLeftX,
     minFontSize: Math.max(11, Math.round(Math.max(19, Math.round(params.geometry.heightDots * 0.122)) * 0.72)),
     text: params.patientNameText,
-    top: Math.max(0, params.layout.paddingY - 1),
+    top: Math.max(0, params.layout.paddingY - 1 + params.nameTopOffset),
     width: params.layout.nameWidth,
   });
   appendTextBox(root, {
@@ -461,7 +476,7 @@ async function renderCompositeRasterLabelLayer(params: {
     height: params.layout.sexHeight,
     left: params.layout.sexX,
     text: params.sexText,
-    top: params.layout.paddingY,
+    top: Math.max(0, params.layout.paddingY + params.sexTopOffset),
     width: params.layout.sexWidth,
   });
   appendTextBox(root, {
