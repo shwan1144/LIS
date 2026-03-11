@@ -17,13 +17,15 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { AntibioticsService } from './antibiotics.service';
 import { CreateAntibioticDto } from './dto/create-antibiotic.dto';
 import { UpdateAntibioticDto } from './dto/update-antibiotic.dto';
+import { RolesGuard } from '../auth/roles.guard';
+import { Roles } from '../auth/roles.decorator';
 
 interface RequestWithUser {
   user: { userId: string; username: string; labId: string };
 }
 
 @Controller('antibiotics')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, RolesGuard)
 export class AntibioticsController {
   constructor(private readonly antibioticsService: AntibioticsService) {}
 
@@ -45,6 +47,7 @@ export class AntibioticsController {
   }
 
   @Post()
+  @Roles('LAB_ADMIN', 'SUPER_ADMIN')
   @UsePipes(new ValidationPipe({ whitelist: true, transform: true }))
   async create(@Req() req: RequestWithUser, @Body() dto: CreateAntibioticDto) {
     const labId = req.user?.labId;
@@ -53,6 +56,7 @@ export class AntibioticsController {
   }
 
   @Patch(':id')
+  @Roles('LAB_ADMIN', 'SUPER_ADMIN')
   @UsePipes(new ValidationPipe({ whitelist: true, transform: true }))
   async update(
     @Req() req: RequestWithUser,
@@ -65,6 +69,7 @@ export class AntibioticsController {
   }
 
   @Delete(':id')
+  @Roles('LAB_ADMIN', 'SUPER_ADMIN')
   async remove(@Req() req: RequestWithUser, @Param('id', ParseUUIDPipe) id: string) {
     const labId = req.user?.labId;
     if (!labId) throw new Error('Lab ID not found in token');

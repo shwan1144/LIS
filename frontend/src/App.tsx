@@ -37,6 +37,7 @@ import { AdminAnnouncementsPage } from './pages/admin/AdminAnnouncementsPage';
 import { Outlet } from 'react-router-dom';
 import { getCurrentAuthScope } from './utils/tenant-scope';
 import { InstallAppButton } from './components/InstallAppButton';
+import { PublicResultProxyPage } from './pages/PublicResultProxyPage';
 import './App.css';
 
 function SettingsLayout() {
@@ -169,6 +170,7 @@ function AppContent() {
               </Route>
             )}
 
+            <Route path="/public/results/:id" element={<PublicResultProxyPage />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </BrowserRouter>

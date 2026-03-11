@@ -12,13 +12,15 @@ import {
 } from '@nestjs/common';
 import { DepartmentsService } from './departments.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { RolesGuard } from '../auth/roles.guard';
+import { Roles } from '../auth/roles.decorator';
 
 interface RequestWithUser {
   user: { userId: string; username: string; labId: string };
 }
 
 @Controller('departments')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, RolesGuard)
 export class DepartmentsController {
   constructor(private readonly departmentsService: DepartmentsService) {}
 
@@ -37,6 +39,7 @@ export class DepartmentsController {
   }
 
   @Post()
+  @Roles('LAB_ADMIN', 'SUPER_ADMIN')
   async create(
     @Req() req: RequestWithUser,
     @Body() body: { code: string; name?: string },
@@ -47,6 +50,7 @@ export class DepartmentsController {
   }
 
   @Patch(':id')
+  @Roles('LAB_ADMIN', 'SUPER_ADMIN')
   async update(
     @Req() req: RequestWithUser,
     @Param('id', ParseUUIDPipe) id: string,
@@ -58,6 +62,7 @@ export class DepartmentsController {
   }
 
   @Delete(':id')
+  @Roles('LAB_ADMIN', 'SUPER_ADMIN')
   async delete(@Req() req: RequestWithUser, @Param('id', ParseUUIDPipe) id: string) {
     const labId = req.user?.labId;
     if (!labId) throw new Error('Lab ID not found in token');

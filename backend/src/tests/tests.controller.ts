@@ -17,13 +17,15 @@ import { TestsService } from './tests.service';
 import { CreateTestDto } from './dto/create-test.dto';
 import { UpdateTestDto } from './dto/update-test.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { RolesGuard } from '../auth/roles.guard';
+import { Roles } from '../auth/roles.decorator';
 
 interface RequestWithUser {
   user: { userId: string | null; username: string; labId: string };
 }
 
 @Controller('tests')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, RolesGuard)
 export class TestsController {
   constructor(private readonly testsService: TestsService) {}
 
@@ -37,6 +39,7 @@ export class TestsController {
 
   // Seed routes must be before :id routes so "seed" is not captured as id
   @Post('seed/all')
+  @Roles('LAB_ADMIN', 'SUPER_ADMIN')
   async seedAll(@Req() req: RequestWithUser) {
     const labId = req.user?.labId;
     if (!labId) throw new Error('Lab ID not found in token');
@@ -55,6 +58,7 @@ export class TestsController {
   }
 
   @Post('seed/cbc')
+  @Roles('LAB_ADMIN', 'SUPER_ADMIN')
   async seedCBC(@Req() req: RequestWithUser) {
     const labId = req.user?.labId;
     if (!labId) throw new Error('Lab ID not found in token');
@@ -62,6 +66,7 @@ export class TestsController {
   }
 
   @Post('seed/chemistry')
+  @Roles('LAB_ADMIN', 'SUPER_ADMIN')
   async seedChemistry(@Req() req: RequestWithUser) {
     const labId = req.user?.labId;
     if (!labId) throw new Error('Lab ID not found in token');
@@ -69,6 +74,7 @@ export class TestsController {
   }
 
   @Post('seed/urinalysis')
+  @Roles('LAB_ADMIN', 'SUPER_ADMIN')
   async seedUrinalysis(@Req() req: RequestWithUser) {
     const labId = req.user?.labId;
     if (!labId) throw new Error('Lab ID not found in token');
@@ -83,6 +89,7 @@ export class TestsController {
   }
 
   @Patch(':id/pricing')
+  @Roles('LAB_ADMIN', 'SUPER_ADMIN')
   async setPricing(
     @Req() req: RequestWithUser,
     @Param('id', ParseUUIDPipe) id: string,
@@ -102,6 +109,7 @@ export class TestsController {
   }
 
   @Post()
+  @Roles('LAB_ADMIN', 'SUPER_ADMIN')
   @UsePipes(new ValidationPipe({ whitelist: true, transform: true }))
   async create(@Req() req: RequestWithUser, @Body() dto: CreateTestDto) {
     const labId = req.user?.labId;
@@ -110,6 +118,7 @@ export class TestsController {
   }
 
   @Patch(':id')
+  @Roles('LAB_ADMIN', 'SUPER_ADMIN')
   @UsePipes(new ValidationPipe({ whitelist: true, transform: true }))
   async update(
     @Req() req: RequestWithUser,
@@ -122,6 +131,7 @@ export class TestsController {
   }
 
   @Delete(':id')
+  @Roles('LAB_ADMIN', 'SUPER_ADMIN')
   async delete(@Req() req: RequestWithUser, @Param('id', ParseUUIDPipe) id: string) {
     const labId = req.user?.labId;
     if (!labId) throw new Error('Lab ID not found in token');
@@ -130,6 +140,7 @@ export class TestsController {
   }
 
   @Patch(':id/toggle-active')
+  @Roles('LAB_ADMIN', 'SUPER_ADMIN')
   async toggleActive(@Req() req: RequestWithUser, @Param('id', ParseUUIDPipe) id: string) {
     const labId = req.user?.labId;
     if (!labId) throw new Error('Lab ID not found in token');

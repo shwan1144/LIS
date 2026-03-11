@@ -472,7 +472,10 @@ export class SettingsService {
     return {
       user,
       labIds: user.labAssignments?.map((a) => a.labId) ?? [],
-      shiftIds: user.shiftAssignments?.map((a) => a.shiftId) ?? [],
+      shiftIds:
+        user.shiftAssignments
+          ?.filter((a) => a.shift?.labId === labId)
+          ?.map((a) => a.shiftId) ?? [],
       departmentIds,
     };
   }
@@ -590,7 +593,19 @@ export class SettingsService {
 
       if (data.shiftIds !== undefined) {
         const shiftIds = Array.from(new Set(data.shiftIds.map((value) => value.trim()).filter(Boolean)));
-        await shiftAssignmentRepo.delete({ userId: id });
+        const shiftsInLab = await manager.getRepository(Shift).find({
+          where: { labId },
+          select: ['id'],
+        });
+        const shiftIdsInLab = shiftsInLab.map((shift) => shift.id);
+        if (shiftIdsInLab.length > 0) {
+          await shiftAssignmentRepo
+            .createQueryBuilder()
+            .delete()
+            .where('userId = :userId', { userId: id })
+            .andWhere('shiftId IN (:...shiftIds)', { shiftIds: shiftIdsInLab })
+            .execute();
+        }
         if (shiftIds.length > 0) {
           await this.ensureShiftsBelongToLab(shiftIds, labId, manager);
           await shiftAssignmentRepo.insert(
@@ -600,7 +615,19 @@ export class SettingsService {
       }
       if (data.departmentIds !== undefined) {
         const departmentIds = Array.from(new Set(data.departmentIds.map((value) => value.trim()).filter(Boolean)));
-        await userDeptRepo.delete({ userId: id });
+        const departmentsInLab = await manager.getRepository(Department).find({
+          where: { labId },
+          select: ['id'],
+        });
+        const departmentIdsInLab = departmentsInLab.map((department) => department.id);
+        if (departmentIdsInLab.length > 0) {
+          await userDeptRepo
+            .createQueryBuilder()
+            .delete()
+            .where('userId = :userId', { userId: id })
+            .andWhere('departmentId IN (:...departmentIds)', { departmentIds: departmentIdsInLab })
+            .execute();
+        }
         if (departmentIds.length > 0) {
           await this.ensureDepartmentsBelongToLab(departmentIds, labId, manager);
           await userDeptRepo.insert(
