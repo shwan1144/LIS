@@ -1225,6 +1225,7 @@ export interface OrderTestDto {
   resultValue?: number | null;
   resultText?: string | null;
   resultParameters?: Record<string, string> | null;
+  cultureResult?: CultureResultPayload | null;
   flag?: ResultFlag | null;
   resultedAt?: string | null;
   resultedBy?: string | null;
@@ -1655,7 +1656,41 @@ export interface TestNumericAgeRange {
 
 export type TestNumericAgeUnit = 'DAY' | 'MONTH' | 'YEAR';
 
-export type TestResultEntryType = 'NUMERIC' | 'QUALITATIVE' | 'TEXT';
+export interface TestCultureConfig {
+  interpretationOptions: string[];
+  micUnit?: string | null;
+}
+
+export interface CultureResultAntibioticRow {
+  antibioticId?: string | null;
+  antibioticCode?: string | null;
+  antibioticName?: string | null;
+  interpretation: string;
+  mic?: string | null;
+}
+
+export interface CultureResultIsolate {
+  isolateKey: string;
+  organism: string;
+  source?: string | null;
+  condition?: string | null;
+  colonyCount?: string | null;
+  comment?: string | null;
+  antibiotics: CultureResultAntibioticRow[];
+}
+
+export interface CultureResultPayload {
+  noGrowth: boolean;
+  noGrowthResult?: string | null;
+  notes?: string | null;
+  isolates: CultureResultIsolate[];
+}
+
+export type TestResultEntryType =
+  | 'NUMERIC'
+  | 'QUALITATIVE'
+  | 'TEXT'
+  | 'CULTURE_SENSITIVITY';
 
 export interface TestResultTextOption {
   value: string;
@@ -1700,6 +1735,8 @@ export interface TestDto {
   resultEntryType: TestResultEntryType;
   resultTextOptions: TestResultTextOption[] | null;
   allowCustomResultText: boolean;
+  cultureConfig: TestCultureConfig | null;
+  cultureAntibioticIds?: string[];
   panelComponents?: TestPanelComponent[];
   description: string | null;
   childTestIds: string | null;
@@ -1733,6 +1770,8 @@ export interface CreateTestDto {
   resultEntryType?: TestResultEntryType;
   resultTextOptions?: TestResultTextOption[] | null;
   allowCustomResultText?: boolean;
+  cultureConfig?: TestCultureConfig | null;
+  cultureAntibioticIds?: string[] | null;
   panelComponents?: TestPanelComponent[] | null;
   panelComponentTestIds?: string[] | null;
   description?: string;
@@ -1742,6 +1781,48 @@ export interface CreateTestDto {
   isActive?: boolean;
   sortOrder?: number;
   expectedCompletionMinutes?: number | null;
+}
+
+export interface AntibioticDto {
+  id: string;
+  labId: string;
+  code: string;
+  name: string;
+  isActive: boolean;
+  sortOrder: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateAntibioticDto {
+  code: string;
+  name: string;
+  isActive?: boolean;
+  sortOrder?: number;
+}
+
+export async function getAntibiotics(includeInactive = false): Promise<AntibioticDto[]> {
+  const res = await api.get<AntibioticDto[]>('/antibiotics', {
+    params: includeInactive ? { includeInactive: 'true' } : undefined,
+  });
+  return res.data;
+}
+
+export async function createAntibiotic(data: CreateAntibioticDto): Promise<AntibioticDto> {
+  const res = await api.post<AntibioticDto>('/antibiotics', data);
+  return res.data;
+}
+
+export async function updateAntibiotic(
+  id: string,
+  data: Partial<CreateAntibioticDto>,
+): Promise<AntibioticDto> {
+  const res = await api.patch<AntibioticDto>(`/antibiotics/${id}`, data);
+  return res.data;
+}
+
+export async function deleteAntibiotic(id: string): Promise<void> {
+  await api.delete(`/antibiotics/${id}`);
 }
 
 export async function getTests(activeOnly?: boolean): Promise<TestDto[]> {
@@ -1825,6 +1906,7 @@ export const ResultFlag = {
 
 export interface WorklistItem {
   id: string;
+  testId: string;
   orderNumber: string;
   orderId: string;
   sampleId: string;
@@ -1843,10 +1925,13 @@ export interface WorklistItem {
   resultEntryType: TestResultEntryType;
   resultTextOptions: TestResultTextOption[] | null;
   allowCustomResultText: boolean;
+  cultureConfig: TestCultureConfig | null;
+  cultureAntibioticIds: string[];
   tubeType: string | null;
   status: OrderTestStatus;
   resultValue: number | null;
   resultText: string | null;
+  cultureResult: CultureResultPayload | null;
   flag: ResultFlag | null;
   resultedAt: string | null;
   resultedBy: string | null;
@@ -1870,6 +1955,7 @@ export async function enterResult(
     resultText?: string | null;
     comments?: string | null;
     resultParameters?: Record<string, string> | null;
+    cultureResult?: CultureResultPayload | null;
     forceEditVerified?: boolean;
   }
 ): Promise<void> {
@@ -1883,6 +1969,7 @@ export async function batchEnterResults(
     resultText?: string | null;
     comments?: string | null;
     resultParameters?: Record<string, string> | null;
+    cultureResult?: CultureResultPayload | null;
     forceEditVerified?: boolean;
   }>
 ): Promise<void> {

@@ -41,12 +41,16 @@ import {
   getTestPricing,
   setTestPricing,
   seedAllTests,
+  getAntibiotics,
+  createAntibiotic,
   getInstruments,
   getInstrumentMappingsByTestId,
   createInstrumentMapping,
   deleteInstrumentMapping,
+  type AntibioticDto,
   type TestDto,
   type CreateTestDto,
+  type TestCultureConfig,
   type TestType,
   type TestTubeType,
   type TestParameterDefinition,
@@ -82,6 +86,7 @@ const RESULT_ENTRY_TYPES: { label: string; value: TestResultEntryType }[] = [
   { label: 'Numeric', value: 'NUMERIC' },
   { label: 'Qualitative (dropdown)', value: 'QUALITATIVE' },
   { label: 'Text', value: 'TEXT' },
+  { label: 'Culture & Sensitivity', value: 'CULTURE_SENSITIVITY' },
 ];
 
 const RESULT_FLAG_OPTIONS: { label: string; value: NonNullable<TestResultTextOption['flag']> }[] = [
@@ -288,6 +293,10 @@ export function TestsPage() {
   const [newMappingInstrumentId, setNewMappingInstrumentId] = useState<string | null>(null);
   const [newMappingCode, setNewMappingCode] = useState('');
   const [newMappingName, setNewMappingName] = useState('');
+  const [antibiotics, setAntibiotics] = useState<AntibioticDto[]>([]);
+  const [addingAntibiotic, setAddingAntibiotic] = useState(false);
+  const [newAntibioticCode, setNewAntibioticCode] = useState('');
+  const [newAntibioticName, setNewAntibioticName] = useState('');
 
   const panelCardStyle = useMemo(
     () => ({
@@ -352,14 +361,16 @@ export function TestsPage() {
   );
 
   const handleOpenModal = async (test?: TestDto) => {
-    const [shiftList, deptList, latestAllTests] = await Promise.all([
+    const [shiftList, deptList, latestAllTests, antibioticList] = await Promise.all([
       getShifts().catch(() => []),
       getDepartments().catch(() => []),
       getTests(false).catch(() => []),
+      getAntibiotics(true).catch(() => []),
     ]);
     setShifts(shiftList);
     setDepartments(deptList);
     setAllTests(latestAllTests.map(normalizeTestDtoNumericFields));
+    setAntibiotics(antibioticList);
     const initialPrices: Record<string, number> = { default: 0 };
     shiftList.forEach((s) => { initialPrices[s.id] = 0; });
     if (test) {
@@ -390,6 +401,10 @@ export function TestsPage() {
           flag: option.flag ?? undefined,
           isDefault: Boolean(option.isDefault),
         })),
+        cultureConfig: fullTest.cultureConfig ?? {
+          interpretationOptions: ['S', 'I', 'R'],
+          micUnit: null,
+        },
         parameterDefinitions: (fullTest.parameterDefinitions ?? []).map((p) => ({
           code: p.code,
           label: p.label,
@@ -401,6 +416,7 @@ export function TestsPage() {
         panelComponentTestIds: (fullTest.panelComponents ?? [])
           .sort((a, b) => a.sortOrder - b.sortOrder)
           .map((component) => component.childTestId),
+        cultureAntibioticIds: fullTest.cultureAntibioticIds ?? [],
       });
       const pricing = await getTestPricing(fullTest.id).catch(() => []);
       pricing.forEach((p) => {
@@ -422,6 +438,11 @@ export function TestsPage() {
         resultEntryType: 'NUMERIC',
         allowCustomResultText: false,
         resultTextOptions: [],
+        cultureConfig: {
+          interpretationOptions: ['S', 'I', 'R'],
+          micUnit: null,
+        },
+        cultureAntibioticIds: [],
         panelComponentTestIds: [],
       });
     }
@@ -437,6 +458,8 @@ export function TestsPage() {
     setNewMappingInstrumentId(null);
     setNewMappingCode('');
     setNewMappingName('');
+    setNewAntibioticCode('');
+    setNewAntibioticName('');
   };
 
   useEffect(() => {
@@ -497,6 +520,39 @@ export function TestsPage() {
     }
   };
 
+  const handleAddAntibiotic = async () => {
+    const code = newAntibioticCode.trim().toUpperCase();
+    const name = newAntibioticName.trim();
+    if (!code || !name) {
+      message.warning('Enter antibiotic code and name');
+      return;
+    }
+    setAddingAntibiotic(true);
+    try {
+      const created = await createAntibiotic({ code, name, isActive: true });
+      setAntibiotics((prev) =>
+        [...prev, created].sort((a, b) =>
+          a.sortOrder !== b.sortOrder ? a.sortOrder - b.sortOrder : a.code.localeCompare(b.code),
+        ),
+      );
+      const currentIds = form.getFieldValue('cultureAntibioticIds') as string[] | undefined;
+      form.setFieldsValue({
+        cultureAntibioticIds: Array.from(new Set([...(currentIds ?? []), created.id])),
+      });
+      setNewAntibioticCode('');
+      setNewAntibioticName('');
+      message.success('Antibiotic added');
+    } catch (error: unknown) {
+      const msg =
+        error && typeof error === 'object' && 'response' in error
+          ? (error as { response?: { data?: { message?: string } } }).response?.data?.message
+          : 'Failed to add antibiotic';
+      message.error(msg || 'Failed to add antibiotic');
+    } finally {
+      setAddingAntibiotic(false);
+    }
+  };
+
   const handleSubmit = async (
     values: CreateTestDto & {
       category?: string | string[] | null;
@@ -511,11 +567,13 @@ export function TestsPage() {
       numericAgeRanges?: TestNumericAgeRange[];
       resultEntryType?: TestResultEntryType;
       allowCustomResultText?: boolean;
+      cultureConfig?: TestCultureConfig | null;
       resultTextOptions?: {
         value: string;
         flag?: TestResultTextOption['flag'];
         isDefault?: boolean;
       }[];
+      cultureAntibioticIds?: string[] | null;
       panelComponentTestIds?: string[];
       type?: TestType;
     },
@@ -555,6 +613,23 @@ export function TestsPage() {
         }))
         .filter((option) => option.value.length > 0);
     const resultEntryType = values.resultEntryType ?? 'NUMERIC';
+    const normalizedCultureConfig =
+      resultEntryType === 'CULTURE_SENSITIVITY'
+        ? {
+            interpretationOptions:
+              Array.from(
+                new Set(
+                  (values.cultureConfig?.interpretationOptions ?? ['S', 'I', 'R'])
+                    .map((option) => String(option ?? '').trim().toUpperCase())
+                    .filter(Boolean),
+                ),
+              ) || ['S', 'I', 'R'],
+            micUnit: values.cultureConfig?.micUnit?.trim() || null,
+          }
+        : null;
+    const cultureAntibioticIds = Array.from(
+      new Set((values.cultureAntibioticIds ?? []).filter(Boolean)),
+    );
     const panelComponentTestIds = (values.panelComponentTestIds ?? []).filter(Boolean);
 
     if (
@@ -567,6 +642,15 @@ export function TestsPage() {
 
     if (resultEntryType === 'QUALITATIVE' && normalizedResultTextOptions.length === 0) {
       message.error('Add at least one result text option for qualitative tests');
+      setSubmitting(false);
+      return;
+    }
+
+    if (
+      resultEntryType === 'CULTURE_SENSITIVITY' &&
+      (normalizedCultureConfig?.interpretationOptions?.length ?? 0) === 0
+    ) {
+      message.error('Add at least one interpretation option (e.g., S, I, R)');
       setSubmitting(false);
       return;
     }
@@ -592,6 +676,12 @@ export function TestsPage() {
         : null,
       resultEntryType: isPanel ? 'NUMERIC' : resultEntryType,
       allowCustomResultText: isPanel ? false : Boolean(values.allowCustomResultText),
+      cultureConfig: isPanel ? null : normalizedCultureConfig,
+      cultureAntibioticIds: isPanel
+        ? null
+        : resultEntryType === 'CULTURE_SENSITIVITY'
+          ? cultureAntibioticIds
+          : null,
       resultTextOptions: isPanel
         ? null
         : normalizedResultTextOptions.length
@@ -1049,6 +1139,11 @@ export function TestsPage() {
             resultEntryType: 'NUMERIC',
             allowCustomResultText: false,
             resultTextOptions: [],
+            cultureConfig: {
+              interpretationOptions: ['S', 'I', 'R'],
+              micUnit: null,
+            },
+            cultureAntibioticIds: [],
           }}
         >
           <Form.Item noStyle shouldUpdate={(prev, curr) => prev?.type !== curr?.type}>
@@ -1119,6 +1214,18 @@ export function TestsPage() {
                 form.getFieldValue('resultEntryType') || 'NUMERIC';
               const showTextOptions =
                 resultEntryType === 'QUALITATIVE' || resultEntryType === 'TEXT';
+              const showCultureConfig = resultEntryType === 'CULTURE_SENSITIVITY';
+              const antibioticOptions = antibiotics
+                .filter((item) => item.isActive)
+                .sort((a, b) =>
+                  a.sortOrder !== b.sortOrder
+                    ? a.sortOrder - b.sortOrder
+                    : a.code.localeCompare(b.code),
+                )
+                .map((item) => ({
+                  label: `${item.code} - ${item.name}`,
+                  value: item.id,
+                }));
 
               return (
                 <div className="tests-editor-panel">
@@ -1134,7 +1241,12 @@ export function TestsPage() {
                       label="Allow custom text"
                       valuePropName="checked"
                     >
-                      <Switch disabled={resultEntryType === 'NUMERIC'} />
+                      <Switch
+                        disabled={
+                          resultEntryType === 'NUMERIC' ||
+                          resultEntryType === 'CULTURE_SENSITIVITY'
+                        }
+                      />
                     </Form.Item>
                   </div>
 
@@ -1202,6 +1314,70 @@ export function TestsPage() {
                         </>
                       )}
                     </Form.List>
+                  )}
+
+                  {showCultureConfig && (
+                    <div style={{ marginTop: 10 }}>
+                      <div className="tests-editor-table single-col" style={{ marginBottom: 10 }}>
+                        <Form.Item
+                          name={['cultureConfig', 'interpretationOptions']}
+                          label="Interpretation options"
+                          rules={[{ required: true, message: 'Required' }]}
+                        >
+                          <Select
+                            mode="tags"
+                            tokenSeparators={[',', ' ']}
+                            placeholder="e.g., S, I, R"
+                          />
+                        </Form.Item>
+                        <Form.Item
+                          name={['cultureConfig', 'micUnit']}
+                          label="MIC unit"
+                        >
+                          <Input placeholder="Optional, e.g. µg/mL" />
+                        </Form.Item>
+                        <Form.Item
+                          name="cultureAntibioticIds"
+                          label="Antibiotic template"
+                        >
+                          <Select
+                            mode="multiple"
+                            showSearch
+                            allowClear
+                            optionFilterProp="label"
+                            placeholder="Select antibiotics used in this test"
+                            options={antibioticOptions}
+                          />
+                        </Form.Item>
+                      </div>
+                      <Row gutter={8} align="middle">
+                        <Col span={6}>
+                          <Input
+                            placeholder="Code"
+                            value={newAntibioticCode}
+                            onChange={(event) => setNewAntibioticCode(event.target.value)}
+                          />
+                        </Col>
+                        <Col span={12}>
+                          <Input
+                            placeholder="Antibiotic name"
+                            value={newAntibioticName}
+                            onChange={(event) => setNewAntibioticName(event.target.value)}
+                          />
+                        </Col>
+                        <Col span={6}>
+                          <Button
+                            type="dashed"
+                            block
+                            icon={<PlusOutlined />}
+                            loading={addingAntibiotic}
+                            onClick={handleAddAntibiotic}
+                          >
+                            Add catalog antibiotic
+                          </Button>
+                        </Col>
+                      </Row>
+                    </div>
                   )}
                 </div>
               );

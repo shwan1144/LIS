@@ -1,5 +1,6 @@
 import { AuditLog } from '../entities/audit-log.entity';
 import { AdminLabPortalToken } from '../entities/admin-lab-portal-token.entity';
+import { Antibiotic } from '../entities/antibiotic.entity';
 import { Department } from '../entities/department.entity';
 import {
   Instrument,
@@ -26,6 +27,7 @@ import { Result } from '../entities/result.entity';
 import { Sample } from '../entities/sample.entity';
 import { Shift } from '../entities/shift.entity';
 import { TestComponent } from '../entities/test-component.entity';
+import { TestAntibiotic } from '../entities/test-antibiotic.entity';
 import { Test } from '../entities/test.entity';
 import { UnmatchedInstrumentResult } from '../entities/unmatched-instrument-result.entity';
 import { UserDepartmentAssignment } from '../entities/user-department-assignment.entity';
@@ -42,11 +44,13 @@ export const DATABASE_ENTITIES = [
   UserShiftAssignment,
   UserDepartmentAssignment,
   Department,
+  Antibiotic,
   Patient,
   Order,
   Sample,
   OrderTest,
   Test,
+  TestAntibiotic,
   Pricing,
   PlatformUser,
   PlatformSetting,

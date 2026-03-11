@@ -21,7 +21,11 @@ export interface TestNumericAgeRange {
     normalMin?: number | null;
     normalMax?: number | null;
 }
-export type TestResultEntryType = 'NUMERIC' | 'QUALITATIVE' | 'TEXT';
+export interface TestCultureConfig {
+    interpretationOptions: string[];
+    micUnit?: string | null;
+}
+export type TestResultEntryType = 'NUMERIC' | 'QUALITATIVE' | 'TEXT' | 'CULTURE_SENSITIVITY';
 export type TestResultFlag = 'N' | 'H' | 'L' | 'POS' | 'NEG' | 'ABN';
 export interface TestResultTextOption {
     value: string;
@@ -67,6 +71,7 @@ export declare class Test {
     resultEntryType: TestResultEntryType;
     resultTextOptions: TestResultTextOption[] | null;
     allowCustomResultText: boolean;
+    cultureConfig: TestCultureConfig | null;
     numericAgeRanges: TestNumericAgeRange[] | null;
     description: string | null;
     childTestIds: string | null;
@@ -77,4 +82,5 @@ export declare class Test {
     createdAt: Date;
     updatedAt: Date;
     orderTests: OrderTest[];
+    cultureAntibioticIds?: string[];
 }

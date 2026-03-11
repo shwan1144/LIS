@@ -1573,6 +1573,7 @@ let PlatformAdminService = PlatformAdminService_1 = class PlatformAdminService {
             resultEntryType: this.normalizeTransferResultEntryType(sourceTest.resultEntryType),
             resultTextOptions: this.cloneTransferredResultTextOptions(sourceTest.resultTextOptions),
             allowCustomResultText: Boolean(sourceTest.allowCustomResultText),
+            cultureConfig: this.cloneTransferredCultureConfig(sourceTest.cultureConfig),
             numericAgeRanges: this.cloneTransferredNumericAgeRanges(sourceTest.numericAgeRanges),
             description: this.toNullableTrimmedText(sourceTest.description),
             childTestIds: sourceTest.type === test_entity_1.TestType.PANEL ? null : this.toNullableTrimmedText(sourceTest.childTestIds),
@@ -1646,10 +1647,34 @@ let PlatformAdminService = PlatformAdminService_1 = class PlatformAdminService {
     }
     normalizeTransferResultEntryType(value) {
         const normalized = String(value ?? '').trim().toUpperCase();
-        if (normalized === 'QUALITATIVE' || normalized === 'TEXT') {
+        if (normalized === 'QUALITATIVE' ||
+            normalized === 'TEXT' ||
+            normalized === 'CULTURE_SENSITIVITY') {
             return normalized;
         }
         return 'NUMERIC';
+    }
+    cloneTransferredCultureConfig(config) {
+        if (!config || typeof config !== 'object')
+            return null;
+        const seen = new Set();
+        const interpretationOptions = (config.interpretationOptions ?? [])
+            .map((value) => String(value ?? '').trim().toUpperCase())
+            .filter((value) => {
+            if (!value || seen.has(value))
+                return false;
+            seen.add(value);
+            return true;
+        });
+        const micUnit = typeof config.micUnit === 'string' && config.micUnit.trim().length > 0
+            ? config.micUnit.trim()
+            : null;
+        return {
+            interpretationOptions: interpretationOptions.length
+                ? interpretationOptions
+                : ['S', 'I', 'R'],
+            micUnit,
+        };
     }
     cloneTransferredNumericAgeRanges(ranges) {
         return ((0, normal_range_util_1.normalizeNumericAgeRanges)(ranges)?.map((range) => ({

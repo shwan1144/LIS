@@ -12,6 +12,7 @@ import { TestsModule } from './tests/tests.module';
 import { WorklistModule } from './worklist/worklist.module';
 import { ShiftsModule } from './shifts/shifts.module';
 import { DepartmentsModule } from './departments/departments.module';
+import { AntibioticsModule } from './antibiotics/antibiotics.module';
 import { SettingsModule } from './settings/settings.module';
 import { ReportsModule } from './reports/reports.module';
 import { AuditModule } from './audit/audit.module';
@@ -69,6 +70,7 @@ const typeOrmConfig = useDatabaseUrl
     WorklistModule,
     ShiftsModule,
     DepartmentsModule,
+    AntibioticsModule,
     SettingsModule,
     ReportsModule,
     AuditModule,

@@ -17,17 +17,21 @@ const common_1 = require("@nestjs/common");
 const typeorm_1 = require("@nestjs/typeorm");
 const typeorm_2 = require("typeorm");
 const test_entity_1 = require("../entities/test.entity");
+const antibiotic_entity_1 = require("../entities/antibiotic.entity");
 const pricing_entity_1 = require("../entities/pricing.entity");
 const test_component_entity_1 = require("../entities/test-component.entity");
+const test_antibiotic_entity_1 = require("../entities/test-antibiotic.entity");
 const order_test_entity_1 = require("../entities/order-test.entity");
 const department_entity_1 = require("../entities/department.entity");
 const normal_range_util_1 = require("./normal-range.util");
 const order_test_flag_util_1 = require("../order-tests/order-test-flag.util");
 let TestsService = class TestsService {
-    constructor(testRepo, pricingRepo, testComponentRepo, orderTestRepo, departmentRepo) {
+    constructor(testRepo, pricingRepo, testComponentRepo, testAntibioticRepo, antibioticRepo, orderTestRepo, departmentRepo) {
         this.testRepo = testRepo;
         this.pricingRepo = pricingRepo;
         this.testComponentRepo = testComponentRepo;
+        this.testAntibioticRepo = testAntibioticRepo;
+        this.antibioticRepo = antibioticRepo;
         this.orderTestRepo = orderTestRepo;
         this.departmentRepo = departmentRepo;
     }
@@ -38,7 +42,8 @@ let TestsService = class TestsService {
             order: { sortOrder: 'ASC', code: 'ASC' },
         });
         const withComponents = await this.attachPanelComponents(tests.map((test) => this.normalizeTestForOutput(test)));
-        return this.attachDefaultPrices(withComponents, labId);
+        const withCultureAntibioticIds = await this.attachCultureAntibioticIds(withComponents);
+        return this.attachDefaultPrices(withCultureAntibioticIds, labId);
     }
     async findOne(id, labId) {
         const test = await this.testRepo.findOne({ where: { id, labId } });
@@ -48,7 +53,10 @@ let TestsService = class TestsService {
         const [withComponents] = await this.attachPanelComponents([
             this.normalizeTestForOutput(test),
         ]);
-        return withComponents ?? test;
+        const [withCultureAntibioticIds] = await this.attachCultureAntibioticIds([
+            withComponents ?? test,
+        ]);
+        return withCultureAntibioticIds ?? test;
     }
     async findByCode(code, labId) {
         return this.testRepo.findOne({ where: { code, labId } });
@@ -63,7 +71,8 @@ let TestsService = class TestsService {
         const resultEntryType = this.normalizeResultEntryType(dto.resultEntryType);
         const resultTextOptions = this.normalizeResultTextOptions(dto.resultTextOptions);
         const allowCustomResultText = dto.allowCustomResultText ?? false;
-        this.validateResultEntryConfig(resultEntryType, resultTextOptions, allowCustomResultText);
+        const cultureConfig = this.normalizeCultureConfig(dto.cultureConfig, resultEntryType);
+        this.validateResultEntryConfig(resultEntryType, resultTextOptions, allowCustomResultText, cultureConfig, dto.type || test_entity_1.TestType.SINGLE);
         const test = this.testRepo.create({
             labId,
             code: normalizedCode,
@@ -83,6 +92,7 @@ let TestsService = class TestsService {
             resultEntryType,
             resultTextOptions,
             allowCustomResultText,
+            cultureConfig,
             numericAgeRanges: this.normalizeNumericAgeRanges(dto.numericAgeRanges),
             description: dto.description?.trim() || null,
             childTestIds: dto.childTestIds?.trim() || null,
@@ -95,10 +105,14 @@ let TestsService = class TestsService {
         });
         const saved = await this.testRepo.save(test);
         await this.syncPanelComponentsForTest(saved, dto, labId);
+        await this.syncCultureAntibioticsForTest(saved.id, labId, dto.cultureAntibioticIds ?? [], resultEntryType);
         const [withComponents] = await this.attachPanelComponents([
             this.normalizeTestForOutput(saved),
         ]);
-        return withComponents ?? saved;
+        const [withCultureAntibioticIds] = await this.attachCultureAntibioticIds([
+            withComponents ?? saved,
+        ]);
+        return withCultureAntibioticIds ?? saved;
     }
     async update(id, labId, dto) {
         const test = await this.findOne(id, labId);
@@ -113,6 +127,8 @@ let TestsService = class TestsService {
             test.code = dto.code.toUpperCase().trim();
         if (dto.name !== undefined)
             test.name = dto.name.trim();
+        const previousResultEntryType = test.resultEntryType ?? 'NUMERIC';
+        const previousType = test.type ?? test_entity_1.TestType.SINGLE;
         if (dto.type !== undefined)
             test.type = dto.type;
         if (dto.tubeType !== undefined)
@@ -167,16 +183,32 @@ let TestsService = class TestsService {
         const nextAllowCustomResultText = dto.allowCustomResultText !== undefined
             ? dto.allowCustomResultText
             : (test.allowCustomResultText ?? false);
-        this.validateResultEntryConfig(nextResultEntryType, nextResultTextOptions, nextAllowCustomResultText);
+        const nextCultureConfig = dto.cultureConfig !== undefined
+            ? this.normalizeCultureConfig(dto.cultureConfig, nextResultEntryType)
+            : this.normalizeCultureConfig(test.cultureConfig, nextResultEntryType);
+        this.validateResultEntryConfig(nextResultEntryType, nextResultTextOptions, nextAllowCustomResultText, nextCultureConfig, test.type ?? previousType);
         test.resultEntryType = nextResultEntryType;
         test.resultTextOptions = nextResultTextOptions;
         test.allowCustomResultText = nextAllowCustomResultText;
+        test.cultureConfig = nextCultureConfig;
         const saved = await this.testRepo.save(test);
         await this.syncPanelComponentsForTest(saved, dto, labId);
+        if (nextResultEntryType !== 'CULTURE_SENSITIVITY') {
+            await this.syncCultureAntibioticsForTest(saved.id, labId, [], nextResultEntryType);
+        }
+        else if (dto.cultureAntibioticIds !== undefined) {
+            await this.syncCultureAntibioticsForTest(saved.id, labId, dto.cultureAntibioticIds ?? [], nextResultEntryType);
+        }
+        else if (previousResultEntryType !== 'CULTURE_SENSITIVITY') {
+            await this.syncCultureAntibioticsForTest(saved.id, labId, [], nextResultEntryType);
+        }
         const [withComponents] = await this.attachPanelComponents([
             this.normalizeTestForOutput(saved),
         ]);
-        return withComponents ?? saved;
+        const [withCultureAntibioticIds] = await this.attachCultureAntibioticIds([
+            withComponents ?? saved,
+        ]);
+        return withCultureAntibioticIds ?? saved;
     }
     normalizeNumericAgeRanges(ranges) {
         if (!ranges || !Array.isArray(ranges))
@@ -255,10 +287,35 @@ let TestsService = class TestsService {
         const normalized = (value || 'NUMERIC').toUpperCase();
         if (normalized === 'NUMERIC' ||
             normalized === 'QUALITATIVE' ||
-            normalized === 'TEXT') {
+            normalized === 'TEXT' ||
+            normalized === 'CULTURE_SENSITIVITY') {
             return normalized;
         }
-        throw new common_1.BadRequestException('Invalid resultEntryType. Allowed values: NUMERIC, QUALITATIVE, TEXT');
+        throw new common_1.BadRequestException('Invalid resultEntryType. Allowed values: NUMERIC, QUALITATIVE, TEXT, CULTURE_SENSITIVITY');
+    }
+    normalizeCultureConfig(value, resultEntryType) {
+        if (resultEntryType !== 'CULTURE_SENSITIVITY') {
+            return null;
+        }
+        const rawOptions = Array.isArray(value?.interpretationOptions)
+            ? value.interpretationOptions
+            : ['S', 'I', 'R'];
+        const seen = new Set();
+        const interpretationOptions = [];
+        for (const option of rawOptions) {
+            const normalized = String(option ?? '').trim().toUpperCase();
+            if (!normalized || seen.has(normalized))
+                continue;
+            seen.add(normalized);
+            interpretationOptions.push(normalized);
+        }
+        const micUnitRaw = typeof value?.micUnit === 'string' ? value.micUnit.trim() : '';
+        return {
+            interpretationOptions: interpretationOptions.length
+                ? interpretationOptions
+                : ['S', 'I', 'R'],
+            micUnit: micUnitRaw.length > 0 ? micUnitRaw : null,
+        };
     }
     normalizeResultTextOptions(options) {
         if (!options || !Array.isArray(options))
@@ -312,9 +369,15 @@ let TestsService = class TestsService {
                 flag: (0, order_test_flag_util_1.normalizeOrderTestFlag)(option.flag ?? null),
                 isDefault: Boolean(option.isDefault),
             })) ?? null,
+            cultureConfig: test.cultureConfig && typeof test.cultureConfig === 'object'
+                ? this.normalizeCultureConfig(test.cultureConfig, (test.resultEntryType ?? 'NUMERIC'))
+                : null,
         });
     }
-    validateResultEntryConfig(resultEntryType, resultTextOptions, allowCustomResultText) {
+    validateResultEntryConfig(resultEntryType, resultTextOptions, allowCustomResultText, cultureConfig, testType) {
+        if (resultEntryType === 'CULTURE_SENSITIVITY' && testType !== test_entity_1.TestType.SINGLE) {
+            throw new common_1.BadRequestException('CULTURE_SENSITIVITY entry mode is only supported for single tests');
+        }
         if (resultEntryType === 'NUMERIC' && resultTextOptions?.length) {
             throw new common_1.BadRequestException('resultTextOptions are only valid for QUALITATIVE or TEXT result entry type');
         }
@@ -323,6 +386,20 @@ let TestsService = class TestsService {
         }
         if (resultEntryType === 'NUMERIC' && allowCustomResultText) {
             throw new common_1.BadRequestException('allowCustomResultText can only be enabled for QUALITATIVE or TEXT tests');
+        }
+        if (resultEntryType !== 'CULTURE_SENSITIVITY' && cultureConfig) {
+            throw new common_1.BadRequestException('cultureConfig is only valid for CULTURE_SENSITIVITY result entry type');
+        }
+        if (resultEntryType === 'CULTURE_SENSITIVITY') {
+            if (resultTextOptions?.length) {
+                throw new common_1.BadRequestException('resultTextOptions are not valid for CULTURE_SENSITIVITY tests');
+            }
+            if (allowCustomResultText) {
+                throw new common_1.BadRequestException('allowCustomResultText cannot be enabled for CULTURE_SENSITIVITY tests');
+            }
+            if (!cultureConfig || !cultureConfig.interpretationOptions.length) {
+                throw new common_1.BadRequestException('CULTURE_SENSITIVITY tests require at least one interpretation option');
+            }
         }
     }
     isUuid(value) {
@@ -518,6 +595,56 @@ let TestsService = class TestsService {
                 panelComponents: grouped.get(test.id) ?? [],
             });
         });
+    }
+    async attachCultureAntibioticIds(tests) {
+        if (!tests.length)
+            return tests;
+        const testIds = tests.map((test) => test.id);
+        const mappings = await this.testAntibioticRepo.find({
+            where: { testId: (0, typeorm_2.In)(testIds) },
+            order: { sortOrder: 'ASC', createdAt: 'ASC' },
+        });
+        const grouped = new Map();
+        for (const mapping of mappings) {
+            const list = grouped.get(mapping.testId) ?? [];
+            list.push(mapping.antibioticId);
+            grouped.set(mapping.testId, list);
+        }
+        return tests.map((test) => Object.assign(test, {
+            cultureAntibioticIds: grouped.get(test.id) ?? [],
+        }));
+    }
+    async syncCultureAntibioticsForTest(testId, labId, antibioticIds, resultEntryType) {
+        if (resultEntryType !== 'CULTURE_SENSITIVITY') {
+            await this.testAntibioticRepo.delete({ testId });
+            return;
+        }
+        const normalizedIds = Array.from(new Set((antibioticIds ?? [])
+            .map((id) => String(id || '').trim())
+            .filter((id) => id.length > 0)));
+        if (normalizedIds.length === 0) {
+            await this.testAntibioticRepo.delete({ testId });
+            return;
+        }
+        const antibiotics = await this.antibioticRepo.find({
+            where: {
+                labId,
+                id: (0, typeorm_2.In)(normalizedIds),
+                isActive: true,
+            },
+            select: ['id'],
+        });
+        if (antibiotics.length !== normalizedIds.length) {
+            throw new common_1.BadRequestException('One or more selected culture antibiotics are missing or inactive');
+        }
+        await this.testAntibioticRepo.delete({ testId });
+        const rows = normalizedIds.map((antibioticId, index) => this.testAntibioticRepo.create({
+            testId,
+            antibioticId,
+            sortOrder: index + 1,
+            isDefault: index === 0,
+        }));
+        await this.testAntibioticRepo.save(rows);
     }
     async attachDefaultPrices(tests, labId) {
         if (!tests.length)
@@ -1071,9 +1198,13 @@ exports.TestsService = TestsService = __decorate([
     __param(0, (0, typeorm_1.InjectRepository)(test_entity_1.Test)),
     __param(1, (0, typeorm_1.InjectRepository)(pricing_entity_1.Pricing)),
     __param(2, (0, typeorm_1.InjectRepository)(test_component_entity_1.TestComponent)),
-    __param(3, (0, typeorm_1.InjectRepository)(order_test_entity_1.OrderTest)),
-    __param(4, (0, typeorm_1.InjectRepository)(department_entity_1.Department)),
+    __param(3, (0, typeorm_1.InjectRepository)(test_antibiotic_entity_1.TestAntibiotic)),
+    __param(4, (0, typeorm_1.InjectRepository)(antibiotic_entity_1.Antibiotic)),
+    __param(5, (0, typeorm_1.InjectRepository)(order_test_entity_1.OrderTest)),
+    __param(6, (0, typeorm_1.InjectRepository)(department_entity_1.Department)),
     __metadata("design:paramtypes", [typeorm_2.Repository,
+        typeorm_2.Repository,
+        typeorm_2.Repository,
         typeorm_2.Repository,
         typeorm_2.Repository,
         typeorm_2.Repository,

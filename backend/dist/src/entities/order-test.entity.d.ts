@@ -18,6 +18,28 @@ export declare enum ResultFlag {
     NEGATIVE = "NEG",
     ABNORMAL = "ABN"
 }
+export interface CultureResultAntibioticRow {
+    antibioticId?: string | null;
+    antibioticCode?: string | null;
+    antibioticName?: string | null;
+    interpretation: string;
+    mic?: string | null;
+}
+export interface CultureResultIsolate {
+    isolateKey: string;
+    organism: string;
+    source?: string | null;
+    condition?: string | null;
+    colonyCount?: string | null;
+    comment?: string | null;
+    antibiotics: CultureResultAntibioticRow[];
+}
+export interface CultureResultPayload {
+    noGrowth: boolean;
+    noGrowthResult?: string | null;
+    notes?: string | null;
+    isolates: CultureResultIsolate[];
+}
 export declare class OrderTest {
     id: string;
     labId: string | null;
@@ -29,6 +51,7 @@ export declare class OrderTest {
     resultValue: number | null;
     resultText: string | null;
     resultParameters: Record<string, string> | null;
+    cultureResult: CultureResultPayload | null;
     flag: ResultFlag | null;
     resultedAt: Date | null;
     resultedBy: string | null;

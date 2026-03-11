@@ -9,11 +9,16 @@ var __metadata = (this && this.__metadata) || function (k, v) {
     if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.CreateTestDto = exports.TestPanelComponentDto = exports.TestResultTextOptionDto = exports.TestNumericAgeRangeDto = exports.TestParameterDefinitionDto = exports.TEST_NUMERIC_AGE_UNITS = exports.TEST_RESULT_FLAGS = exports.TEST_RESULT_ENTRY_TYPES = void 0;
+exports.CreateTestDto = exports.TestPanelComponentDto = exports.TestCultureConfigDto = exports.TestResultTextOptionDto = exports.TestNumericAgeRangeDto = exports.TestParameterDefinitionDto = exports.TEST_NUMERIC_AGE_UNITS = exports.TEST_RESULT_FLAGS = exports.TEST_RESULT_ENTRY_TYPES = void 0;
 const class_validator_1 = require("class-validator");
 const class_transformer_1 = require("class-transformer");
 const test_entity_1 = require("../../entities/test.entity");
-exports.TEST_RESULT_ENTRY_TYPES = ['NUMERIC', 'QUALITATIVE', 'TEXT'];
+exports.TEST_RESULT_ENTRY_TYPES = [
+    'NUMERIC',
+    'QUALITATIVE',
+    'TEXT',
+    'CULTURE_SENSITIVITY',
+];
 exports.TEST_RESULT_FLAGS = ['N', 'H', 'L', 'POS', 'NEG', 'ABN'];
 exports.TEST_NUMERIC_AGE_UNITS = ['DAY', 'MONTH', 'YEAR'];
 class TestParameterDefinitionDto {
@@ -124,6 +129,21 @@ __decorate([
     (0, class_validator_1.IsBoolean)(),
     __metadata("design:type", Boolean)
 ], TestResultTextOptionDto.prototype, "isDefault", void 0);
+class TestCultureConfigDto {
+}
+exports.TestCultureConfigDto = TestCultureConfigDto;
+__decorate([
+    (0, class_validator_1.IsArray)(),
+    (0, class_validator_1.IsString)({ each: true }),
+    (0, class_validator_1.ArrayUnique)(),
+    __metadata("design:type", Array)
+], TestCultureConfigDto.prototype, "interpretationOptions", void 0);
+__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    (0, class_validator_1.MaxLength)(24),
+    __metadata("design:type", Object)
+], TestCultureConfigDto.prototype, "micUnit", void 0);
 class TestPanelComponentDto {
 }
 exports.TestPanelComponentDto = TestPanelComponentDto;
@@ -273,6 +293,19 @@ __decorate([
     (0, class_validator_1.IsOptional)(),
     __metadata("design:type", Boolean)
 ], CreateTestDto.prototype, "allowCustomResultText", void 0);
+__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.ValidateNested)(),
+    (0, class_transformer_1.Type)(() => TestCultureConfigDto),
+    __metadata("design:type", Object)
+], CreateTestDto.prototype, "cultureConfig", void 0);
+__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsArray)(),
+    (0, class_validator_1.IsUUID)(undefined, { each: true }),
+    (0, class_validator_1.ArrayUnique)(),
+    __metadata("design:type", Object)
+], CreateTestDto.prototype, "cultureAntibioticIds", void 0);
 __decorate([
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsArray)(),

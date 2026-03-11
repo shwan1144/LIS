@@ -33,6 +33,13 @@ export interface PrintRequestBody {
     };
 }
 
+export interface RawPrintRequestBody {
+    contentType?: 'zpl';
+    jobName?: string;
+    printerName?: string;
+    rawBase64?: string;
+}
+
 export interface ServerStatusSnapshot {
     port: number;
     printerCount: number;
@@ -49,6 +56,8 @@ export interface PrinterConfigSnapshot {
     orientation: 'landscape' | 'portrait' | null;
     paperSize: string | null;
     printerName: string;
+    resolutionXDpi: number | null;
+    resolutionYDpi: number | null;
 }
 
 export interface ServerEvent {
@@ -158,6 +167,7 @@ export class PrintServer {
             throw new HttpError(400, 'Request body must be a JSON object.');
         }
 
+        const requestStartedAt = Date.now();
         const body = payload as PrintRequestBody;
         const jobName = this.normalizeOptionalText(body.jobName, 'jobName') ?? 'LIS Print Job';
         const requestedPrinterName = this.normalizeOptionalText(body.printerName, 'printerName');
@@ -184,7 +194,11 @@ export class PrintServer {
 
             await printPdf(tempFilePath, options);
 
-            this.log(`Printed ${jobName}${printerName ? ` on ${printerName}` : ''}.`, 'success');
+            const durationMs = Date.now() - requestStartedAt;
+            this.log(
+                `Printed ${jobName}${printerName ? ` on ${printerName}` : ''} in ${durationMs} ms (${pdfBuffer.length} bytes).`,
+                'success',
+            );
             this.respondJson(res, 200, {
                 jobName,
                 printerName: printerName ?? null,
@@ -199,6 +213,49 @@ export class PrintServer {
             setTimeout(() => {
                 fs.rmSync(tempDir, { force: true, recursive: true });
             }, 10_000);
+        }
+    }
+
+    private async handleRawPrintRequest(res: ServerResponse, payload: unknown): Promise<void> {
+        if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+            throw new HttpError(400, 'Request body must be a JSON object.');
+        }
+
+        const requestStartedAt = Date.now();
+        const body = payload as RawPrintRequestBody;
+        const jobName = this.normalizeOptionalText(body.jobName, 'jobName') ?? 'LIS Raw Print Job';
+        const requestedPrinterName = this.normalizeOptionalText(body.printerName, 'printerName');
+        const contentType = this.normalizeOptionalText(body.contentType, 'contentType') ?? 'zpl';
+        if (contentType !== 'zpl') {
+            throw new HttpError(400, 'contentType must be zpl.');
+        }
+
+        const printerName = await this.resolvePrinterName(requestedPrinterName);
+        if (!printerName) {
+            throw new HttpError(400, 'printerName is required for raw printing.');
+        }
+
+        const rawBuffer = this.decodeBase64Buffer(body.rawBase64, 'rawBase64');
+        this.log(`Raw print request received for ${jobName} on ${printerName}.`);
+
+        try {
+            await this.printRawBuffer(printerName, jobName, rawBuffer);
+            const durationMs = Date.now() - requestStartedAt;
+            this.log(
+                `Printed raw ${contentType} job ${jobName} on ${printerName} in ${durationMs} ms (${rawBuffer.length} bytes).`,
+                'success',
+            );
+            this.respondJson(res, 200, {
+                contentType,
+                jobName,
+                printerName,
+                status: 'success',
+            });
+            void this.notifyStatus();
+        } catch (error) {
+            const message = error instanceof Error ? error.message : 'Raw print failed.';
+            this.log(`Raw print failed: ${message}`, 'error');
+            throw new HttpError(500, message);
         }
     }
 
@@ -241,6 +298,12 @@ export class PrintServer {
                 return;
             }
 
+            if (req.method === 'POST' && url.pathname === '/local/print-raw') {
+                const payload = await this.readJsonBody(req);
+                await this.handleRawPrintRequest(res, payload);
+                return;
+            }
+
             throw new HttpError(404, 'Route not found.');
         } catch (error) {
             const statusCode = error instanceof HttpError ? error.statusCode : 500;
@@ -264,22 +327,27 @@ export class PrintServer {
     }
 
     private decodeBase64Pdf(value: unknown): Buffer {
-        const raw = this.normalizeRequiredText(value, 'pdfBase64');
-        const withoutPrefix = raw.replace(/^data:application\/pdf;base64,/i, '');
+        const buffer = this.decodeBase64Buffer(value, 'pdfBase64');
+        const fileSignature = buffer.subarray(0, 4).toString('ascii');
+        if (fileSignature !== '%PDF') {
+            throw new HttpError(400, 'pdfBase64 must contain a valid PDF document.');
+        }
+
+        return buffer;
+    }
+
+    private decodeBase64Buffer(value: unknown, fieldName: string): Buffer {
+        const raw = this.normalizeRequiredText(value, fieldName);
+        const withoutPrefix = raw.replace(/^data:[^;]+;base64,/i, '');
         const normalized = withoutPrefix.replace(/\s+/g, '');
 
         if (!/^[A-Za-z0-9+/=]+$/.test(normalized)) {
-            throw new HttpError(400, 'pdfBase64 must contain base64-encoded PDF data.');
+            throw new HttpError(400, `${fieldName} must contain base64-encoded data.`);
         }
 
         const buffer = Buffer.from(normalized, 'base64');
         if (buffer.length === 0) {
-            throw new HttpError(400, 'pdfBase64 could not be decoded.');
-        }
-
-        const fileSignature = buffer.subarray(0, 4).toString('ascii');
-        if (fileSignature !== '%PDF') {
-            throw new HttpError(400, 'pdfBase64 must contain a valid PDF document.');
+            throw new HttpError(400, `${fieldName} could not be decoded.`);
         }
 
         return buffer;
@@ -371,6 +439,10 @@ export class PrintServer {
             const widthMatch = xml.match(/MediaSizeWidth"><psf:Value[^>]*>(\d+)<\/psf:Value>/i);
             const heightMatch = xml.match(/MediaSizeHeight"><psf:Value[^>]*>(\d+)<\/psf:Value>/i);
             const orientationMatch = xml.match(/Feature name="psk:PageOrientation"><psf:Option name="psk:(Portrait|Landscape)"/i);
+            const resolutionXMatch = xml.match(/ResolutionX"><psf:Value[^>]*>([\d.]+)<\/psf:Value>/i)
+                ?? xml.match(/PageResolutionX"><psf:Value[^>]*>([\d.]+)<\/psf:Value>/i);
+            const resolutionYMatch = xml.match(/ResolutionY"><psf:Value[^>]*>([\d.]+)<\/psf:Value>/i)
+                ?? xml.match(/PageResolutionY"><psf:Value[^>]*>([\d.]+)<\/psf:Value>/i);
 
             return {
                 mediaHeightMm: heightMatch ? Number(heightMatch[1]) / 1000 : null,
@@ -382,11 +454,159 @@ export class PrintServer {
                     ? parsed.PaperSize.trim()
                     : null,
                 printerName,
+                resolutionXDpi: resolutionXMatch ? Math.round(Number(resolutionXMatch[1])) : null,
+                resolutionYDpi: resolutionYMatch ? Math.round(Number(resolutionYMatch[1])) : null,
             };
         } catch (error) {
             const message = error instanceof Error ? error.message : 'Failed to read printer configuration.';
             throw new HttpError(500, `Failed to read printer configuration: ${message}`);
         }
+    }
+
+    private async printRawBuffer(
+        printerName: string,
+        jobName: string,
+        rawBuffer: Buffer,
+    ): Promise<void> {
+        const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), `${SERVICE_NAME}-raw-`));
+        const payloadPath = path.join(tempDir, `${randomUUID()}.raw`);
+        const scriptPath = path.join(tempDir, 'send-raw.ps1');
+
+        try {
+            fs.writeFileSync(payloadPath, rawBuffer);
+            fs.writeFileSync(scriptPath, this.buildRawPrintScript(), 'utf8');
+
+            await execFileAsync(
+                'Powershell.exe',
+                [
+                    '-NoProfile',
+                    '-ExecutionPolicy',
+                    'Bypass',
+                    '-File',
+                    scriptPath,
+                    '-PrinterName',
+                    printerName,
+                    '-JobName',
+                    jobName,
+                    '-PayloadPath',
+                    payloadPath,
+                ],
+                { windowsHide: true },
+            );
+        } catch (error) {
+            const message = this.getCommandErrorMessage(error, 'RAW print command failed.');
+            throw new Error(message);
+        } finally {
+            setTimeout(() => {
+                fs.rmSync(tempDir, { force: true, recursive: true });
+            }, 10_000);
+        }
+    }
+
+    private buildRawPrintScript(): string {
+        return [
+            'param(',
+            '    [Parameter(Mandatory = $true)][string]$PrinterName,',
+            '    [Parameter(Mandatory = $true)][string]$JobName,',
+            '    [Parameter(Mandatory = $true)][string]$PayloadPath',
+            ')',
+            "$ErrorActionPreference = 'Stop'",
+            'Add-Type -TypeDefinition @"',
+            'using System;',
+            'using System.Runtime.InteropServices;',
+            '',
+            '[StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]',
+            'public class DOCINFO',
+            '{',
+            '    [MarshalAs(UnmanagedType.LPWStr)]',
+            '    public string pDocName;',
+            '    [MarshalAs(UnmanagedType.LPWStr)]',
+            '    public string pOutputFile;',
+            '    [MarshalAs(UnmanagedType.LPWStr)]',
+            '    public string pDataType;',
+            '}',
+            '',
+            'public static class RawPrinterNative',
+            '{',
+            '    [DllImport("winspool.drv", EntryPoint = "OpenPrinterW", SetLastError = true, CharSet = CharSet.Unicode)]',
+            '    public static extern bool OpenPrinter(string printerName, out IntPtr printerHandle, IntPtr defaults);',
+            '',
+            '    [DllImport("winspool.drv", SetLastError = true, CharSet = CharSet.Unicode)]',
+            '    public static extern int StartDocPrinter(IntPtr printerHandle, int level, [In] DOCINFO docInfo);',
+            '',
+            '    [DllImport("winspool.drv", SetLastError = true)]',
+            '    public static extern bool EndDocPrinter(IntPtr printerHandle);',
+            '',
+            '    [DllImport("winspool.drv", SetLastError = true)]',
+            '    public static extern bool StartPagePrinter(IntPtr printerHandle);',
+            '',
+            '    [DllImport("winspool.drv", SetLastError = true)]',
+            '    public static extern bool EndPagePrinter(IntPtr printerHandle);',
+            '',
+            '    [DllImport("winspool.drv", SetLastError = true)]',
+            '    public static extern bool WritePrinter(IntPtr printerHandle, byte[] bytes, int count, out int written);',
+            '',
+            '    [DllImport("winspool.drv", SetLastError = true)]',
+            '    public static extern bool ClosePrinter(IntPtr printerHandle);',
+            '}',
+            '"@',
+            '$bytes = [System.IO.File]::ReadAllBytes($PayloadPath)',
+            'if (-not $bytes -or $bytes.Length -eq 0) {',
+            "    throw 'Payload is empty.'",
+            '}',
+            '$printerHandle = [IntPtr]::Zero',
+            '$docStarted = $false',
+            '$pageStarted = $false',
+            'if (-not [RawPrinterNative]::OpenPrinter($PrinterName, [ref]$printerHandle, [IntPtr]::Zero)) {',
+            '    throw "OpenPrinter failed with Win32 error $([Runtime.InteropServices.Marshal]::GetLastWin32Error())."',
+            '}',
+            'try {',
+            '    $docInfo = New-Object DOCINFO',
+            '    $docInfo.pDocName = $JobName',
+            "    $docInfo.pDataType = 'RAW'",
+            '    $jobId = [RawPrinterNative]::StartDocPrinter($printerHandle, 1, $docInfo)',
+            '    if ($jobId -eq 0) {',
+            '        throw "StartDocPrinter failed with Win32 error $([Runtime.InteropServices.Marshal]::GetLastWin32Error())."',
+            '    }',
+            '    $docStarted = $true',
+            '    if (-not [RawPrinterNative]::StartPagePrinter($printerHandle)) {',
+            '        throw "StartPagePrinter failed with Win32 error $([Runtime.InteropServices.Marshal]::GetLastWin32Error())."',
+            '    }',
+            '    $pageStarted = $true',
+            '    $written = 0',
+            '    if (-not [RawPrinterNative]::WritePrinter($printerHandle, $bytes, $bytes.Length, [ref]$written)) {',
+            '        throw "WritePrinter failed with Win32 error $([Runtime.InteropServices.Marshal]::GetLastWin32Error())."',
+            '    }',
+            '    if ($written -ne $bytes.Length) {',
+            '        throw "WritePrinter wrote $written of $($bytes.Length) bytes."',
+            '    }',
+            '} finally {',
+            '    if ($pageStarted) {',
+            '        [void][RawPrinterNative]::EndPagePrinter($printerHandle)',
+            '    }',
+            '    if ($docStarted) {',
+            '        [void][RawPrinterNative]::EndDocPrinter($printerHandle)',
+            '    }',
+            '    if ($printerHandle -ne [IntPtr]::Zero) {',
+            '        [void][RawPrinterNative]::ClosePrinter($printerHandle)',
+            '    }',
+            '}',
+        ].join('\n');
+    }
+
+    private getCommandErrorMessage(error: unknown, fallback: string): string {
+        if (error && typeof error === 'object') {
+            const stderr = 'stderr' in error ? String(error.stderr ?? '').trim() : '';
+            const stdout = 'stdout' in error ? String(error.stdout ?? '').trim() : '';
+            if (stderr) {
+                return stderr;
+            }
+            if (stdout) {
+                return stdout;
+            }
+        }
+
+        return error instanceof Error && error.message.trim() ? error.message : fallback;
     }
 
     private log(text: string, type: LogType = 'info'): void {

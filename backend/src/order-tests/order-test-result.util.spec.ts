@@ -34,4 +34,35 @@ describe('hasMeaningfulOrderTestResult', () => {
       }),
     ).toBe(true);
   });
+
+  it('treats no-growth culture result as a real result', () => {
+    expect(
+      hasMeaningfulOrderTestResult({
+        resultValue: null,
+        resultText: null,
+        resultParameters: null,
+        cultureResult: {
+          noGrowth: true,
+          isolates: [],
+        },
+      }),
+    ).toBe(true);
+  });
+
+  it('treats isolate rows with interpretation as a real culture result', () => {
+    expect(
+      hasMeaningfulOrderTestResult({
+        cultureResult: {
+          noGrowth: false,
+          isolates: [
+            {
+              isolateKey: 'iso-1',
+              organism: 'E. coli',
+              antibiotics: [{ interpretation: 'S' }],
+            },
+          ],
+        },
+      }),
+    ).toBe(true);
+  });
 });

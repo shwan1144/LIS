@@ -3,6 +3,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.DATABASE_ENTITIES = void 0;
 const audit_log_entity_1 = require("../entities/audit-log.entity");
 const admin_lab_portal_token_entity_1 = require("../entities/admin-lab-portal-token.entity");
+const antibiotic_entity_1 = require("../entities/antibiotic.entity");
 const department_entity_1 = require("../entities/department.entity");
 const instrument_entity_1 = require("../entities/instrument.entity");
 const lab_orders_worklist_entity_1 = require("../entities/lab-orders-worklist.entity");
@@ -20,6 +21,7 @@ const result_entity_1 = require("../entities/result.entity");
 const sample_entity_1 = require("../entities/sample.entity");
 const shift_entity_1 = require("../entities/shift.entity");
 const test_component_entity_1 = require("../entities/test-component.entity");
+const test_antibiotic_entity_1 = require("../entities/test-antibiotic.entity");
 const test_entity_1 = require("../entities/test.entity");
 const unmatched_instrument_result_entity_1 = require("../entities/unmatched-instrument-result.entity");
 const user_department_assignment_entity_1 = require("../entities/user-department-assignment.entity");
@@ -35,11 +37,13 @@ exports.DATABASE_ENTITIES = [
     user_shift_assignment_entity_1.UserShiftAssignment,
     user_department_assignment_entity_1.UserDepartmentAssignment,
     department_entity_1.Department,
+    antibiotic_entity_1.Antibiotic,
     patient_entity_1.Patient,
     order_entity_1.Order,
     sample_entity_1.Sample,
     order_test_entity_1.OrderTest,
     test_entity_1.Test,
+    test_antibiotic_entity_1.TestAntibiotic,
     pricing_entity_1.Pricing,
     platform_user_entity_1.PlatformUser,
     platform_setting_entity_1.PlatformSetting,

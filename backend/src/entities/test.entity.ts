@@ -38,7 +38,16 @@ export interface TestNumericAgeRange {
   normalMax?: number | null;
 }
 
-export type TestResultEntryType = 'NUMERIC' | 'QUALITATIVE' | 'TEXT';
+export interface TestCultureConfig {
+  interpretationOptions: string[];
+  micUnit?: string | null;
+}
+
+export type TestResultEntryType =
+  | 'NUMERIC'
+  | 'QUALITATIVE'
+  | 'TEXT'
+  | 'CULTURE_SENSITIVITY';
 export type TestResultFlag = 'N' | 'H' | 'L' | 'POS' | 'NEG' | 'ABN';
 
 export interface TestResultTextOption {
@@ -144,7 +153,7 @@ export class Test {
   normalTextFemale: string | null;
 
   /** Result entry behavior: numeric input, qualitative dropdown, or free text */
-  @Column({ type: 'varchar', length: 16, default: 'NUMERIC' })
+  @Column({ type: 'varchar', length: 32, default: 'NUMERIC' })
   resultEntryType: TestResultEntryType;
 
   /** Optional predefined text options for qualitative/text tests (e.g. Positive/Negative). */
@@ -154,6 +163,10 @@ export class Test {
   /** Allow custom text input in addition to predefined options. */
   @Column({ type: 'boolean', default: false })
   allowCustomResultText: boolean;
+
+  /** Configuration used for CULTURE_SENSITIVITY entry mode. */
+  @Column({ type: 'jsonb', nullable: true })
+  cultureConfig: TestCultureConfig | null;
 
   /**
    * Optional age/sex-specific numeric ranges.
@@ -191,4 +204,7 @@ export class Test {
 
   @OneToMany(() => OrderTest, (orderTest) => orderTest.test)
   orderTests: OrderTest[];
+
+  /** Derived field loaded from the test_antibiotics mapping table. */
+  cultureAntibioticIds?: string[];
 }

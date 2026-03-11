@@ -128,7 +128,7 @@ __decorate([
     __metadata("design:type", Object)
 ], Test.prototype, "normalTextFemale", void 0);
 __decorate([
-    (0, typeorm_1.Column)({ type: 'varchar', length: 16, default: 'NUMERIC' }),
+    (0, typeorm_1.Column)({ type: 'varchar', length: 32, default: 'NUMERIC' }),
     __metadata("design:type", String)
 ], Test.prototype, "resultEntryType", void 0);
 __decorate([
@@ -139,6 +139,10 @@ __decorate([
     (0, typeorm_1.Column)({ type: 'boolean', default: false }),
     __metadata("design:type", Boolean)
 ], Test.prototype, "allowCustomResultText", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ type: 'jsonb', nullable: true }),
+    __metadata("design:type", Object)
+], Test.prototype, "cultureConfig", void 0);
 __decorate([
     (0, typeorm_1.Column)({ type: 'jsonb', nullable: true }),
     __metadata("design:type", Object)

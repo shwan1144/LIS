@@ -1,5 +1,5 @@
 import { TestType, TubeType } from '../../entities/test.entity';
-export declare const TEST_RESULT_ENTRY_TYPES: readonly ["NUMERIC", "QUALITATIVE", "TEXT"];
+export declare const TEST_RESULT_ENTRY_TYPES: readonly ["NUMERIC", "QUALITATIVE", "TEXT", "CULTURE_SENSITIVITY"];
 export declare const TEST_RESULT_FLAGS: readonly ["N", "H", "L", "POS", "NEG", "ABN"];
 export declare const TEST_NUMERIC_AGE_UNITS: readonly ["DAY", "MONTH", "YEAR"];
 export declare class TestParameterDefinitionDto {
@@ -24,6 +24,10 @@ export declare class TestResultTextOptionDto {
     value: string;
     flag?: (typeof TEST_RESULT_FLAGS)[number] | null;
     isDefault?: boolean;
+}
+export declare class TestCultureConfigDto {
+    interpretationOptions: string[];
+    micUnit?: string | null;
 }
 export declare class TestPanelComponentDto {
     childTestId: string;
@@ -53,6 +57,8 @@ export declare class CreateTestDto {
     panelComponents?: TestPanelComponentDto[] | null;
     panelComponentTestIds?: string[] | null;
     allowCustomResultText?: boolean;
+    cultureConfig?: TestCultureConfigDto | null;
+    cultureAntibioticIds?: string[] | null;
     numericAgeRanges?: TestNumericAgeRangeDto[];
     description?: string;
     childTestIds?: string;

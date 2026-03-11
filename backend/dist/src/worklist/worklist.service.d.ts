@@ -1,16 +1,19 @@
 import { Repository } from 'typeorm';
-import { OrderTest, OrderTestStatus, ResultFlag } from '../entities/order-test.entity';
+import { CultureResultPayload, OrderTest, OrderTestStatus, ResultFlag } from '../entities/order-test.entity';
 import { Order } from '../entities/order.entity';
 import { Test } from '../entities/test.entity';
+import { Antibiotic } from '../entities/antibiotic.entity';
 import { Lab } from '../entities/lab.entity';
+import { TestAntibiotic } from '../entities/test-antibiotic.entity';
 import { UserDepartmentAssignment } from '../entities/user-department-assignment.entity';
 import { Department } from '../entities/department.entity';
-import type { TestParameterDefinition, TestResultEntryType, TestResultTextOption } from '../entities/test.entity';
+import type { TestCultureConfig, TestParameterDefinition, TestResultEntryType, TestResultTextOption } from '../entities/test.entity';
 import { AuditService } from '../audit/audit.service';
 import { PanelStatusService } from '../panels/panel-status.service';
 import { LabActorContext } from '../types/lab-actor-context';
 export interface WorklistItem {
     id: string;
+    testId: string;
     orderNumber: string;
     patientName: string;
     patientSex: string | null;
@@ -27,11 +30,14 @@ export interface WorklistItem {
     resultEntryType: TestResultEntryType;
     resultTextOptions: TestResultTextOption[] | null;
     allowCustomResultText: boolean;
+    cultureConfig: TestCultureConfig | null;
+    cultureAntibioticIds: string[];
     tubeType: string | null;
     status: OrderTestStatus;
     resultValue: number | null;
     resultText: string | null;
     flag: ResultFlag | null;
+    cultureResult: CultureResultPayload | null;
     resultedAt: Date | null;
     resultedBy: string | null;
     verifiedAt: Date | null;
@@ -95,6 +101,8 @@ export declare class WorklistService {
     private readonly orderTestRepo;
     private readonly orderRepo;
     private readonly testRepo;
+    private readonly testAntibioticRepo;
+    private readonly antibioticRepo;
     private readonly labRepo;
     private readonly userDeptRepo;
     private readonly departmentRepo;
@@ -102,7 +110,7 @@ export declare class WorklistService {
     private readonly auditService;
     private readonly logger;
     private readonly worklistPerfLogThresholdMs;
-    constructor(orderTestRepo: Repository<OrderTest>, orderRepo: Repository<Order>, testRepo: Repository<Test>, labRepo: Repository<Lab>, userDeptRepo: Repository<UserDepartmentAssignment>, departmentRepo: Repository<Department>, panelStatusService: PanelStatusService, auditService: AuditService);
+    constructor(orderTestRepo: Repository<OrderTest>, orderRepo: Repository<Order>, testRepo: Repository<Test>, testAntibioticRepo: Repository<TestAntibiotic>, antibioticRepo: Repository<Antibiotic>, labRepo: Repository<Lab>, userDeptRepo: Repository<UserDepartmentAssignment>, departmentRepo: Repository<Department>, panelStatusService: PanelStatusService, auditService: AuditService);
     getWorklist(labId: string, params: {
         status?: OrderTestStatus[];
         search?: string;
@@ -141,6 +149,7 @@ export declare class WorklistService {
         resultText?: string | null;
         comments?: string | null;
         resultParameters?: Record<string, string> | null;
+        cultureResult?: CultureResultPayload | null;
         forceEditVerified?: boolean;
     }, actorRole?: string): Promise<OrderTest>;
     batchEnterResults(labId: string, actor: LabActorContext, actorRole: string | undefined, updates: Array<{
@@ -149,6 +158,7 @@ export declare class WorklistService {
         resultText?: string | null;
         comments?: string | null;
         resultParameters?: Record<string, string> | null;
+        cultureResult?: CultureResultPayload | null;
         forceEditVerified?: boolean;
     }>): Promise<OrderTest[]>;
     verifyResult(orderTestId: string, labId: string, actor: LabActorContext): Promise<OrderTest>;
@@ -162,6 +172,11 @@ export declare class WorklistService {
     private normalizeResultEntryType;
     private normalizeResultText;
     private normalizeResultTextOptions;
+    private normalizeCultureConfig;
+    private normalizeCultureResultFromStorage;
+    private summarizeCultureResult;
+    private normalizeCultureResultInput;
+    private attachCultureAntibioticIds;
     private findMatchingResultTextOption;
     private resolveFlagFromResultText;
     private toResultFlag;

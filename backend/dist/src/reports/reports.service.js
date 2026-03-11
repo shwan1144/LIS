@@ -33,6 +33,7 @@ const results_report_template_1 = require("./html/results-report.template");
 const report_design_fingerprint_util_1 = require("./report-design-fingerprint.util");
 const normal_range_util_1 = require("../tests/normal-range.util");
 const patient_age_util_1 = require("../patients/patient-age.util");
+const order_test_result_util_1 = require("../order-tests/order-test-result.util");
 const REPORT_BANNER_WIDTH = 2480;
 const REPORT_BANNER_HEIGHT = 220;
 function formatDateTime(value) {
@@ -57,11 +58,83 @@ function getNormalRange(test, sex, patientAge) {
     return '-';
 }
 function formatResultValue(ot) {
+    const cultureResult = ot.cultureResult;
+    if (cultureResult && typeof cultureResult === 'object') {
+        if (cultureResult.noGrowth === true) {
+            const noGrowthResult = typeof cultureResult.noGrowthResult === 'string' &&
+                cultureResult.noGrowthResult.trim().length > 0
+                ? cultureResult.noGrowthResult.trim()
+                : 'No growth';
+            return noGrowthResult;
+        }
+        if (Array.isArray(cultureResult.isolates) && cultureResult.isolates.length > 0) {
+            const antibioticRows = cultureResult.isolates.reduce((sum, isolate) => {
+                if (!isolate || typeof isolate !== 'object')
+                    return sum;
+                const rows = Array.isArray(isolate.antibiotics)
+                    ? (isolate.antibiotics?.length ?? 0)
+                    : 0;
+                return sum + rows;
+            }, 0);
+            return `${cultureResult.isolates.length} isolate${cultureResult.isolates.length === 1 ? '' : 's'} • ${antibioticRows} row${antibioticRows === 1 ? '' : 's'}`;
+        }
+    }
     if (ot.resultText?.trim())
         return ot.resultText.trim();
     if (ot.resultValue !== null && ot.resultValue !== undefined)
         return String(ot.resultValue);
     return 'Pending';
+}
+const CULTURE_PRIMARY_RESISTANCE_CAPACITY = 24;
+function isCultureSensitivityOrderTest(ot) {
+    return (String(ot.test?.resultEntryType ?? '').toUpperCase() ===
+        'CULTURE_SENSITIVITY');
+}
+function getCultureAntibioticName(row) {
+    if (!row || typeof row !== 'object')
+        return '-';
+    const rowObj = row;
+    const antibioticName = String(rowObj.antibioticName ?? '').trim();
+    if (antibioticName)
+        return antibioticName;
+    const antibioticCode = String(rowObj.antibioticCode ?? '').trim();
+    return antibioticCode || '-';
+}
+function buildCultureAstColumns(isolate) {
+    const sensitive = [];
+    const intermediate = [];
+    const resistance = [];
+    const isolateObj = isolate && typeof isolate === 'object'
+        ? isolate
+        : null;
+    const antibiotics = Array.isArray(isolateObj?.antibiotics)
+        ? isolateObj.antibiotics
+        : [];
+    for (const row of antibiotics) {
+        if (!row || typeof row !== 'object')
+            continue;
+        const interpretation = String(row.interpretation ?? '').trim();
+        const name = getCultureAntibioticName(row);
+        if (interpretation === 'S') {
+            sensitive.push(name);
+            continue;
+        }
+        if (interpretation === 'I') {
+            intermediate.push(name);
+            continue;
+        }
+        resistance.push(name);
+    }
+    const sortNames = (list) => list
+        .slice()
+        .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+    const resistanceSorted = sortNames(resistance);
+    return {
+        sensitive: sortNames(sensitive),
+        intermediate: sortNames(intermediate),
+        resistancePrimary: resistanceSorted.slice(0, CULTURE_PRIMARY_RESISTANCE_CAPACITY),
+        resistanceSecondary: resistanceSorted.slice(CULTURE_PRIMARY_RESISTANCE_CAPACITY),
+    };
 }
 function hasNonEmptyResultParameters(params) {
     if (!params || typeof params !== 'object') {
@@ -652,19 +725,14 @@ let ReportsService = ReportsService_1 = class ReportsService {
         const test = orderTest.test;
         if (!test)
             return false;
-        const hasDirectResult = (orderTest.resultText?.trim()?.length ?? 0) > 0 ||
-            (orderTest.resultValue !== null && orderTest.resultValue !== undefined);
-        const hasParameterResult = hasNonEmptyResultParameters(orderTest.resultParameters);
+        const hasDirectResult = (0, order_test_result_util_1.hasMeaningfulOrderTestResult)(orderTest);
         if (test.type === test_entity_1.TestType.PANEL && !orderTest.parentOrderTestId) {
             if (childOrderTestParentIds.has(orderTest.id)) {
                 return true;
             }
-            if (hasParameterResult) {
-                return true;
-            }
             return hasDirectResult;
         }
-        return hasDirectResult || hasParameterResult;
+        return hasDirectResult;
     }
     assertAllResultsEnteredForReport(orderTests) {
         if (orderTests.length === 0) {
@@ -739,9 +807,8 @@ let ReportsService = ReportsService_1 = class ReportsService {
             const test = ot.test;
             const departmentName = test?.department?.name ||
                 'General Department';
-            const resultValue = ot.resultValue !== null && ot.resultValue !== undefined
-                ? String(ot.resultValue)
-                : ot.resultText?.trim() || null;
+            const formattedValue = formatResultValue(ot);
+            const resultValue = formattedValue === 'Pending' ? null : formattedValue;
             return {
                 orderTestId: ot.id,
                 testCode: test?.code || '-',
@@ -1156,6 +1223,8 @@ let ReportsService = ReportsService_1 = class ReportsService {
                 ['Verified By', verifiers.join(', ') || '-'],
             ]);
             const { regularTests, panelParents, panelChildrenByParent } = this.classifyOrderTestsForReport(orderTests);
+            const cultureRegularTests = regularTests.filter((ot) => isCultureSensitivityOrderTest(ot));
+            const nonCultureRegularTests = regularTests.filter((ot) => !isCultureSensitivityOrderTest(ot));
             const leftX = doc.page.margins.left;
             const usableWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right;
             const widths = {
@@ -1221,15 +1290,253 @@ let ReportsService = ReportsService_1 = class ReportsService {
                     extraParams: formatResultParameters(ot.resultParameters),
                 });
             };
-            if (regularTests.length > 0) {
+            const cultureColumnGap = 6;
+            const drawCultureColumns = (columns) => {
+                const columnDefs = [
+                    {
+                        title: 'Sensitive',
+                        values: columns.sensitive,
+                        backgroundColor: '#F0FDF4',
+                        borderColor: '#86EFAC',
+                    },
+                    {
+                        title: 'Intermediate',
+                        values: columns.intermediate,
+                        backgroundColor: '#FFFBEB',
+                        borderColor: '#FCD34D',
+                    },
+                    {
+                        title: 'Resistance',
+                        values: columns.resistancePrimary,
+                        backgroundColor: '#FEF2F2',
+                        borderColor: '#FCA5A5',
+                    },
+                ];
+                if (columns.resistanceSecondary.length > 0) {
+                    columnDefs.push({
+                        title: 'Resistance',
+                        values: columns.resistanceSecondary,
+                        backgroundColor: '#FEF2F2',
+                        borderColor: '#FCA5A5',
+                    });
+                }
+                const cultureColumnWidth = (tableWidth - cultureColumnGap * (columnDefs.length - 1)) /
+                    columnDefs.length;
+                const headerHeight = 12;
+                const bodyHeights = columnDefs.map((column) => {
+                    const listText = column.values.length ? column.values.join('\n') : '-';
+                    doc.font('Helvetica').fontSize(8.5);
+                    return doc.heightOfString(listText, {
+                        width: cultureColumnWidth - 10,
+                        lineGap: 1,
+                    });
+                });
+                const contentHeight = Math.max(...bodyHeights, 12);
+                const minimumColumnHeight = headerHeight + contentHeight + 14;
+                ensureSpace(doc, minimumColumnHeight + 10);
+                const startY = doc.y;
+                const pageBottomY = doc.page.height - doc.page.margins.bottom - 2;
+                const remainingHeight = Math.max(120, pageBottomY - startY - 4);
+                const columnHeight = Math.max(minimumColumnHeight, remainingHeight);
+                columnDefs.forEach((column, index) => {
+                    const x = leftX + index * (cultureColumnWidth + cultureColumnGap);
+                    const listText = column.values.length ? column.values.join('\n') : '-';
+                    doc.save();
+                    doc
+                        .roundedRect(x, startY, cultureColumnWidth, columnHeight, 4)
+                        .fillAndStroke(column.backgroundColor, column.borderColor);
+                    doc.restore();
+                    doc
+                        .font('Helvetica-Bold')
+                        .fontSize(9)
+                        .fillColor('#111827')
+                        .text(column.title, x + 5, startY + 4, { width: cultureColumnWidth - 10 });
+                    doc
+                        .strokeColor('#CBD5E1')
+                        .lineWidth(0.7)
+                        .moveTo(x + 4, startY + headerHeight + 1)
+                        .lineTo(x + cultureColumnWidth - 4, startY + headerHeight + 1)
+                        .stroke();
+                    doc
+                        .font('Helvetica')
+                        .fontSize(8.5)
+                        .fillColor(column.values.length ? '#0F172A' : '#64748B')
+                        .text(listText, x + 5, startY + headerHeight + 4, {
+                        width: cultureColumnWidth - 10,
+                        lineGap: 1,
+                    });
+                });
+                doc.y = startY + columnHeight + 8;
+            };
+            const drawCultureSectionTitle = (testName) => {
+                ensureSpace(doc, 24);
+                doc.font('Helvetica-Bold').fontSize(14).fillColor('#111827').text(testName);
+                doc.moveDown(0.25);
+            };
+            const drawCultureMessage = (message) => {
+                ensureSpace(doc, 26);
+                const boxHeight = 22;
+                const startY = doc.y;
+                doc
+                    .roundedRect(leftX, startY, tableWidth, boxHeight, 4)
+                    .fillAndStroke('#ECFDF5', '#86EFAC');
+                doc
+                    .font('Helvetica-Bold')
+                    .fontSize(10)
+                    .fillColor('#166534')
+                    .text(message, leftX + 8, startY + 6, { width: tableWidth - 16 });
+                doc.y = startY + boxHeight + 8;
+            };
+            const drawCultureNotes = (notes) => {
+                if (!notes)
+                    return;
+                ensureSpace(doc, 30);
+                doc
+                    .strokeColor('#CBD5E1')
+                    .lineWidth(0.7)
+                    .moveTo(leftX, doc.y)
+                    .lineTo(leftX + tableWidth, doc.y)
+                    .stroke();
+                doc.moveDown(0.2);
+                doc
+                    .font('Helvetica-Bold')
+                    .fontSize(9)
+                    .fillColor('#111827')
+                    .text('Notes:', leftX, doc.y, { continued: true })
+                    .font('Helvetica')
+                    .text(` ${notes}`, { width: tableWidth });
+                doc.moveDown(0.3);
+            };
+            if (nonCultureRegularTests.length > 0) {
                 drawTableHeader();
-                for (const ot of regularTests) {
+                for (const ot of nonCultureRegularTests) {
                     drawOrderTestRow(ot);
                 }
             }
+            let renderedCulturePageCount = 0;
+            for (const ot of cultureRegularTests) {
+                const test = ot.test;
+                const testName = test?.name || test?.code || 'Culture & Sensitivity';
+                const cultureResult = ot.cultureResult && typeof ot.cultureResult === 'object'
+                    ? ot.cultureResult
+                    : null;
+                const noGrowth = cultureResult?.noGrowth === true;
+                const noGrowthResult = typeof cultureResult?.noGrowthResult === 'string' &&
+                    cultureResult.noGrowthResult.trim().length > 0
+                    ? cultureResult.noGrowthResult.trim()
+                    : 'No growth';
+                const notes = typeof cultureResult?.notes === 'string' && cultureResult.notes.trim().length > 0
+                    ? cultureResult.notes.trim()
+                    : '';
+                const isolates = Array.isArray(cultureResult?.isolates)
+                    ? cultureResult.isolates
+                    : [];
+                if (!noGrowth && isolates.length === 0) {
+                    const shouldStartNewPage = nonCultureRegularTests.length > 0 || renderedCulturePageCount > 0;
+                    if (shouldStartNewPage) {
+                        doc.addPage();
+                    }
+                    drawCultureSectionTitle(testName);
+                    drawCultureMessage('No isolate data');
+                    drawCultureNotes(notes);
+                    renderedCulturePageCount += 1;
+                    continue;
+                }
+                const isolatesForRender = noGrowth && isolates.length === 0 ? [null] : isolates;
+                isolatesForRender.forEach((isolate, isolateIndex) => {
+                    const shouldStartNewPage = nonCultureRegularTests.length > 0 || renderedCulturePageCount > 0;
+                    if (shouldStartNewPage) {
+                        doc.addPage();
+                    }
+                    const isolateObj = isolate && typeof isolate === 'object'
+                        ? isolate
+                        : {};
+                    const organism = String(isolateObj.organism ?? '').trim() || `Isolate ${isolateIndex + 1}`;
+                    const isolateSource = typeof isolateObj.source === 'string' && isolateObj.source.trim().length > 0
+                        ? isolateObj.source.trim()
+                        : '';
+                    const isolateCondition = typeof isolateObj.condition === 'string' &&
+                        isolateObj.condition.trim().length > 0
+                        ? isolateObj.condition.trim()
+                        : '';
+                    const isolateColonyCount = typeof isolateObj.colonyCount === 'string' &&
+                        isolateObj.colonyCount.trim().length > 0
+                        ? isolateObj.colonyCount.trim()
+                        : '';
+                    const isolateComment = typeof isolateObj.comment === 'string' && isolateObj.comment.trim().length > 0
+                        ? isolateObj.comment.trim()
+                        : '';
+                    drawCultureSectionTitle(testName);
+                    ensureSpace(doc, 22);
+                    if (noGrowth) {
+                        doc
+                            .font('Helvetica')
+                            .fontSize(9)
+                            .fillColor('#334155')
+                            .text(`Result: ${noGrowthResult}`);
+                        if (isolateSource) {
+                            doc
+                                .font('Helvetica')
+                                .fontSize(9)
+                                .fillColor('#334155')
+                                .text(`Source: ${isolateSource}`);
+                        }
+                        if (isolateComment) {
+                            doc
+                                .font('Helvetica')
+                                .fontSize(9)
+                                .fillColor('#475569')
+                                .text(`Comment: ${isolateComment}`);
+                        }
+                        drawCultureNotes('');
+                        renderedCulturePageCount += 1;
+                        return;
+                    }
+                    doc
+                        .font('Helvetica-Bold')
+                        .fontSize(10)
+                        .fillColor('#111827')
+                        .text('Microorganism:', leftX, doc.y, { continued: true })
+                        .font('Helvetica-Oblique')
+                        .fontSize(10)
+                        .text(` ${organism}`);
+                    if (isolateSource) {
+                        doc
+                            .font('Helvetica')
+                            .fontSize(9)
+                            .fillColor('#334155')
+                            .text(`Source: ${isolateSource}`);
+                    }
+                    if (isolateCondition) {
+                        doc
+                            .font('Helvetica')
+                            .fontSize(9)
+                            .fillColor('#334155')
+                            .text(`Condition: ${isolateCondition}`);
+                    }
+                    if (isolateColonyCount) {
+                        doc
+                            .font('Helvetica')
+                            .fontSize(9)
+                            .fillColor('#334155')
+                            .text(`Colony count: ${isolateColonyCount}`);
+                    }
+                    if (isolateComment) {
+                        doc
+                            .font('Helvetica')
+                            .fontSize(9)
+                            .fillColor('#475569')
+                            .text(isolateComment);
+                    }
+                    doc.moveDown(0.25);
+                    drawCultureColumns(buildCultureAstColumns(isolate ?? null));
+                    drawCultureNotes(isolateIndex === 0 ? notes : '');
+                    renderedCulturePageCount += 1;
+                });
+            }
             for (let panelIndex = 0; panelIndex < panelParents.length; panelIndex++) {
                 const panelParent = panelParents[panelIndex];
-                const shouldStartNewPage = regularTests.length > 0 || panelIndex > 0;
+                const shouldStartNewPage = nonCultureRegularTests.length > 0 || renderedCulturePageCount > 0 || panelIndex > 0;
                 if (shouldStartNewPage) {
                     doc.addPage();
                 }

@@ -11,6 +11,7 @@
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview",
+    "render:zpl-check": "node ./scripts/render-zpl-check.mjs",
     "start": "serve -s dist -l 3000"
   },
   "dependencies": {
@@ -41,6 +42,7 @@
     "globals": "^16.5.0",
     "typescript": "~5.9.3",
     "typescript-eslint": "^8.46.4",
-    "vite": "^7.2.4"
+    "vite": "^7.2.4",
+    "zpl-renderer-js": "^3.2.2"
   }
 }

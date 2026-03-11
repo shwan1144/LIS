@@ -31,6 +31,31 @@ export enum ResultFlag {
   ABNORMAL = 'ABN',
 }
 
+export interface CultureResultAntibioticRow {
+  antibioticId?: string | null;
+  antibioticCode?: string | null;
+  antibioticName?: string | null;
+  interpretation: string;
+  mic?: string | null;
+}
+
+export interface CultureResultIsolate {
+  isolateKey: string;
+  organism: string;
+  source?: string | null;
+  condition?: string | null;
+  colonyCount?: string | null;
+  comment?: string | null;
+  antibiotics: CultureResultAntibioticRow[];
+}
+
+export interface CultureResultPayload {
+  noGrowth: boolean;
+  noGrowthResult?: string | null;
+  notes?: string | null;
+  isolates: CultureResultIsolate[];
+}
+
 @Entity('order_tests')
 export class OrderTest {
   @PrimaryGeneratedColumn('uuid')
@@ -68,6 +93,10 @@ export class OrderTest {
   /** Parameter results (e.g. { color: 'yellow', appearance: 'clear' }). Keys match Test.parameterDefinitions[].code */
   @Column({ type: 'jsonb', nullable: true })
   resultParameters: Record<string, string> | null;
+
+  /** CULTURE_SENSITIVITY result payload (isolates + antibiotic susceptibility rows). */
+  @Column({ type: 'jsonb', nullable: true })
+  cultureResult: CultureResultPayload | null;
 
   @Column({
     type: 'enum',

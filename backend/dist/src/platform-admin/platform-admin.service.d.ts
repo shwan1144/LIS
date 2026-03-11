@@ -503,6 +503,7 @@ export declare class PlatformAdminService {
     private toIntegerOrZero;
     private toTransferPrice;
     private normalizeTransferResultEntryType;
+    private cloneTransferredCultureConfig;
     private cloneTransferredNumericAgeRanges;
     private cloneTransferredResultTextOptions;
     private cloneTransferredParameterDefinitions;

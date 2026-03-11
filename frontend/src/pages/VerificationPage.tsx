@@ -41,6 +41,7 @@ import {
   type WorklistOrderGroupSummary,
 } from './worklistGrouping';
 import { useTheme } from '../contexts/ThemeContext';
+import { formatCultureResultSummary } from '../utils/culture-sensitivity';
 import {
   RESULT_FLAG_COLOR as FLAG_COLOR,
   RESULT_FLAG_LABEL as FLAG_LABEL,
@@ -64,6 +65,10 @@ interface GroupedOrderCache {
 }
 
 function formatResult(item: WorklistItem): string {
+  const cultureSummary = formatCultureResultSummary(item.cultureResult);
+  if (cultureSummary) {
+    return cultureSummary;
+  }
   if (item.resultValue !== null && item.resultValue !== undefined) {
     return `${item.resultValue}${item.testUnit ? ` ${item.testUnit}` : ''}`;
   }

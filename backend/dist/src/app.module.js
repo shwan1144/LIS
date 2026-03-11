@@ -21,6 +21,7 @@ const tests_module_1 = require("./tests/tests.module");
 const worklist_module_1 = require("./worklist/worklist.module");
 const shifts_module_1 = require("./shifts/shifts.module");
 const departments_module_1 = require("./departments/departments.module");
+const antibiotics_module_1 = require("./antibiotics/antibiotics.module");
 const settings_module_1 = require("./settings/settings.module");
 const reports_module_1 = require("./reports/reports.module");
 const audit_module_1 = require("./audit/audit.module");
@@ -79,6 +80,7 @@ exports.AppModule = AppModule = __decorate([
             worklist_module_1.WorklistModule,
             shifts_module_1.ShiftsModule,
             departments_module_1.DepartmentsModule,
+            antibiotics_module_1.AntibioticsModule,
             settings_module_1.SettingsModule,
             reports_module_1.ReportsModule,
             audit_module_1.AuditModule,

@@ -19,6 +19,8 @@ import { Lab } from '../src/entities/lab.entity';
 import { Test } from '../src/entities/test.entity';
 import { Pricing } from '../src/entities/pricing.entity';
 import { TestComponent } from '../src/entities/test-component.entity';
+import { TestAntibiotic } from '../src/entities/test-antibiotic.entity';
+import { Antibiotic } from '../src/entities/antibiotic.entity';
 import { OrderTest } from '../src/entities/order-test.entity';
 import { Department } from '../src/entities/department.entity';
 import { TestsService } from '../src/tests/tests.service';
@@ -106,6 +108,8 @@ async function run() {
       dataSource.getRepository(Test),
       dataSource.getRepository(Pricing),
       dataSource.getRepository(TestComponent),
+      dataSource.getRepository(TestAntibiotic),
+      dataSource.getRepository(Antibiotic),
       dataSource.getRepository(OrderTest),
       dataSource.getRepository(Department),
     );

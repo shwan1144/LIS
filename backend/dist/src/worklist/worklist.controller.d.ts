@@ -1,4 +1,5 @@
 import { WorklistEntryStatus, WorklistOrderMode, WorklistService, WorklistVerificationStatus, WorklistView } from './worklist.service';
+import { CultureResultPayload } from '../entities/order-test.entity';
 interface RequestWithUser {
     user: {
         userId?: string | null;
@@ -36,6 +37,7 @@ export declare class WorklistController {
         resultText?: string | null;
         comments?: string | null;
         resultParameters?: Record<string, string> | null;
+        cultureResult?: CultureResultPayload | null;
         forceEditVerified?: boolean;
     }): Promise<import("../entities/order-test.entity").OrderTest>;
     batchEnterResults(req: RequestWithUser, body: {
@@ -45,6 +47,7 @@ export declare class WorklistController {
             resultText?: string | null;
             comments?: string | null;
             resultParameters?: Record<string, string> | null;
+            cultureResult?: CultureResultPayload | null;
             forceEditVerified?: boolean;
         }>;
     }): Promise<import("../entities/order-test.entity").OrderTest[]>;

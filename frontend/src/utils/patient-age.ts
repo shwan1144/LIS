@@ -83,6 +83,10 @@ function formatUnit(value: number, singular: string): string {
   return `${value} ${singular}${value === 1 ? '' : 's'}`;
 }
 
+function formatCompactUnit(value: number, suffix: string): string {
+  return `${value}${suffix}`;
+}
+
 export function formatPatientAgeDisplay(
   dateOfBirth: DateInput,
   referenceDate: DateInput = new Date(),
@@ -103,4 +107,66 @@ export function formatPatientAgeDisplay(
   }
 
   return formatUnit(Math.max(0, completedDays(dob, reference)), 'day');
+}
+
+export function formatPatientAgeCompactDisplay(
+  dateOfBirth: DateInput,
+  referenceDate: DateInput = new Date(),
+): string | null {
+  const dob = toUtcDateParts(dateOfBirth);
+  const reference = toUtcDateParts(referenceDate);
+  if (!dob || !reference) return null;
+  if (compareUtcDates(reference, dob) < 0) return null;
+
+  const years = completedYears(dob, reference);
+  if (years >= 1) {
+    return formatCompactUnit(years, 'Y');
+  }
+
+  const months = completedMonths(dob, reference);
+  if (months >= 1) {
+    return formatCompactUnit(months, 'M');
+  }
+
+  return formatCompactUnit(Math.max(0, completedDays(dob, reference)), 'D');
+}
+
+export type AgeUnit = 'year' | 'month' | 'day';
+
+export function calculateDobFromAge(
+  age: number,
+  unit: AgeUnit,
+  referenceDate: Date = new Date(),
+): string {
+  const date = new Date(referenceDate.getTime());
+  if (unit === 'year') {
+    date.setFullYear(date.getFullYear() - age);
+  } else if (unit === 'month') {
+    date.setMonth(date.getMonth() - age);
+  } else {
+    date.setDate(date.getDate() - age);
+  }
+  return date.toISOString().slice(0, 10);
+}
+
+export function getAgeFromDob(
+  dateOfBirth: DateInput,
+  referenceDate: DateInput = new Date(),
+): { value: number; unit: AgeUnit } | null {
+  const dob = toUtcDateParts(dateOfBirth);
+  const reference = toUtcDateParts(referenceDate);
+  if (!dob || !reference) return null;
+  if (compareUtcDates(reference, dob) < 0) return { value: 0, unit: 'year' };
+
+  const years = completedYears(dob, reference);
+  if (years >= 1) {
+    return { value: years, unit: 'year' };
+  }
+
+  const months = completedMonths(dob, reference);
+  if (months >= 1) {
+    return { value: months, unit: 'month' };
+  }
+
+  return { value: Math.max(0, completedDays(dob, reference)), unit: 'day' };
 }

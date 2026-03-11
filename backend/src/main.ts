@@ -179,9 +179,10 @@ async function ensureReportBrandingColumns(dataSource: DataSource): Promise<void
       END $$;
     `,
     'ALTER TABLE IF EXISTS "tests" ADD COLUMN IF NOT EXISTS "numericAgeRanges" jsonb',
-    `ALTER TABLE IF EXISTS "tests" ADD COLUMN IF NOT EXISTS "resultEntryType" varchar(16) NOT NULL DEFAULT 'NUMERIC'`,
+    `ALTER TABLE IF EXISTS "tests" ADD COLUMN IF NOT EXISTS "resultEntryType" varchar(32) NOT NULL DEFAULT 'NUMERIC'`,
     'ALTER TABLE IF EXISTS "tests" ADD COLUMN IF NOT EXISTS "resultTextOptions" jsonb',
     'ALTER TABLE IF EXISTS "tests" ADD COLUMN IF NOT EXISTS "allowCustomResultText" boolean NOT NULL DEFAULT false',
+    'ALTER TABLE IF EXISTS "tests" ADD COLUMN IF NOT EXISTS "cultureConfig" jsonb',
     'ALTER TABLE IF EXISTS "tests" ADD COLUMN IF NOT EXISTS "abbreviation" varchar(32)',
     'ALTER TABLE IF EXISTS "tests" ADD COLUMN IF NOT EXISTS "normalTextMale" text',
     'ALTER TABLE IF EXISTS "tests" ADD COLUMN IF NOT EXISTS "normalTextFemale" text',
@@ -199,6 +200,60 @@ async function ensureReportBrandingColumns(dataSource: DataSource): Promise<void
         END IF;
       END $$;
     `,
+    `
+      DO $$
+      BEGIN
+        IF EXISTS (
+          SELECT 1
+          FROM information_schema.columns
+          WHERE table_schema = 'public'
+            AND table_name = 'tests'
+            AND column_name = 'resultEntryType'
+        ) THEN
+          ALTER TABLE "tests" ALTER COLUMN "resultEntryType" TYPE varchar(32);
+        END IF;
+      END $$;
+    `,
+    'ALTER TABLE IF EXISTS "order_tests" ADD COLUMN IF NOT EXISTS "cultureResult" jsonb',
+    `
+      CREATE TABLE IF NOT EXISTS "antibiotics" (
+        "id" uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+        "labId" uuid NOT NULL,
+        "code" varchar(64) NOT NULL,
+        "name" varchar(255) NOT NULL,
+        "isActive" boolean NOT NULL DEFAULT true,
+        "sortOrder" integer NOT NULL DEFAULT 0,
+        "createdAt" timestamp NOT NULL DEFAULT now(),
+        "updatedAt" timestamp NOT NULL DEFAULT now(),
+        CONSTRAINT "FK_antibiotics_labId_labs"
+          FOREIGN KEY ("labId")
+          REFERENCES "labs"("id")
+          ON DELETE CASCADE
+      )
+    `,
+    'CREATE UNIQUE INDEX IF NOT EXISTS "UQ_antibiotics_lab_code" ON "antibiotics" ("labId", "code")',
+    'CREATE INDEX IF NOT EXISTS "IDX_antibiotics_lab_sort" ON "antibiotics" ("labId", "sortOrder", "code")',
+    `
+      CREATE TABLE IF NOT EXISTS "test_antibiotics" (
+        "id" uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+        "testId" uuid NOT NULL,
+        "antibioticId" uuid NOT NULL,
+        "sortOrder" integer NOT NULL DEFAULT 0,
+        "isDefault" boolean NOT NULL DEFAULT false,
+        "createdAt" timestamp NOT NULL DEFAULT now(),
+        "updatedAt" timestamp NOT NULL DEFAULT now(),
+        CONSTRAINT "FK_test_antibiotics_testId_tests"
+          FOREIGN KEY ("testId")
+          REFERENCES "tests"("id")
+          ON DELETE CASCADE,
+        CONSTRAINT "FK_test_antibiotics_antibioticId_antibiotics"
+          FOREIGN KEY ("antibioticId")
+          REFERENCES "antibiotics"("id")
+          ON DELETE CASCADE
+      )
+    `,
+    'CREATE UNIQUE INDEX IF NOT EXISTS "UQ_test_antibiotics_test_antibiotic" ON "test_antibiotics" ("testId", "antibioticId")',
+    'CREATE INDEX IF NOT EXISTS "IDX_test_antibiotics_test_sort" ON "test_antibiotics" ("testId", "sortOrder")',
     `
       DO $$
       DECLARE
@@ -418,6 +473,8 @@ async function ensureTenantRolePrivileges(dataSource: DataSource): Promise<void>
           'refresh_tokens',
           'admin_lab_portal_tokens',
           'tests',
+          'antibiotics',
+          'test_antibiotics',
           'test_components',
           'shifts',
           'departments',
@@ -461,6 +518,50 @@ async function ensureTenantRolePrivileges(dataSource: DataSource): Promise<void>
             FOR ALL TO app_lab_user
             USING ("labId" = app.current_lab_id())
             WITH CHECK ("labId" = app.current_lab_id());
+        END IF;
+
+        IF to_regclass('public.antibiotics') IS NOT NULL THEN
+          GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE "antibiotics" TO app_lab_user;
+          ALTER TABLE "antibiotics" ENABLE ROW LEVEL SECURITY;
+          ALTER TABLE "antibiotics" FORCE ROW LEVEL SECURITY;
+          DROP POLICY IF EXISTS "antibiotics_tenant_isolation" ON "antibiotics";
+          CREATE POLICY "antibiotics_tenant_isolation" ON "antibiotics"
+            FOR ALL TO app_lab_user
+            USING ("labId" = app.current_lab_id())
+            WITH CHECK ("labId" = app.current_lab_id());
+        END IF;
+
+        IF to_regclass('public.test_antibiotics') IS NOT NULL
+           AND to_regclass('public.tests') IS NOT NULL
+           AND to_regclass('public.antibiotics') IS NOT NULL THEN
+          GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE "test_antibiotics" TO app_lab_user;
+          ALTER TABLE "test_antibiotics" ENABLE ROW LEVEL SECURITY;
+          ALTER TABLE "test_antibiotics" FORCE ROW LEVEL SECURITY;
+          DROP POLICY IF EXISTS "test_antibiotics_tenant_isolation" ON "test_antibiotics";
+          CREATE POLICY "test_antibiotics_tenant_isolation" ON "test_antibiotics"
+            FOR ALL TO app_lab_user
+            USING (
+              EXISTS (
+                SELECT 1
+                FROM "tests" t
+                JOIN "antibiotics" a
+                  ON a.id = "test_antibiotics"."antibioticId"
+                WHERE t.id = "test_antibiotics"."testId"
+                  AND t."labId" = app.current_lab_id()
+                  AND a."labId" = app.current_lab_id()
+              )
+            )
+            WITH CHECK (
+              EXISTS (
+                SELECT 1
+                FROM "tests" t
+                JOIN "antibiotics" a
+                  ON a.id = "test_antibiotics"."antibioticId"
+                WHERE t.id = "test_antibiotics"."testId"
+                  AND t."labId" = app.current_lab_id()
+                  AND a."labId" = app.current_lab_id()
+              )
+            );
         END IF;
 
         IF to_regclass('public.audit_logs') IS NOT NULL THEN

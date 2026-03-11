@@ -1,7 +1,9 @@
 import { Repository } from 'typeorm';
 import { Test, TestType } from '../entities/test.entity';
+import { Antibiotic } from '../entities/antibiotic.entity';
 import { Pricing } from '../entities/pricing.entity';
 import { TestComponent } from '../entities/test-component.entity';
+import { TestAntibiotic } from '../entities/test-antibiotic.entity';
 import { OrderTest } from '../entities/order-test.entity';
 import { Department } from '../entities/department.entity';
 import { CreateTestDto } from './dto/create-test.dto';
@@ -31,9 +33,11 @@ export declare class TestsService {
     private readonly testRepo;
     private readonly pricingRepo;
     private readonly testComponentRepo;
+    private readonly testAntibioticRepo;
+    private readonly antibioticRepo;
     private readonly orderTestRepo;
     private readonly departmentRepo;
-    constructor(testRepo: Repository<Test>, pricingRepo: Repository<Pricing>, testComponentRepo: Repository<TestComponent>, orderTestRepo: Repository<OrderTest>, departmentRepo: Repository<Department>);
+    constructor(testRepo: Repository<Test>, pricingRepo: Repository<Pricing>, testComponentRepo: Repository<TestComponent>, testAntibioticRepo: Repository<TestAntibiotic>, antibioticRepo: Repository<Antibiotic>, orderTestRepo: Repository<OrderTest>, departmentRepo: Repository<Department>);
     findAll(labId: string, activeOnly?: boolean): Promise<TestListItem[]>;
     findOne(id: string, labId: string): Promise<Test>;
     findByCode(code: string, labId: string): Promise<Test | null>;
@@ -42,6 +46,7 @@ export declare class TestsService {
     private normalizeNumericAgeRanges;
     private toNullableRawText;
     private normalizeResultEntryType;
+    private normalizeCultureConfig;
     private normalizeResultTextOptions;
     private normalizeResultFlag;
     private normalizeTestForOutput;
@@ -51,6 +56,8 @@ export declare class TestsService {
     private validatePanelComponents;
     private syncPanelComponentsForTest;
     private attachPanelComponents;
+    private attachCultureAntibioticIds;
+    private syncCultureAntibioticsForTest;
     private attachDefaultPrices;
     delete(id: string, labId: string): Promise<void>;
     toggleActive(id: string, labId: string): Promise<Test>;

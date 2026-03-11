@@ -20,7 +20,9 @@ const typeorm_2 = require("typeorm");
 const order_test_entity_1 = require("../entities/order-test.entity");
 const order_entity_1 = require("../entities/order.entity");
 const test_entity_1 = require("../entities/test.entity");
+const antibiotic_entity_1 = require("../entities/antibiotic.entity");
 const lab_entity_1 = require("../entities/lab.entity");
+const test_antibiotic_entity_1 = require("../entities/test-antibiotic.entity");
 const user_department_assignment_entity_1 = require("../entities/user-department-assignment.entity");
 const department_entity_1 = require("../entities/department.entity");
 const audit_service_1 = require("../audit/audit.service");
@@ -68,10 +70,12 @@ function parseJsonField(val) {
     return null;
 }
 let WorklistService = WorklistService_1 = class WorklistService {
-    constructor(orderTestRepo, orderRepo, testRepo, labRepo, userDeptRepo, departmentRepo, panelStatusService, auditService) {
+    constructor(orderTestRepo, orderRepo, testRepo, testAntibioticRepo, antibioticRepo, labRepo, userDeptRepo, departmentRepo, panelStatusService, auditService) {
         this.orderTestRepo = orderTestRepo;
         this.orderRepo = orderRepo;
         this.testRepo = testRepo;
+        this.testAntibioticRepo = testAntibioticRepo;
+        this.antibioticRepo = antibioticRepo;
         this.labRepo = labRepo;
         this.userDeptRepo = userDeptRepo;
         this.departmentRepo = departmentRepo;
@@ -166,6 +170,7 @@ let WorklistService = WorklistService_1 = class WorklistService {
             }
             const selectFields = [
                 'ot.id AS id',
+                'test.id AS "testId"',
                 'order.orderNumber AS "orderNumber"',
                 'order.id AS "orderId"',
                 'order.registeredAt AS "registeredAt"',
@@ -196,6 +201,7 @@ let WorklistService = WorklistService_1 = class WorklistService {
                 'ot.resultValue AS "resultValue"',
                 'ot.resultText AS "resultText"',
                 'ot.resultParameters AS "resultParameters"',
+                'ot.cultureResult AS "cultureResult"',
                 'ot.rejectionReason AS "rejectionReason"',
                 'ot.flag AS flag',
                 'ot.resultedAt AS "resultedAt"',
@@ -206,7 +212,7 @@ let WorklistService = WorklistService_1 = class WorklistService {
                 'ot.panelSortOrder AS "panelSortOrder"',
             ];
             if (view === WorklistView.FULL) {
-                selectFields.push('test.resultEntryType AS "resultEntryType"', 'test.resultTextOptions AS "resultTextOptions"', 'test.allowCustomResultText AS "allowCustomResultText"', 'test.parameterDefinitions AS "parameterDefinitions"');
+                selectFields.push('test.resultEntryType AS "resultEntryType"', 'test.resultTextOptions AS "resultTextOptions"', 'test.allowCustomResultText AS "allowCustomResultText"', 'test.cultureConfig AS "cultureConfig"', 'test.parameterDefinitions AS "parameterDefinitions"');
             }
             const rawItems = await buildBaseQuery()
                 .andWhere('order.id IN (:...orderIds)', { orderIds })
@@ -235,6 +241,7 @@ let WorklistService = WorklistService_1 = class WorklistService {
                 }, item.patientSex, patientAgeSnapshot);
                 return {
                     id: item.id,
+                    testId: item.testId,
                     orderNumber: item.orderNumber,
                     orderId: item.orderId,
                     sampleId: item.sampleId,
@@ -258,6 +265,8 @@ let WorklistService = WorklistService_1 = class WorklistService {
                     resultTextOptions: parseJsonField(item.resultTextOptions) ??
                         null,
                     allowCustomResultText: Boolean(item.allowCustomResultText),
+                    cultureConfig: this.normalizeCultureConfig(parseJsonField(item.cultureConfig)),
+                    cultureAntibioticIds: [],
                     tubeType: item.tubeType,
                     status: item.status,
                     resultValue: item.resultValue !== null && item.resultValue !== undefined
@@ -265,6 +274,7 @@ let WorklistService = WorklistService_1 = class WorklistService {
                         : null,
                     resultText: item.resultText,
                     flag: (0, order_test_flag_util_1.normalizeOrderTestFlag)(item.flag),
+                    cultureResult: this.normalizeCultureResultFromStorage(parseJsonField(item.cultureResult)),
                     resultedAt: item.resultedAt,
                     resultedBy: item.resultedBy ?? null,
                     verifiedAt: item.verifiedAt,
@@ -281,8 +291,9 @@ let WorklistService = WorklistService_1 = class WorklistService {
                     panelSortOrder: item.panelSortOrder != null ? Number(item.panelSortOrder) : null,
                 };
             });
-            itemsCount = items.length;
-            return { items, total };
+            const itemsWithCultureTemplates = await this.attachCultureAntibioticIds(items);
+            itemsCount = itemsWithCultureTemplates.length;
+            return { items: itemsWithCultureTemplates, total };
         }
         finally {
             const durationMs = this.elapsedMs(startedAt);
@@ -518,6 +529,7 @@ let WorklistService = WorklistService_1 = class WorklistService {
             const rawItems = await qb
                 .select([
                 'ot.id AS id',
+                'test.id AS "testId"',
                 'order.orderNumber AS "orderNumber"',
                 'order.id AS "orderId"',
                 'order.registeredAt AS "registeredAt"',
@@ -547,11 +559,13 @@ let WorklistService = WorklistService_1 = class WorklistService {
                 'test.resultEntryType AS "resultEntryType"',
                 'test.resultTextOptions AS "resultTextOptions"',
                 'test.allowCustomResultText AS "allowCustomResultText"',
+                'test.cultureConfig AS "cultureConfig"',
                 'test.parameterDefinitions AS "parameterDefinitions"',
                 'ot.status AS status',
                 'ot.resultValue AS "resultValue"',
                 'ot.resultText AS "resultText"',
                 'ot.resultParameters AS "resultParameters"',
+                'ot.cultureResult AS "cultureResult"',
                 'ot.rejectionReason AS "rejectionReason"',
                 'ot.flag AS flag',
                 'ot.resultedAt AS "resultedAt"',
@@ -573,7 +587,8 @@ let WorklistService = WorklistService_1 = class WorklistService {
                 .setParameter('singleType', 'SINGLE')
                 .setParameter('panelType', 'PANEL')
                 .getRawMany();
-            const items = rawItems.map((item) => this.mapRawWorklistItem(item));
+            const mappedItems = rawItems.map((item) => this.mapRawWorklistItem(item));
+            const items = await this.attachCultureAntibioticIds(mappedItems);
             const patientAge = this.computePatientAgeYears(order.patient?.dateOfBirth ?? null, order.registeredAt);
             const patientAgeDisplay = (0, patient_age_util_1.formatPatientAgeDisplay)(order.patient?.dateOfBirth ?? null, order.registeredAt);
             return {
@@ -650,8 +665,9 @@ let WorklistService = WorklistService_1 = class WorklistService {
                 normalMaxFemale: orderTest.test.normalMaxFemale,
                 numericAgeRanges: orderTest.test.numericAgeRanges,
             }, orderTest.sample.order.patient?.sex ?? null, patientAgeSnapshot);
-            return {
+            const item = {
                 id: orderTest.id,
+                testId: orderTest.test.id,
                 orderNumber: orderTest.sample.order.orderNumber ?? orderTest.sample.order.id.substring(0, 8),
                 orderId: orderTest.sample.order.id,
                 sampleId: orderTest.sample.id,
@@ -670,11 +686,14 @@ let WorklistService = WorklistService_1 = class WorklistService {
                 resultEntryType: this.normalizeResultEntryType(orderTest.test.resultEntryType),
                 resultTextOptions: this.normalizeResultTextOptions(orderTest.test.resultTextOptions),
                 allowCustomResultText: Boolean(orderTest.test.allowCustomResultText),
+                cultureConfig: this.normalizeCultureConfig(orderTest.test.cultureConfig),
+                cultureAntibioticIds: [],
                 tubeType: orderTest.sample.tubeType,
                 status: orderTest.status,
                 resultValue: orderTest.resultValue ?? null,
                 resultText: orderTest.resultText ?? null,
                 flag: (0, order_test_flag_util_1.normalizeOrderTestFlag)(orderTest.flag ?? null),
+                cultureResult: this.normalizeCultureResultFromStorage(orderTest.cultureResult),
                 resultedAt: orderTest.resultedAt ?? null,
                 resultedBy: orderTest.resultedBy ?? null,
                 verifiedAt: orderTest.verifiedAt ?? null,
@@ -689,6 +708,8 @@ let WorklistService = WorklistService_1 = class WorklistService {
                 rejectionReason: orderTest.rejectionReason ?? null,
                 panelSortOrder: orderTest.panelSortOrder ?? null,
             };
+            const [withCultureTemplates] = await this.attachCultureAntibioticIds([item]);
+            return withCultureTemplates ?? item;
         }
         finally {
             const durationMs = this.elapsedMs(startedAt);
@@ -734,6 +755,9 @@ let WorklistService = WorklistService_1 = class WorklistService {
                 ? data.resultParameters
                 : null;
         }
+        if (data.cultureResult !== undefined) {
+            orderTest.cultureResult = await this.normalizeCultureResultInput(data.cultureResult, orderTest.test, labId);
+        }
         const resultEntryType = this.normalizeResultEntryType(orderTest.test.resultEntryType);
         const resultTextOptions = this.normalizeResultTextOptions(orderTest.test.resultTextOptions);
         const normalizedResultTextInput = data.resultText !== undefined
@@ -755,6 +779,7 @@ let WorklistService = WorklistService_1 = class WorklistService {
             }
             orderTest.resultText = matchedOption?.value ?? candidateText;
             orderTest.resultValue = null;
+            orderTest.cultureResult = null;
             orderTest.flag = this.toResultFlag(matchedOption?.flag ?? null);
         }
         else if (resultEntryType === 'TEXT') {
@@ -762,12 +787,23 @@ let WorklistService = WorklistService_1 = class WorklistService {
                 orderTest.resultText = normalizedResultTextInput ?? null;
             }
             orderTest.resultValue = null;
+            orderTest.cultureResult = null;
             orderTest.flag = this.resolveFlagFromResultText(orderTest.resultText, resultTextOptions);
+        }
+        else if (resultEntryType === 'CULTURE_SENSITIVITY') {
+            if (data.cultureResult !== undefined) {
+                orderTest.cultureResult = await this.normalizeCultureResultInput(data.cultureResult, orderTest.test, labId);
+            }
+            orderTest.resultValue = null;
+            orderTest.resultParameters = null;
+            orderTest.flag = null;
+            orderTest.resultText = this.summarizeCultureResult(orderTest.cultureResult);
         }
         else {
             if (data.resultText !== undefined) {
                 orderTest.resultText = normalizedResultTextInput ?? null;
             }
+            orderTest.cultureResult = null;
             const optionFlag = this.resolveFlagFromResultText(orderTest.resultText, resultTextOptions);
             if (optionFlag) {
                 orderTest.flag = optionFlag;
@@ -778,7 +814,7 @@ let WorklistService = WorklistService_1 = class WorklistService {
             }
         }
         if (!(0, order_test_result_util_1.hasMeaningfulOrderTestResult)(orderTest)) {
-            throw new common_1.BadRequestException('Cannot complete a test without a real result value, text, or parameters');
+            throw new common_1.BadRequestException('Cannot complete a test without a real result value, text, parameters, or culture data');
         }
         const isUpdate = orderTest.resultedAt !== null;
         orderTest.status = isVerifiedOverride
@@ -813,6 +849,7 @@ let WorklistService = WorklistService_1 = class WorklistService {
             newValues: {
                 resultValue: data.resultValue,
                 resultText: data.resultText,
+                cultureResult: data.cultureResult,
                 flag: orderTest.flag,
                 forceEditVerified: isVerifiedOverride,
                 ...impersonationAudit,
@@ -836,6 +873,7 @@ let WorklistService = WorklistService_1 = class WorklistService {
         const updatedOrderIds = new Set();
         const updatedPanelRootIds = new Set();
         const auditLogs = [];
+        const antibioticCacheById = new Map();
         for (const data of updates) {
             const orderTest = orderTestsMap.get(data.orderTestId);
             if (!orderTest || orderTest.sample.order.labId !== labId) {
@@ -859,6 +897,9 @@ let WorklistService = WorklistService_1 = class WorklistService {
                         ? data.resultParameters
                         : null;
             }
+            if (data.cultureResult !== undefined) {
+                orderTest.cultureResult = await this.normalizeCultureResultInput(data.cultureResult, orderTest.test, labId, antibioticCacheById);
+            }
             const resultEntryType = this.normalizeResultEntryType(orderTest.test.resultEntryType);
             const resultTextOptions = this.normalizeResultTextOptions(orderTest.test.resultTextOptions);
             const normalizedResultTextInput = data.resultText !== undefined ? this.normalizeResultText(data.resultText) : undefined;
@@ -871,6 +912,7 @@ let WorklistService = WorklistService_1 = class WorklistService {
                     continue;
                 orderTest.resultText = matchedOption?.value ?? candidateText;
                 orderTest.resultValue = null;
+                orderTest.cultureResult = null;
                 orderTest.flag = this.toResultFlag(matchedOption?.flag ?? null);
             }
             else if (resultEntryType === 'TEXT') {
@@ -878,12 +920,23 @@ let WorklistService = WorklistService_1 = class WorklistService {
                     orderTest.resultText = normalizedResultTextInput ?? null;
                 }
                 orderTest.resultValue = null;
+                orderTest.cultureResult = null;
                 orderTest.flag = this.resolveFlagFromResultText(orderTest.resultText, resultTextOptions);
+            }
+            else if (resultEntryType === 'CULTURE_SENSITIVITY') {
+                if (data.cultureResult !== undefined) {
+                    orderTest.cultureResult = await this.normalizeCultureResultInput(data.cultureResult, orderTest.test, labId, antibioticCacheById);
+                }
+                orderTest.resultValue = null;
+                orderTest.resultParameters = null;
+                orderTest.flag = null;
+                orderTest.resultText = this.summarizeCultureResult(orderTest.cultureResult);
             }
             else {
                 if (data.resultText !== undefined) {
                     orderTest.resultText = normalizedResultTextInput ?? null;
                 }
+                orderTest.cultureResult = null;
                 const optionFlag = this.resolveFlagFromResultText(orderTest.resultText, resultTextOptions);
                 if (optionFlag) {
                     orderTest.flag = optionFlag;
@@ -932,6 +985,7 @@ let WorklistService = WorklistService_1 = class WorklistService {
                 newValues: {
                     resultValue: data.resultValue,
                     resultText: data.resultText,
+                    cultureResult: data.cultureResult,
                     flag: orderTest.flag,
                     forceEditVerified: isVerifiedOverride,
                     ...impersonationAudit,
@@ -973,7 +1027,7 @@ let WorklistService = WorklistService_1 = class WorklistService {
             throw new common_1.BadRequestException('Cannot verify a test without a result');
         }
         if (!(0, order_test_result_util_1.hasMeaningfulOrderTestResult)(orderTest)) {
-            throw new common_1.BadRequestException('Cannot verify a test without a real result value, text, or parameters');
+            throw new common_1.BadRequestException('Cannot verify a test without a real result value, text, parameters, or culture data');
         }
         orderTest.status = order_test_entity_1.OrderTestStatus.VERIFIED;
         orderTest.verifiedAt = new Date();
@@ -1000,6 +1054,7 @@ let WorklistService = WorklistService_1 = class WorklistService {
             newValues: {
                 resultValue: orderTest.resultValue,
                 resultText: orderTest.resultText,
+                cultureResult: orderTest.cultureResult,
                 flag: orderTest.flag,
                 status: order_test_entity_1.OrderTestStatus.VERIFIED,
                 ...impersonationAudit,
@@ -1053,6 +1108,7 @@ let WorklistService = WorklistService_1 = class WorklistService {
                 newValues: {
                     resultValue: ot.resultValue,
                     resultText: ot.resultText,
+                    cultureResult: ot.cultureResult,
                     flag: ot.flag,
                     status: order_test_entity_1.OrderTestStatus.VERIFIED,
                     ...impersonationAudit,
@@ -1150,6 +1206,7 @@ let WorklistService = WorklistService_1 = class WorklistService {
         const rawResultValue = item.resultValue;
         return {
             id: String(item.id),
+            testId: String(item.testId ?? ''),
             orderNumber: String(item.orderNumber ?? ''),
             orderId: String(item.orderId),
             sampleId: String(item.sampleId),
@@ -1172,6 +1229,8 @@ let WorklistService = WorklistService_1 = class WorklistService {
             resultEntryType: this.normalizeResultEntryType(item.resultEntryType),
             resultTextOptions: this.normalizeResultTextOptions(parseJsonField(item.resultTextOptions) ?? null),
             allowCustomResultText: Boolean(item.allowCustomResultText),
+            cultureConfig: this.normalizeCultureConfig(parseJsonField(item.cultureConfig)),
+            cultureAntibioticIds: [],
             tubeType: item.tubeType ?? null,
             status: item.status,
             resultValue: rawResultValue !== null && rawResultValue !== undefined
@@ -1179,6 +1238,7 @@ let WorklistService = WorklistService_1 = class WorklistService {
                 : null,
             resultText: item.resultText ?? null,
             flag: (0, order_test_flag_util_1.normalizeOrderTestFlag)(item.flag),
+            cultureResult: this.normalizeCultureResultFromStorage(parseJsonField(item.cultureResult)),
             resultedAt: item.resultedAt ?? null,
             resultedBy: item.resultedBy ?? null,
             verifiedAt: item.verifiedAt ?? null,
@@ -1200,7 +1260,8 @@ let WorklistService = WorklistService_1 = class WorklistService {
         const normalized = String(value || 'NUMERIC').trim().toUpperCase();
         if (normalized === 'NUMERIC' ||
             normalized === 'QUALITATIVE' ||
-            normalized === 'TEXT') {
+            normalized === 'TEXT' ||
+            normalized === 'CULTURE_SENSITIVITY') {
             return normalized;
         }
         return 'NUMERIC';
@@ -1225,6 +1286,280 @@ let WorklistService = WorklistService_1 = class WorklistService {
             isDefault: option.isDefault,
         }));
         return normalized.length ? normalized : null;
+    }
+    normalizeCultureConfig(config) {
+        if (!config || typeof config !== 'object')
+            return null;
+        const seen = new Set();
+        const interpretationOptions = (config.interpretationOptions ?? [])
+            .map((value) => String(value ?? '').trim().toUpperCase())
+            .filter((value) => {
+            if (!value || seen.has(value))
+                return false;
+            seen.add(value);
+            return true;
+        });
+        const micUnit = typeof config.micUnit === 'string' && config.micUnit.trim().length > 0
+            ? config.micUnit.trim()
+            : null;
+        return {
+            interpretationOptions: interpretationOptions.length
+                ? interpretationOptions
+                : ['S', 'I', 'R'],
+            micUnit,
+        };
+    }
+    normalizeCultureResultFromStorage(payload) {
+        if (!payload || typeof payload !== 'object')
+            return null;
+        const noGrowth = payload.noGrowth === true;
+        const noGrowthResult = typeof payload.noGrowthResult === 'string' &&
+            payload.noGrowthResult.trim().length > 0
+            ? payload.noGrowthResult.trim()
+            : null;
+        const notes = typeof payload.notes === 'string' && payload.notes.trim().length > 0
+            ? payload.notes.trim()
+            : null;
+        const isolates = Array.isArray(payload.isolates)
+            ? payload.isolates
+                .map((isolate, isolateIndex) => {
+                const isolateKeyRaw = String(isolate?.isolateKey ?? `isolate-${isolateIndex + 1}`).trim();
+                const organism = String(isolate?.organism ?? '').trim();
+                const source = typeof isolate?.source === 'string' && isolate.source.trim().length > 0
+                    ? isolate.source.trim()
+                    : null;
+                const condition = typeof isolate?.condition === 'string' &&
+                    isolate.condition.trim().length > 0
+                    ? isolate.condition.trim()
+                    : null;
+                const colonyCount = typeof isolate?.colonyCount === 'string' &&
+                    isolate.colonyCount.trim().length > 0
+                    ? isolate.colonyCount.trim()
+                    : null;
+                const comment = typeof isolate?.comment === 'string' && isolate.comment.trim().length > 0
+                    ? isolate.comment.trim()
+                    : null;
+                const antibiotics = Array.isArray(isolate?.antibiotics)
+                    ? isolate.antibiotics
+                        .map((row) => {
+                        const interpretation = String(row?.interpretation ?? '')
+                            .trim()
+                            .toUpperCase();
+                        if (!interpretation)
+                            return null;
+                        const mic = typeof row?.mic === 'string' && row.mic.trim().length > 0
+                            ? row.mic.trim()
+                            : null;
+                        const antibioticId = typeof row?.antibioticId === 'string' &&
+                            row.antibioticId.trim().length > 0
+                            ? row.antibioticId.trim()
+                            : null;
+                        const antibioticCode = typeof row?.antibioticCode === 'string' &&
+                            row.antibioticCode.trim().length > 0
+                            ? row.antibioticCode.trim().toUpperCase()
+                            : null;
+                        const antibioticName = typeof row?.antibioticName === 'string' &&
+                            row.antibioticName.trim().length > 0
+                            ? row.antibioticName.trim()
+                            : null;
+                        return {
+                            antibioticId,
+                            antibioticCode,
+                            antibioticName,
+                            interpretation,
+                            mic,
+                        };
+                    })
+                        .filter((row) => Boolean(row))
+                    : [];
+                if (!organism && !source && !condition && !colonyCount && antibiotics.length === 0) {
+                    return null;
+                }
+                return {
+                    isolateKey: isolateKeyRaw || `isolate-${isolateIndex + 1}`,
+                    organism,
+                    source,
+                    condition,
+                    colonyCount,
+                    comment,
+                    antibiotics,
+                };
+            })
+                .filter((isolate) => Boolean(isolate))
+            : [];
+        return {
+            noGrowth,
+            noGrowthResult,
+            notes,
+            isolates,
+        };
+    }
+    summarizeCultureResult(payload) {
+        const normalized = this.normalizeCultureResultFromStorage(payload);
+        if (!normalized)
+            return null;
+        if (normalized.noGrowth) {
+            return normalized.noGrowthResult || 'No growth';
+        }
+        const isolateCount = normalized.isolates.length;
+        const antibioticCount = normalized.isolates.reduce((sum, isolate) => sum + isolate.antibiotics.length, 0);
+        if (isolateCount === 0 && normalized.notes) {
+            return normalized.notes;
+        }
+        return `${isolateCount} isolate${isolateCount === 1 ? '' : 's'} • ${antibioticCount} antibiotic row${antibioticCount === 1 ? '' : 's'}`;
+    }
+    async normalizeCultureResultInput(payload, test, labId, antibioticCacheById) {
+        if (payload === null)
+            return null;
+        if (!payload || typeof payload !== 'object') {
+            throw new common_1.BadRequestException('Invalid cultureResult payload');
+        }
+        if (this.normalizeResultEntryType(test.resultEntryType) !== 'CULTURE_SENSITIVITY') {
+            throw new common_1.BadRequestException('cultureResult can only be entered for CULTURE_SENSITIVITY tests');
+        }
+        const normalizedConfig = this.normalizeCultureConfig(test.cultureConfig);
+        const interpretationOptions = new Set((normalizedConfig?.interpretationOptions ?? ['S', 'I', 'R']).map((value) => value.toUpperCase()));
+        const noGrowth = payload.noGrowth === true;
+        const noGrowthResult = typeof payload.noGrowthResult === 'string' &&
+            payload.noGrowthResult.trim().length > 0
+            ? payload.noGrowthResult.trim()
+            : null;
+        const notes = typeof payload.notes === 'string' && payload.notes.trim().length > 0
+            ? payload.notes.trim()
+            : null;
+        const isolatesInput = Array.isArray(payload.isolates) ? payload.isolates : [];
+        const cache = antibioticCacheById ?? new Map();
+        const antibioticIds = Array.from(new Set(isolatesInput.flatMap((isolate) => Array.isArray(isolate?.antibiotics)
+            ? isolate.antibiotics
+                .map((row) => String(row?.antibioticId ?? '').trim())
+                .filter((id) => id.length > 0)
+            : [])));
+        const missingIds = antibioticIds.filter((id) => !cache.has(id));
+        if (missingIds.length > 0) {
+            const fetched = await this.antibioticRepo.find({
+                where: { labId, id: (0, typeorm_2.In)(missingIds) },
+                select: ['id', 'code', 'name', 'isActive'],
+            });
+            for (const antibiotic of fetched) {
+                cache.set(antibiotic.id, antibiotic);
+            }
+        }
+        const isolates = isolatesInput
+            .map((isolate, isolateIndex) => {
+            const isolateKey = String(isolate?.isolateKey ?? `isolate-${isolateIndex + 1}`).trim();
+            const organism = String(isolate?.organism ?? '').trim();
+            const source = typeof isolate?.source === 'string' && isolate.source.trim().length > 0
+                ? isolate.source.trim()
+                : null;
+            const condition = typeof isolate?.condition === 'string' &&
+                isolate.condition.trim().length > 0
+                ? isolate.condition.trim()
+                : null;
+            const colonyCount = typeof isolate?.colonyCount === 'string' &&
+                isolate.colonyCount.trim().length > 0
+                ? isolate.colonyCount.trim()
+                : null;
+            const comment = typeof isolate?.comment === 'string' && isolate.comment.trim().length > 0
+                ? isolate.comment.trim()
+                : null;
+            const rows = Array.isArray(isolate?.antibiotics) ? isolate.antibiotics : [];
+            const antibiotics = rows
+                .map((row) => {
+                const interpretation = String(row?.interpretation ?? '')
+                    .trim()
+                    .toUpperCase();
+                if (!interpretation)
+                    return null;
+                if (!interpretationOptions.has(interpretation)) {
+                    throw new common_1.BadRequestException(`Invalid interpretation "${interpretation}". Allowed values: ${Array.from(interpretationOptions).join(', ')}`);
+                }
+                const mic = typeof row?.mic === 'string' && row.mic.trim().length > 0
+                    ? row.mic.trim()
+                    : null;
+                const rowAntibioticId = String(row?.antibioticId ?? '').trim();
+                if (!rowAntibioticId) {
+                    const antibioticCode = typeof row?.antibioticCode === 'string' &&
+                        row.antibioticCode.trim().length > 0
+                        ? row.antibioticCode.trim().toUpperCase()
+                        : null;
+                    const antibioticName = typeof row?.antibioticName === 'string' &&
+                        row.antibioticName.trim().length > 0
+                        ? row.antibioticName.trim()
+                        : null;
+                    if (!antibioticCode && !antibioticName) {
+                        throw new common_1.BadRequestException('Each culture antibiotic row must include antibioticId or antibioticCode/name');
+                    }
+                    return {
+                        antibioticId: null,
+                        antibioticCode,
+                        antibioticName,
+                        interpretation,
+                        mic,
+                    };
+                }
+                const antibiotic = cache.get(rowAntibioticId);
+                if (!antibiotic) {
+                    throw new common_1.BadRequestException(`Antibiotic "${rowAntibioticId}" was not found in this lab`);
+                }
+                return {
+                    antibioticId: antibiotic.id,
+                    antibioticCode: antibiotic.code,
+                    antibioticName: antibiotic.name,
+                    interpretation,
+                    mic,
+                };
+            })
+                .filter((row) => Boolean(row));
+            if (!noGrowth && !organism) {
+                throw new common_1.BadRequestException('Each culture isolate requires an organism name');
+            }
+            if (!noGrowth && antibiotics.length === 0) {
+                throw new common_1.BadRequestException('Each culture isolate requires at least one antibiotic row with interpretation');
+            }
+            return {
+                isolateKey: isolateKey || `isolate-${isolateIndex + 1}`,
+                organism,
+                source,
+                condition,
+                colonyCount,
+                comment,
+                antibiotics,
+            };
+        })
+            .filter((isolate) => Boolean(isolate));
+        if (!noGrowth && isolates.length === 0) {
+            throw new common_1.BadRequestException('cultureResult requires at least one isolate when noGrowth=false');
+        }
+        return {
+            noGrowth,
+            noGrowthResult,
+            notes,
+            isolates,
+        };
+    }
+    async attachCultureAntibioticIds(items) {
+        if (!items.length)
+            return items;
+        const testIds = Array.from(new Set(items
+            .map((item) => item.testId)
+            .filter((id) => typeof id === 'string' && id.length > 0)));
+        if (testIds.length === 0)
+            return items;
+        const mappings = await this.testAntibioticRepo.find({
+            where: { testId: (0, typeorm_2.In)(testIds) },
+            order: { sortOrder: 'ASC', createdAt: 'ASC' },
+            select: ['testId', 'antibioticId'],
+        });
+        const grouped = new Map();
+        for (const mapping of mappings) {
+            const current = grouped.get(mapping.testId) ?? [];
+            current.push(mapping.antibioticId);
+            grouped.set(mapping.testId, current);
+        }
+        return items.map((item) => ({
+            ...item,
+            cultureAntibioticIds: grouped.get(item.testId) ?? [],
+        }));
     }
     findMatchingResultTextOption(text, options) {
         if (!options?.length)
@@ -1370,10 +1705,14 @@ exports.WorklistService = WorklistService = WorklistService_1 = __decorate([
     __param(0, (0, typeorm_1.InjectRepository)(order_test_entity_1.OrderTest)),
     __param(1, (0, typeorm_1.InjectRepository)(order_entity_1.Order)),
     __param(2, (0, typeorm_1.InjectRepository)(test_entity_1.Test)),
-    __param(3, (0, typeorm_1.InjectRepository)(lab_entity_1.Lab)),
-    __param(4, (0, typeorm_1.InjectRepository)(user_department_assignment_entity_1.UserDepartmentAssignment)),
-    __param(5, (0, typeorm_1.InjectRepository)(department_entity_1.Department)),
+    __param(3, (0, typeorm_1.InjectRepository)(test_antibiotic_entity_1.TestAntibiotic)),
+    __param(4, (0, typeorm_1.InjectRepository)(antibiotic_entity_1.Antibiotic)),
+    __param(5, (0, typeorm_1.InjectRepository)(lab_entity_1.Lab)),
+    __param(6, (0, typeorm_1.InjectRepository)(user_department_assignment_entity_1.UserDepartmentAssignment)),
+    __param(7, (0, typeorm_1.InjectRepository)(department_entity_1.Department)),
     __metadata("design:paramtypes", [typeorm_2.Repository,
+        typeorm_2.Repository,
+        typeorm_2.Repository,
         typeorm_2.Repository,
         typeorm_2.Repository,
         typeorm_2.Repository,

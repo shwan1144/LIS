@@ -13,6 +13,14 @@ function countMatches(haystack: string, needle: string): number {
   return haystack.split(needle).length - 1;
 }
 
+function sliceBetween(haystack: string, startMarker: string, endMarker: string): string {
+  const start = haystack.indexOf(startMarker);
+  if (start < 0) return '';
+  const end = haystack.indexOf(endMarker, start + startMarker.length);
+  if (end < 0) return haystack.slice(start);
+  return haystack.slice(start, end);
+}
+
 function createOrder(overrides: Partial<Order> = {}): Order {
   return {
     id: 'order-1',
@@ -48,6 +56,8 @@ function createOrderTest(
     category?: string | null;
     departmentName?: string | null;
     sortOrder?: number;
+    resultEntryType?: string | null;
+    cultureResult?: unknown;
   },
 ): OrderTest {
   return {
@@ -56,12 +66,14 @@ function createOrderTest(
     resultText: options.resultText ?? null,
     resultValue: options.resultValue ?? null,
     resultParameters: options.resultParameters ?? null,
+    cultureResult: options.cultureResult ?? null,
     flag: null,
     test: {
       name: options.name,
       code: options.code,
       abbreviation: options.abbreviation ?? null,
       type: options.type ?? TestType.SINGLE,
+      resultEntryType: options.resultEntryType ?? 'NUMERIC',
       unit: options.unit ?? null,
       parameterDefinitions: options.parameterDefinitions ?? [],
       category: options.category ?? null,
@@ -459,6 +471,223 @@ describe('buildResultsReportHtml panel page isolation', () => {
     expect(html).toContain('<td style="width:28%;font-weight:600;">color</td>');
     expect(html).toContain('<td style="width:36%;">yellow</td>');
     expect(html).toContain('<td style="width:36%;" class="reference-value">-</td>');
+  });
+
+  it('renders culture susceptibility isolates in four S/I/R/R columns with duplicate Resistance headers', () => {
+    const order = createOrder();
+    const culture = createOrderTest('culture-1', {
+      name: 'Urine Culture and Sensitivity',
+      code: 'UCUL',
+      resultEntryType: 'CULTURE_SENSITIVITY',
+      cultureResult: {
+        noGrowth: false,
+        isolates: [
+          {
+            isolateKey: 'iso-1',
+            organism: 'E. coli',
+            source: 'Urine',
+            condition: 'Pure growth',
+            colonyCount: '10^5 CFU/mL',
+            antibiotics: [
+              { antibioticName: 'Gentamicin', interpretation: 'S' },
+              { antibioticName: 'Amikacin', interpretation: 'S' },
+              { antibioticName: 'Aztreonam', interpretation: 'I' },
+              { antibioticName: 'Cefepime', interpretation: 'UNK' },
+            ],
+          },
+        ],
+      },
+    });
+
+    const html = buildResultsReportHtml({
+      order,
+      orderTests: [culture],
+      reportableCount: 1,
+      verifiedCount: 1,
+      verifiers: ['Verifier'],
+      latestVerifiedAt: new Date('2026-02-26T11:00:00.000Z'),
+      comments: [],
+    });
+
+    expect(countMatches(html, 'class="page culture-page"')).toBe(1);
+    expect(countMatches(html, 'class="culture-ast-column-title">Sensitive')).toBe(1);
+    expect(countMatches(html, 'class="culture-ast-column-title">Intermediate')).toBe(1);
+    expect(countMatches(html, 'class="culture-ast-column-title">Resistance')).toBe(1);
+    expect(html).toContain('<strong>Source:</strong> Urine');
+    expect(html).toContain('<strong>Condition:</strong> Pure growth');
+    expect(html).toContain('<strong>Colony count:</strong> 10^5 CFU/mL');
+    expect(html).toContain('class="culture-ast-grid culture-ast-grid-three"');
+    expect(html).not.toContain(
+      'class="culture-ast-column culture-ast-column-resistance-secondary"',
+    );
+    expect(html).not.toContain('class="culture-ast-table"');
+    expect(html).not.toContain('<th>Interpretation</th>');
+    expect(html).not.toContain('<th>MIC</th>');
+
+    const sensitiveChunk = sliceBetween(
+      html,
+      'culture-ast-column culture-ast-column-sensitive',
+      'culture-ast-column culture-ast-column-intermediate',
+    );
+    expect(sensitiveChunk.indexOf('Amikacin')).toBeGreaterThanOrEqual(0);
+    expect(sensitiveChunk.indexOf('Gentamicin')).toBeGreaterThanOrEqual(0);
+    expect(sensitiveChunk.indexOf('Amikacin')).toBeLessThan(
+      sensitiveChunk.indexOf('Gentamicin'),
+    );
+
+    const intermediateChunk = sliceBetween(
+      html,
+      'culture-ast-column culture-ast-column-intermediate',
+      'culture-ast-column culture-ast-column-resistance-primary',
+    );
+    expect(intermediateChunk).toContain('Aztreonam');
+    expect(intermediateChunk).not.toContain('Cefepime');
+
+    const resistanceChunk = sliceBetween(
+      html,
+      'culture-ast-column culture-ast-column-resistance-primary',
+      'class="report-footer',
+    );
+    expect(resistanceChunk).toContain('Cefepime');
+  });
+
+  it('splits sorted resistance antibiotics into two sequential resistance columns', () => {
+    const order = createOrder();
+    const culture = createOrderTest('culture-r-split', {
+      name: 'Urine Culture and Sensitivity',
+      code: 'UCUL',
+      resultEntryType: 'CULTURE_SENSITIVITY',
+      cultureResult: {
+        noGrowth: false,
+        isolates: [
+          {
+            isolateKey: 'iso-1',
+            organism: 'Klebsiella',
+            antibiotics: Array.from({ length: 26 }, (_, index) => ({
+              antibioticName: `Drug ${String(index + 1).padStart(2, '0')}`,
+              interpretation: 'R',
+            })),
+          },
+        ],
+      },
+    });
+
+    const html = buildResultsReportHtml({
+      order,
+      orderTests: [culture],
+      reportableCount: 1,
+      verifiedCount: 1,
+      verifiers: ['Verifier'],
+      latestVerifiedAt: new Date('2026-02-26T11:00:00.000Z'),
+      comments: [],
+    });
+    expect(countMatches(html, 'class="culture-ast-column-title">Resistance')).toBe(2);
+    expect(html).toContain('class="culture-ast-grid culture-ast-grid-four"');
+
+    const resistancePrimaryChunk = sliceBetween(
+      html,
+      'culture-ast-column culture-ast-column-resistance-primary',
+      'culture-ast-column culture-ast-column-resistance-secondary',
+    );
+    expect(resistancePrimaryChunk).toContain('Drug 01');
+    expect(resistancePrimaryChunk).toContain('Drug 24');
+    expect(resistancePrimaryChunk).not.toContain('Drug 25');
+    expect(resistancePrimaryChunk.indexOf('Drug 01')).toBeLessThan(
+      resistancePrimaryChunk.indexOf('Drug 24'),
+    );
+
+    const resistanceSecondaryChunk = sliceBetween(
+      html,
+      'culture-ast-column culture-ast-column-resistance-secondary',
+      'class="report-footer',
+    );
+    expect(resistanceSecondaryChunk).toContain('Drug 25');
+    expect(resistanceSecondaryChunk).toContain('Drug 26');
+    expect(resistanceSecondaryChunk.indexOf('Drug 25')).toBeLessThan(
+      resistanceSecondaryChunk.indexOf('Drug 26'),
+    );
+  });
+
+  it('renders no-growth culture section with only result, source, and comment fields', () => {
+    const order = createOrder();
+    const culture = createOrderTest('culture-no-growth', {
+      name: 'Blood Culture and Sensitivity',
+      code: 'BCUL',
+      resultEntryType: 'CULTURE_SENSITIVITY',
+      cultureResult: {
+        noGrowth: true,
+        noGrowthResult: 'No growth of microorganizm',
+        notes: 'No pathogen detected',
+        isolates: [
+          {
+            isolateKey: 'iso-1',
+            source: 'Urine',
+            comment: 'No pathogenic colonies',
+            antibiotics: [],
+          },
+        ],
+      },
+    });
+
+    const html = buildResultsReportHtml({
+      order,
+      orderTests: [culture],
+      reportableCount: 1,
+      verifiedCount: 1,
+      verifiers: ['Verifier'],
+      latestVerifiedAt: new Date('2026-02-26T11:00:00.000Z'),
+      comments: [],
+    });
+
+    expect(html).toContain('<div class="culture-no-growth-result">Result: No growth of microorganizm</div>');
+    expect(html).toContain('<strong>Source:</strong> Urine');
+    expect(html).toContain('<strong>Comment:</strong> No pathogenic colonies');
+    expect(html).not.toContain('class="culture-ast-grid');
+    expect(html).not.toContain('class="culture-isolate-title-label">Microorganism:</span>');
+    expect(html).not.toContain('<strong>Condition:</strong>');
+    expect(html).not.toContain('<strong>Colony count:</strong>');
+    expect(countMatches(html, '<strong>Notes:</strong>')).toBe(0);
+  });
+
+  it('renders one culture page per isolate for multi-isolate results', () => {
+    const order = createOrder();
+    const culture = createOrderTest('culture-multi-isolate', {
+      name: 'Urine Culture and Sensitivity',
+      code: 'UCUL',
+      resultEntryType: 'CULTURE_SENSITIVITY',
+      cultureResult: {
+        noGrowth: false,
+        notes: 'General note',
+        isolates: [
+          {
+            isolateKey: 'iso-1',
+            organism: 'E. coli',
+            antibiotics: [{ antibioticName: 'Amikacin', interpretation: 'S' }],
+          },
+          {
+            isolateKey: 'iso-2',
+            organism: 'Klebsiella pneumoniae',
+            antibiotics: [{ antibioticName: 'Cefepime', interpretation: 'R' }],
+          },
+        ],
+      },
+    });
+
+    const html = buildResultsReportHtml({
+      order,
+      orderTests: [culture],
+      reportableCount: 1,
+      verifiedCount: 1,
+      verifiers: ['Verifier'],
+      latestVerifiedAt: new Date('2026-02-26T11:00:00.000Z'),
+      comments: [],
+    });
+
+    expect(countMatches(html, 'class="page culture-page"')).toBe(2);
+    expect(countMatches(html, 'class="culture-isolate-title-label">Microorganism:</span>')).toBe(2);
+    expect(countMatches(html, 'class="culture-isolate-title-value">E. coli</span>')).toBe(1);
+    expect(countMatches(html, 'class="culture-isolate-title-value">Klebsiella pneumoniae</span>')).toBe(1);
+    expect(countMatches(html, '<strong>Notes:</strong>')).toBe(1);
   });
 
   it('contains panel overflow-safe page-break CSS rules', () => {

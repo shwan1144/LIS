@@ -23,10 +23,12 @@ import type { ColumnsType } from 'antd/es/table';
 import dayjs from 'dayjs';
 import {
   enterResult,
+  getAntibiotics,
   getDepartments,
   getWorklistOrderTests,
   getWorklistOrders,
   getWorklistStats,
+  type AntibioticDto,
   type DepartmentDto,
   type ResultFlag,
   type TestParameterDefinition,
@@ -38,8 +40,14 @@ import {
 } from '../api/client';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
+import { CultureSensitivityEditor } from '../components/CultureSensitivityEditor';
 import { WorklistStatusDashboard } from '../components/WorklistStatusDashboard';
 import { useFillToViewportBottom } from '../hooks/useFillToViewportBottom';
+import {
+  buildCultureAntibioticOptions,
+  buildCultureResultPayloadFromForm,
+  normalizeCultureResultForForm,
+} from '../utils/culture-sensitivity';
 import {
   RESULT_FLAG_COLOR as FLAG_COLOR,
   RESULT_FLAG_LABEL as FLAG_LABEL,
@@ -237,13 +245,16 @@ function buildInitialFormValues(items: WorklistItem[]): Record<string, unknown> 
 
     values[target.id] = {
       resultValue:
-        target.resultEntryType === 'QUALITATIVE' || target.resultEntryType === 'TEXT'
+        target.resultEntryType === 'QUALITATIVE' ||
+          target.resultEntryType === 'TEXT' ||
+          target.resultEntryType === 'CULTURE_SENSITIVITY'
           ? undefined
           : numericInitialValue,
       resultText: initialResultText,
       customResultText,
       resultParameters: { ...defaults, ...resultParametersInitial },
       resultParametersCustom: resultParametersCustomInitial,
+      cultureResult: normalizeCultureResultForForm(target.cultureResult),
     };
   }
 
@@ -289,6 +300,7 @@ export function WorklistPage() {
     useState<WorklistEntryStatusFilter>('pending');
   const [departmentId, setDepartmentId] = useState<string | ''>('');
   const [departments, setDepartments] = useState<DepartmentDto[]>([]);
+  const [antibiotics, setAntibiotics] = useState<AntibioticDto[]>([]);
   const [page, setPage] = useState(1);
   const [size] = useState(25);
 
@@ -312,6 +324,10 @@ export function WorklistPage() {
   const [submitting, setSubmitting] = useState(false);
   const [liveFlags, setLiveFlags] = useState<Record<string, ResultFlag | null>>({});
   const [resultForm] = Form.useForm<any>();
+  const antibioticById = useMemo(
+    () => new Map(antibiotics.map((antibiotic) => [antibiotic.id, antibiotic])),
+    [antibiotics],
+  );
 
   const orderCacheKey = useCallback(
     (orderId: string, appliedDepartmentId?: string | null) =>
@@ -387,6 +403,12 @@ export function WorklistPage() {
     void getDepartments()
       .then(setDepartments)
       .catch(() => undefined);
+  }, []);
+
+  useEffect(() => {
+    void getAntibiotics(true)
+      .then(setAntibiotics)
+      .catch(() => setAntibiotics([]));
   }, []);
 
   useEffect(() => {
@@ -480,6 +502,15 @@ export function WorklistPage() {
     editableTargetIds.length === 0,
   );
 
+  const getCultureOptionsForTarget = useCallback(
+    (target: WorklistItem) =>
+      buildCultureAntibioticOptions(
+        antibiotics,
+        target.cultureAntibioticIds,
+      ),
+    [antibiotics],
+  );
+
   const firstPanelIndex = useMemo(
     () =>
       orderedModalItems.findIndex(
@@ -532,6 +563,11 @@ export function WorklistPage() {
               resultText || null,
               target.resultTextOptions ?? null,
             ) ?? target.flag ?? null;
+          continue;
+        }
+
+        if (resultEntryType === 'CULTURE_SENSITIVITY') {
+          nextFlags[target.id] = target.flag ?? null;
           continue;
         }
 
@@ -753,6 +789,7 @@ export function WorklistPage() {
           const normalizedNumericInput = normalizeNumericResultInput(itemValues.resultValue);
           let resultValue = itemValues.resultValue ?? null;
           let resultText = itemValues.resultText?.trim() || null;
+          let cultureResult = null;
 
           if (resultEntryType === 'NUMERIC') {
             resultValue = normalizedNumericInput !== null ? Number(normalizedNumericInput) : null;
@@ -764,6 +801,13 @@ export function WorklistPage() {
             resultValue = null;
           } else if (resultEntryType === 'TEXT') {
             resultValue = null;
+          } else if (resultEntryType === 'CULTURE_SENSITIVITY') {
+            cultureResult = buildCultureResultPayloadFromForm(
+              itemValues.cultureResult,
+              antibioticById,
+            );
+            resultValue = null;
+            resultText = null;
           }
 
           const isVerifiedOverride =
@@ -772,7 +816,13 @@ export function WorklistPage() {
           await enterResult(target.id, {
             resultValue,
             resultText,
-            resultParameters: hasResultParameters ? resultParameters : null,
+            resultParameters:
+              resultEntryType === 'CULTURE_SENSITIVITY'
+                ? null
+                : hasResultParameters
+                  ? resultParameters
+                  : null,
+            cultureResult,
             ...(isVerifiedOverride ? { forceEditVerified: true } : {}),
           });
         }),
@@ -1595,6 +1645,16 @@ export function WorklistPage() {
                               </Form.Item>
                             ))}
                           </Space>
+                        ) : target.resultEntryType === 'CULTURE_SENSITIVITY' ? (
+                          <CultureSensitivityEditor
+                            baseName={[target.id, 'cultureResult']}
+                            antibioticOptions={getCultureOptionsForTarget(target)}
+                            interpretationOptions={
+                              target.cultureConfig?.interpretationOptions ?? ['S', 'I', 'R']
+                            }
+                            micUnit={target.cultureConfig?.micUnit ?? null}
+                            disabled={isReadOnly}
+                          />
                         ) : (
                           <Form.Item
                             name={[target.id, target.resultEntryType === 'NUMERIC' ? 'resultValue' : 'resultText']}

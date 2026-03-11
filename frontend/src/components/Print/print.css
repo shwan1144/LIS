@@ -1,3 +1,19 @@
+@font-face {
+  font-family: 'LIS Noto Sans Arabic';
+  src: url('../../assets/fonts/NotoSansArabic-Regular.ttf') format('truetype');
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'LIS Noto Sans Arabic';
+  src: url('../../assets/fonts/NotoSansArabic-Bold.ttf') format('truetype');
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+}
+
 /* =====================================================
    RECEIPT STYLES
    ===================================================== */
@@ -220,16 +236,16 @@
 }
 
 .sample-label {
-  width: 50mm;
-  height: 25mm;
-  min-width: 50mm;
-  min-height: 25mm;
-  max-width: 50mm;
-  max-height: 25mm;
+  width: var(--label-width, 50mm);
+  height: var(--label-height, 25mm);
+  min-width: var(--label-width, 50mm);
+  min-height: var(--label-height, 25mm);
+  max-width: var(--label-width, 50mm);
+  max-height: var(--label-height, 25mm);
   padding: 0;
-  border: 1px solid #000;
+  border: none;
   border-radius: 0;
-  font-family: Arial, sans-serif;
+  font-family: var(--label-preview-font-family, Arial, sans-serif);
   font-size: 7px;
   background: white;
   page-break-inside: avoid;
@@ -242,29 +258,56 @@
 
 /* Left vertical strip: Tube/Department + Sequence */
 .label-sequence-strip {
-  flex: 0 0 5.2mm;
-  width: 5.2mm;
-  min-width: 5.2mm;
+  flex: 0 0 var(--label-left-strip-width, 5mm);
+  width: var(--label-left-strip-width, 5mm);
+  min-width: var(--label-left-strip-width, 5mm);
   background: white;
-  border-right: 1px solid #000;
+  border-right: none;
   display: flex;
-  align-items: center;
-  justify-content: center;
+  flex-direction: row;
+  align-items: stretch;
+  justify-content: stretch;
   overflow: hidden;
-  padding: 1px 0;
+  padding: 0;
+}
+
+.label-side-band {
+  position: relative;
+  height: 100%;
+  overflow: hidden;
+  min-width: 0;
+}
+
+.label-side-band-main {
+  flex: 0 0 calc((1 - var(--label-left-strip-meta-width-ratio, 0.34)) * 100%);
+}
+
+.label-side-band-meta {
+  flex: 0 0 calc(var(--label-left-strip-meta-width-ratio, 0.34) * 100%);
+}
+
+.label-side-rotated-text {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: calc(var(--label-height, 25mm) - 1mm);
+  transform: translate(-50%, -50%) rotate(-90deg);
+  transform-origin: center center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  line-height: 1;
+  text-align: center;
 }
 
 .label-sequence-text {
-  writing-mode: vertical-rl;
-  transform: rotate(180deg);
-  font-size: 4.9px;
+  font-size: var(--label-side-strip-font-size, 6px);
   font-weight: 700;
-  overflow: hidden;
-  text-overflow: clip;
-  white-space: normal;
-  max-height: 100%;
-  line-height: 1;
-  text-align: center;
+}
+
+.label-sequence-meta-text {
+  font-size: var(--label-side-meta-font-size, 4.8px);
+  font-weight: 600;
 }
 
 /* Center main area */
@@ -278,20 +321,22 @@
 
 /* Top row: Name (~3/4, gray) | Sex (~1/4) */
 .label-header-row {
-  display: flex;
-  flex-direction: row;
+  display: grid;
+  grid-template-columns:
+    minmax(0, calc((100% - var(--label-header-gap, 0.8mm)) * (1 - var(--label-sex-width-ratio, 0.22))))
+    minmax(0, calc((100% - var(--label-header-gap, 0.8mm)) * var(--label-sex-width-ratio, 0.22)));
+  column-gap: var(--label-header-gap, 0.8mm);
   flex: 0 0 auto;
-  min-height: 4.6mm;
+  min-height: var(--label-header-height, 4.6mm);
   border-bottom: none;
 }
 
 .label-name-cell {
-  flex: 3;
   min-width: 0;
-  padding: 1px 2px;
+  padding: 0 1px 0 0;
   background: #fff;
   font-weight: 700;
-  font-size: 6.8px;
+  font-size: var(--label-name-font-size, 9px);
   line-height: 1.15;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -301,18 +346,17 @@
 }
 
 .label-sex-cell {
-  flex: 1;
   min-width: 0;
-  padding: 0 1px;
+  padding: 0;
   background: white;
-  font-size: 6.4px;
+  font-size: var(--label-sex-font-size, 8px);
   font-weight: 600;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   display: flex;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
   border-left: none;
 }
 
@@ -325,8 +369,8 @@
 }
 
 .label-left-margin {
-  flex: 0 0 0.7mm;
-  min-width: 0.7mm;
+  flex: 0 0 var(--label-inner-left-margin, 0.7mm);
+  min-width: var(--label-inner-left-margin, 0.7mm);
   background: #fff;
   border-right: none;
 }
@@ -340,46 +384,53 @@
 }
 
 .label-barcode-row {
-  flex: 0 0 12mm;
+  flex: 0 0 var(--label-barcode-row-height, 12.8mm);
   min-height: 0;
   display: flex;
   align-items: center;
   justify-content: center;
   overflow: hidden;
   border-bottom: none;
-  padding: 0;
+  padding: var(--label-body-top-gap, 1mm) 0 0;
+  box-sizing: border-box;
 }
 
 .label-barcode {
   text-align: center;
   margin: 0;
-  padding: 0;
+  padding: 0 var(--label-barcode-quiet-zone, 1.5mm);
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: center;
   min-width: 0;
+  width: 100%;
   overflow: hidden;
+  box-sizing: border-box;
 }
 
 .label-barcode svg {
-  width: 100%;
+  width: auto;
   max-width: 100%;
-  height: 11.4mm;
+  max-height: var(--label-barcode-max-height, 12.8mm);
+  height: auto;
   display: block;
 }
 
 .label-test-row {
   flex: 1;
-  min-height: 4mm;
-  font-size: 6.4px;
+  min-height: var(--label-test-row-height, 6.4mm);
+  font-size: var(--label-test-font-size, 6.3px);
   font-weight: 600;
-  padding: 0.8px 1.6px;
+  padding: 0.3px 1.2px 0;
   overflow: hidden;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  line-height: 1.05;
   word-break: break-word;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
+  white-space: normal;
   text-overflow: ellipsis;
   text-align: center;
   border-top: none;
@@ -387,11 +438,11 @@
 
 /* Right vertical strip: Patient/Order number */
 .label-patient-number-strip {
-  flex: 0 0 2.5mm;
-  width: 2.5mm;
-  min-width: 2.5mm;
+  flex: 0 0 var(--label-right-strip-width, 2.5mm);
+  width: var(--label-right-strip-width, 2.5mm);
+  min-width: var(--label-right-strip-width, 2.5mm);
   background: white;
-  border-left: 1px solid #000;
+  border-left: none;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -402,7 +453,7 @@
 .label-patient-number-text {
   writing-mode: vertical-rl;
   transform: rotate(180deg);
-  font-size: 4.8px;
+  font-size: var(--label-side-strip-font-size, 6px);
   font-weight: 700;
   overflow: hidden;
   text-overflow: clip;
@@ -476,8 +527,8 @@
 
   .sample-label {
     page: label;
-    width: 50mm !important;
-    height: 25mm !important;
+    width: var(--label-width, 50mm) !important;
+    height: var(--label-height, 25mm) !important;
     margin: 0 !important;
     padding: 0 !important;
     page-break-after: always;
@@ -497,7 +548,7 @@
 
   .all-labels-container {
     display: block !important;
-    width: 50mm;
+    width: var(--label-width, 50mm);
     padding: 0;
     margin: 0;
     gap: 0;
@@ -507,8 +558,8 @@
     display: flex !important;
     flex-direction: row !important;
     margin: 0;
-    width: 50mm !important;
-    height: 25mm !important;
+    width: var(--label-width, 50mm) !important;
+    height: var(--label-height, 25mm) !important;
   }
 
   /* Hide screen-only elements when printing */

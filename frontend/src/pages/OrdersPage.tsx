@@ -1610,12 +1610,15 @@ export function OrdersPage() {
                 printerName,
               });
             } else {
-              await directPrintLabels({
+              const result = await directPrintLabels({
                 order,
                 printerName,
                 labelSequenceBy: nextLabelSequenceBy,
                 departments,
               });
+              if (result.warning) {
+                message.warning(result.warning);
+              }
             }
             message.success(`${type === 'receipt' ? 'Receipt' : 'Labels'} sent to ${printerName}`);
             return;
@@ -2031,7 +2034,7 @@ export function OrdersPage() {
     <div className="orders-page-shell">
       <Card size="small" className="orders-page-header-card">
         <div className="orders-page-header-row">
-          <div>
+          <div className="orders-page-heading-block">
             <Title level={4} style={{ marginTop: 0, marginBottom: 2 }}>
               Orders {listTotal > 0 && (
                 <Text type="secondary" style={{ fontWeight: 'normal', fontSize: 14 }}>({listTotal} total)</Text>
@@ -2164,7 +2167,12 @@ export function OrdersPage() {
             }}
           >
             <div className="orders-history-content">
-              <Space direction="vertical" style={{ width: '100%', flexShrink: 0 }} size={12}>
+              <Space
+                direction="vertical"
+                style={{ width: '100%', flexShrink: 0 }}
+                size={12}
+                className="orders-history-toolbar"
+              >
                 <Input
                   placeholder="Search order #, patient, phone"
                   value={listQueryInput}
@@ -2174,7 +2182,11 @@ export function OrdersPage() {
                   onPressEnter={handleApplyHistorySearch}
                   disabled={historyRefreshing || patientBootstrapLoading}
                 />
-                <Space style={{ width: '100%', justifyContent: 'space-between' }} wrap>
+                <Space
+                  style={{ width: '100%', justifyContent: 'space-between' }}
+                  wrap
+                  className="orders-history-filter-row"
+                >
                   <Select<'ALL' | OrderStatus>
                     style={{ minWidth: 170 }}
                     value={statusFilter}
@@ -2227,11 +2239,7 @@ export function OrdersPage() {
                     className={`order-history-scroll${isDark ? ' order-history-scroll-dark' : ''}`}
                   >
                     <div
-                      className="order-history-grid-row order-history-grid-header"
-                      style={{
-                        padding: '6px 8px',
-                        borderBottom: styles.border,
-                      }}
+                      className="order-history-grid-row order-history-grid-header order-history-grid-header-surface"
                     >
                       <Text type="secondary" className="order-history-header-text">Patient</Text>
                       <Text type="secondary" className="order-history-header-text">Status</Text>
@@ -2254,12 +2262,7 @@ export function OrdersPage() {
                         return (
                           <List.Item
                             key={row.rowId}
-                            style={{
-                              padding: '6px 8px',
-                              cursor: 'pointer',
-                              backgroundColor: isSelected ? 'rgba(22, 119, 255, 0.08)' : undefined,
-                              boxShadow: isSelected ? 'inset 3px 0 0 #1677ff' : undefined,
-                            }}
+                            className={`order-history-list-item${isSelected ? ' is-selected' : ''}`}
                             onClick={() => setSelectedRowId(row.rowId)}
                           >
                             <div className="order-history-grid-row order-history-grid-body">

@@ -8,13 +8,16 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, IsNull, In } from 'typeorm';
 import { Test, TestType, TubeType } from '../entities/test.entity';
 import type {
+  TestCultureConfig,
   TestNumericAgeRange,
   TestParameterDefinition,
   TestResultEntryType,
   TestResultTextOption,
 } from '../entities/test.entity';
+import { Antibiotic } from '../entities/antibiotic.entity';
 import { Pricing } from '../entities/pricing.entity';
 import { TestComponent } from '../entities/test-component.entity';
+import { TestAntibiotic } from '../entities/test-antibiotic.entity';
 import { OrderTest } from '../entities/order-test.entity';
 import { Department } from '../entities/department.entity';
 import { CreateTestDto } from './dto/create-test.dto';
@@ -57,6 +60,10 @@ export class TestsService {
     private readonly pricingRepo: Repository<Pricing>,
     @InjectRepository(TestComponent)
     private readonly testComponentRepo: Repository<TestComponent>,
+    @InjectRepository(TestAntibiotic)
+    private readonly testAntibioticRepo: Repository<TestAntibiotic>,
+    @InjectRepository(Antibiotic)
+    private readonly antibioticRepo: Repository<Antibiotic>,
     @InjectRepository(OrderTest)
     private readonly orderTestRepo: Repository<OrderTest>,
     @InjectRepository(Department)
@@ -75,7 +82,8 @@ export class TestsService {
     const withComponents = await this.attachPanelComponents(
       tests.map((test) => this.normalizeTestForOutput(test)),
     );
-    return this.attachDefaultPrices(withComponents, labId);
+    const withCultureAntibioticIds = await this.attachCultureAntibioticIds(withComponents);
+    return this.attachDefaultPrices(withCultureAntibioticIds, labId);
   }
 
   async findOne(id: string, labId: string): Promise<Test> {
@@ -86,7 +94,10 @@ export class TestsService {
     const [withComponents] = await this.attachPanelComponents([
       this.normalizeTestForOutput(test),
     ]);
-    return withComponents ?? test;
+    const [withCultureAntibioticIds] = await this.attachCultureAntibioticIds([
+      withComponents ?? test,
+    ]);
+    return withCultureAntibioticIds ?? test;
   }
 
   async findByCode(code: string, labId: string): Promise<Test | null> {
@@ -104,10 +115,13 @@ export class TestsService {
     const resultEntryType = this.normalizeResultEntryType(dto.resultEntryType);
     const resultTextOptions = this.normalizeResultTextOptions(dto.resultTextOptions);
     const allowCustomResultText = dto.allowCustomResultText ?? false;
+    const cultureConfig = this.normalizeCultureConfig(dto.cultureConfig, resultEntryType);
     this.validateResultEntryConfig(
       resultEntryType,
       resultTextOptions,
       allowCustomResultText,
+      cultureConfig,
+      dto.type || TestType.SINGLE,
     );
 
     const test = this.testRepo.create({
@@ -129,6 +143,7 @@ export class TestsService {
       resultEntryType,
       resultTextOptions,
       allowCustomResultText,
+      cultureConfig,
       numericAgeRanges: this.normalizeNumericAgeRanges(dto.numericAgeRanges),
       description: dto.description?.trim() || null,
       childTestIds: dto.childTestIds?.trim() || null,
@@ -141,10 +156,19 @@ export class TestsService {
     });
     const saved = await this.testRepo.save(test);
     await this.syncPanelComponentsForTest(saved, dto, labId);
+    await this.syncCultureAntibioticsForTest(
+      saved.id,
+      labId,
+      dto.cultureAntibioticIds ?? [],
+      resultEntryType,
+    );
     const [withComponents] = await this.attachPanelComponents([
       this.normalizeTestForOutput(saved),
     ]);
-    return withComponents ?? saved;
+    const [withCultureAntibioticIds] = await this.attachCultureAntibioticIds([
+      withComponents ?? saved,
+    ]);
+    return withCultureAntibioticIds ?? saved;
   }
 
   async update(id: string, labId: string, dto: UpdateTestDto): Promise<Test> {
@@ -161,6 +185,8 @@ export class TestsService {
 
     if (dto.code !== undefined) test.code = dto.code.toUpperCase().trim();
     if (dto.name !== undefined) test.name = dto.name.trim();
+    const previousResultEntryType = test.resultEntryType ?? 'NUMERIC';
+    const previousType = test.type ?? TestType.SINGLE;
     if (dto.type !== undefined) test.type = dto.type;
     if (dto.tubeType !== undefined) test.tubeType = dto.tubeType;
     if (dto.unit !== undefined) test.unit = dto.unit?.trim() || null;
@@ -201,23 +227,45 @@ export class TestsService {
       dto.allowCustomResultText !== undefined
         ? dto.allowCustomResultText
         : (test.allowCustomResultText ?? false);
+    const nextCultureConfig =
+      dto.cultureConfig !== undefined
+        ? this.normalizeCultureConfig(dto.cultureConfig, nextResultEntryType)
+        : this.normalizeCultureConfig(test.cultureConfig, nextResultEntryType);
 
     this.validateResultEntryConfig(
       nextResultEntryType,
       nextResultTextOptions,
       nextAllowCustomResultText,
+      nextCultureConfig,
+      test.type ?? previousType,
     );
 
     test.resultEntryType = nextResultEntryType;
     test.resultTextOptions = nextResultTextOptions;
     test.allowCustomResultText = nextAllowCustomResultText;
+    test.cultureConfig = nextCultureConfig;
 
     const saved = await this.testRepo.save(test);
     await this.syncPanelComponentsForTest(saved, dto, labId);
+    if (nextResultEntryType !== 'CULTURE_SENSITIVITY') {
+      await this.syncCultureAntibioticsForTest(saved.id, labId, [], nextResultEntryType);
+    } else if (dto.cultureAntibioticIds !== undefined) {
+      await this.syncCultureAntibioticsForTest(
+        saved.id,
+        labId,
+        dto.cultureAntibioticIds ?? [],
+        nextResultEntryType,
+      );
+    } else if (previousResultEntryType !== 'CULTURE_SENSITIVITY') {
+      await this.syncCultureAntibioticsForTest(saved.id, labId, [], nextResultEntryType);
+    }
     const [withComponents] = await this.attachPanelComponents([
       this.normalizeTestForOutput(saved),
     ]);
-    return withComponents ?? saved;
+    const [withCultureAntibioticIds] = await this.attachCultureAntibioticIds([
+      withComponents ?? saved,
+    ]);
+    return withCultureAntibioticIds ?? saved;
   }
 
   private normalizeNumericAgeRanges(
@@ -325,13 +373,45 @@ export class TestsService {
     if (
       normalized === 'NUMERIC' ||
       normalized === 'QUALITATIVE' ||
-      normalized === 'TEXT'
+      normalized === 'TEXT' ||
+      normalized === 'CULTURE_SENSITIVITY'
     ) {
       return normalized;
     }
     throw new BadRequestException(
-      'Invalid resultEntryType. Allowed values: NUMERIC, QUALITATIVE, TEXT',
+      'Invalid resultEntryType. Allowed values: NUMERIC, QUALITATIVE, TEXT, CULTURE_SENSITIVITY',
     );
+  }
+
+  private normalizeCultureConfig(
+    value: CreateTestDto['cultureConfig'] | null | undefined,
+    resultEntryType: TestResultEntryType,
+  ): TestCultureConfig | null {
+    if (resultEntryType !== 'CULTURE_SENSITIVITY') {
+      return null;
+    }
+
+    const rawOptions = Array.isArray(value?.interpretationOptions)
+      ? value.interpretationOptions
+      : ['S', 'I', 'R'];
+    const seen = new Set<string>();
+    const interpretationOptions: string[] = [];
+    for (const option of rawOptions) {
+      const normalized = String(option ?? '').trim().toUpperCase();
+      if (!normalized || seen.has(normalized)) continue;
+      seen.add(normalized);
+      interpretationOptions.push(normalized);
+    }
+
+    const micUnitRaw =
+      typeof value?.micUnit === 'string' ? value.micUnit.trim() : '';
+
+    return {
+      interpretationOptions: interpretationOptions.length
+        ? interpretationOptions
+        : ['S', 'I', 'R'],
+      micUnit: micUnitRaw.length > 0 ? micUnitRaw : null,
+    };
   }
 
   private normalizeResultTextOptions(
@@ -397,6 +477,13 @@ export class TestsService {
           flag: normalizeOrderTestFlag(option.flag ?? null),
           isDefault: Boolean(option.isDefault),
         })) ?? null,
+      cultureConfig:
+        test.cultureConfig && typeof test.cultureConfig === 'object'
+          ? this.normalizeCultureConfig(
+              test.cultureConfig as CreateTestDto['cultureConfig'],
+              (test.resultEntryType ?? 'NUMERIC') as TestResultEntryType,
+            )
+          : null,
     });
   }
 
@@ -404,7 +491,15 @@ export class TestsService {
     resultEntryType: TestResultEntryType,
     resultTextOptions: TestResultTextOption[] | null,
     allowCustomResultText: boolean,
+    cultureConfig: TestCultureConfig | null,
+    testType: TestType,
   ): void {
+    if (resultEntryType === 'CULTURE_SENSITIVITY' && testType !== TestType.SINGLE) {
+      throw new BadRequestException(
+        'CULTURE_SENSITIVITY entry mode is only supported for single tests',
+      );
+    }
+
     if (resultEntryType === 'NUMERIC' && resultTextOptions?.length) {
       throw new BadRequestException(
         'resultTextOptions are only valid for QUALITATIVE or TEXT result entry type',
@@ -421,6 +516,30 @@ export class TestsService {
       throw new BadRequestException(
         'allowCustomResultText can only be enabled for QUALITATIVE or TEXT tests',
       );
+    }
+
+    if (resultEntryType !== 'CULTURE_SENSITIVITY' && cultureConfig) {
+      throw new BadRequestException(
+        'cultureConfig is only valid for CULTURE_SENSITIVITY result entry type',
+      );
+    }
+
+    if (resultEntryType === 'CULTURE_SENSITIVITY') {
+      if (resultTextOptions?.length) {
+        throw new BadRequestException(
+          'resultTextOptions are not valid for CULTURE_SENSITIVITY tests',
+        );
+      }
+      if (allowCustomResultText) {
+        throw new BadRequestException(
+          'allowCustomResultText cannot be enabled for CULTURE_SENSITIVITY tests',
+        );
+      }
+      if (!cultureConfig || !cultureConfig.interpretationOptions.length) {
+        throw new BadRequestException(
+          'CULTURE_SENSITIVITY tests require at least one interpretation option',
+        );
+      }
     }
   }
 
@@ -680,6 +799,76 @@ export class TestsService {
         panelComponents: grouped.get(test.id) ?? [],
       });
     });
+  }
+
+  private async attachCultureAntibioticIds<T extends Test>(tests: T[]): Promise<T[]> {
+    if (!tests.length) return tests;
+    const testIds = tests.map((test) => test.id);
+    const mappings = await this.testAntibioticRepo.find({
+      where: { testId: In(testIds) },
+      order: { sortOrder: 'ASC', createdAt: 'ASC' },
+    });
+    const grouped = new Map<string, string[]>();
+    for (const mapping of mappings) {
+      const list = grouped.get(mapping.testId) ?? [];
+      list.push(mapping.antibioticId);
+      grouped.set(mapping.testId, list);
+    }
+    return tests.map((test) =>
+      Object.assign(test, {
+        cultureAntibioticIds: grouped.get(test.id) ?? [],
+      }),
+    );
+  }
+
+  private async syncCultureAntibioticsForTest(
+    testId: string,
+    labId: string,
+    antibioticIds: string[],
+    resultEntryType: TestResultEntryType,
+  ): Promise<void> {
+    if (resultEntryType !== 'CULTURE_SENSITIVITY') {
+      await this.testAntibioticRepo.delete({ testId });
+      return;
+    }
+
+    const normalizedIds = Array.from(
+      new Set(
+        (antibioticIds ?? [])
+          .map((id) => String(id || '').trim())
+          .filter((id) => id.length > 0),
+      ),
+    );
+
+    if (normalizedIds.length === 0) {
+      await this.testAntibioticRepo.delete({ testId });
+      return;
+    }
+
+    const antibiotics = await this.antibioticRepo.find({
+      where: {
+        labId,
+        id: In(normalizedIds),
+        isActive: true,
+      },
+      select: ['id'],
+    });
+    if (antibiotics.length !== normalizedIds.length) {
+      throw new BadRequestException(
+        'One or more selected culture antibiotics are missing or inactive',
+      );
+    }
+
+    await this.testAntibioticRepo.delete({ testId });
+    const rows = normalizedIds.map((antibioticId, index) =>
+      this.testAntibioticRepo.create({
+        testId,
+        antibioticId,
+        sortOrder: index + 1,
+        isDefault: index === 0,
+      }),
+    );
+    await this.testAntibioticRepo.save(rows);
   }
 
   private async attachDefaultPrices(

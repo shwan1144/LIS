@@ -37,6 +37,7 @@ import dayjs from 'dayjs';
 import {
   downloadTestResultsPDF,
   enterResult,
+  getAntibiotics,
   getReportActionFlags,
   getLabSettings,
   getOrder,
@@ -44,6 +45,7 @@ import {
   logReportAction,
   searchOrdersHistory,
   updateOrderPayment,
+  type AntibioticDto,
   type ReportActionFlagsDto,
   type ReportActionKind,
   type OrderHistoryItemDto,
@@ -55,8 +57,15 @@ import {
 } from '../api/client';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
+import { CultureSensitivityEditor } from '../components/CultureSensitivityEditor';
 import { PrintPreviewModal } from '../components/Print';
 import { WorklistStatusDashboard } from '../components/WorklistStatusDashboard';
+import {
+  buildCultureAntibioticOptions,
+  buildCultureResultPayloadFromForm,
+  formatCultureResultSummary,
+  normalizeCultureResultForForm,
+} from '../utils/culture-sensitivity';
 import { normalizeResultFlag } from '../utils/result-flag';
 import {
   directPrintReceipt,
@@ -111,7 +120,7 @@ type EditResultContext = {
   normalMin: number | null;
   normalMax: number | null;
   normalText: string | null;
-  resultEntryType: 'NUMERIC' | 'QUALITATIVE' | 'TEXT';
+  resultEntryType: 'NUMERIC' | 'QUALITATIVE' | 'TEXT' | 'CULTURE_SENSITIVITY';
   resultTextOptions: { value: string; flag?: string | null; isDefault?: boolean }[] | null;
   allowCustomResultText: boolean;
   parameterDefinitions: TestParameterDefinition[];
@@ -354,6 +363,11 @@ function formatOrderTestResultPreview(orderTest: OrderTestDto, allTests: OrderTe
     return `${completed}/${total} done (${percent}%)`;
   }
 
+  const cultureSummary = formatCultureResultSummary(orderTest.cultureResult);
+  if (cultureSummary) {
+    return cultureSummary;
+  }
+
   const parameters = orderTest.resultParameters;
   if (parameters && Object.keys(parameters).length > 0) {
     return Object.keys(parameters).join(', ');
@@ -369,7 +383,7 @@ function formatOrderTestResultPreview(orderTest: OrderTestDto, allTests: OrderTe
   }
 
   if (orderTest.resultText?.trim()) {
-    return 'Text result';
+    return orderTest.resultText.trim();
   }
 
   return '-';
@@ -560,6 +574,7 @@ export function ReportsPage() {
 
   const [loading, setLoading] = useState(false);
   const [orders, setOrders] = useState<OrderHistoryItemDto[]>([]);
+  const [antibiotics, setAntibiotics] = useState<AntibioticDto[]>([]);
   const [ordersTotal, setOrdersTotal] = useState(0);
   const [ordersPage, setOrdersPage] = useState(1);
   const [orderDetailsCache, setOrderDetailsCache] = useState<Record<string, OrderDto>>({});
@@ -598,6 +613,10 @@ export function ReportsPage() {
   const [savingResult, setSavingResult] = useState(false);
   const [nowMs, setNowMs] = useState(() => Date.now());
   const [editResultForm] = Form.useForm<any>();
+  const antibioticById = useMemo(
+    () => new Map(antibiotics.map((antibiotic) => [antibiotic.id, antibiotic])),
+    [antibiotics],
+  );
   const compactCellStyle = { paddingTop: 6, paddingBottom: 6, fontSize: 12 };
 
   const currentUserRole = useMemo(() => {
@@ -758,6 +777,12 @@ export function ReportsPage() {
   useEffect(() => {
     void loadOrders(1);
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    void getAntibiotics(true)
+      .then(setAntibiotics)
+      .catch(() => setAntibiotics([]));
   }, []);
 
   useEffect(() => {
@@ -1109,6 +1134,15 @@ export function ReportsPage() {
     window.open(url, '_blank');
   };
 
+  const getCultureOptionsForTest = useCallback(
+    (target: OrderTestDto) =>
+      buildCultureAntibioticOptions(
+        antibiotics,
+        target.test?.cultureAntibioticIds ?? [],
+      ),
+    [antibiotics],
+  );
+
   const openEditResultModal = (order: OrderDto, orderTest: OrderTestDto) => {
     const isPanel = orderTest.test?.type === 'PANEL';
     const allTests = (order.samples ?? []).flatMap((s) => s.orderTests ?? []);
@@ -1219,13 +1253,16 @@ export function ReportsPage() {
 
       formValues[target.id] = {
         resultValue:
-          resultEntryType === 'QUALITATIVE' || resultEntryType === 'TEXT'
+          resultEntryType === 'QUALITATIVE' ||
+            resultEntryType === 'TEXT' ||
+            resultEntryType === 'CULTURE_SENSITIVITY'
             ? undefined
             : valueCandidate,
         resultText: initialResultText,
         customResultText,
         resultParameters: { ...defaults, ...resultParametersInitial },
         resultParametersCustom: resultParametersCustomInitial,
+        cultureResult: normalizeCultureResultForForm(target.cultureResult),
       };
     });
 
@@ -1264,6 +1301,7 @@ export function ReportsPage() {
         const resultParameters = Object.fromEntries(resultParameterEntries);
         const hasResultParameters = Object.keys(resultParameters).length > 0;
         const resultEntryType = target.test?.resultEntryType ?? 'NUMERIC';
+        let cultureResult = null;
 
         if (resultEntryType === 'QUALITATIVE') {
           if (resultText === '__other__') {
@@ -1272,12 +1310,25 @@ export function ReportsPage() {
           resultValue = null;
         } else if (resultEntryType === 'TEXT') {
           resultValue = null;
+        } else if (resultEntryType === 'CULTURE_SENSITIVITY') {
+          cultureResult = buildCultureResultPayloadFromForm(
+            itemValues.cultureResult,
+            antibioticById,
+          );
+          resultValue = null;
+          resultText = null;
         }
 
         await enterResult(target.id, {
           resultValue,
           resultText,
-          resultParameters: hasResultParameters ? resultParameters : null,
+          resultParameters:
+            resultEntryType === 'CULTURE_SENSITIVITY'
+              ? null
+              : hasResultParameters
+                ? resultParameters
+                : null,
+          cultureResult,
           forceEditVerified: editResultContext.wasVerified,
         });
       });
@@ -2263,40 +2314,51 @@ export function ReportsPage() {
 
                             <div style={{ flex: isPanel ? '1 1 40%' : '1 1 100%', textAlign: 'center' }}>
                               {!hasParams ? (
-                                <Form.Item
-                                  name={[target.id, 'resultText']}
-                                  noStyle={isPanel}
-                                  rules={target.test?.resultEntryType === 'QUALITATIVE' ? [{ required: true, message: 'Required' }] : []}
-                                >
-                                  {target.test?.resultEntryType === 'NUMERIC' ? (
-                                    <div style={{ display: 'flex', gap: 8, alignItems: 'center', justifyContent: isPanel ? 'center' : 'flex-start', width: isPanel ? '100%' : undefined }}>
-                                      <Form.Item name={[target.id, 'resultValue']} noStyle>
-                                        <InputNumber
-                                          style={{ width: '100%', textAlign: 'center' }}
-                                          placeholder="Value"
-                                          precision={2}
-                                          size={isPanel ? 'small' : 'large'}
-                                        />
-                                      </Form.Item>
-                                      {target.test?.resultEntryType === 'NUMERIC' && !isPanel && target.test?.unit && <Text type="secondary">{target.test.unit}</Text>}
-                                    </div>
-                                  ) : target.test?.resultEntryType === 'QUALITATIVE' && (target.test?.resultTextOptions?.length ?? 0) > 0 ? (
-                                    <Select
-                                      allowClear
-                                      showSearch
-                                      style={{ ...panelResultControlStyle, textAlign: 'center' }}
-                                      dropdownStyle={{ textAlign: 'center' }}
-                                      size={isPanel ? 'small' : 'large'}
-                                      placeholder="Select"
-                                      options={[
-                                        ...(target.test?.resultTextOptions ?? []).map((o) => ({ label: o.value, value: o.value })),
-                                        ...(target.test?.allowCustomResultText ? [{ label: 'Other...', value: '__other__' }] : []),
-                                      ]}
-                                    />
-                                  ) : (
-                                    <Input style={{ ...panelResultControlStyle, textAlign: 'center' }} size={isPanel ? 'small' : 'large'} placeholder="Result text" />
-                                  )}
-                                </Form.Item>
+                                target.test?.resultEntryType === 'CULTURE_SENSITIVITY' ? (
+                                  <CultureSensitivityEditor
+                                    baseName={[target.id, 'cultureResult']}
+                                    antibioticOptions={getCultureOptionsForTest(target)}
+                                    interpretationOptions={
+                                      target.test?.cultureConfig?.interpretationOptions ?? ['S', 'I', 'R']
+                                    }
+                                    micUnit={target.test?.cultureConfig?.micUnit ?? null}
+                                  />
+                                ) : (
+                                  <Form.Item
+                                    name={[target.id, 'resultText']}
+                                    noStyle={isPanel}
+                                    rules={target.test?.resultEntryType === 'QUALITATIVE' ? [{ required: true, message: 'Required' }] : []}
+                                  >
+                                    {target.test?.resultEntryType === 'NUMERIC' ? (
+                                      <div style={{ display: 'flex', gap: 8, alignItems: 'center', justifyContent: isPanel ? 'center' : 'flex-start', width: isPanel ? '100%' : undefined }}>
+                                        <Form.Item name={[target.id, 'resultValue']} noStyle>
+                                          <InputNumber
+                                            style={{ width: '100%', textAlign: 'center' }}
+                                            placeholder="Value"
+                                            precision={2}
+                                            size={isPanel ? 'small' : 'large'}
+                                          />
+                                        </Form.Item>
+                                        {target.test?.resultEntryType === 'NUMERIC' && !isPanel && target.test?.unit && <Text type="secondary">{target.test.unit}</Text>}
+                                      </div>
+                                    ) : target.test?.resultEntryType === 'QUALITATIVE' && (target.test?.resultTextOptions?.length ?? 0) > 0 ? (
+                                      <Select
+                                        allowClear
+                                        showSearch
+                                        style={{ ...panelResultControlStyle, textAlign: 'center' }}
+                                        dropdownStyle={{ textAlign: 'center' }}
+                                        size={isPanel ? 'small' : 'large'}
+                                        placeholder="Select"
+                                        options={[
+                                          ...(target.test?.resultTextOptions ?? []).map((o) => ({ label: o.value, value: o.value })),
+                                          ...(target.test?.allowCustomResultText ? [{ label: 'Other...', value: '__other__' }] : []),
+                                        ]}
+                                      />
+                                    ) : (
+                                      <Input style={{ ...panelResultControlStyle, textAlign: 'center' }} size={isPanel ? 'small' : 'large'} placeholder="Result text" />
+                                    )}
+                                  </Form.Item>
+                                )
                               ) : (
                                 <Text type="secondary" italic style={{ fontSize: 12 }}>See parameters below</Text>
                               )}

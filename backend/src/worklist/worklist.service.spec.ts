@@ -2,8 +2,10 @@ import { BadRequestException } from '@nestjs/common';
 import type { Repository } from 'typeorm';
 import { AuditActorType } from '../entities/audit-log.entity';
 import { Order } from '../entities/order.entity';
+import { Antibiotic } from '../entities/antibiotic.entity';
 import { OrderTest, OrderTestStatus } from '../entities/order-test.entity';
 import { Lab } from '../entities/lab.entity';
+import { TestAntibiotic } from '../entities/test-antibiotic.entity';
 import { Test, TestType, TubeType } from '../entities/test.entity';
 import { Department } from '../entities/department.entity';
 import { UserDepartmentAssignment } from '../entities/user-department-assignment.entity';
@@ -48,6 +50,7 @@ function createTest(overrides: Partial<Test> = {}): Test {
     resultEntryType: 'NUMERIC',
     resultTextOptions: null,
     allowCustomResultText: false,
+    cultureConfig: null,
     numericAgeRanges: null,
     description: null,
     childTestIds: null,
@@ -58,6 +61,7 @@ function createTest(overrides: Partial<Test> = {}): Test {
     createdAt: new Date('2026-03-01T00:00:00.000Z'),
     updatedAt: new Date('2026-03-01T00:00:00.000Z'),
     orderTests: [],
+    cultureAntibioticIds: [],
     ...overrides,
   } as unknown as Test;
 }
@@ -80,6 +84,7 @@ function createOrderTest(overrides: Partial<OrderTest> = {}): OrderTest {
     resultValue: null,
     resultText: null,
     resultParameters: null,
+    cultureResult: null,
     flag: null,
     resultedAt: null,
     resultedBy: null,
@@ -116,6 +121,8 @@ function createService(orderTestRepo: MockRepo<OrderTest>) {
     orderTestRepo as unknown as Repository<OrderTest>,
     {} as Repository<Order>,
     {} as Repository<Test>,
+    {} as Repository<TestAntibiotic>,
+    {} as Repository<Antibiotic>,
     {} as Repository<Lab>,
     {} as Repository<UserDepartmentAssignment>,
     {} as Repository<Department>,

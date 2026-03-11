@@ -19,7 +19,7 @@ import {
   WorklistView,
 } from './worklist.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import { OrderTestStatus } from '../entities/order-test.entity';
+import { CultureResultPayload, OrderTestStatus } from '../entities/order-test.entity';
 import { buildLabActorContext } from '../types/lab-actor-context';
 
 interface RequestWithUser {
@@ -176,6 +176,7 @@ export class WorklistController {
       resultText?: string | null;
       comments?: string | null;
       resultParameters?: Record<string, string> | null;
+      cultureResult?: CultureResultPayload | null;
       forceEditVerified?: boolean;
     },
   ) {
@@ -198,6 +199,7 @@ export class WorklistController {
         resultText?: string | null;
         comments?: string | null;
         resultParameters?: Record<string, string> | null;
+        cultureResult?: CultureResultPayload | null;
         forceEditVerified?: boolean;
       }>;
     },

@@ -15,6 +15,7 @@ import { OrderTest, OrderTestStatus } from '../entities/order-test.entity';
 import { Patient } from '../entities/patient.entity';
 import {
   Test,
+  type TestCultureConfig,
   type TestParameterDefinition,
   type TestResultEntryType,
   type TestResultTextOption,
@@ -2373,6 +2374,7 @@ export class PlatformAdminService {
       resultEntryType: this.normalizeTransferResultEntryType(sourceTest.resultEntryType),
       resultTextOptions: this.cloneTransferredResultTextOptions(sourceTest.resultTextOptions),
       allowCustomResultText: Boolean(sourceTest.allowCustomResultText),
+      cultureConfig: this.cloneTransferredCultureConfig(sourceTest.cultureConfig),
       numericAgeRanges: this.cloneTransferredNumericAgeRanges(sourceTest.numericAgeRanges),
       description: this.toNullableTrimmedText(sourceTest.description),
       childTestIds: sourceTest.type === TestType.PANEL ? null : this.toNullableTrimmedText(sourceTest.childTestIds),
@@ -2460,10 +2462,38 @@ export class PlatformAdminService {
 
   private normalizeTransferResultEntryType(value: unknown): TestResultEntryType {
     const normalized = String(value ?? '').trim().toUpperCase();
-    if (normalized === 'QUALITATIVE' || normalized === 'TEXT') {
+    if (
+      normalized === 'QUALITATIVE' ||
+      normalized === 'TEXT' ||
+      normalized === 'CULTURE_SENSITIVITY'
+    ) {
       return normalized;
     }
     return 'NUMERIC';
+  }
+
+  private cloneTransferredCultureConfig(
+    config: TestCultureConfig | null | undefined,
+  ): TestCultureConfig | null {
+    if (!config || typeof config !== 'object') return null;
+    const seen = new Set<string>();
+    const interpretationOptions = (config.interpretationOptions ?? [])
+      .map((value) => String(value ?? '').trim().toUpperCase())
+      .filter((value) => {
+        if (!value || seen.has(value)) return false;
+        seen.add(value);
+        return true;
+      });
+    const micUnit =
+      typeof config.micUnit === 'string' && config.micUnit.trim().length > 0
+        ? config.micUnit.trim()
+        : null;
+    return {
+      interpretationOptions: interpretationOptions.length
+        ? interpretationOptions
+        : ['S', 'I', 'R'],
+      micUnit,
+    };
   }
 
   private cloneTransferredNumericAgeRanges(

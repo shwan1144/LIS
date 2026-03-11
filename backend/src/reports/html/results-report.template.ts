@@ -47,9 +47,122 @@ function isAbnormalFlag(flag: string): boolean {
 }
 
 function formatResultValue(ot: OrderTest): string {
+  const cultureResult = (ot as { cultureResult?: unknown }).cultureResult as
+    | {
+        noGrowth?: unknown;
+        noGrowthResult?: unknown;
+        isolates?: unknown;
+      }
+    | null
+    | undefined;
+  if (cultureResult && typeof cultureResult === 'object') {
+    if (cultureResult.noGrowth === true) {
+      const noGrowthResult =
+        typeof cultureResult.noGrowthResult === 'string' &&
+        cultureResult.noGrowthResult.trim().length > 0
+          ? cultureResult.noGrowthResult.trim()
+          : 'No growth';
+      return noGrowthResult;
+    }
+    if (Array.isArray(cultureResult.isolates) && cultureResult.isolates.length > 0) {
+      const rows = cultureResult.isolates.reduce((sum, isolate) => {
+        if (!isolate || typeof isolate !== 'object') return sum;
+        const antibiotics = Array.isArray((isolate as { antibiotics?: unknown }).antibiotics)
+          ? ((isolate as { antibiotics?: unknown[] }).antibiotics?.length ?? 0)
+          : 0;
+        return sum + antibiotics;
+      }, 0);
+      return `${cultureResult.isolates.length} isolate${cultureResult.isolates.length === 1 ? '' : 's'} • ${rows} row${rows === 1 ? '' : 's'}`;
+    }
+  }
   if (ot.resultText?.trim()) return ot.resultText.trim();
   if (ot.resultValue !== null && ot.resultValue !== undefined) return String(ot.resultValue);
   return 'Pending';
+}
+
+type CultureAstColumns = {
+  sensitive: string[];
+  intermediate: string[];
+  resistancePrimary: string[];
+  resistanceSecondary: string[];
+};
+
+const CULTURE_PRIMARY_RESISTANCE_CAPACITY = 24;
+
+function isCultureSensitivityOrderTest(ot: OrderTest): boolean {
+  return (
+    String((ot.test as { resultEntryType?: unknown } | undefined)?.resultEntryType ?? '').toUpperCase() ===
+    'CULTURE_SENSITIVITY'
+  );
+}
+
+function getCultureAntibioticName(row: unknown): string {
+  if (!row || typeof row !== 'object') return '-';
+  const rowObj = row as { antibioticName?: unknown; antibioticCode?: unknown };
+  const antibioticName = String(rowObj.antibioticName ?? '').trim();
+  if (antibioticName) return antibioticName;
+  const antibioticCode = String(rowObj.antibioticCode ?? '').trim();
+  return antibioticCode || '-';
+}
+
+function buildCultureAstColumns(isolate: unknown): CultureAstColumns {
+  const sensitive: string[] = [];
+  const intermediate: string[] = [];
+  const resistance: string[] = [];
+
+  const isolateObj =
+    isolate && typeof isolate === 'object'
+      ? (isolate as { antibiotics?: unknown })
+      : null;
+  const antibiotics = Array.isArray(isolateObj?.antibiotics)
+    ? isolateObj.antibiotics
+    : [];
+
+  for (const row of antibiotics) {
+    if (!row || typeof row !== 'object') continue;
+    const interpretation = String((row as { interpretation?: unknown }).interpretation ?? '').trim();
+    const name = getCultureAntibioticName(row);
+    if (interpretation === 'S') {
+      sensitive.push(name);
+      continue;
+    }
+    if (interpretation === 'I') {
+      intermediate.push(name);
+      continue;
+    }
+    resistance.push(name);
+  }
+
+  const sortNames = (list: string[]) =>
+    list
+      .slice()
+      .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+  const resistanceSorted = sortNames(resistance);
+
+  return {
+    sensitive: sortNames(sensitive),
+    intermediate: sortNames(intermediate),
+    resistancePrimary: resistanceSorted.slice(0, CULTURE_PRIMARY_RESISTANCE_CAPACITY),
+    resistanceSecondary: resistanceSorted.slice(CULTURE_PRIMARY_RESISTANCE_CAPACITY),
+  };
+}
+
+function renderCultureAstColumn(
+  title: string,
+  values: string[],
+  columnClass: string,
+): string {
+  const listHtml = values.length
+    ? values
+        .map((name) => `<li class="culture-ast-item">${escapeHtml(name)}</li>`)
+        .join('')
+    : '<li class="culture-ast-empty">-</li>';
+  return `
+    <div class="culture-ast-column ${columnClass}">
+      <div class="culture-ast-column-title">${escapeHtml(title)}</div>
+      <ul class="culture-ast-list">${listHtml}</ul>
+    </div>
+  `;
 }
 
 function formatRange(
@@ -330,10 +443,16 @@ export function buildResultsReportHtml(input: {
   }
 
   const panelParents = flattenedTests.filter((ot) => panelParentIds.has(ot.id));
-  const regularTests = flattenedTests.filter(
+  const allRegularTests = flattenedTests.filter(
     (ot) =>
       !panelParentIds.has(ot.id) &&
       (!ot.parentOrderTestId || !panelParentIds.has(ot.parentOrderTestId)),
+  );
+  const cultureRegularTests = allRegularTests.filter((ot) =>
+    isCultureSensitivityOrderTest(ot),
+  );
+  const regularTests = allRegularTests.filter(
+    (ot) => !isCultureSensitivityOrderTest(ot),
   );
 
   // Build panel content with one panel per page.
@@ -442,6 +561,160 @@ export function buildResultsReportHtml(input: {
     })
     .join('');
 
+  const culturePageItems: Array<{
+    testName: string;
+    bodyHtml: string;
+    notes: string;
+  }> = [];
+  for (const ot of cultureRegularTests) {
+    const test = ot.test as any;
+    const testName = test?.name || test?.code || 'Culture & Sensitivity';
+    const cultureResult =
+      ot.cultureResult && typeof ot.cultureResult === 'object'
+        ? (ot.cultureResult as any)
+        : null;
+    const noGrowth = cultureResult?.noGrowth === true;
+    const noGrowthResult =
+      typeof cultureResult?.noGrowthResult === 'string' &&
+      cultureResult.noGrowthResult.trim().length > 0
+        ? cultureResult.noGrowthResult.trim()
+        : 'No growth';
+    const isolates = Array.isArray(cultureResult?.isolates)
+      ? cultureResult.isolates
+      : [];
+    const notes =
+      typeof cultureResult?.notes === 'string' &&
+      cultureResult.notes.trim().length > 0
+        ? cultureResult.notes.trim()
+        : '';
+
+    if (isolates.length === 0) {
+      if (noGrowth) {
+        culturePageItems.push({
+          testName,
+          bodyHtml: `
+            <div class="culture-isolate-block">
+              <div class="culture-no-growth-result">Result: ${escapeHtml(noGrowthResult)}</div>
+            </div>
+          `,
+          notes: '',
+        });
+        continue;
+      }
+      culturePageItems.push({
+        testName,
+        bodyHtml: '<div class="culture-no-growth">No isolate data</div>',
+        notes,
+      });
+      continue;
+    }
+
+    isolates.forEach((isolate: any, isolateIndex: number) => {
+      const organismRaw = String(isolate?.organism ?? '').trim();
+      const organism = organismRaw || (noGrowth ? '-' : `Isolate ${isolateIndex + 1}`);
+      const isolateSource =
+        typeof isolate?.source === 'string' && isolate.source.trim().length > 0
+          ? isolate.source.trim()
+          : '';
+      const isolateCondition =
+        typeof isolate?.condition === 'string' && isolate.condition.trim().length > 0
+          ? isolate.condition.trim()
+          : '';
+      const isolateColonyCount =
+        typeof isolate?.colonyCount === 'string' &&
+        isolate.colonyCount.trim().length > 0
+          ? isolate.colonyCount.trim()
+          : '';
+      const isolateComment =
+        typeof isolate?.comment === 'string' && isolate.comment.trim().length > 0
+          ? isolate.comment.trim()
+          : '';
+      if (noGrowth) {
+        const bodyHtml = `
+          <div class="culture-isolate-block">
+            <div class="culture-no-growth-result">Result: ${escapeHtml(noGrowthResult)}</div>
+            ${isolateSource ? `<div class="culture-isolate-source"><strong>Source:</strong> ${escapeHtml(isolateSource)}</div>` : ''}
+            ${isolateComment ? `<div class="culture-isolate-comment"><strong>Comment:</strong> ${escapeHtml(isolateComment)}</div>` : ''}
+          </div>
+        `;
+        culturePageItems.push({
+          testName,
+          bodyHtml,
+          notes: '',
+        });
+        return;
+      }
+      const columns = buildCultureAstColumns(isolate);
+      const hasSecondaryResistance = columns.resistanceSecondary.length > 0;
+      const astColumnsHtml = [
+        renderCultureAstColumn(
+          'Sensitive',
+          columns.sensitive,
+          'culture-ast-column-sensitive',
+        ),
+        renderCultureAstColumn(
+          'Intermediate',
+          columns.intermediate,
+          'culture-ast-column-intermediate',
+        ),
+        renderCultureAstColumn(
+          'Resistance',
+          columns.resistancePrimary,
+          'culture-ast-column-resistance-primary',
+        ),
+      ];
+      if (hasSecondaryResistance) {
+        astColumnsHtml.push(
+          renderCultureAstColumn(
+            'Resistance',
+            columns.resistanceSecondary,
+            'culture-ast-column-resistance-secondary',
+          ),
+        );
+      }
+      const bodyHtml = `
+        <div class="culture-isolate-block">
+          <div class="culture-isolate-title">
+            <span class="culture-isolate-title-label">Microorganism:</span>
+            <span class="culture-isolate-title-value">${escapeHtml(organism)}</span>
+          </div>
+          ${isolateSource ? `<div class="culture-isolate-source"><strong>Source:</strong> ${escapeHtml(isolateSource)}</div>` : ''}
+          ${isolateCondition ? `<div class="culture-isolate-source"><strong>Condition:</strong> ${escapeHtml(isolateCondition)}</div>` : ''}
+          ${isolateColonyCount ? `<div class="culture-isolate-source"><strong>Colony count:</strong> ${escapeHtml(isolateColonyCount)}</div>` : ''}
+          ${isolateComment ? `<div class="culture-isolate-comment">${escapeHtml(isolateComment)}</div>` : ''}
+          <div class="culture-ast-grid ${hasSecondaryResistance ? 'culture-ast-grid-four' : 'culture-ast-grid-three'}">
+            ${astColumnsHtml.join('')}
+          </div>
+        </div>
+      `;
+      culturePageItems.push({
+        testName,
+        bodyHtml,
+        notes: isolateIndex === 0 ? notes : '',
+      });
+    });
+  }
+
+  const culturePagesHtml = culturePageItems
+    .map((item, index) => {
+      const shouldBreakBefore =
+        regularTests.length > 0 || index > 0 || panelPageSections.length > 0;
+      return `
+      <div class="page culture-page" style="page-break-before: ${shouldBreakBefore ? 'always' : 'auto'};">
+        ${pageHeaderHtml}
+        <div class="content">
+          <div class="panel-page-title">${escapeHtml(item.testName)}</div>
+          ${item.bodyHtml}
+          ${item.notes ? `<div class="culture-notes"><strong>Notes:</strong> ${escapeHtml(item.notes)}</div>` : ''}
+          ${commentsText && index === culturePageItems.length - 1 && panelPageSections.length === 0
+            ? `<div class="comments" style="margin-top:8px;font-size:11px;font-weight:700;"><strong>Comments:</strong> ${escapeHtml(commentsText)}</div>`
+            : ''}
+        </div>
+        ${pageFooterHtml}
+      </div>`;
+    })
+    .join('');
+
   // Group regular tests by department then category.
   const deptCatMap = new Map<string, Map<string, OrderTest[]>>();
   for (const ot of regularTests) {
@@ -506,10 +779,14 @@ export function buildResultsReportHtml(input: {
       ${pageHeaderHtml}
       <div class="content">
         ${regularContentHtml}
-        ${commentsText && panelParents.length === 0 ? `<div class="comments" style="margin-top:8px;font-size:11px;font-weight:700;"><strong>Comments:</strong> ${escapeHtml(commentsText)}</div>` : ''}
+        ${commentsText && panelParents.length === 0 && cultureRegularTests.length === 0 ? `<div class="comments" style="margin-top:8px;font-size:11px;font-weight:700;"><strong>Comments:</strong> ${escapeHtml(commentsText)}</div>` : ''}
       </div>
       ${pageFooterHtml}
     </div>`;
+  }
+
+  if (culturePagesHtml) {
+    pagesHtml += culturePagesHtml;
   }
 
   // Panel pages (one panel section per page).
@@ -518,7 +795,7 @@ export function buildResultsReportHtml(input: {
   }
 
   // If no tests at all
-  if (regularTests.length === 0 && panelParents.length === 0) {
+  if (regularTests.length === 0 && panelParents.length === 0 && cultureRegularTests.length === 0) {
     pagesHtml += `
     <div class="page">
       ${pageHeaderHtml}
@@ -776,6 +1053,103 @@ export function buildResultsReportHtml(input: {
     .panel-page table { page-break-inside: var(--results-panel-table-break); break-inside: var(--results-panel-table-break); }
     .panel-page tr { page-break-inside: var(--results-panel-row-break); break-inside: var(--results-panel-row-break); }
     .gue-gse-table { margin-top: 8px; margin-bottom: 12px; }
+    .culture-page .content {
+      padding: 0;
+      overflow: visible;
+      display: flex;
+      flex-direction: column;
+    }
+    .culture-no-growth {
+      background: #ecfdf5;
+      border: 1px solid #86efac;
+      color: #166534;
+      font-weight: 700;
+      padding: 8px 10px;
+      border-radius: 6px;
+      margin-bottom: 10px;
+    }
+    .culture-no-growth-result {
+      font-size: 11px;
+      color: #334155;
+      font-weight: 400;
+      margin-bottom: 4px;
+    }
+    .culture-isolate-block {
+      margin-bottom: 12px;
+      display: flex;
+      flex-direction: column;
+      flex: 1;
+      min-height: 0;
+    }
+    .culture-isolate-title { font-size: 13px; margin-bottom: 4px; }
+    .culture-isolate-title-label { font-weight: 700; }
+    .culture-isolate-title-value { font-style: italic; font-weight: 600; }
+    .culture-isolate-source { font-size: 11px; color: #334155; margin-bottom: 4px; }
+    .culture-isolate-comment { font-size: 11px; color: #4b5563; margin-bottom: 6px; }
+    .culture-ast-grid {
+      width: 100%;
+      display: grid;
+      gap: 6px;
+      margin-bottom: 8px;
+      flex: 1;
+      align-items: stretch;
+      min-height: 430px;
+    }
+    .culture-ast-grid-three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .culture-ast-grid-four { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+    .culture-ast-column {
+      border: 1px solid #d1d5db;
+      border-radius: 6px;
+      background: #f8fafc;
+      padding: 6px 7px;
+      min-height: 92px;
+      display: flex;
+      flex-direction: column;
+    }
+    .culture-ast-column-sensitive {
+      border-color: #86efac;
+      background: #f0fdf4;
+    }
+    .culture-ast-column-intermediate {
+      border-color: #fcd34d;
+      background: #fffbeb;
+    }
+    .culture-ast-column-resistance-primary,
+    .culture-ast-column-resistance-secondary {
+      border-color: #fca5a5;
+      background: #fef2f2;
+    }
+    .culture-ast-column-title {
+      font-size: 11px;
+      font-weight: 700;
+      margin-bottom: 4px;
+      border-bottom: 1px solid #e5e7eb;
+      padding-bottom: 2px;
+    }
+    .culture-ast-list {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      flex: 1;
+    }
+    .culture-ast-item {
+      font-size: 10.5px;
+      line-height: 1.35;
+      margin: 0 0 2px 0;
+      word-break: break-word;
+    }
+    .culture-ast-empty {
+      list-style: none;
+      font-size: 10.5px;
+      color: #64748b;
+      margin: 0;
+    }
+    .culture-notes {
+      margin-top: 8px;
+      font-size: 11px;
+      border-top: 1px dashed #d1d5db;
+      padding-top: 6px;
+    }
     ${rowStripeCss}
     .report-footer {
       position: absolute;

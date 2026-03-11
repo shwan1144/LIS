@@ -8,6 +8,8 @@ const lab_entity_1 = require("../src/entities/lab.entity");
 const test_entity_1 = require("../src/entities/test.entity");
 const pricing_entity_1 = require("../src/entities/pricing.entity");
 const test_component_entity_1 = require("../src/entities/test-component.entity");
+const test_antibiotic_entity_1 = require("../src/entities/test-antibiotic.entity");
+const antibiotic_entity_1 = require("../src/entities/antibiotic.entity");
 const order_test_entity_1 = require("../src/entities/order-test.entity");
 const department_entity_1 = require("../src/entities/department.entity");
 const tests_service_1 = require("../src/tests/tests.service");
@@ -74,7 +76,7 @@ async function run() {
         if (!lab) {
             throw new Error(`Lab not found (searched code="${labCode}", name="${fallbackLabName}")`);
         }
-        const testsService = new tests_service_1.TestsService(dataSource.getRepository(test_entity_1.Test), dataSource.getRepository(pricing_entity_1.Pricing), dataSource.getRepository(test_component_entity_1.TestComponent), dataSource.getRepository(order_test_entity_1.OrderTest), dataSource.getRepository(department_entity_1.Department));
+        const testsService = new tests_service_1.TestsService(dataSource.getRepository(test_entity_1.Test), dataSource.getRepository(pricing_entity_1.Pricing), dataSource.getRepository(test_component_entity_1.TestComponent), dataSource.getRepository(test_antibiotic_entity_1.TestAntibiotic), dataSource.getRepository(antibiotic_entity_1.Antibiotic), dataSource.getRepository(order_test_entity_1.OrderTest), dataSource.getRepository(department_entity_1.Department));
         const before = await getPanelCounts(dataSource, lab.id);
         console.log(JSON.stringify({
             event: 'panel.seed.baseline',

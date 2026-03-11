@@ -7,6 +7,7 @@ import {
   IsUUID,
   IsArray,
   IsIn,
+  ArrayUnique,
   MaxLength,
   MinLength,
   Min,
@@ -15,7 +16,12 @@ import {
 import { Type } from 'class-transformer';
 import { TestType, TubeType } from '../../entities/test.entity';
 
-export const TEST_RESULT_ENTRY_TYPES = ['NUMERIC', 'QUALITATIVE', 'TEXT'] as const;
+export const TEST_RESULT_ENTRY_TYPES = [
+  'NUMERIC',
+  'QUALITATIVE',
+  'TEXT',
+  'CULTURE_SENSITIVITY',
+] as const;
 export const TEST_RESULT_FLAGS = ['N', 'H', 'L', 'POS', 'NEG', 'ABN'] as const;
 export const TEST_NUMERIC_AGE_UNITS = ['DAY', 'MONTH', 'YEAR'] as const;
 
@@ -105,6 +111,18 @@ export class TestResultTextOptionDto {
   @IsOptional()
   @IsBoolean()
   isDefault?: boolean;
+}
+
+export class TestCultureConfigDto {
+  @IsArray()
+  @IsString({ each: true })
+  @ArrayUnique()
+  interpretationOptions: string[];
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(24)
+  micUnit?: string | null;
 }
 
 export class TestPanelComponentDto {
@@ -227,6 +245,17 @@ export class CreateTestDto {
   @IsBoolean()
   @IsOptional()
   allowCustomResultText?: boolean;
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => TestCultureConfigDto)
+  cultureConfig?: TestCultureConfigDto | null;
+
+  @IsOptional()
+  @IsArray()
+  @IsUUID(undefined, { each: true })
+  @ArrayUnique()
+  cultureAntibioticIds?: string[] | null;
 
   @IsOptional()
   @IsArray()

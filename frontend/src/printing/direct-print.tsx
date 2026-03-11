@@ -7,6 +7,18 @@ import printCss from '../components/Print/print.css?raw';
 import axios from 'axios';
 import { jsPDF } from 'jspdf';
 import html2canvas from 'html2canvas';
+import {
+  generateZebraLabelZpl,
+  resolveZebraLabelGeometry,
+  type ZebraLabelPrinterConfig,
+} from './zebra-label';
+import { resolvePrinterCapabilityProfile } from './label-printing-spec';
+import {
+  measureAsync,
+  nowMs,
+  recordLabelPrintTelemetry,
+  utf8ByteLength,
+} from './label-printing-telemetry';
 
 const GATEWAY_URL = 'http://localhost:17881';
 const GATEWAY_HEALTH_TIMEOUT_MS = 3_000;
@@ -47,11 +59,22 @@ type GatewayPrinterConfigResponse = {
   orientation?: 'portrait' | 'landscape' | null;
   paperSize?: string | null;
   printerName?: string;
+  resolutionXDpi?: number | null;
+  resolutionYDpi?: number | null;
+};
+
+export type DirectLabelPrintResult = {
+  mode: 'pdf' | 'zpl';
+  warning?: string;
 };
 
 export function isVirtualSavePrinterName(name: string): boolean {
   const value = name.trim().toLowerCase();
   return VIRTUAL_SAVE_PRINTER_KEYWORDS.some((keyword) => value.includes(keyword));
+}
+
+export function isZebraPrinterName(name: string): boolean {
+  return /zebra|zdesigner/i.test(name);
 }
 
 function normalizePrinterList(printers: string[]): string[] {
@@ -107,6 +130,24 @@ async function gatewayPrintPdf(
   );
 }
 
+async function gatewayPrintRaw(params: {
+  contentType: 'zpl';
+  jobName: string;
+  printerName: string;
+  raw: string;
+}): Promise<void> {
+  await axios.post(
+    `${GATEWAY_URL}/local/print-raw`,
+    {
+      contentType: params.contentType,
+      jobName: params.jobName,
+      printerName: params.printerName,
+      rawBase64: utf8ToBase64(params.raw),
+    },
+    { timeout: GATEWAY_PRINT_TIMEOUT_MS },
+  );
+}
+
 async function convertHtmlToPdf(element: HTMLElement): Promise<Blob> {
   const canvas = await html2canvas(element, {
     scale: 2,
@@ -124,7 +165,7 @@ async function convertHtmlToPdf(element: HTMLElement): Promise<Blob> {
   return pdf.output('blob');
 }
 
-async function renderLabelsToPdf(
+export async function renderLabelsToPdf(
   element: React.ReactElement,
   pageWidthMm: number,
   pageHeightMm: number,
@@ -304,6 +345,34 @@ async function blobToBase64(blob: Blob): Promise<string> {
   });
 }
 
+function utf8ToBase64(value: string): string {
+  const bytes = new TextEncoder().encode(value);
+  let binary = '';
+  const chunkSize = 0x8000;
+  for (let index = 0; index < bytes.length; index += chunkSize) {
+    const chunk = bytes.subarray(index, index + chunkSize);
+    binary += String.fromCharCode(...chunk);
+  }
+  return btoa(binary);
+}
+
+export function buildLabelsPrintElement(params: {
+  departments?: DepartmentDto[];
+  labelSequenceBy?: 'tube_type' | 'department';
+  order: OrderDto;
+}): React.ReactElement {
+  return (
+    <div className="print-container">
+      <style>{printCss}</style>
+      <AllSampleLabels
+        order={params.order}
+        labelSequenceBy={params.labelSequenceBy}
+        departments={params.departments}
+      />
+    </div>
+  );
+}
+
 export async function directPrintReceipt(params: {
   order: OrderDto;
   labName?: string;
@@ -324,20 +393,15 @@ export async function directPrintLabels(params: {
   printerName: string;
   labelSequenceBy?: 'tube_type' | 'department';
   departments?: DepartmentDto[];
-}): Promise<void> {
+}): Promise<DirectLabelPrintResult> {
+  const printStart = nowMs();
+  const labelCount = params.order.samples?.length ?? 0;
   const jobName = `Labels-${params.order.orderNumber || params.order.id}`;
-  let pageWidthMm = LABEL_DESIGN_WIDTH_MM;
-  let pageHeightMm = LABEL_DESIGN_HEIGHT_MM;
   let paperSize = 'Custom';
+  let printerConfig: GatewayPrinterConfigResponse = {};
 
   try {
-    const printerConfig = await fetchGatewayPrinterConfig(params.printerName);
-    const mediaWidthMm = Number(printerConfig.mediaWidthMm ?? 0);
-    const mediaHeightMm = Number(printerConfig.mediaHeightMm ?? 0);
-    if (mediaWidthMm > 0 && mediaHeightMm > 0) {
-      pageWidthMm = Math.max(mediaWidthMm, mediaHeightMm);
-      pageHeightMm = Math.min(mediaWidthMm, mediaHeightMm);
-    }
+    printerConfig = await fetchGatewayPrinterConfig(params.printerName);
     if (typeof printerConfig.paperSize === 'string' && printerConfig.paperSize.trim()) {
       paperSize = printerConfig.paperSize.trim();
     }
@@ -345,23 +409,75 @@ export async function directPrintLabels(params: {
     // fall back to default label size when printer details cannot be read
   }
 
-  const blob = await renderLabelsToPdf(
-    <div className="print-container">
-      <style>{printCss}</style>
-      <AllSampleLabels
-        order={params.order}
-        labelSequenceBy={params.labelSequenceBy}
-        departments={params.departments}
-      />
-    </div>,
-    pageWidthMm,
-    pageHeightMm,
-  );
-  await gatewayPrintPdf(blob, params.printerName, jobName, {
-    orientation: 'landscape',
-    scale: 'noscale',
-    paperSize,
+  const geometry = resolveZebraLabelGeometry(printerConfig as ZebraLabelPrinterConfig);
+  const capabilityProfile = resolvePrinterCapabilityProfile({
+    printerConfig,
+    printerName: params.printerName,
   });
+  const labelsElement = buildLabelsPrintElement(params);
+
+  if (isZebraPrinterName(params.printerName)) {
+    try {
+      const zplResult = await measureAsync(() =>
+        generateZebraLabelZpl({
+          departments: params.departments,
+          labelSequenceBy: params.labelSequenceBy,
+          order: params.order,
+          printerConfig,
+        }),
+      );
+      const dispatchResult = await measureAsync(() =>
+        gatewayPrintRaw({
+          contentType: 'zpl',
+          jobName,
+          printerName: params.printerName,
+          raw: zplResult.result,
+        }),
+      );
+      recordLabelPrintTelemetry({
+        capabilityProfile,
+        dispatchMs: dispatchResult.durationMs,
+        generationMs: zplResult.durationMs,
+        jobName,
+        labelCount,
+        payloadBytes: utf8ByteLength(zplResult.result),
+        printerName: params.printerName,
+        strategy: 'zebra_raw_zpl',
+        totalMs: nowMs() - printStart,
+      });
+      return { mode: 'zpl' };
+    } catch (rawError) {
+      const rawMessage = getDirectPrintErrorMessage(rawError);
+      throw new Error(`Native Zebra print failed (${rawMessage}).`);
+    }
+  }
+
+  const pdfResult = await measureAsync(() =>
+    renderLabelsToPdf(
+      labelsElement,
+      geometry.pageWidthMm,
+      geometry.pageHeightMm,
+    ),
+  );
+  const dispatchResult = await measureAsync(() =>
+    gatewayPrintPdf(pdfResult.result, params.printerName, jobName, {
+      orientation: 'landscape',
+      paperSize,
+      scale: 'noscale',
+    }),
+  );
+  recordLabelPrintTelemetry({
+    capabilityProfile,
+    dispatchMs: dispatchResult.durationMs,
+    generationMs: pdfResult.durationMs,
+    jobName,
+    labelCount,
+    payloadBytes: pdfResult.result.size,
+    printerName: params.printerName,
+    strategy: 'gateway_pdf',
+    totalMs: nowMs() - printStart,
+  });
+  return { mode: 'pdf' };
 }
 
 export async function directPrintReportPdf(params: {

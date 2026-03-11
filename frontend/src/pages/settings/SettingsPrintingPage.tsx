@@ -222,6 +222,11 @@ export function SettingsPrintingPage() {
             name="labelsPrinterName"
             label="Label printer name"
             tooltip="Example: ZDesigner GK420d"
+            extra={
+              currentMode === 'direct_gateway'
+                ? 'Zebra/ZDesigner direct labels use a native printer template optimized for speed and barcode quality, so the printed result may not match preview exactly.'
+                : undefined
+            }
           >
             {currentMode === 'direct_gateway' && availablePrinters.length > 0 ? (
               <Select
