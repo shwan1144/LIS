@@ -99,6 +99,7 @@ export declare class ReportsService implements OnModuleInit, OnModuleDestroy {
     generateDraftTestResultsPreviewPDF(input: {
         orderId: string;
         labId: string;
+        previewMode?: 'full' | 'culture_only';
         reportBranding: ReportBrandingOverride;
         reportStyle: ReportStyleConfig;
     }): Promise<Buffer>;
@@ -107,6 +108,7 @@ export declare class ReportsService implements OnModuleInit, OnModuleDestroy {
         bypassPaymentCheck?: boolean;
         bypassResultCompletionCheck?: boolean;
         disableCache?: boolean;
+        cultureOnly?: boolean;
         reportDesignOverride?: {
             reportBranding?: ReportBrandingOverride;
             reportStyle?: ReportStyleConfig | null;

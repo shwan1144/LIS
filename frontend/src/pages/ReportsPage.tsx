@@ -1756,7 +1756,7 @@ export function ReportsPage() {
       render: (_: unknown, record: OrderHistoryItemDto) => (
         <Space size={8} style={{ minWidth: 0 }}>
           <UserOutlined style={{ fontSize: 14, color: '#1677ff' }} />
-          <Text strong ellipsis style={{ fontSize: 13 }}>
+          <Text strong ellipsis style={{ fontSize: 16 }}>
             {record.patient?.fullName?.trim() || '-'}
           </Text>
         </Space>

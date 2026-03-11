@@ -556,7 +556,7 @@ export function VerificationPage() {
       width: 280,
       render: (_: unknown, record) => (
         <div>
-          <Text strong style={{ display: 'block', fontSize: 13, lineHeight: '16px' }}>
+          <Text strong style={{ display: 'block', fontSize: 16, lineHeight: '20px' }}>
             {record.patientName}
           </Text>
           <Text type="secondary" style={{ fontSize: 11, lineHeight: '14px' }}>
@@ -702,7 +702,7 @@ export function VerificationPage() {
                     )}
                   </div>
                   <Space size={[4, 4]} wrap>
-                    <Tag style={{ margin: 0 }}>{group.testsCount} tests</Tag>
+                    <Tag style={{ margin: 0 }}>{group.groupKind === 'panel' ? 1 : group.testsCount} tests</Tag>
                     {group.completed > 0 && (
                       <Tag color="processing" style={{ margin: 0 }}>
                         Completed {group.completed}

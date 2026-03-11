@@ -91,6 +91,32 @@ exports.DEFAULT_REPORT_STYLE_V1 = {
         pageMarginLeftMm: 3,
         contentMarginXMm: 3,
     },
+    cultureSection: {
+        fontFamily: exports.DEFAULT_REPORT_FONT_FAMILY,
+        sectionTitleColor: '#111111',
+        sectionTitleBorderColor: '#222222',
+        noGrowthBackgroundColor: '#F7FEF9',
+        noGrowthBorderColor: '#BBF7D0',
+        noGrowthTextColor: '#166534',
+        metaTextColor: '#334155',
+        commentTextColor: '#4B5563',
+        notesTextColor: '#111827',
+        notesBorderColor: '#D1D5DB',
+        astGridGapPx: 6,
+        astMinHeightPx: 430,
+        astColumnBorderRadiusPx: 6,
+        astColumnPaddingPx: 7,
+        astColumnTitleColor: '#111827',
+        astColumnTitleBorderColor: '#E5E7EB',
+        astBodyTextColor: '#111827',
+        astEmptyTextColor: '#64748B',
+        astSensitiveBorderColor: '#BBF7D0',
+        astSensitiveBackgroundColor: '#F8FFFB',
+        astIntermediateBorderColor: '#FDE68A',
+        astIntermediateBackgroundColor: '#FFFDF5',
+        astResistanceBorderColor: '#FECACA',
+        astResistanceBackgroundColor: '#FFF8F8',
+    },
 };
 const HEX_COLOR_REGEX = /^#(?:[0-9A-Fa-f]{6}|[0-9A-Fa-f]{8})$/;
 const TEXT_ALIGN_SET = new Set(['left', 'center', 'right']);
@@ -150,6 +176,32 @@ const PAGE_LAYOUT_KEYS = [
     'pageMarginLeftMm',
     'contentMarginXMm',
 ];
+const CULTURE_SECTION_KEYS = [
+    'fontFamily',
+    'sectionTitleColor',
+    'sectionTitleBorderColor',
+    'noGrowthBackgroundColor',
+    'noGrowthBorderColor',
+    'noGrowthTextColor',
+    'metaTextColor',
+    'commentTextColor',
+    'notesTextColor',
+    'notesBorderColor',
+    'astGridGapPx',
+    'astMinHeightPx',
+    'astColumnBorderRadiusPx',
+    'astColumnPaddingPx',
+    'astColumnTitleColor',
+    'astColumnTitleBorderColor',
+    'astBodyTextColor',
+    'astEmptyTextColor',
+    'astSensitiveBorderColor',
+    'astSensitiveBackgroundColor',
+    'astIntermediateBorderColor',
+    'astIntermediateBackgroundColor',
+    'astResistanceBorderColor',
+    'astResistanceBackgroundColor',
+];
 function assertObject(value, fieldName) {
     if (!value || typeof value !== 'object' || Array.isArray(value)) {
         throw new Error(`${fieldName} must be an object`);
@@ -195,7 +247,7 @@ function assertBoolean(value, fieldName) {
 }
 function validateAndNormalizeReportStyleConfig(value, fieldName = 'reportStyle') {
     const styleObj = assertObject(value, fieldName);
-    assertExactKeys(styleObj, ['version', 'patientInfo', 'resultsTable', 'pageLayout'], fieldName);
+    assertExactKeys(styleObj, ['version', 'patientInfo', 'resultsTable', 'pageLayout', 'cultureSection'], fieldName);
     const version = styleObj.version;
     if (version !== 1) {
         throw new Error(`${fieldName}.version must be 1`);
@@ -266,11 +318,40 @@ function validateAndNormalizeReportStyleConfig(value, fieldName = 'reportStyle')
         pageMarginLeftMm: assertIntRange(pageLayoutObj.pageMarginLeftMm, 0, 20, `${fieldName}.pageLayout.pageMarginLeftMm`),
         contentMarginXMm: assertIntRange(pageLayoutObj.contentMarginXMm, 0, 20, `${fieldName}.pageLayout.contentMarginXMm`),
     };
+    const cultureSectionObj = assertObject(styleObj.cultureSection, `${fieldName}.cultureSection`);
+    assertExactKeys(cultureSectionObj, CULTURE_SECTION_KEYS, `${fieldName}.cultureSection`);
+    const cultureSection = {
+        fontFamily: assertFromSet(cultureSectionObj.fontFamily, REPORT_FONT_FAMILY_SET, `${fieldName}.cultureSection.fontFamily`),
+        sectionTitleColor: assertColor(cultureSectionObj.sectionTitleColor, `${fieldName}.cultureSection.sectionTitleColor`),
+        sectionTitleBorderColor: assertColor(cultureSectionObj.sectionTitleBorderColor, `${fieldName}.cultureSection.sectionTitleBorderColor`),
+        noGrowthBackgroundColor: assertColor(cultureSectionObj.noGrowthBackgroundColor, `${fieldName}.cultureSection.noGrowthBackgroundColor`),
+        noGrowthBorderColor: assertColor(cultureSectionObj.noGrowthBorderColor, `${fieldName}.cultureSection.noGrowthBorderColor`),
+        noGrowthTextColor: assertColor(cultureSectionObj.noGrowthTextColor, `${fieldName}.cultureSection.noGrowthTextColor`),
+        metaTextColor: assertColor(cultureSectionObj.metaTextColor, `${fieldName}.cultureSection.metaTextColor`),
+        commentTextColor: assertColor(cultureSectionObj.commentTextColor, `${fieldName}.cultureSection.commentTextColor`),
+        notesTextColor: assertColor(cultureSectionObj.notesTextColor, `${fieldName}.cultureSection.notesTextColor`),
+        notesBorderColor: assertColor(cultureSectionObj.notesBorderColor, `${fieldName}.cultureSection.notesBorderColor`),
+        astGridGapPx: assertIntRange(cultureSectionObj.astGridGapPx, 2, 16, `${fieldName}.cultureSection.astGridGapPx`),
+        astMinHeightPx: assertIntRange(cultureSectionObj.astMinHeightPx, 120, 700, `${fieldName}.cultureSection.astMinHeightPx`),
+        astColumnBorderRadiusPx: assertIntRange(cultureSectionObj.astColumnBorderRadiusPx, 0, 16, `${fieldName}.cultureSection.astColumnBorderRadiusPx`),
+        astColumnPaddingPx: assertIntRange(cultureSectionObj.astColumnPaddingPx, 2, 16, `${fieldName}.cultureSection.astColumnPaddingPx`),
+        astColumnTitleColor: assertColor(cultureSectionObj.astColumnTitleColor, `${fieldName}.cultureSection.astColumnTitleColor`),
+        astColumnTitleBorderColor: assertColor(cultureSectionObj.astColumnTitleBorderColor, `${fieldName}.cultureSection.astColumnTitleBorderColor`),
+        astBodyTextColor: assertColor(cultureSectionObj.astBodyTextColor, `${fieldName}.cultureSection.astBodyTextColor`),
+        astEmptyTextColor: assertColor(cultureSectionObj.astEmptyTextColor, `${fieldName}.cultureSection.astEmptyTextColor`),
+        astSensitiveBorderColor: assertColor(cultureSectionObj.astSensitiveBorderColor, `${fieldName}.cultureSection.astSensitiveBorderColor`),
+        astSensitiveBackgroundColor: assertColor(cultureSectionObj.astSensitiveBackgroundColor, `${fieldName}.cultureSection.astSensitiveBackgroundColor`),
+        astIntermediateBorderColor: assertColor(cultureSectionObj.astIntermediateBorderColor, `${fieldName}.cultureSection.astIntermediateBorderColor`),
+        astIntermediateBackgroundColor: assertColor(cultureSectionObj.astIntermediateBackgroundColor, `${fieldName}.cultureSection.astIntermediateBackgroundColor`),
+        astResistanceBorderColor: assertColor(cultureSectionObj.astResistanceBorderColor, `${fieldName}.cultureSection.astResistanceBorderColor`),
+        astResistanceBackgroundColor: assertColor(cultureSectionObj.astResistanceBackgroundColor, `${fieldName}.cultureSection.astResistanceBackgroundColor`),
+    };
     return {
         version: 1,
         patientInfo,
         resultsTable,
         pageLayout,
+        cultureSection,
     };
 }
 function resolveReportStyleConfig(value) {
@@ -303,6 +384,9 @@ function resolveReportStyleConfig(value) {
         const rawPageLayout = raw.pageLayout && typeof raw.pageLayout === 'object' && !Array.isArray(raw.pageLayout)
             ? raw.pageLayout
             : {};
+        const rawCultureSection = raw.cultureSection && typeof raw.cultureSection === 'object' && !Array.isArray(raw.cultureSection)
+            ? raw.cultureSection
+            : {};
         const upgradedPatientInfo = {
             ...exports.DEFAULT_REPORT_STYLE_V1.patientInfo,
         };
@@ -327,12 +411,21 @@ function resolveReportStyleConfig(value) {
                 upgradedPageLayout[key] = rawPageLayout[key];
             }
         }
+        const upgradedCultureSection = {
+            ...exports.DEFAULT_REPORT_STYLE_V1.cultureSection,
+        };
+        for (const key of CULTURE_SECTION_KEYS) {
+            if (key in rawCultureSection) {
+                upgradedCultureSection[key] = rawCultureSection[key];
+            }
+        }
         try {
             return validateAndNormalizeReportStyleConfig({
                 version: 1,
                 patientInfo: upgradedPatientInfo,
                 resultsTable: upgradedResultsTable,
                 pageLayout: upgradedPageLayout,
+                cultureSection: upgradedCultureSection,
             });
         }
         catch {

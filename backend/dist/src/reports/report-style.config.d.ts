@@ -59,11 +59,38 @@ export interface ReportPageLayoutStyle {
     pageMarginLeftMm: number;
     contentMarginXMm: number;
 }
+export interface ReportCultureSectionStyle {
+    fontFamily: ReportFontFamily;
+    sectionTitleColor: string;
+    sectionTitleBorderColor: string;
+    noGrowthBackgroundColor: string;
+    noGrowthBorderColor: string;
+    noGrowthTextColor: string;
+    metaTextColor: string;
+    commentTextColor: string;
+    notesTextColor: string;
+    notesBorderColor: string;
+    astGridGapPx: number;
+    astMinHeightPx: number;
+    astColumnBorderRadiusPx: number;
+    astColumnPaddingPx: number;
+    astColumnTitleColor: string;
+    astColumnTitleBorderColor: string;
+    astBodyTextColor: string;
+    astEmptyTextColor: string;
+    astSensitiveBorderColor: string;
+    astSensitiveBackgroundColor: string;
+    astIntermediateBorderColor: string;
+    astIntermediateBackgroundColor: string;
+    astResistanceBorderColor: string;
+    astResistanceBackgroundColor: string;
+}
 export interface ReportStyleConfig {
     version: 1;
     patientInfo: ReportPatientInfoStyle;
     resultsTable: ReportResultsTableStyle;
     pageLayout: ReportPageLayoutStyle;
+    cultureSection: ReportCultureSectionStyle;
 }
 export declare const DEFAULT_REPORT_STYLE_V1: ReportStyleConfig;
 export declare function validateAndNormalizeReportStyleConfig(value: unknown, fieldName?: string): ReportStyleConfig;

@@ -239,6 +239,7 @@ function buildResultsReportHtml(input) {
     const patientInfoFontFamily = (0, report_style_config_1.resolveReportFontStackWithArabicFallback)(reportStyle.patientInfo.fontFamily);
     const patientInfoRtlFontFamily = (0, report_style_config_1.resolveReportRtlFontStack)(reportStyle.patientInfo.fontFamily);
     const resultsFontFamily = (0, report_style_config_1.resolveReportFontStackWithArabicFallback)(reportStyle.resultsTable.fontFamily);
+    const cultureSectionFontFamily = (0, report_style_config_1.resolveReportFontStackWithArabicFallback)(reportStyle.cultureSection.fontFamily);
     const bannerSrc = labAny?.reportBannerDataUrl || '';
     const footerSrc = labAny?.reportFooterDataUrl || '';
     const logoSrc = labAny?.reportLogoDataUrl || '';
@@ -708,6 +709,30 @@ function buildResultsReportHtml(input) {
       --results-regular-row-break: ${reportStyle.resultsTable.regularRowBreak};
       --results-panel-table-break: ${reportStyle.resultsTable.panelTableBreak};
       --results-panel-row-break: ${reportStyle.resultsTable.panelRowBreak};
+      --culture-font-family: ${cultureSectionFontFamily};
+      --culture-section-title-color: ${reportStyle.cultureSection.sectionTitleColor};
+      --culture-section-title-border-color: ${reportStyle.cultureSection.sectionTitleBorderColor};
+      --culture-no-growth-bg: ${reportStyle.cultureSection.noGrowthBackgroundColor};
+      --culture-no-growth-border: ${reportStyle.cultureSection.noGrowthBorderColor};
+      --culture-no-growth-text: ${reportStyle.cultureSection.noGrowthTextColor};
+      --culture-meta-text: ${reportStyle.cultureSection.metaTextColor};
+      --culture-comment-text: ${reportStyle.cultureSection.commentTextColor};
+      --culture-notes-text: ${reportStyle.cultureSection.notesTextColor};
+      --culture-notes-border: ${reportStyle.cultureSection.notesBorderColor};
+      --culture-ast-gap: ${reportStyle.cultureSection.astGridGapPx}px;
+      --culture-ast-min-height: ${reportStyle.cultureSection.astMinHeightPx}px;
+      --culture-ast-column-radius: ${reportStyle.cultureSection.astColumnBorderRadiusPx}px;
+      --culture-ast-column-padding: ${reportStyle.cultureSection.astColumnPaddingPx}px;
+      --culture-ast-title-color: ${reportStyle.cultureSection.astColumnTitleColor};
+      --culture-ast-title-border: ${reportStyle.cultureSection.astColumnTitleBorderColor};
+      --culture-ast-body-text: ${reportStyle.cultureSection.astBodyTextColor};
+      --culture-ast-empty-text: ${reportStyle.cultureSection.astEmptyTextColor};
+      --culture-ast-sensitive-border: ${reportStyle.cultureSection.astSensitiveBorderColor};
+      --culture-ast-sensitive-bg: ${reportStyle.cultureSection.astSensitiveBackgroundColor};
+      --culture-ast-intermediate-border: ${reportStyle.cultureSection.astIntermediateBorderColor};
+      --culture-ast-intermediate-bg: ${reportStyle.cultureSection.astIntermediateBackgroundColor};
+      --culture-ast-resistance-border: ${reportStyle.cultureSection.astResistanceBorderColor};
+      --culture-ast-resistance-bg: ${reportStyle.cultureSection.astResistanceBackgroundColor};
       margin: 0;
       font-family: 'Segoe UI', Tahoma, Arial, sans-serif;
       font-size: 12px;
@@ -901,6 +926,11 @@ function buildResultsReportHtml(input) {
     .panel-page table { page-break-inside: var(--results-panel-table-break); break-inside: var(--results-panel-table-break); }
     .panel-page tr { page-break-inside: var(--results-panel-row-break); break-inside: var(--results-panel-row-break); }
     .gue-gse-table { margin-top: 8px; margin-bottom: 12px; }
+    .culture-page .panel-page-title {
+      color: var(--culture-section-title-color);
+      border-bottom-color: var(--culture-section-title-border-color);
+      font-family: var(--culture-font-family);
+    }
     .culture-page .content {
       padding: 0;
       overflow: visible;
@@ -908,19 +938,21 @@ function buildResultsReportHtml(input) {
       flex-direction: column;
     }
     .culture-no-growth {
-      background: #f7fef9;
-      border: 1px solid #bbf7d0;
-      color: #166534;
+      background: var(--culture-no-growth-bg);
+      border: 1px solid var(--culture-no-growth-border);
+      color: var(--culture-no-growth-text);
       font-weight: 700;
       padding: 8px 10px;
       border-radius: 6px;
       margin-bottom: 10px;
+      font-family: var(--culture-font-family);
     }
     .culture-no-growth-result {
       font-size: 11px;
-      color: #334155;
+      color: var(--culture-meta-text);
       font-weight: 400;
       margin-bottom: 4px;
+      font-family: var(--culture-font-family);
     }
     .culture-isolate-block {
       margin-bottom: 12px;
@@ -929,50 +961,57 @@ function buildResultsReportHtml(input) {
       flex: 1;
       min-height: 0;
     }
-    .culture-isolate-title { font-size: 13px; margin-bottom: 4px; }
+    .culture-isolate-title {
+      font-size: 13px;
+      margin-bottom: 4px;
+      color: var(--culture-meta-text);
+      font-family: var(--culture-font-family);
+    }
     .culture-isolate-title-label { font-weight: 700; }
-    .culture-isolate-title-value { font-style: italic; font-weight: 600; }
-    .culture-isolate-source { font-size: 11px; color: #334155; margin-bottom: 4px; }
-    .culture-isolate-comment { font-size: 11px; color: #4b5563; margin-bottom: 6px; }
+    .culture-isolate-title-value { font-style: italic; font-weight: 600; color: var(--culture-section-title-color); }
+    .culture-isolate-source { font-size: 11px; color: var(--culture-meta-text); margin-bottom: 4px; font-family: var(--culture-font-family); }
+    .culture-isolate-comment { font-size: 11px; color: var(--culture-comment-text); margin-bottom: 6px; font-family: var(--culture-font-family); }
     .culture-ast-grid {
       width: 100%;
       display: grid;
-      gap: 6px;
+      gap: var(--culture-ast-gap);
       margin-bottom: 8px;
       flex: 1;
       align-items: stretch;
-      min-height: 430px;
+      min-height: var(--culture-ast-min-height);
     }
     .culture-ast-grid-three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
     .culture-ast-grid-four { grid-template-columns: repeat(4, minmax(0, 1fr)); }
     .culture-ast-column {
       border: 1px solid #d1d5db;
-      border-radius: 6px;
+      border-radius: var(--culture-ast-column-radius);
       background: #f8fafc;
-      padding: 6px 7px;
+      padding: var(--culture-ast-column-padding);
       min-height: 92px;
       display: flex;
       flex-direction: column;
     }
     .culture-ast-column-sensitive {
-      border-color: #bbf7d0;
-      background: #f8fffb;
+      border-color: var(--culture-ast-sensitive-border);
+      background: var(--culture-ast-sensitive-bg);
     }
     .culture-ast-column-intermediate {
-      border-color: #fde68a;
-      background: #fffdf5;
+      border-color: var(--culture-ast-intermediate-border);
+      background: var(--culture-ast-intermediate-bg);
     }
     .culture-ast-column-resistance-primary,
     .culture-ast-column-resistance-secondary {
-      border-color: #fecaca;
-      background: #fff8f8;
+      border-color: var(--culture-ast-resistance-border);
+      background: var(--culture-ast-resistance-bg);
     }
     .culture-ast-column-title {
       font-size: 11px;
       font-weight: 700;
       margin-bottom: 4px;
-      border-bottom: 1px solid #e5e7eb;
+      color: var(--culture-ast-title-color);
+      border-bottom: 1px solid var(--culture-ast-title-border);
       padding-bottom: 2px;
+      font-family: var(--culture-font-family);
     }
     .culture-ast-list {
       list-style: none;
@@ -985,18 +1024,23 @@ function buildResultsReportHtml(input) {
       line-height: 1.35;
       margin: 0 0 2px 0;
       word-break: break-word;
+      color: var(--culture-ast-body-text);
+      font-family: var(--culture-font-family);
     }
     .culture-ast-empty {
       list-style: none;
       font-size: 10.5px;
-      color: #64748b;
+      color: var(--culture-ast-empty-text);
       margin: 0;
+      font-family: var(--culture-font-family);
     }
     .culture-notes {
       margin-top: 8px;
       font-size: 11px;
-      border-top: 1px dashed #d1d5db;
+      border-top: 1px dashed var(--culture-notes-border);
+      color: var(--culture-notes-text);
       padding-top: 6px;
+      font-family: var(--culture-font-family);
     }
     ${rowStripeCss}
     .report-footer {

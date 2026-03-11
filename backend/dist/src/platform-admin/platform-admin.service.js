@@ -765,11 +765,13 @@ let PlatformAdminService = PlatformAdminService_1 = class PlatformAdminService {
     }
     async generateLabReportPreviewPdf(labId, payload) {
         const orderId = this.normalizeUuidV4(payload.orderId, 'orderId');
+        const previewMode = this.normalizePreviewMode(payload.previewMode);
         const reportBranding = this.normalizePreviewReportBranding(payload.reportBranding);
         const reportStyle = this.normalizePreviewReportStyle(payload.reportStyle);
         const pdfBuffer = await this.reportsService.generateDraftTestResultsPreviewPDF({
             orderId,
             labId,
+            previewMode,
             reportBranding,
             reportStyle,
         });
@@ -1982,6 +1984,19 @@ let PlatformAdminService = PlatformAdminService_1 = class PlatformAdminService {
             const message = error instanceof Error ? error.message : 'Invalid reportStyle';
             throw new common_1.BadRequestException(message);
         }
+    }
+    normalizePreviewMode(value) {
+        if (value === null || value === undefined) {
+            return 'full';
+        }
+        if (typeof value !== 'string') {
+            throw new common_1.BadRequestException('previewMode must be a string');
+        }
+        const normalized = value.trim().toLowerCase();
+        if (normalized === 'full' || normalized === 'culture_only') {
+            return normalized;
+        }
+        throw new common_1.BadRequestException('previewMode must be one of: full, culture_only');
     }
     async logPlatformSensitiveRead(actor, payload, manager) {
         if (!actor?.platformUserId)

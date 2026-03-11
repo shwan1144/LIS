@@ -866,7 +866,7 @@ export function WorklistPage() {
       width: 280,
       render: (_: unknown, record) => (
         <div>
-          <Text strong style={{ display: 'block', fontSize: 13, lineHeight: '16px' }}>
+          <Text strong style={{ display: 'block', fontSize: 16, lineHeight: '20px' }}>
             {record.patientName}
           </Text>
           <Text type="secondary" style={{ fontSize: 11, lineHeight: '14px' }}>
@@ -1008,8 +1008,8 @@ export function WorklistPage() {
               <div
                 key={group.groupId}
                 className={`worklist-group-item ${group.groupKind === 'panel'
-                    ? 'worklist-group-item-panel'
-                    : 'worklist-group-item-single'
+                  ? 'worklist-group-item-panel'
+                  : 'worklist-group-item-single'
                   } ${groupStateClass}`}
                 onClick={openGroup}
               >
@@ -1025,7 +1025,7 @@ export function WorklistPage() {
                     )}
                   </div>
                   <Space size={[4, 4]} wrap>
-                    <Tag style={{ margin: 0 }}>{group.testsCount} tests</Tag>
+                    <Tag style={{ margin: 0 }}>{group.groupKind === 'panel' ? 1 : group.testsCount} tests</Tag>
                     {group.pending > 0 && (
                       <Tag style={{ margin: 0 }}>Pending {group.pending}</Tag>
                     )}
@@ -1148,21 +1148,21 @@ export function WorklistPage() {
           border-color: ${isDark ? 'rgba(74,222,128,0.46)' : '#86efac'};
           background:
             ${isDark
-              ? 'linear-gradient(135deg, rgba(20,83,45,0.62) 0%, rgba(21,128,61,0.2) 100%)'
-              : 'linear-gradient(135deg, #ecfdf3 0%, #dcfce7 100%)'};
+          ? 'linear-gradient(135deg, rgba(20,83,45,0.62) 0%, rgba(21,128,61,0.2) 100%)'
+          : 'linear-gradient(135deg, #ecfdf3 0%, #dcfce7 100%)'};
           box-shadow: ${isDark
-            ? '0 8px 18px rgba(20,83,45,0.18)'
-            : '0 8px 16px rgba(34,197,94,0.12)'};
+          ? '0 8px 18px rgba(20,83,45,0.18)'
+          : '0 8px 16px rgba(34,197,94,0.12)'};
         }
         .worklist-group-item-state-pending {
           border-color: ${isDark ? 'rgba(248,113,113,0.42)' : '#fda4af'};
           background:
             ${isDark
-              ? 'linear-gradient(135deg, rgba(127,29,29,0.54) 0%, rgba(127,29,29,0.18) 100%)'
-              : 'linear-gradient(135deg, #fff1f2 0%, #ffe4e6 100%)'};
+          ? 'linear-gradient(135deg, rgba(127,29,29,0.54) 0%, rgba(127,29,29,0.18) 100%)'
+          : 'linear-gradient(135deg, #fff1f2 0%, #ffe4e6 100%)'};
           box-shadow: ${isDark
-            ? '0 8px 18px rgba(127,29,29,0.18)'
-            : '0 8px 16px rgba(248,113,113,0.12)'};
+          ? '0 8px 18px rgba(127,29,29,0.18)'
+          : '0 8px 16px rgba(248,113,113,0.12)'};
         }
         .worklist-group-main {
           min-width: 0;

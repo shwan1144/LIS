@@ -100,11 +100,39 @@ export interface ReportPageLayoutStyle {
   contentMarginXMm: number;
 }
 
+export interface ReportCultureSectionStyle {
+  fontFamily: ReportFontFamily;
+  sectionTitleColor: string;
+  sectionTitleBorderColor: string;
+  noGrowthBackgroundColor: string;
+  noGrowthBorderColor: string;
+  noGrowthTextColor: string;
+  metaTextColor: string;
+  commentTextColor: string;
+  notesTextColor: string;
+  notesBorderColor: string;
+  astGridGapPx: number;
+  astMinHeightPx: number;
+  astColumnBorderRadiusPx: number;
+  astColumnPaddingPx: number;
+  astColumnTitleColor: string;
+  astColumnTitleBorderColor: string;
+  astBodyTextColor: string;
+  astEmptyTextColor: string;
+  astSensitiveBorderColor: string;
+  astSensitiveBackgroundColor: string;
+  astIntermediateBorderColor: string;
+  astIntermediateBackgroundColor: string;
+  astResistanceBorderColor: string;
+  astResistanceBackgroundColor: string;
+}
+
 export interface ReportStyleConfig {
   version: 1;
   patientInfo: ReportPatientInfoStyle;
   resultsTable: ReportResultsTableStyle;
   pageLayout: ReportPageLayoutStyle;
+  cultureSection: ReportCultureSectionStyle;
 }
 
 export const DEFAULT_REPORT_STYLE_V1: ReportStyleConfig = {
@@ -162,6 +190,32 @@ export const DEFAULT_REPORT_STYLE_V1: ReportStyleConfig = {
     pageMarginBottomMm: 3,
     pageMarginLeftMm: 3,
     contentMarginXMm: 3,
+  },
+  cultureSection: {
+    fontFamily: DEFAULT_REPORT_FONT_FAMILY,
+    sectionTitleColor: '#111111',
+    sectionTitleBorderColor: '#222222',
+    noGrowthBackgroundColor: '#F7FEF9',
+    noGrowthBorderColor: '#BBF7D0',
+    noGrowthTextColor: '#166534',
+    metaTextColor: '#334155',
+    commentTextColor: '#4B5563',
+    notesTextColor: '#111827',
+    notesBorderColor: '#D1D5DB',
+    astGridGapPx: 6,
+    astMinHeightPx: 430,
+    astColumnBorderRadiusPx: 6,
+    astColumnPaddingPx: 7,
+    astColumnTitleColor: '#111827',
+    astColumnTitleBorderColor: '#E5E7EB',
+    astBodyTextColor: '#111827',
+    astEmptyTextColor: '#64748B',
+    astSensitiveBorderColor: '#BBF7D0',
+    astSensitiveBackgroundColor: '#F8FFFB',
+    astIntermediateBorderColor: '#FDE68A',
+    astIntermediateBackgroundColor: '#FFFDF5',
+    astResistanceBorderColor: '#FECACA',
+    astResistanceBackgroundColor: '#FFF8F8',
   },
 };
 
@@ -223,6 +277,32 @@ const PAGE_LAYOUT_KEYS: Array<keyof ReportPageLayoutStyle> = [
   'pageMarginLeftMm',
   'contentMarginXMm',
 ];
+const CULTURE_SECTION_KEYS: Array<keyof ReportCultureSectionStyle> = [
+  'fontFamily',
+  'sectionTitleColor',
+  'sectionTitleBorderColor',
+  'noGrowthBackgroundColor',
+  'noGrowthBorderColor',
+  'noGrowthTextColor',
+  'metaTextColor',
+  'commentTextColor',
+  'notesTextColor',
+  'notesBorderColor',
+  'astGridGapPx',
+  'astMinHeightPx',
+  'astColumnBorderRadiusPx',
+  'astColumnPaddingPx',
+  'astColumnTitleColor',
+  'astColumnTitleBorderColor',
+  'astBodyTextColor',
+  'astEmptyTextColor',
+  'astSensitiveBorderColor',
+  'astSensitiveBackgroundColor',
+  'astIntermediateBorderColor',
+  'astIntermediateBackgroundColor',
+  'astResistanceBorderColor',
+  'astResistanceBackgroundColor',
+];
 
 function assertObject(value: unknown, fieldName: string): Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
@@ -282,7 +362,11 @@ export function validateAndNormalizeReportStyleConfig(
   fieldName = 'reportStyle',
 ): ReportStyleConfig {
   const styleObj = assertObject(value, fieldName);
-  assertExactKeys(styleObj, ['version', 'patientInfo', 'resultsTable', 'pageLayout'], fieldName);
+  assertExactKeys(
+    styleObj,
+    ['version', 'patientInfo', 'resultsTable', 'pageLayout', 'cultureSection'],
+    fieldName,
+  );
 
   const version = styleObj.version;
   if (version !== 1) {
@@ -487,11 +571,122 @@ export function validateAndNormalizeReportStyleConfig(
     ),
   };
 
+  const cultureSectionObj = assertObject(styleObj.cultureSection, `${fieldName}.cultureSection`);
+  assertExactKeys(cultureSectionObj, CULTURE_SECTION_KEYS, `${fieldName}.cultureSection`);
+  const cultureSection: ReportCultureSectionStyle = {
+    fontFamily: assertFromSet(
+      cultureSectionObj.fontFamily,
+      REPORT_FONT_FAMILY_SET,
+      `${fieldName}.cultureSection.fontFamily`,
+    ),
+    sectionTitleColor: assertColor(
+      cultureSectionObj.sectionTitleColor,
+      `${fieldName}.cultureSection.sectionTitleColor`,
+    ),
+    sectionTitleBorderColor: assertColor(
+      cultureSectionObj.sectionTitleBorderColor,
+      `${fieldName}.cultureSection.sectionTitleBorderColor`,
+    ),
+    noGrowthBackgroundColor: assertColor(
+      cultureSectionObj.noGrowthBackgroundColor,
+      `${fieldName}.cultureSection.noGrowthBackgroundColor`,
+    ),
+    noGrowthBorderColor: assertColor(
+      cultureSectionObj.noGrowthBorderColor,
+      `${fieldName}.cultureSection.noGrowthBorderColor`,
+    ),
+    noGrowthTextColor: assertColor(
+      cultureSectionObj.noGrowthTextColor,
+      `${fieldName}.cultureSection.noGrowthTextColor`,
+    ),
+    metaTextColor: assertColor(
+      cultureSectionObj.metaTextColor,
+      `${fieldName}.cultureSection.metaTextColor`,
+    ),
+    commentTextColor: assertColor(
+      cultureSectionObj.commentTextColor,
+      `${fieldName}.cultureSection.commentTextColor`,
+    ),
+    notesTextColor: assertColor(
+      cultureSectionObj.notesTextColor,
+      `${fieldName}.cultureSection.notesTextColor`,
+    ),
+    notesBorderColor: assertColor(
+      cultureSectionObj.notesBorderColor,
+      `${fieldName}.cultureSection.notesBorderColor`,
+    ),
+    astGridGapPx: assertIntRange(
+      cultureSectionObj.astGridGapPx,
+      2,
+      16,
+      `${fieldName}.cultureSection.astGridGapPx`,
+    ),
+    astMinHeightPx: assertIntRange(
+      cultureSectionObj.astMinHeightPx,
+      120,
+      700,
+      `${fieldName}.cultureSection.astMinHeightPx`,
+    ),
+    astColumnBorderRadiusPx: assertIntRange(
+      cultureSectionObj.astColumnBorderRadiusPx,
+      0,
+      16,
+      `${fieldName}.cultureSection.astColumnBorderRadiusPx`,
+    ),
+    astColumnPaddingPx: assertIntRange(
+      cultureSectionObj.astColumnPaddingPx,
+      2,
+      16,
+      `${fieldName}.cultureSection.astColumnPaddingPx`,
+    ),
+    astColumnTitleColor: assertColor(
+      cultureSectionObj.astColumnTitleColor,
+      `${fieldName}.cultureSection.astColumnTitleColor`,
+    ),
+    astColumnTitleBorderColor: assertColor(
+      cultureSectionObj.astColumnTitleBorderColor,
+      `${fieldName}.cultureSection.astColumnTitleBorderColor`,
+    ),
+    astBodyTextColor: assertColor(
+      cultureSectionObj.astBodyTextColor,
+      `${fieldName}.cultureSection.astBodyTextColor`,
+    ),
+    astEmptyTextColor: assertColor(
+      cultureSectionObj.astEmptyTextColor,
+      `${fieldName}.cultureSection.astEmptyTextColor`,
+    ),
+    astSensitiveBorderColor: assertColor(
+      cultureSectionObj.astSensitiveBorderColor,
+      `${fieldName}.cultureSection.astSensitiveBorderColor`,
+    ),
+    astSensitiveBackgroundColor: assertColor(
+      cultureSectionObj.astSensitiveBackgroundColor,
+      `${fieldName}.cultureSection.astSensitiveBackgroundColor`,
+    ),
+    astIntermediateBorderColor: assertColor(
+      cultureSectionObj.astIntermediateBorderColor,
+      `${fieldName}.cultureSection.astIntermediateBorderColor`,
+    ),
+    astIntermediateBackgroundColor: assertColor(
+      cultureSectionObj.astIntermediateBackgroundColor,
+      `${fieldName}.cultureSection.astIntermediateBackgroundColor`,
+    ),
+    astResistanceBorderColor: assertColor(
+      cultureSectionObj.astResistanceBorderColor,
+      `${fieldName}.cultureSection.astResistanceBorderColor`,
+    ),
+    astResistanceBackgroundColor: assertColor(
+      cultureSectionObj.astResistanceBackgroundColor,
+      `${fieldName}.cultureSection.astResistanceBackgroundColor`,
+    ),
+  };
+
   return {
     version: 1,
     patientInfo,
     resultsTable,
     pageLayout,
+    cultureSection,
   };
 }
 
@@ -526,6 +721,10 @@ export function resolveReportStyleConfig(value: unknown): ReportStyleConfig {
       raw.pageLayout && typeof raw.pageLayout === 'object' && !Array.isArray(raw.pageLayout)
         ? (raw.pageLayout as Record<string, unknown>)
         : {};
+    const rawCultureSection =
+      raw.cultureSection && typeof raw.cultureSection === 'object' && !Array.isArray(raw.cultureSection)
+        ? (raw.cultureSection as Record<string, unknown>)
+        : {};
 
     const upgradedPatientInfo: Record<string, unknown> = {
       ...DEFAULT_REPORT_STYLE_V1.patientInfo,
@@ -554,12 +753,22 @@ export function resolveReportStyleConfig(value: unknown): ReportStyleConfig {
       }
     }
 
+    const upgradedCultureSection: Record<string, unknown> = {
+      ...DEFAULT_REPORT_STYLE_V1.cultureSection,
+    };
+    for (const key of CULTURE_SECTION_KEYS) {
+      if (key in rawCultureSection) {
+        upgradedCultureSection[key] = rawCultureSection[key];
+      }
+    }
+
     try {
       return validateAndNormalizeReportStyleConfig({
         version: 1,
         patientInfo: upgradedPatientInfo,
         resultsTable: upgradedResultsTable,
         pageLayout: upgradedPageLayout,
+        cultureSection: upgradedCultureSection,
       });
     } catch {
       return DEFAULT_REPORT_STYLE_V1;

@@ -458,6 +458,7 @@ export class ReportsService implements OnModuleInit, OnModuleDestroy {
     latestVerifiedAt: Date | null;
     bypassPaymentCheck: boolean;
     orderQrValue: string;
+    cultureOnly?: boolean;
   }): string {
     const reportableFingerprint = input.reportableOrderTests
       .map((ot) => {
@@ -479,6 +480,7 @@ export class ReportsService implements OnModuleInit, OnModuleDestroy {
       reportDesignFingerprint,
       input.latestVerifiedAt ? new Date(input.latestVerifiedAt).toISOString() : '-',
       input.bypassPaymentCheck ? 'bypass' : 'strict',
+      input.cultureOnly ? 'culture-only' : 'full',
       input.orderQrValue,
       String(input.reportableOrderTests.length),
       reportableFingerprint,
@@ -1110,6 +1112,7 @@ export class ReportsService implements OnModuleInit, OnModuleDestroy {
   async generateDraftTestResultsPreviewPDF(input: {
     orderId: string;
     labId: string;
+    previewMode?: 'full' | 'culture_only';
     reportBranding: ReportBrandingOverride;
     reportStyle: ReportStyleConfig;
   }): Promise<Buffer> {
@@ -1117,6 +1120,7 @@ export class ReportsService implements OnModuleInit, OnModuleDestroy {
       bypassPaymentCheck: true,
       bypassResultCompletionCheck: true,
       disableCache: true,
+      cultureOnly: input.previewMode === 'culture_only',
       reportDesignOverride: {
         reportBranding: input.reportBranding,
         reportStyle: input.reportStyle,
@@ -1279,6 +1283,7 @@ export class ReportsService implements OnModuleInit, OnModuleDestroy {
       bypassPaymentCheck?: boolean;
       bypassResultCompletionCheck?: boolean;
       disableCache?: boolean;
+      cultureOnly?: boolean;
       reportDesignOverride?: {
         reportBranding?: ReportBrandingOverride;
         reportStyle?: ReportStyleConfig | null;
@@ -1293,7 +1298,17 @@ export class ReportsService implements OnModuleInit, OnModuleDestroy {
     const bypassPaymentCheck = !!options?.bypassPaymentCheck;
     const bypassResultCompletionCheck = !!options?.bypassResultCompletionCheck;
     const disableCache = !!options?.disableCache;
+    const cultureOnly = !!options?.cultureOnly;
     const orderForRender = this.applyReportDesignOverride(order, options?.reportDesignOverride);
+    const renderedOrderTests = cultureOnly
+      ? reportableOrderTests.filter((ot) =>
+          String((ot.test as { resultEntryType?: unknown } | undefined)?.resultEntryType ?? '')
+            .toUpperCase() === 'CULTURE_SENSITIVITY',
+        )
+      : reportableOrderTests;
+    const renderedVerifiedTests = cultureOnly
+      ? verifiedTests.filter((ot) => renderedOrderTests.some((candidate) => candidate.id === ot.id))
+      : verifiedTests;
 
     if (!bypassResultCompletionCheck) {
       this.assertAllResultsEnteredForReport(reportableOrderTests);
@@ -1309,10 +1324,11 @@ export class ReportsService implements OnModuleInit, OnModuleDestroy {
     const cacheKey = this.buildReportPdfCacheKey({
       labId,
       order: orderForRender,
-      reportableOrderTests,
+      reportableOrderTests: renderedOrderTests,
       latestVerifiedAt,
       bypassPaymentCheck,
       orderQrValue,
+      cultureOnly,
     });
 
     let verifierLookupMs = 0;
@@ -1325,7 +1341,7 @@ export class ReportsService implements OnModuleInit, OnModuleDestroy {
       const verifierLookupStartMs = Date.now();
       const verifierIds = [
         ...new Set(
-          reportableOrderTests
+          renderedOrderTests
             .map((ot) => ot.verifiedBy)
             .filter((id): id is string => Boolean(id)),
         ),
@@ -1343,14 +1359,14 @@ export class ReportsService implements OnModuleInit, OnModuleDestroy {
 
       const verifierNames = [
         ...new Set(
-          verifiedTests
+          renderedVerifiedTests
             .map((ot) => (ot.verifiedBy ? verifierNameMap.get(ot.verifiedBy) || ot.verifiedBy : null))
             .filter((name): name is string => Boolean(name)),
         ),
       ];
       const comments = [
         ...new Set(
-          reportableOrderTests
+          renderedOrderTests
             .map((ot) => ot.comments?.trim())
             .filter((value): value is string => Boolean(value)),
         ),
@@ -1383,9 +1399,9 @@ export class ReportsService implements OnModuleInit, OnModuleDestroy {
       const htmlStartMs = Date.now();
       const html = buildResultsReportHtml({
         order: orderForRender,
-        orderTests: reportableOrderTests,
-        verifiedCount: verifiedTests.length,
-        reportableCount: reportableOrderTests.length,
+        orderTests: renderedOrderTests,
+        verifiedCount: renderedVerifiedTests.length,
+        reportableCount: renderedOrderTests.length,
         verifiers: verifierNames,
         latestVerifiedAt: latestVerifiedAt ?? null,
         comments,
@@ -1410,7 +1426,7 @@ export class ReportsService implements OnModuleInit, OnModuleDestroy {
         const fallbackStartMs = Date.now();
         const fallbackPdf = await this.renderTestResultsFallbackPDF({
           order: orderForRender,
-          orderTests: reportableOrderTests,
+          orderTests: renderedOrderTests,
           verifiers: verifierNames,
           latestVerifiedAt: latestVerifiedAt ?? null,
           comments,

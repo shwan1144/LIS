@@ -337,6 +337,7 @@ export declare class PlatformAdminService {
     }>;
     generateLabReportPreviewPdf(labId: string, payload: {
         orderId: string;
+        previewMode?: unknown;
         reportBranding: unknown;
         reportStyle: unknown;
     }): Promise<{
@@ -523,6 +524,7 @@ export declare class PlatformAdminService {
     private normalizeDashboardAnnouncementText;
     private normalizePreviewReportBranding;
     private normalizePreviewReportStyle;
+    private normalizePreviewMode;
     private logPlatformSensitiveRead;
     private logLabAudit;
 }

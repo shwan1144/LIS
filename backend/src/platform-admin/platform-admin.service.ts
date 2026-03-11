@@ -1266,17 +1266,20 @@ export class PlatformAdminService {
     labId: string,
     payload: {
       orderId: string;
+      previewMode?: unknown;
       reportBranding: unknown;
       reportStyle: unknown;
     },
   ): Promise<{ pdfBuffer: Buffer; fileName: string }> {
     const orderId = this.normalizeUuidV4(payload.orderId, 'orderId');
+    const previewMode = this.normalizePreviewMode(payload.previewMode);
     const reportBranding = this.normalizePreviewReportBranding(payload.reportBranding);
     const reportStyle = this.normalizePreviewReportStyle(payload.reportStyle);
 
     const pdfBuffer = await this.reportsService.generateDraftTestResultsPreviewPDF({
       orderId,
       labId,
+      previewMode,
       reportBranding,
       reportStyle,
     });
@@ -2885,6 +2888,20 @@ export class PlatformAdminService {
       const message = error instanceof Error ? error.message : 'Invalid reportStyle';
       throw new BadRequestException(message);
     }
+  }
+
+  private normalizePreviewMode(value: unknown): 'full' | 'culture_only' {
+    if (value === null || value === undefined) {
+      return 'full';
+    }
+    if (typeof value !== 'string') {
+      throw new BadRequestException('previewMode must be a string');
+    }
+    const normalized = value.trim().toLowerCase();
+    if (normalized === 'full' || normalized === 'culture_only') {
+      return normalized;
+    }
+    throw new BadRequestException('previewMode must be one of: full, culture_only');
   }
 
   private async logPlatformSensitiveRead(

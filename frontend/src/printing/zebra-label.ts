@@ -144,6 +144,10 @@ async function buildZplDocument(
   const sexText = collapseWhitespace(label.sexLabel) || '-';
   const patientNameFontSize = Math.max(15, Math.round(geometry.heightDots * 0.098));
   const patientNameMinFontSize = Math.max(11, Math.round(patientNameFontSize * 0.72));
+  const basePatientIdFontSize = Math.max(14, Math.round(geometry.heightDots * 0.078));
+  const patientIdMinFontSize = Math.max(9, Math.round(basePatientIdFontSize * 0.62));
+  const baseSexFontSize = Math.max(18, Math.round(geometry.heightDots * 0.11));
+  const sexMinFontSize = Math.max(9, Math.round(baseSexFontSize * 0.62));
   const patientNameShouldRenderGraphic = true;
   const useEnglishVerticalTweaks = !containsArabic(`${patientNameText} ${sexText}`);
   const englishDownShiftDots = useEnglishVerticalTweaks
@@ -187,6 +191,7 @@ async function buildZplDocument(
     testCodesGraphic,
     sequenceGraphic,
     patientIdGraphic,
+    sexGraphic,
   ] = await Promise.all([
     patientNameShouldRenderGraphic
       ? cachedRenderTextGraphic({
@@ -230,17 +235,27 @@ async function buildZplDocument(
       text: sequenceText,
       width: layout.sequenceMainWidth,
     }),
-    needsRasterText(patientIdText)
-      ? cachedRenderTextGraphic({
-        align: 'center',
-        fontSize: Math.max(14, Math.round(geometry.heightDots * 0.078)),
-        fontWeight: 700,
-        height: geometry.heightDots - (layout.borderThickness * 2),
-        rotation: 270,
-        text: patientIdText,
-        width: layout.rightStripWidth - (layout.borderThickness * 2),
-      })
-      : Promise.resolve(null),
+    cachedRenderTextGraphic({
+      align: 'center',
+      fontSize: basePatientIdFontSize,
+      fontWeight: 600,
+      height: geometry.heightDots - (layout.borderThickness * 2),
+      minFontSize: patientIdMinFontSize,
+      rotation: 270,
+      shrinkToFitWidth: true,
+      text: patientIdText,
+      width: layout.rightStripWidth - (layout.borderThickness * 2),
+    }),
+    cachedRenderTextGraphic({
+      align: 'center',
+      fontSize: baseSexFontSize,
+      fontWeight: 600,
+      height: layout.sexHeight,
+      minFontSize: sexMinFontSize,
+      shrinkToFitWidth: true,
+      text: sexText,
+      width: layout.sexWidth,
+    }),
   ]);
 
   const moduleWidth = pickCode128ModuleWidth(
@@ -271,22 +286,11 @@ async function buildZplDocument(
     graphicToZpl(layout.sequenceMetaX, layout.borderThickness, registeredAtGraphic),
 
     // Right Strip (Patient ID)
-    patientIdGraphic
-      ? graphicToZpl(
-        layout.patientIdX,
-        Math.max(0, layout.borderThickness - englishUpShiftDots),
-        patientIdGraphic,
-      )
-      : nativeTextField({
-        align: 'C',
-        fontHeight: Math.max(19, Math.round(geometry.heightDots * 0.086)),
-        fontWidth: Math.max(15, Math.round(geometry.heightDots * 0.074)),
-        orientation: 'R',
-        text: patientIdText,
-        width: geometry.heightDots,
-        x: layout.patientIdX + Math.round(layout.rightStripWidth / 2) - 6,
-        y: Math.max(0, layout.borderThickness - englishUpShiftDots),
-      }),
+    graphicToZpl(
+      layout.patientIdX,
+      Math.max(0, layout.borderThickness - englishUpShiftDots),
+      patientIdGraphic,
+    ),
 
     // Patient Name
     patientNameGraphic
@@ -306,15 +310,11 @@ async function buildZplDocument(
       }),
 
     // Sex
-    nativeTextField({
-      align: 'C',
-      fontHeight: Math.max(18, Math.round(geometry.heightDots * 0.11)),
-      fontWidth: Math.max(14, Math.round(geometry.heightDots * 0.085)),
-      text: sexText,
-      width: layout.sexWidth,
-      x: layout.sexX,
-      y: Math.max(0, layout.paddingY + englishDownShiftDots),
-    }),
+    graphicToZpl(
+      layout.sexX,
+      Math.max(0, layout.paddingY + englishDownShiftDots),
+      sexGraphic,
+    ),
 
     // Barcode
     `^BY${moduleWidth},2,${layout.barcodeHeight}`,
@@ -323,8 +323,8 @@ async function buildZplDocument(
     // Barcode Text
     nativeTextField({
       align: 'C',
-      fontHeight: Math.max(12, Math.round(geometry.heightDots * 0.07)),
-      fontWidth: Math.max(10, Math.round(geometry.heightDots * 0.055)),
+      fontHeight: Math.max(13, Math.round(geometry.heightDots * 0.078)),
+      fontWidth: Math.max(11, Math.round(geometry.heightDots * 0.062)),
       text: label.barcodeText,
       width: layout.barcodeBoxWidth,
       x: layout.barcodeX,
@@ -427,6 +427,8 @@ async function renderCompositeRasterLabelLayerUncached(
     params.testCodesText,
   ].filter(Boolean).join(' ');
   const lineWidth = Math.max(1, params.layout.borderThickness);
+  const compositeSexFontSize = Math.max(18, Math.round(params.geometry.heightDots * 0.11));
+  const compositeSexMinFontSize = Math.max(9, Math.round(compositeSexFontSize * 0.62));
   const root = document.createElement('div');
   const host = document.createElement('div');
 
@@ -503,11 +505,13 @@ async function renderCompositeRasterLabelLayerUncached(
   });
   appendTextBox(root, {
     align: 'center',
+    autoShrinkToFit: true,
     fontFamily: getCanvasFontFamily(params.sexText),
-    fontSize: Math.max(18, Math.round(params.geometry.heightDots * 0.11)),
+    fontSize: compositeSexFontSize,
     fontWeight: 600,
     height: params.layout.sexHeight,
     left: params.layout.sexX,
+    minFontSize: compositeSexMinFontSize,
     text: params.sexText,
     top: Math.max(0, params.layout.paddingY + params.sexTopOffset),
     width: params.layout.sexWidth,
@@ -515,7 +519,7 @@ async function renderCompositeRasterLabelLayerUncached(
   appendTextBox(root, {
     align: 'center',
     fontFamily: DEFAULT_CANVAS_FONT_STACK,
-    fontSize: Math.max(12, Math.round(params.geometry.heightDots * 0.07)),
+    fontSize: Math.max(13, Math.round(params.geometry.heightDots * 0.078)),
     fontWeight: 700,
     height: params.layout.barcodeTextHeight,
     left: params.layout.barcodeX,

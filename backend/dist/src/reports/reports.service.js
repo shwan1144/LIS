@@ -346,6 +346,7 @@ let ReportsService = ReportsService_1 = class ReportsService {
             reportDesignFingerprint,
             input.latestVerifiedAt ? new Date(input.latestVerifiedAt).toISOString() : '-',
             input.bypassPaymentCheck ? 'bypass' : 'strict',
+            input.cultureOnly ? 'culture-only' : 'full',
             input.orderQrValue,
             String(input.reportableOrderTests.length),
             reportableFingerprint,
@@ -866,6 +867,7 @@ let ReportsService = ReportsService_1 = class ReportsService {
             bypassPaymentCheck: true,
             bypassResultCompletionCheck: true,
             disableCache: true,
+            cultureOnly: input.previewMode === 'culture_only',
             reportDesignOverride: {
                 reportBranding: input.reportBranding,
                 reportStyle: input.reportStyle,
@@ -991,7 +993,15 @@ let ReportsService = ReportsService_1 = class ReportsService {
         const bypassPaymentCheck = !!options?.bypassPaymentCheck;
         const bypassResultCompletionCheck = !!options?.bypassResultCompletionCheck;
         const disableCache = !!options?.disableCache;
+        const cultureOnly = !!options?.cultureOnly;
         const orderForRender = this.applyReportDesignOverride(order, options?.reportDesignOverride);
+        const renderedOrderTests = cultureOnly
+            ? reportableOrderTests.filter((ot) => String(ot.test?.resultEntryType ?? '')
+                .toUpperCase() === 'CULTURE_SENSITIVITY')
+            : reportableOrderTests;
+        const renderedVerifiedTests = cultureOnly
+            ? verifiedTests.filter((ot) => renderedOrderTests.some((candidate) => candidate.id === ot.id))
+            : verifiedTests;
         if (!bypassResultCompletionCheck) {
             this.assertAllResultsEnteredForReport(reportableOrderTests);
         }
@@ -1002,10 +1012,11 @@ let ReportsService = ReportsService_1 = class ReportsService {
         const cacheKey = this.buildReportPdfCacheKey({
             labId,
             order: orderForRender,
-            reportableOrderTests,
+            reportableOrderTests: renderedOrderTests,
             latestVerifiedAt,
             bypassPaymentCheck,
             orderQrValue,
+            cultureOnly,
         });
         let verifierLookupMs = 0;
         let assetsMs = 0;
@@ -1015,7 +1026,7 @@ let ReportsService = ReportsService_1 = class ReportsService {
         const generatePdf = async () => {
             const verifierLookupStartMs = Date.now();
             const verifierIds = [
-                ...new Set(reportableOrderTests
+                ...new Set(renderedOrderTests
                     .map((ot) => ot.verifiedBy)
                     .filter((id) => Boolean(id))),
             ];
@@ -1027,12 +1038,12 @@ let ReportsService = ReportsService_1 = class ReportsService {
             verifierLookupMs = Date.now() - verifierLookupStartMs;
             const verifierNameMap = new Map(verifiers.map((u) => [u.id, u.fullName || u.username || u.id.substring(0, 8)]));
             const verifierNames = [
-                ...new Set(verifiedTests
+                ...new Set(renderedVerifiedTests
                     .map((ot) => (ot.verifiedBy ? verifierNameMap.get(ot.verifiedBy) || ot.verifiedBy : null))
                     .filter((name) => Boolean(name))),
             ];
             const comments = [
-                ...new Set(reportableOrderTests
+                ...new Set(renderedOrderTests
                     .map((ot) => ot.comments?.trim())
                     .filter((value) => Boolean(value))),
             ];
@@ -1059,9 +1070,9 @@ let ReportsService = ReportsService_1 = class ReportsService {
             const htmlStartMs = Date.now();
             const html = (0, results_report_template_1.buildResultsReportHtml)({
                 order: orderForRender,
-                orderTests: reportableOrderTests,
-                verifiedCount: verifiedTests.length,
-                reportableCount: reportableOrderTests.length,
+                orderTests: renderedOrderTests,
+                verifiedCount: renderedVerifiedTests.length,
+                reportableCount: renderedOrderTests.length,
                 verifiers: verifierNames,
                 latestVerifiedAt: latestVerifiedAt ?? null,
                 comments,
@@ -1084,7 +1095,7 @@ let ReportsService = ReportsService_1 = class ReportsService {
                 const fallbackStartMs = Date.now();
                 const fallbackPdf = await this.renderTestResultsFallbackPDF({
                     order: orderForRender,
-                    orderTests: reportableOrderTests,
+                    orderTests: renderedOrderTests,
                     verifiers: verifierNames,
                     latestVerifiedAt: latestVerifiedAt ?? null,
                     comments,

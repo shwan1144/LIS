@@ -150,6 +150,7 @@ export declare class PlatformAdminController {
     getOrderResultsPdf(req: RequestWithPlatformUser, orderId: string, res: Response): Promise<Response<any, Record<string, any>> | undefined>;
     previewLabReportPdf(labId: string, body: {
         orderId: string;
+        previewMode?: 'full' | 'culture_only';
         reportBranding: {
             bannerDataUrl?: string | null;
             footerDataUrl?: string | null;

@@ -771,6 +771,45 @@ describe('buildResultsReportHtml panel page isolation', () => {
     );
   });
 
+  it('injects culture section style variables and hooks CSS to them', () => {
+    const customStyle: typeof DEFAULT_REPORT_STYLE_V1 = {
+      ...DEFAULT_REPORT_STYLE_V1,
+      cultureSection: {
+        ...DEFAULT_REPORT_STYLE_V1.cultureSection,
+        fontFamily: 'verdana',
+        sectionTitleColor: '#102030',
+        astResistanceBackgroundColor: '#FFECEC',
+      },
+    };
+    const order = createOrder({
+      lab: {
+        ...createOrder().lab,
+        reportStyle: customStyle,
+      } as Order['lab'],
+    });
+
+    const html = buildResultsReportHtml({
+      order,
+      orderTests: [],
+      reportableCount: 0,
+      verifiedCount: 0,
+      verifiers: [],
+      latestVerifiedAt: null,
+      comments: [],
+    });
+
+    expect(html).toContain(
+      `--culture-font-family: ${resolveReportFontStackWithArabicFallback(
+        customStyle.cultureSection.fontFamily,
+      )};`,
+    );
+    expect(html).toContain('--culture-section-title-color: #102030;');
+    expect(html).toContain('--culture-ast-resistance-bg: #FFECEC;');
+    expect(html).toContain('.culture-page .panel-page-title {');
+    expect(html).toContain('font-family: var(--culture-font-family);');
+    expect(html).toContain('background: var(--culture-ast-resistance-bg);');
+  });
+
   it('renders an order QR in patient info when orderQrDataUrl is provided', () => {
     const html = buildResultsReportHtml({
       order: createOrder(),

@@ -217,6 +217,32 @@ function defaultReportStyle(): ReportStyleDto {
       pageMarginLeftMm: 3,
       contentMarginXMm: 3,
     },
+    cultureSection: {
+      fontFamily: 'system-sans',
+      sectionTitleColor: '#111111',
+      sectionTitleBorderColor: '#222222',
+      noGrowthBackgroundColor: '#F7FEF9',
+      noGrowthBorderColor: '#BBF7D0',
+      noGrowthTextColor: '#166534',
+      metaTextColor: '#334155',
+      commentTextColor: '#4B5563',
+      notesTextColor: '#111827',
+      notesBorderColor: '#D1D5DB',
+      astGridGapPx: 6,
+      astMinHeightPx: 430,
+      astColumnBorderRadiusPx: 6,
+      astColumnPaddingPx: 7,
+      astColumnTitleColor: '#111827',
+      astColumnTitleBorderColor: '#E5E7EB',
+      astBodyTextColor: '#111827',
+      astEmptyTextColor: '#64748B',
+      astSensitiveBorderColor: '#BBF7D0',
+      astSensitiveBackgroundColor: '#F8FFFB',
+      astIntermediateBorderColor: '#FDE68A',
+      astIntermediateBackgroundColor: '#FFFDF5',
+      astResistanceBorderColor: '#FECACA',
+      astResistanceBackgroundColor: '#FFF8F8',
+    },
   };
 }
 
@@ -330,6 +356,7 @@ export function AdminLabReportDesignPage() {
   const [selectedPreviewOrderId, setSelectedPreviewOrderId] = useState<string | null>(null);
   const [loadingPreviewOrders, setLoadingPreviewOrders] = useState(false);
   const [refreshingFullPreview, setRefreshingFullPreview] = useState(false);
+  const [cultureOnlyPreview, setCultureOnlyPreview] = useState(false);
   const [fullPreviewPdfUrl, setFullPreviewPdfUrl] = useState<string | null>(null);
   const [fullPreviewError, setFullPreviewError] = useState<string | null>(null);
   const orderSearchTimerRef = useRef<number | null>(null);
@@ -414,6 +441,7 @@ export function AdminLabReportDesignPage() {
     setPreviewOrderQuery('');
     setPreviewOrderOptions([]);
     setSelectedPreviewOrderId(null);
+    setCultureOnlyPreview(false);
     setFullPreviewError(null);
     setRefreshingFullPreview(false);
     setFullPreviewPdfUrl((previousUrl) => {
@@ -490,6 +518,19 @@ export function AdminLabReportDesignPage() {
     }));
   };
 
+  const updateCultureStyle = <K extends keyof ReportStyleDto['cultureSection']>(
+    key: K,
+    value: ReportStyleDto['cultureSection'][K],
+  ) => {
+    setReportStyle((prev) => ({
+      ...prev,
+      cultureSection: {
+        ...prev.cultureSection,
+        [key]: value,
+      },
+    }));
+  };
+
   const handleRefreshFullPreview = async () => {
     if (!selectedLabId) return;
     if (!selectedPreviewOrderId) {
@@ -502,6 +543,7 @@ export function AdminLabReportDesignPage() {
     try {
       const blob = await previewAdminLabReportPdf(selectedLabId, {
         orderId: selectedPreviewOrderId,
+        previewMode: cultureOnlyPreview ? 'culture_only' : 'full',
         reportBranding: {
           bannerDataUrl: branding.bannerDataUrl ?? null,
           footerDataUrl: branding.footerDataUrl ?? null,
@@ -733,6 +775,8 @@ export function AdminLabReportDesignPage() {
   const showStatusColumn = reportStyle.resultsTable.showStatusColumn;
   const showDepartmentRow = reportStyle.resultsTable.showDepartmentRow;
   const showCategoryRow = reportStyle.resultsTable.showCategoryRow;
+  const culturePreviewFontFamily = resolvePreviewFontStack(reportStyle.cultureSection.fontFamily);
+  const culturePreviewGridMinHeight = Math.min(reportStyle.cultureSection.astMinHeightPx, 320);
   const previewColumnCount = showStatusColumn ? 5 : 4;
   const previewRegularWidths = {
     test: '28%',
@@ -1312,6 +1356,177 @@ export function AdminLabReportDesignPage() {
                               </Space>
                             </Card>
                           </Col>
+
+                          <Col xs={24}>
+                            <Card size="small" title="Culture Section (C&S)">
+                              <Space direction="vertical" style={{ width: '100%' }} size={12}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                  <Text>Font Family</Text>
+                                  <Select
+                                    style={{ width: 180 }}
+                                    value={reportStyle.cultureSection.fontFamily}
+                                    options={FONT_OPTIONS}
+                                    onChange={(value) => updateCultureStyle('fontFamily', value)}
+                                    disabled={!canMutate}
+                                  />
+                                </div>
+                                <StyleColorControl
+                                  label="Section Title Text"
+                                  value={reportStyle.cultureSection.sectionTitleColor}
+                                  disabled={!canMutate}
+                                  onChange={(value) => updateCultureStyle('sectionTitleColor', value)}
+                                />
+                                <StyleColorControl
+                                  label="Section Title Border"
+                                  value={reportStyle.cultureSection.sectionTitleBorderColor}
+                                  disabled={!canMutate}
+                                  onChange={(value) => updateCultureStyle('sectionTitleBorderColor', value)}
+                                />
+                                <StyleColorControl
+                                  label="No Growth Background"
+                                  value={reportStyle.cultureSection.noGrowthBackgroundColor}
+                                  disabled={!canMutate}
+                                  onChange={(value) => updateCultureStyle('noGrowthBackgroundColor', value)}
+                                />
+                                <StyleColorControl
+                                  label="No Growth Border"
+                                  value={reportStyle.cultureSection.noGrowthBorderColor}
+                                  disabled={!canMutate}
+                                  onChange={(value) => updateCultureStyle('noGrowthBorderColor', value)}
+                                />
+                                <StyleColorControl
+                                  label="No Growth Text"
+                                  value={reportStyle.cultureSection.noGrowthTextColor}
+                                  disabled={!canMutate}
+                                  onChange={(value) => updateCultureStyle('noGrowthTextColor', value)}
+                                />
+                                <StyleColorControl
+                                  label="Meta Text"
+                                  value={reportStyle.cultureSection.metaTextColor}
+                                  disabled={!canMutate}
+                                  onChange={(value) => updateCultureStyle('metaTextColor', value)}
+                                />
+                                <StyleColorControl
+                                  label="Comment Text"
+                                  value={reportStyle.cultureSection.commentTextColor}
+                                  disabled={!canMutate}
+                                  onChange={(value) => updateCultureStyle('commentTextColor', value)}
+                                />
+                                <StyleColorControl
+                                  label="Notes Text"
+                                  value={reportStyle.cultureSection.notesTextColor}
+                                  disabled={!canMutate}
+                                  onChange={(value) => updateCultureStyle('notesTextColor', value)}
+                                />
+                                <StyleColorControl
+                                  label="Notes Border"
+                                  value={reportStyle.cultureSection.notesBorderColor}
+                                  disabled={!canMutate}
+                                  onChange={(value) => updateCultureStyle('notesBorderColor', value)}
+                                />
+                                <StyleColorControl
+                                  label="AST Title Text"
+                                  value={reportStyle.cultureSection.astColumnTitleColor}
+                                  disabled={!canMutate}
+                                  onChange={(value) => updateCultureStyle('astColumnTitleColor', value)}
+                                />
+                                <StyleColorControl
+                                  label="AST Title Border"
+                                  value={reportStyle.cultureSection.astColumnTitleBorderColor}
+                                  disabled={!canMutate}
+                                  onChange={(value) => updateCultureStyle('astColumnTitleBorderColor', value)}
+                                />
+                                <StyleColorControl
+                                  label="AST Body Text"
+                                  value={reportStyle.cultureSection.astBodyTextColor}
+                                  disabled={!canMutate}
+                                  onChange={(value) => updateCultureStyle('astBodyTextColor', value)}
+                                />
+                                <StyleColorControl
+                                  label="AST Empty Text"
+                                  value={reportStyle.cultureSection.astEmptyTextColor}
+                                  disabled={!canMutate}
+                                  onChange={(value) => updateCultureStyle('astEmptyTextColor', value)}
+                                />
+                                <StyleColorControl
+                                  label="Sensitive Border"
+                                  value={reportStyle.cultureSection.astSensitiveBorderColor}
+                                  disabled={!canMutate}
+                                  onChange={(value) => updateCultureStyle('astSensitiveBorderColor', value)}
+                                />
+                                <StyleColorControl
+                                  label="Sensitive Background"
+                                  value={reportStyle.cultureSection.astSensitiveBackgroundColor}
+                                  disabled={!canMutate}
+                                  onChange={(value) => updateCultureStyle('astSensitiveBackgroundColor', value)}
+                                />
+                                <StyleColorControl
+                                  label="Intermediate Border"
+                                  value={reportStyle.cultureSection.astIntermediateBorderColor}
+                                  disabled={!canMutate}
+                                  onChange={(value) => updateCultureStyle('astIntermediateBorderColor', value)}
+                                />
+                                <StyleColorControl
+                                  label="Intermediate Background"
+                                  value={reportStyle.cultureSection.astIntermediateBackgroundColor}
+                                  disabled={!canMutate}
+                                  onChange={(value) => updateCultureStyle('astIntermediateBackgroundColor', value)}
+                                />
+                                <StyleColorControl
+                                  label="Resistance Border"
+                                  value={reportStyle.cultureSection.astResistanceBorderColor}
+                                  disabled={!canMutate}
+                                  onChange={(value) => updateCultureStyle('astResistanceBorderColor', value)}
+                                />
+                                <StyleColorControl
+                                  label="Resistance Background"
+                                  value={reportStyle.cultureSection.astResistanceBackgroundColor}
+                                  disabled={!canMutate}
+                                  onChange={(value) => updateCultureStyle('astResistanceBackgroundColor', value)}
+                                />
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                  <Text>AST Grid Gap</Text>
+                                  <InputNumber
+                                    min={2}
+                                    max={16}
+                                    value={reportStyle.cultureSection.astGridGapPx}
+                                    onChange={(value) => updateCultureStyle('astGridGapPx', Number(value ?? 6))}
+                                    disabled={!canMutate}
+                                  />
+                                </div>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                  <Text>AST Min Height</Text>
+                                  <InputNumber
+                                    min={120}
+                                    max={700}
+                                    value={reportStyle.cultureSection.astMinHeightPx}
+                                    onChange={(value) => updateCultureStyle('astMinHeightPx', Number(value ?? 430))}
+                                    disabled={!canMutate}
+                                  />
+                                </div>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                  <Text>AST Column Radius</Text>
+                                  <InputNumber
+                                    min={0}
+                                    max={16}
+                                    value={reportStyle.cultureSection.astColumnBorderRadiusPx}
+                                    onChange={(value) => updateCultureStyle('astColumnBorderRadiusPx', Number(value ?? 6))}
+                                    disabled={!canMutate}
+                                  />
+                                </div>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                  <Text>AST Column Padding</Text>
+                                  <InputNumber
+                                    min={2}
+                                    max={16}
+                                    value={reportStyle.cultureSection.astColumnPaddingPx}
+                                    onChange={(value) => updateCultureStyle('astColumnPaddingPx', Number(value ?? 7))}
+                                    disabled={!canMutate}
+                                  />
+                                </div>
+                              </Space>
+                            </Card>
+                          </Col>
                         </Row>
                       </Card>
                     </Col>
@@ -1528,11 +1743,167 @@ export function AdminLabReportDesignPage() {
                                 </tbody>
                               </table>
                             </div>
+                            <div style={{ marginTop: 14 }}>
+                              <div
+                                style={{
+                                  fontFamily: culturePreviewFontFamily,
+                                  color: reportStyle.cultureSection.sectionTitleColor,
+                                  borderBottom: `2px solid ${reportStyle.cultureSection.sectionTitleBorderColor}`,
+                                  fontSize: 16,
+                                  fontWeight: 800,
+                                  paddingBottom: 4,
+                                  marginBottom: 8,
+                                }}
+                              >
+                                Culture &amp; Sensitivity
+                              </div>
+                              <div
+                                style={{
+                                  border: `1px solid ${reportStyle.cultureSection.noGrowthBorderColor}`,
+                                  background: reportStyle.cultureSection.noGrowthBackgroundColor,
+                                  color: reportStyle.cultureSection.noGrowthTextColor,
+                                  borderRadius: 6,
+                                  padding: '8px 10px',
+                                  marginBottom: 10,
+                                  fontFamily: culturePreviewFontFamily,
+                                  fontWeight: 700,
+                                }}
+                              >
+                                No growth
+                                <div
+                                  style={{
+                                    marginTop: 2,
+                                    fontSize: 11,
+                                    fontWeight: 400,
+                                    color: reportStyle.cultureSection.metaTextColor,
+                                  }}
+                                >
+                                  Result: No growth after 24 hours
+                                </div>
+                              </div>
+                              <div
+                                style={{
+                                  marginBottom: 6,
+                                  fontFamily: culturePreviewFontFamily,
+                                  color: reportStyle.cultureSection.metaTextColor,
+                                  fontSize: 12,
+                                }}
+                              >
+                                <strong>Microorganism:</strong>{' '}
+                                <span style={{ color: reportStyle.cultureSection.sectionTitleColor, fontStyle: 'italic' }}>
+                                  E. coli
+                                </span>
+                              </div>
+                              <div
+                                style={{
+                                  display: 'grid',
+                                  gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
+                                  gap: reportStyle.cultureSection.astGridGapPx,
+                                  minHeight: culturePreviewGridMinHeight,
+                                }}
+                              >
+                                {[
+                                  {
+                                    title: 'Sensitive',
+                                    border: reportStyle.cultureSection.astSensitiveBorderColor,
+                                    bg: reportStyle.cultureSection.astSensitiveBackgroundColor,
+                                    values: ['Amikacin', 'Meropenem'],
+                                  },
+                                  {
+                                    title: 'Intermediate',
+                                    border: reportStyle.cultureSection.astIntermediateBorderColor,
+                                    bg: reportStyle.cultureSection.astIntermediateBackgroundColor,
+                                    values: ['Ciprofloxacin'],
+                                  },
+                                  {
+                                    title: 'Resistance',
+                                    border: reportStyle.cultureSection.astResistanceBorderColor,
+                                    bg: reportStyle.cultureSection.astResistanceBackgroundColor,
+                                    values: ['Ampicillin', 'Ceftriaxone'],
+                                  },
+                                ].map((column) => (
+                                  <div
+                                    key={column.title}
+                                    style={{
+                                      border: `1px solid ${column.border}`,
+                                      background: column.bg,
+                                      borderRadius: reportStyle.cultureSection.astColumnBorderRadiusPx,
+                                      padding: reportStyle.cultureSection.astColumnPaddingPx,
+                                      display: 'flex',
+                                      flexDirection: 'column',
+                                      minHeight: 92,
+                                    }}
+                                  >
+                                    <div
+                                      style={{
+                                        color: reportStyle.cultureSection.astColumnTitleColor,
+                                        borderBottom: `1px solid ${reportStyle.cultureSection.astColumnTitleBorderColor}`,
+                                        paddingBottom: 2,
+                                        marginBottom: 4,
+                                        fontWeight: 700,
+                                        fontSize: 11,
+                                        fontFamily: culturePreviewFontFamily,
+                                      }}
+                                    >
+                                      {column.title}
+                                    </div>
+                                    <div
+                                      style={{
+                                        color: reportStyle.cultureSection.astBodyTextColor,
+                                        fontSize: 11,
+                                        lineHeight: 1.35,
+                                        fontFamily: culturePreviewFontFamily,
+                                      }}
+                                    >
+                                      {column.values.map((item) => (
+                                        <div key={item}>{item}</div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                              <div
+                                style={{
+                                  marginTop: 8,
+                                  borderTop: `1px dashed ${reportStyle.cultureSection.notesBorderColor}`,
+                                  paddingTop: 6,
+                                  color: reportStyle.cultureSection.notesTextColor,
+                                  fontSize: 11,
+                                  fontFamily: culturePreviewFontFamily,
+                                }}
+                              >
+                                <strong>Notes:</strong>{' '}
+                                <span style={{ color: reportStyle.cultureSection.commentTextColor }}>
+                                  Clinical correlation advised.
+                                </span>
+                              </div>
+                            </div>
                           </Card>
                         </div>
                         <Card title="Full Report Preview" className="admin-report-design-full-preview-card" loading={loading}>
                           <Text type="secondary" style={{ display: 'block', marginBottom: 8 }}>
-                            Select a real order from this lab, then refresh to render a full PDF with unsaved draft design.
+                            Select a real order from this lab, then refresh to render a PDF with unsaved draft design.
+                          </Text>
+                          <div
+                            style={{
+                              display: 'flex',
+                              justifyContent: 'space-between',
+                              alignItems: 'center',
+                              marginBottom: 10,
+                              gap: 8,
+                            }}
+                          >
+                            <Text>Culture-only full preview</Text>
+                            <Switch
+                              checked={cultureOnlyPreview}
+                              onChange={setCultureOnlyPreview}
+                              disabled={!canMutate}
+                            />
+                          </div>
+                          <Text type="secondary" style={{ display: 'block', marginBottom: 8 }}>
+                            {cultureOnlyPreview
+                              ? 'Preview includes only Culture & Sensitivity pages so you can tune culture design faster.'
+                              : 'Preview includes all report pages.'}
                           </Text>
                           <Select
                             showSearch

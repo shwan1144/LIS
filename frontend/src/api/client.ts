@@ -173,11 +173,39 @@ export interface ReportPageLayoutStyleDto {
   contentMarginXMm: number;
 }
 
+export interface ReportCultureSectionStyleDto {
+  fontFamily: ReportFontFamilyDto;
+  sectionTitleColor: string;
+  sectionTitleBorderColor: string;
+  noGrowthBackgroundColor: string;
+  noGrowthBorderColor: string;
+  noGrowthTextColor: string;
+  metaTextColor: string;
+  commentTextColor: string;
+  notesTextColor: string;
+  notesBorderColor: string;
+  astGridGapPx: number;
+  astMinHeightPx: number;
+  astColumnBorderRadiusPx: number;
+  astColumnPaddingPx: number;
+  astColumnTitleColor: string;
+  astColumnTitleBorderColor: string;
+  astBodyTextColor: string;
+  astEmptyTextColor: string;
+  astSensitiveBorderColor: string;
+  astSensitiveBackgroundColor: string;
+  astIntermediateBorderColor: string;
+  astIntermediateBackgroundColor: string;
+  astResistanceBorderColor: string;
+  astResistanceBackgroundColor: string;
+}
+
 export interface ReportStyleDto {
   version: 1;
   patientInfo: ReportPatientInfoStyleDto;
   resultsTable: ReportResultsTableStyleDto;
   pageLayout: ReportPageLayoutStyleDto;
+  cultureSection: ReportCultureSectionStyleDto;
 }
 
 export interface UserDto {
@@ -677,6 +705,7 @@ export async function getAdminOrderResultsPdf(orderId: string): Promise<Blob> {
 
 export interface AdminReportPreviewRequest {
   orderId: string;
+  previewMode?: 'full' | 'culture_only';
   reportBranding: ReportBrandingDto;
   reportStyle: ReportStyleDto;
 }

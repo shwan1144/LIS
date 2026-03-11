@@ -52,6 +52,7 @@ export function buildSampleLabelViewModel(
   const barcodeValue = trimmedOrderNumber || sampleBarcode || deriveSampleBarcodeFallback(sample.id);
   const barcodeText = trimmedOrderNumber || barcodeValue;
   const registeredAtLabel = formatRegisteredAtLabel(order.registeredAt);
+  // Keep age stable across reprints by computing it at order registration time.
   const sexLabel = formatSexLabel(
     order.patient.sex,
     order.patient.dateOfBirth,
