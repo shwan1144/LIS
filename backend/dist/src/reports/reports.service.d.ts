@@ -18,6 +18,7 @@ export interface PublicResultTestItem {
     resultValue: string | null;
     unit: string | null;
     verifiedAt: string | null;
+    expectedCompletionMinutes: number | null;
 }
 export interface PublicResultStatus {
     orderId: string;

@@ -44,6 +44,7 @@ export interface PublicResultTestItem {
   resultValue: string | null;
   unit: string | null;
   verifiedAt: string | null;
+  expectedCompletionMinutes: number | null;
 }
 
 export interface PublicResultStatus {
@@ -1075,6 +1076,7 @@ export class ReportsService implements OnModuleInit, OnModuleDestroy {
           resultValue,
           unit: test?.unit || null,
           verifiedAt: ot.verifiedAt ? ot.verifiedAt.toISOString() : null,
+          expectedCompletionMinutes: typeof test?.expectedCompletionMinutes === 'number' ? test.expectedCompletionMinutes : null,
         };
       })
       .sort((a, b) => {

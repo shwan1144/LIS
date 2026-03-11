@@ -267,8 +267,10 @@ function resolveGroupByIdentity(
 ): WorklistOrderGroupSummary | null {
   if (groups.length === 0) return null;
   if (!currentGroup) return groups[0] ?? null;
-  if (currentGroup.groupKind === 'single') {
-    return groups.find((group) => group.groupKind === 'single') ?? null;
+  if (currentGroup.groupKind === 'single' || currentGroup.groupKind === 'culture') {
+    return (
+      groups.find((group) => group.groupKind === currentGroup.groupKind) ?? null
+    );
   }
   if (currentGroup.panelRootId) {
     return (
@@ -1009,7 +1011,9 @@ export function WorklistPage() {
                 key={group.groupId}
                 className={`worklist-group-item ${group.groupKind === 'panel'
                   ? 'worklist-group-item-panel'
-                  : 'worklist-group-item-single'
+                  : group.groupKind === 'culture'
+                    ? 'worklist-group-item-culture'
+                    : 'worklist-group-item-single'
                   } ${groupStateClass}`}
                 onClick={openGroup}
               >
@@ -1143,6 +1147,9 @@ export function WorklistPage() {
         }
         .worklist-group-item-panel {
           background: ${isDark ? 'rgba(88,28,135,0.16)' : '#f5efff'};
+        }
+        .worklist-group-item-culture {
+          background: ${isDark ? 'rgba(14,116,144,0.2)' : '#ecfeff'};
         }
         .worklist-group-item-state-entered {
           border-color: ${isDark ? 'rgba(74,222,128,0.46)' : '#86efac'};

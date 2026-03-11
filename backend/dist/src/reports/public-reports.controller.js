@@ -43,6 +43,20 @@ function extractErrorMessage(error, fallback) {
     return fallback;
 }
 function renderPendingPage(status) {
+    const testsHtml = (status.tests || []).map(t => {
+        const isCompleted = t.isVerified;
+        const statusText = isCompleted ? 'Completed' : 'Pending';
+        const statusColor = isCompleted ? '#10b981' : '#f59e0b';
+        const icon = isCompleted ? '✓' : '⌛';
+        return `
+      <div class="test-item">
+        <div class="test-name" dir="auto">${escapeHtml(t.testName)}</div>
+        <div class="test-status" style="color: ${statusColor}">
+          <span class="icon">${icon}</span> ${statusText}
+        </div>
+      </div>
+    `;
+    }).join('');
     return `<!doctype html>
 <html lang="en">
 <head>
@@ -50,18 +64,66 @@ function renderPendingPage(status) {
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Result Status</title>
   <style>
-    body { margin: 0; font-family: system-ui, -apple-system, sans-serif; background: #f8fafc; color: #0f172a; height: 100vh; display: flex; align-items: center; justify-content: center; text-align: center; }
-    .card { background: #fff; padding: 2rem; border-radius: 1rem; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1); max-width: 90%; width: 400px; }
-    .patient { font-size: 1rem; color: #64748b; margin-bottom: 2rem; padding-bottom: 1.5rem; border-bottom: 1px solid #e2e8f0; font-weight: 500; }
-    .msg { font-size: 1.1rem; font-weight: 600; color: #2563eb; margin-bottom: 1.2rem; line-height: 1.5; }
-    .refresh { font-size: 0.875rem; color: #94a3b8; margin-top: 2rem; }
+    body { margin: 0; font-family: system-ui, -apple-system, sans-serif; background: #f8fafc; color: #0f172a; display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 2rem 0; box-sizing: border-box; }
+    .card { background: #fff; padding: 2rem; border-radius: 1rem; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1); max-width: 90%; width: 500px; }
+    .patient { font-size: 1.1rem; color: #475569; margin-bottom: 1.5rem; padding-bottom: 1rem; border-bottom: 1px solid #e2e8f0; font-weight: 600; text-align: center; }
+    
+    .msg-block { margin-bottom: 1.5rem; text-align: center; }
+    .msg { font-size: 1.15rem; font-weight: 700; color: #2563eb; margin-bottom: 0.25rem; }
+    .sub-msg { font-size: 0.95rem; color: #64748b; }
+    .msg-ku, .msg-ar { font-size: 1.25rem; margin-bottom: 0.25rem; }
+    .sub-msg-ku, .sub-msg-ar { font-size: 1rem; }
+    
+    .progress-container { margin-bottom: 1.5rem; display: flex; flex-direction: column; gap: 0.5rem; border-top: 1px solid #e2e8f0; padding-top: 1.5rem; }
+    .progress-bar-bg { background: #e2e8f0; height: 10px; border-radius: 5px; overflow: hidden; width: 100%; }
+    .progress-bar-fill { background: #3b82f6; height: 100%; transition: width 0.3s ease; }
+    .progress-text { display: flex; justify-content: space-between; font-size: 0.85rem; color: #64748b; font-weight: 600; }
+
+    .test-list { display: flex; flex-direction: column; gap: 0.5rem; max-height: 350px; overflow-y: auto; padding-right: 0.5rem; margin-bottom: 2rem; }
+    .test-list::-webkit-scrollbar { width: 6px; }
+    .test-list::-webkit-scrollbar-track { background: transparent; }
+    .test-list::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+    .test-item { display: flex; justify-content: space-between; align-items: center; padding: 0.75rem 1rem; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 0.5rem; gap: 1rem; }
+    .test-name { font-weight: 500; font-size: 0.95rem; color: #334155; word-break: break-word; flex: 1; text-align: left; }
+    .test-status { font-size: 0.85rem; font-weight: 600; display: flex; align-items: center; gap: 0.25rem; white-space: nowrap; }
+    .test-status .icon { font-size: 1rem; }
+    
+    .refresh { font-size: 0.875rem; color: #94a3b8; text-align: center; border-top: 1px solid #e2e8f0; padding-top: 1rem; }
   </style>
 </head>
 <body>
   <div class="card">
     <div class="patient" dir="auto">${escapeHtml(status.patientName)}</div>
-    <div class="msg">Result is still in processing.</div>
-    <div class="msg">Please wait while the report is being completed.</div>
+    
+    <div class="msg-block" dir="rtl">
+      <div class="msg msg-ku">ئەنجامەکان هێشتا کاریان لەسەر دەکرێت</div>
+      <div class="sub-msg sub-msg-ku">تکایە چاوەڕێ بکە تا ڕاپۆرتەکە تەواو دەبێت</div>
+    </div>
+    
+    <div class="msg-block" dir="rtl">
+      <div class="msg msg-ar">النتائج لا تزال قيد المعالجة</div>
+      <div class="sub-msg sub-msg-ar">يرجى الانتظار حتى يكتمل التقرير</div>
+    </div>
+    
+    <div class="msg-block">
+      <div class="msg">Result is still in processing</div>
+      <div class="sub-msg">Please wait while the report is being completed</div>
+    </div>
+    
+    <div class="progress-container">
+      <div class="progress-bar-bg">
+        <div class="progress-bar-fill" style="width: ${status.progressPercent}%"></div>
+      </div>
+      <div class="progress-text">
+        <span>Overall Progress</span>
+        <span>${status.progressPercent}%</span>
+      </div>
+    </div>
+
+    <div class="test-list">
+      ${testsHtml}
+    </div>
+
     <div class="refresh">
       Auto refresh in <span id="refresh-sec">30</span>s
     </div>

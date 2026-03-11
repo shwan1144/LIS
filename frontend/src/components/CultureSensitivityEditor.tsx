@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { AutoComplete, Button, Card, Form, Input, Select, Space, Switch, Typography } from 'antd';
 import { DeleteOutlined, PlusOutlined } from '@ant-design/icons';
+import { useTheme } from '../contexts/ThemeContext';
 
 const { Text } = Typography;
 const DEFAULT_NO_GROWTH_RESULT = 'No growth of microorganizm';
@@ -57,18 +58,6 @@ interface CultureSensitivityEditorProps {
   disabled?: boolean;
 }
 
-const fieldLabelStyle = {
-  fontSize: 11,
-  fontWeight: 600,
-  color: '#1f2937',
-};
-
-const cardSurfaceStyle = {
-  border: '1px solid #cbd5e1',
-  borderRadius: 10,
-  background: '#ffffff',
-};
-
 const antibioticGridColumns = '1.65fr 0.8fr 0.8fr 36px';
 
 export function CultureSensitivityEditor({
@@ -78,9 +67,61 @@ export function CultureSensitivityEditor({
   micUnit,
   disabled = false,
 }: CultureSensitivityEditorProps) {
+  const { isDark } = useTheme();
   const form = Form.useFormInstance();
   const noGrowth = Form.useWatch([...baseName, 'noGrowth']);
   const noGrowthResult = Form.useWatch([...baseName, 'noGrowthResult']);
+  const palette = isDark
+    ? {
+        containerBorder: 'rgba(96, 165, 250, 0.4)',
+        containerBackground:
+          'linear-gradient(180deg, rgba(30,41,59,0.74) 0%, rgba(15,23,42,0.84) 70%)',
+        fieldLabel: '#cbd5e1',
+        cardBorder: 'rgba(148, 163, 184, 0.35)',
+        cardBackground: 'rgba(15, 23, 42, 0.66)',
+        noGrowthCardBackground: 'rgba(15, 23, 42, 0.52)',
+        isolateBadgeBackground: 'rgba(30, 64, 175, 0.34)',
+        isolateBadgeColor: '#bfdbfe',
+        mutedText: '#94a3b8',
+        antibioticPanelBorder: 'rgba(148, 163, 184, 0.32)',
+        antibioticPanelBackground: 'rgba(15, 23, 42, 0.58)',
+        antibioticHeaderBorder: 'rgba(148, 163, 184, 0.3)',
+        antibioticHeaderText: '#cbd5e1',
+        emptyRowBorder: 'rgba(148, 163, 184, 0.45)',
+        emptyRowBackground: 'rgba(2, 6, 23, 0.58)',
+        rowBackground: 'rgba(15, 23, 42, 0.82)',
+        rowBorder: 'rgba(148, 163, 184, 0.34)',
+      }
+    : {
+        containerBorder: '#bfdbfe',
+        containerBackground:
+          'linear-gradient(180deg, rgba(239,246,255,0.62) 0%, rgba(255,255,255,0.98) 70%)',
+        fieldLabel: '#1f2937',
+        cardBorder: '#cbd5e1',
+        cardBackground: '#ffffff',
+        noGrowthCardBackground: '#f8fafc',
+        isolateBadgeBackground: '#e0ecff',
+        isolateBadgeColor: '#1d4ed8',
+        mutedText: '#475569',
+        antibioticPanelBorder: '#dbeafe',
+        antibioticPanelBackground: '#f8fbff',
+        antibioticHeaderBorder: '#dbeafe',
+        antibioticHeaderText: '#334155',
+        emptyRowBorder: '#cbd5e1',
+        emptyRowBackground: '#ffffff',
+        rowBackground: '#ffffff',
+        rowBorder: '#e2e8f0',
+      };
+  const fieldLabelStyle = {
+    fontSize: 11,
+    fontWeight: 600,
+    color: palette.fieldLabel,
+  };
+  const cardSurfaceStyle = {
+    border: `1px solid ${palette.cardBorder}`,
+    borderRadius: 10,
+    background: palette.cardBackground,
+  };
 
   useEffect(() => {
     if (!noGrowth) return;
@@ -113,8 +154,8 @@ export function CultureSensitivityEditor({
         border: '1px solid #bfdbfe',
         borderRadius: 12,
         padding: 12,
-        background:
-          'linear-gradient(180deg, rgba(239,246,255,0.62) 0%, rgba(255,255,255,0.98) 70%)',
+        borderColor: palette.containerBorder,
+        background: palette.containerBackground,
       }}
     >
       <Space align="center" style={{ marginBottom: 10 }}>
@@ -125,7 +166,7 @@ export function CultureSensitivityEditor({
         >
           <Switch size="small" disabled={disabled} />
         </Form.Item>
-        <Text strong style={{ fontSize: 12 }}>
+        <Text strong style={{ fontSize: 12, color: palette.fieldLabel }}>
           No growth
         </Text>
       </Space>
@@ -152,7 +193,7 @@ export function CultureSensitivityEditor({
       {noGrowth ? (
         <Card
           size="small"
-          style={{ ...cardSurfaceStyle, marginBottom: 8, background: '#f8fafc' }}
+          style={{ ...cardSurfaceStyle, marginBottom: 8, background: palette.noGrowthCardBackground }}
           bodyStyle={{ padding: 10 }}
         >
           <div
@@ -230,13 +271,13 @@ export function CultureSensitivityEditor({
                             fontSize: 12,
                             padding: '2px 8px',
                             borderRadius: 999,
-                            background: '#e0ecff',
-                            color: '#1d4ed8',
+                            background: palette.isolateBadgeBackground,
+                            color: palette.isolateBadgeColor,
                           }}
                         >
                           Isolate {isolateIndex + 1}
                         </Text>
-                        <Text style={{ fontSize: 11, color: '#475569' }}>
+                        <Text style={{ fontSize: 11, color: palette.mutedText }}>
                           Culture details
                         </Text>
                       </div>
@@ -338,7 +379,8 @@ export function CultureSensitivityEditor({
                           style={{
                             border: '1px solid #dbeafe',
                             borderRadius: 10,
-                            background: '#f8fbff',
+                            borderColor: palette.antibioticPanelBorder,
+                            background: palette.antibioticPanelBackground,
                             padding: 8,
                           }}
                         >
@@ -353,7 +395,7 @@ export function CultureSensitivityEditor({
                             <Text strong style={{ fontSize: 11 }}>
                               Antibiotic list
                             </Text>
-                            <Text style={{ fontSize: 11, color: '#475569' }}>
+                            <Text style={{ fontSize: 11, color: palette.mutedText }}>
                               {rowFields.length} row{rowFields.length === 1 ? '' : 's'}
                             </Text>
                           </Space>
@@ -363,17 +405,17 @@ export function CultureSensitivityEditor({
                               gridTemplateColumns: antibioticGridColumns,
                               gap: 8,
                               padding: '0 0 6px',
-                              borderBottom: '1px solid #dbeafe',
+                              borderBottom: `1px solid ${palette.antibioticHeaderBorder}`,
                               marginBottom: 6,
                             }}
                           >
-                            <Text style={{ fontSize: 10, color: '#334155', fontWeight: 700 }}>
+                            <Text style={{ fontSize: 10, color: palette.antibioticHeaderText, fontWeight: 700 }}>
                               Antibiotic
                             </Text>
-                            <Text style={{ fontSize: 10, color: '#334155', fontWeight: 700 }}>
+                            <Text style={{ fontSize: 10, color: palette.antibioticHeaderText, fontWeight: 700 }}>
                               Result
                             </Text>
-                            <Text style={{ fontSize: 10, color: '#334155', fontWeight: 700 }}>
+                            <Text style={{ fontSize: 10, color: palette.antibioticHeaderText, fontWeight: 700 }}>
                               MIC
                             </Text>
                             <span />
@@ -388,12 +430,12 @@ export function CultureSensitivityEditor({
                             {rowFields.length === 0 ? (
                               <div
                                 style={{
-                                  border: '1px dashed #cbd5e1',
+                                  border: `1px dashed ${palette.emptyRowBorder}`,
                                   borderRadius: 8,
                                   padding: '10px 12px',
                                   fontSize: 11,
-                                  color: '#64748b',
-                                  background: '#ffffff',
+                                  color: palette.mutedText,
+                                  background: palette.emptyRowBackground,
                                 }}
                               >
                                 No antibiotic rows added yet.
@@ -410,8 +452,8 @@ export function CultureSensitivityEditor({
                                   alignItems: 'start',
                                   padding: 6,
                                   borderRadius: 8,
-                                  background: '#ffffff',
-                                  border: '1px solid #e2e8f0',
+                                  background: palette.rowBackground,
+                                  border: `1px solid ${palette.rowBorder}`,
                                 }}
                               >
                                 <Form.Item

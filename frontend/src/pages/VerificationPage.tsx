@@ -152,8 +152,10 @@ function resolveGroupByIdentity(
 ): WorklistOrderGroupSummary | null {
   if (groups.length === 0) return null;
   if (!currentGroup) return groups[0] ?? null;
-  if (currentGroup.groupKind === 'single') {
-    return groups.find((group) => group.groupKind === 'single') ?? null;
+  if (currentGroup.groupKind === 'single' || currentGroup.groupKind === 'culture') {
+    return (
+      groups.find((group) => group.groupKind === currentGroup.groupKind) ?? null
+    );
   }
   if (currentGroup.panelRootId) {
     return (
@@ -686,7 +688,9 @@ export function VerificationPage() {
                 key={group.groupId}
                 className={`verification-group-item ${group.groupKind === 'panel'
                   ? 'verification-group-item-panel'
-                  : 'verification-group-item-single'
+                  : group.groupKind === 'culture'
+                    ? 'verification-group-item-culture'
+                    : 'verification-group-item-single'
                   }`}
                 onClick={openGroup}
               >
@@ -811,6 +815,9 @@ export function VerificationPage() {
         }
         .verification-group-item-panel {
           background: ${isDark ? 'rgba(88,28,135,0.16)' : '#f5efff'};
+        }
+        .verification-group-item-culture {
+          background: ${isDark ? 'rgba(14,116,144,0.2)' : '#ecfeff'};
         }
         .verification-group-main {
           min-width: 0;

@@ -2,7 +2,7 @@ import type { WorklistItem } from '../api/client';
 
 export interface WorklistOrderGroupSummary {
   groupId: string;
-  groupKind: 'single' | 'panel';
+  groupKind: 'single' | 'culture' | 'panel';
   panelRootId?: string;
   label: string;
   testsCount: number;
@@ -72,7 +72,14 @@ function buildPanelCounters(panelRoot: WorklistItem, hasChildren: boolean) {
 
 export function buildWorklistOrderGroups(items: WorklistItem[]): WorklistOrderGroupSummary[] {
   const roots = items.filter((item) => !item.parentOrderTestId).sort(sortByOrder);
-  const singleRoots = roots.filter((item) => item.testType !== 'PANEL');
+  const singleRoots = roots.filter(
+    (item) =>
+      item.testType !== 'PANEL' && item.resultEntryType !== 'CULTURE_SENSITIVITY',
+  );
+  const cultureRoots = roots.filter(
+    (item) =>
+      item.testType !== 'PANEL' && item.resultEntryType === 'CULTURE_SENSITIVITY',
+  );
   const panelRoots = roots.filter((item) => item.testType === 'PANEL');
 
   const childrenByParent = new Map<string, WorklistItem[]>();
@@ -102,6 +109,23 @@ export function buildWorklistOrderGroups(items: WorklistItem[]): WorklistOrderGr
       isFullyEntered: counters.isFullyEntered,
       completedTargetIds: counters.completedTargetIds,
       items: singleRoots,
+    });
+  }
+
+  if (cultureRoots.length > 0) {
+    const counters = buildGroupCounters(cultureRoots);
+    groups.push({
+      groupId: 'culture',
+      groupKind: 'culture',
+      label: `Culture tests (${cultureRoots.length})`,
+      testsCount: cultureRoots.length,
+      pending: counters.pending,
+      completed: counters.completed,
+      verified: counters.verified,
+      rejected: counters.rejected,
+      isFullyEntered: counters.isFullyEntered,
+      completedTargetIds: counters.completedTargetIds,
+      items: cultureRoots,
     });
   }
 
