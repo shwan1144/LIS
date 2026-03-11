@@ -35,6 +35,7 @@ import { AdminSettingsPage } from './pages/admin/AdminSettingsPage';
 import { AdminLabDetailsPage } from './pages/admin/AdminLabDetailsPage';
 import { AdminAnnouncementsPage } from './pages/admin/AdminAnnouncementsPage';
 import { AdminBulkMessagingPage } from './pages/admin/AdminBulkMessagingPage';
+import { PublicResultProxyPage } from './pages/PublicResultProxyPage';
 import { Outlet } from 'react-router-dom';
 import { getCurrentAuthScope } from './utils/tenant-scope';
 import { InstallAppButton } from './components/InstallAppButton';
@@ -114,6 +115,7 @@ function AppContent() {
         <BrowserRouter>
           <InstallAppButton />
           <Routes>
+            <Route path="/public/results/:id/*" element={<PublicResultProxyPage />} />
             <Route path="/login" element={<LoginPage />} />
 
             {isAdminHost ? (
