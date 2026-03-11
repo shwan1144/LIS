@@ -105,7 +105,7 @@ function getMenuItems(role: string | undefined) {
 }
 
 export function AppLayout() {
-  const { user, lab, logout, currentShiftId, currentShiftLabel, setCurrentShift } = useAuth();
+  const { user, lab, logout, currentShiftLabel, setCurrentShift } = useAuth();
   const { isDark, toggleTheme } = useTheme();
   const navigate = useNavigate();
   const location = useLocation();
