@@ -70,6 +70,13 @@ let WorklistController = class WorklistController {
             mode: mode ?? worklist_service_1.WorklistOrderMode.ENTRY,
         }, actor.userId ?? undefined);
     }
+    async getCultureEntryHistory(req) {
+        const labId = req.user?.labId;
+        if (!labId) {
+            throw new Error('Lab ID not found in token');
+        }
+        return this.worklistService.getCultureEntryHistory(labId);
+    }
     async getWorklistItemDetail(req, id) {
         const labId = req.user?.labId;
         const actor = (0, lab_actor_context_1.buildLabActorContext)(req.user);
@@ -166,6 +173,13 @@ __decorate([
     __metadata("design:paramtypes", [Object, String, String, String]),
     __metadata("design:returntype", Promise)
 ], WorklistController.prototype, "getWorklistOrderTests", null);
+__decorate([
+    (0, common_1.Get)('culture-entry-history'),
+    __param(0, (0, common_1.Req)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object]),
+    __metadata("design:returntype", Promise)
+], WorklistController.prototype, "getCultureEntryHistory", null);
 __decorate([
     (0, common_1.Get)(':id/detail'),
     __param(0, (0, common_1.Req)()),

@@ -107,6 +107,10 @@ __decorate([
     __metadata("design:type", Array)
 ], Lab.prototype, "referringDoctors", void 0);
 __decorate([
+    (0, typeorm_1.Column)({ type: 'jsonb', default: () => "'{}'::jsonb" }),
+    __metadata("design:type", Object)
+], Lab.prototype, "cultureEntryHistory", void 0);
+__decorate([
     (0, typeorm_1.Column)({ type: 'varchar', length: 255, nullable: true }),
     __metadata("design:type", Object)
 ], Lab.prototype, "dashboardAnnouncementText", void 0);

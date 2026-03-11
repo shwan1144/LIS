@@ -2068,6 +2068,12 @@ export interface WorklistStats {
   rejected: number;
 }
 
+export interface CultureEntryHistoryDto {
+  microorganisms: string[];
+  conditions: string[];
+  colonyCounts: string[];
+}
+
 export async function getWorklist(params: WorklistParams): Promise<WorklistResult> {
   const queryParams: Record<string, string> = {};
   if (params.status?.length) queryParams.status = params.status.join(',');
@@ -2131,6 +2137,11 @@ export async function getWorklistOrderTests(
 
 export async function getWorklistStats(): Promise<WorklistStats> {
   const res = await api.get<WorklistStats>('/worklist/stats');
+  return res.data;
+}
+
+export async function getCultureEntryHistory(): Promise<CultureEntryHistoryDto> {
+  const res = await api.get<CultureEntryHistoryDto>('/worklist/culture-entry-history');
   return res.data;
 }
 

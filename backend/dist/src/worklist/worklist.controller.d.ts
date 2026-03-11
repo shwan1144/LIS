@@ -25,6 +25,7 @@ export declare class WorklistController {
         totalPages: number;
     }>;
     getWorklistOrderTests(req: RequestWithUser, orderId: string, departmentId?: string, mode?: WorklistOrderMode): Promise<import("./worklist.service").WorklistOrderTestsPayload>;
+    getCultureEntryHistory(req: RequestWithUser): Promise<import("./worklist.service").CultureEntryHistoryDto>;
     getWorklistItemDetail(req: RequestWithUser, id: string): Promise<import("./worklist.service").WorklistItem>;
     getStats(req: RequestWithUser): Promise<{
         pending: number;

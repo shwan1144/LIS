@@ -2,6 +2,11 @@ import { UserLabAssignment } from './user-lab-assignment.entity';
 import { Shift } from './shift.entity';
 import { Department } from './department.entity';
 import { Test } from './test.entity';
+export interface LabCultureEntryHistory {
+    microorganisms: string[];
+    conditions: string[];
+    colonyCounts: string[];
+}
 export declare class Lab {
     id: string;
     code: string;
@@ -29,6 +34,7 @@ export declare class Lab {
         testIds: string[];
     }[] | null;
     referringDoctors: string[];
+    cultureEntryHistory: LabCultureEntryHistory;
     dashboardAnnouncementText: string | null;
     createdAt: Date;
     updatedAt: Date;

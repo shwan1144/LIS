@@ -108,7 +108,13 @@ function createOrderTest(overrides: Partial<OrderTest> = {}): OrderTest {
   } as unknown as OrderTest;
 }
 
-function createService(orderTestRepo: MockRepo<OrderTest>) {
+function createService(
+  orderTestRepo: MockRepo<OrderTest>,
+  options?: {
+    labRepo?: MockRepo<Lab>;
+    antibioticRepo?: MockRepo<Antibiotic>;
+  },
+) {
   const panelStatusService = {
     recomputeAfterChildUpdate: jest.fn().mockResolvedValue(undefined),
     recomputePanelStatus: jest.fn().mockResolvedValue(undefined),
@@ -122,8 +128,8 @@ function createService(orderTestRepo: MockRepo<OrderTest>) {
     {} as Repository<Order>,
     {} as Repository<Test>,
     {} as Repository<TestAntibiotic>,
-    {} as Repository<Antibiotic>,
-    {} as Repository<Lab>,
+    (options?.antibioticRepo ?? {}) as unknown as Repository<Antibiotic>,
+    (options?.labRepo ?? {}) as unknown as Repository<Lab>,
     {} as Repository<UserDepartmentAssignment>,
     {} as Repository<Department>,
     panelStatusService as never,
@@ -206,5 +212,71 @@ describe('WorklistService result guards', () => {
     expect(valid.status).toBe(OrderTestStatus.VERIFIED);
     expect(blank.status).toBe(OrderTestStatus.COMPLETED);
     expect(auditService.log).toHaveBeenCalledTimes(1);
+  });
+
+  it('stores culture entry values in shared lab history after save', async () => {
+    const cultureTest = createTest({
+      resultEntryType: 'CULTURE_SENSITIVITY',
+      cultureConfig: {
+        interpretationOptions: ['S', 'I', 'R'],
+        micUnit: null,
+      },
+    });
+    const orderTest = createOrderTest({
+      test: cultureTest,
+    });
+    const orderTestRepo = {
+      findOne: jest.fn().mockResolvedValue(orderTest),
+      save: jest.fn().mockImplementation(async (value: OrderTest) => value),
+    };
+    const labRepo = {
+      findOne: jest.fn().mockResolvedValue({
+        id: 'lab-1',
+        cultureEntryHistory: {
+          microorganisms: ['Old isolate'],
+          conditions: ['Mixed growth'],
+          colonyCounts: ['10^4 CFU/mL'],
+        },
+      }),
+      update: jest.fn().mockResolvedValue(undefined),
+    };
+    const { service } = createService(orderTestRepo, { labRepo });
+
+    await service.enterResult(orderTest.id, 'lab-1', createActor(), {
+      cultureResult: {
+        noGrowth: false,
+        notes: '',
+        isolates: [
+          {
+            isolateKey: 'isolate-1',
+            organism: 'Klebsiella pneumoniae',
+            source: 'Urine',
+            condition: 'Heavy growth',
+            colonyCount: '>10^5 CFU/mL',
+            comment: '',
+            antibiotics: [
+              {
+                antibioticCode: 'CRO',
+                antibioticName: 'Ceftriaxone',
+                interpretation: 'R',
+                mic: null,
+              },
+            ],
+          },
+        ],
+      },
+    });
+
+    expect(labRepo.update).toHaveBeenCalledTimes(1);
+    expect(labRepo.update).toHaveBeenCalledWith(
+      { id: 'lab-1' },
+      {
+        cultureEntryHistory: {
+          microorganisms: ['Klebsiella pneumoniae', 'Old isolate'],
+          conditions: ['Heavy growth', 'Mixed growth'],
+          colonyCounts: ['>10^5 CFU/mL', '10^4 CFU/mL'],
+        },
+      },
+    );
   });
 });

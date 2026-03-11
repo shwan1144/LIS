@@ -11,6 +11,12 @@ import { Shift } from './shift.entity';
 import { Department } from './department.entity';
 import { Test } from './test.entity';
 
+export interface LabCultureEntryHistory {
+  microorganisms: string[];
+  conditions: string[];
+  colonyCounts: string[];
+}
+
 @Entity('labs')
 export class Lab {
   @PrimaryGeneratedColumn('uuid')
@@ -94,6 +100,10 @@ export class Lab {
   /** Shared per-lab doctor names used for referral selection. */
   @Column({ type: 'jsonb', default: () => "'[]'::jsonb" })
   referringDoctors: string[];
+
+  /** Shared per-lab culture data-entry suggestions (microorganism/condition/colony). */
+  @Column({ type: 'jsonb', default: () => "'{}'::jsonb" })
+  cultureEntryHistory: LabCultureEntryHistory;
 
   /** Optional dashboard announcement shown in the lab panel dashboard. */
   @Column({ type: 'varchar', length: 255, nullable: true })

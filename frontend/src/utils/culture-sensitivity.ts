@@ -1,14 +1,6 @@
 import type { AntibioticDto, CultureResultPayload } from '../api/client';
 
 type UnknownRecord = Record<string, unknown>;
-type CultureHistoryField = 'organism' | 'condition' | 'colonyCount';
-
-const CULTURE_HISTORY_STORAGE_KEY: Record<CultureHistoryField, string> = {
-  organism: 'lis_culture_history_organism',
-  condition: 'lis_culture_history_condition',
-  colonyCount: 'lis_culture_history_colony_count',
-};
-const CULTURE_HISTORY_LIMIT = 60;
 
 function toText(value: unknown): string {
   return typeof value === 'string' ? value.trim() : '';
@@ -17,66 +9,6 @@ function toText(value: unknown): string {
 function toNullableText(value: unknown): string | null {
   const text = toText(value);
   return text.length > 0 ? text : null;
-}
-
-function readCultureHistory(field: CultureHistoryField): string[] {
-  if (typeof window === 'undefined') return [];
-  try {
-    const raw = window.localStorage.getItem(CULTURE_HISTORY_STORAGE_KEY[field]);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return [];
-    const result: string[] = [];
-    const seen = new Set<string>();
-    for (const value of parsed) {
-      if (typeof value !== 'string') continue;
-      const trimmed = value.trim();
-      if (!trimmed) continue;
-      const normalized = trimmed.toLowerCase();
-      if (seen.has(normalized)) continue;
-      seen.add(normalized);
-      result.push(trimmed);
-      if (result.length >= CULTURE_HISTORY_LIMIT) break;
-    }
-    return result;
-  } catch {
-    return [];
-  }
-}
-
-function writeCultureHistory(field: CultureHistoryField, values: string[]): void {
-  if (typeof window === 'undefined') return;
-  try {
-    window.localStorage.setItem(
-      CULTURE_HISTORY_STORAGE_KEY[field],
-      JSON.stringify(values.slice(0, CULTURE_HISTORY_LIMIT)),
-    );
-  } catch {
-    // Ignore storage failures.
-  }
-}
-
-export function getCultureHistoryValues(field: CultureHistoryField): string[] {
-  return readCultureHistory(field);
-}
-
-export function rememberCultureHistoryValue(
-  field: CultureHistoryField,
-  value: string,
-): string[] {
-  const trimmed = value.trim();
-  if (!trimmed) {
-    return readCultureHistory(field);
-  }
-  const existing = readCultureHistory(field);
-  const next = [
-    trimmed,
-    ...existing.filter(
-      (item) => item.trim().toLowerCase() !== trimmed.toLowerCase(),
-    ),
-  ].slice(0, CULTURE_HISTORY_LIMIT);
-  writeCultureHistory(field, next);
-  return next;
 }
 
 export function formatCultureResultSummary(

@@ -723,6 +723,16 @@ let WorklistService = WorklistService_1 = class WorklistService {
             }
         }
     }
+    async getCultureEntryHistory(labId) {
+        const lab = await this.labRepo.findOne({
+            where: { id: labId },
+            select: ['id', 'cultureEntryHistory'],
+        });
+        if (!lab) {
+            throw new common_1.NotFoundException('Lab not found');
+        }
+        return this.normalizeCultureEntryHistory(lab.cultureEntryHistory);
+    }
     async enterResult(orderTestId, labId, actor, data, actorRole) {
         const orderTest = await this.orderTestRepo.findOne({
             where: { id: orderTestId },
@@ -828,6 +838,10 @@ let WorklistService = WorklistService_1 = class WorklistService {
             orderTest.verifiedBy = actor.userId ?? orderTest.verifiedBy;
         }
         const saved = await this.orderTestRepo.save(orderTest);
+        if (resultEntryType === 'CULTURE_SENSITIVITY' &&
+            orderTest.cultureResult) {
+            await this.appendCultureEntryHistorySafe(labId, [orderTest.cultureResult]);
+        }
         await this.panelStatusService.recomputeAfterChildUpdate(orderTest.id);
         await this.syncOrderStatus(orderTest.sample.orderId);
         const impersonationAudit = actor.isImpersonation && actor.platformUserId
@@ -997,6 +1011,10 @@ let WorklistService = WorklistService_1 = class WorklistService {
         }
         if (toSave.length > 0) {
             await this.orderTestRepo.save(toSave);
+            await this.appendCultureEntryHistorySafe(labId, toSave
+                .filter((orderTest) => this.normalizeResultEntryType(orderTest.test.resultEntryType) ===
+                'CULTURE_SENSITIVITY')
+                .map((orderTest) => orderTest.cultureResult));
             for (const panelRootId of updatedPanelRootIds) {
                 await this.panelStatusService.recomputePanelStatus(panelRootId);
             }
@@ -1537,6 +1555,119 @@ let WorklistService = WorklistService_1 = class WorklistService {
             isolates,
         };
     }
+    async appendCultureEntryHistorySafe(labId, cultureResults) {
+        try {
+            await this.appendCultureEntryHistory(labId, cultureResults);
+        }
+        catch (error) {
+            this.logger.warn(`Failed to persist culture entry history for lab ${labId}: ${error instanceof Error ? error.message : String(error)}`);
+        }
+    }
+    async appendCultureEntryHistory(labId, cultureResults) {
+        const additions = this.collectCultureEntryHistory(cultureResults);
+        if (additions.microorganisms.length === 0 &&
+            additions.conditions.length === 0 &&
+            additions.colonyCounts.length === 0) {
+            return;
+        }
+        const lab = await this.labRepo.findOne({
+            where: { id: labId },
+            select: ['id', 'cultureEntryHistory'],
+        });
+        if (!lab) {
+            return;
+        }
+        const current = this.normalizeCultureEntryHistory(lab.cultureEntryHistory);
+        const next = {
+            microorganisms: this.prependUniqueHistoryValues(additions.microorganisms, current.microorganisms),
+            conditions: this.prependUniqueHistoryValues(additions.conditions, current.conditions),
+            colonyCounts: this.prependUniqueHistoryValues(additions.colonyCounts, current.colonyCounts),
+        };
+        if (this.areHistoryArraysEqual(next.microorganisms, current.microorganisms) &&
+            this.areHistoryArraysEqual(next.conditions, current.conditions) &&
+            this.areHistoryArraysEqual(next.colonyCounts, current.colonyCounts)) {
+            return;
+        }
+        await this.labRepo.update({ id: labId }, { cultureEntryHistory: next });
+    }
+    collectCultureEntryHistory(cultureResults) {
+        const microorganisms = [];
+        const conditions = [];
+        const colonyCounts = [];
+        for (const result of cultureResults) {
+            if (!result || typeof result !== 'object')
+                continue;
+            const isolates = Array.isArray(result.isolates) ? result.isolates : [];
+            for (const isolate of isolates) {
+                const organism = typeof isolate?.organism === 'string' ? isolate.organism.trim() : '';
+                const condition = typeof isolate?.condition === 'string' ? isolate.condition.trim() : '';
+                const colonyCount = typeof isolate?.colonyCount === 'string'
+                    ? isolate.colonyCount.trim()
+                    : '';
+                if (organism && organism !== '-') {
+                    microorganisms.push(organism);
+                }
+                if (condition) {
+                    conditions.push(condition);
+                }
+                if (colonyCount) {
+                    colonyCounts.push(colonyCount);
+                }
+            }
+        }
+        return {
+            microorganisms: this.normalizeHistoryList(microorganisms),
+            conditions: this.normalizeHistoryList(conditions),
+            colonyCounts: this.normalizeHistoryList(colonyCounts),
+        };
+    }
+    normalizeCultureEntryHistory(value) {
+        const source = value && typeof value === 'object' ? value : {};
+        return {
+            microorganisms: this.normalizeHistoryList(source.microorganisms),
+            conditions: this.normalizeHistoryList(source.conditions),
+            colonyCounts: this.normalizeHistoryList(source.colonyCounts),
+        };
+    }
+    normalizeHistoryList(value) {
+        if (!Array.isArray(value))
+            return [];
+        const normalized = [];
+        const seen = new Set();
+        for (const raw of value) {
+            if (typeof raw !== 'string')
+                continue;
+            const trimmed = raw.trim();
+            if (!trimmed)
+                continue;
+            if (trimmed.length > WorklistService_1.CULTURE_HISTORY_MAX_VALUE_LENGTH) {
+                continue;
+            }
+            const key = trimmed.toLocaleLowerCase();
+            if (seen.has(key))
+                continue;
+            seen.add(key);
+            normalized.push(trimmed);
+            if (normalized.length >= WorklistService_1.CULTURE_HISTORY_MAX_ITEMS)
+                break;
+        }
+        return normalized;
+    }
+    prependUniqueHistoryValues(additions, existing) {
+        return this.normalizeHistoryList([
+            ...additions,
+            ...existing,
+        ]).slice(0, WorklistService_1.CULTURE_HISTORY_MAX_ITEMS);
+    }
+    areHistoryArraysEqual(left, right) {
+        if (left.length !== right.length)
+            return false;
+        for (let index = 0; index < left.length; index += 1) {
+            if (left[index] !== right[index])
+                return false;
+        }
+        return true;
+    }
     async attachCultureAntibioticIds(items) {
         if (!items.length)
             return items;
@@ -1700,6 +1831,8 @@ let WorklistService = WorklistService_1 = class WorklistService {
     }
 };
 exports.WorklistService = WorklistService;
+WorklistService.CULTURE_HISTORY_MAX_ITEMS = 200;
+WorklistService.CULTURE_HISTORY_MAX_VALUE_LENGTH = 120;
 exports.WorklistService = WorklistService = WorklistService_1 = __decorate([
     (0, common_1.Injectable)(),
     __param(0, (0, typeorm_1.InjectRepository)(order_test_entity_1.OrderTest)),

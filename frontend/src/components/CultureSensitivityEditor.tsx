@@ -3,9 +3,9 @@ import { AutoComplete, Button, Card, Form, Input, Select, Space, Switch, Typogra
 import { DeleteOutlined, PlusOutlined } from '@ant-design/icons';
 import { useTheme } from '../contexts/ThemeContext';
 import {
-  getCultureHistoryValues,
-  rememberCultureHistoryValue,
-} from '../utils/culture-sensitivity';
+  getCultureEntryHistory,
+  type CultureEntryHistoryDto,
+} from '../api/client';
 
 const { Text } = Typography;
 const DEFAULT_NO_GROWTH_RESULT = 'No growth of microorganizm';
@@ -67,6 +67,50 @@ function mergeAutoCompleteOptions(
   return merged;
 }
 
+function mergeHistoryValues(incoming: string[], existing: string[]): string[] {
+  const seen = new Set<string>();
+  const merged: string[] = [];
+  for (const raw of [...incoming, ...existing]) {
+    const value = raw.trim();
+    if (!value) continue;
+    const normalized = value.toLowerCase();
+    if (seen.has(normalized)) continue;
+    seen.add(normalized);
+    merged.push(value);
+  }
+  return merged.slice(0, 200);
+}
+
+const EMPTY_CULTURE_ENTRY_HISTORY: CultureEntryHistoryDto = {
+  microorganisms: [],
+  conditions: [],
+  colonyCounts: [],
+};
+
+let cultureEntryHistoryCache: CultureEntryHistoryDto | null = null;
+let cultureEntryHistoryPromise: Promise<CultureEntryHistoryDto> | null = null;
+
+async function loadCultureEntryHistory(): Promise<CultureEntryHistoryDto> {
+  if (cultureEntryHistoryCache) return cultureEntryHistoryCache;
+  if (!cultureEntryHistoryPromise) {
+    cultureEntryHistoryPromise = getCultureEntryHistory()
+      .then((history) => {
+        const normalized: CultureEntryHistoryDto = {
+          microorganisms: mergeHistoryValues(history.microorganisms ?? [], []),
+          conditions: mergeHistoryValues(history.conditions ?? [], []),
+          colonyCounts: mergeHistoryValues(history.colonyCounts ?? [], []),
+        };
+        cultureEntryHistoryCache = normalized;
+        return normalized;
+      })
+      .catch(() => EMPTY_CULTURE_ENTRY_HISTORY)
+      .finally(() => {
+        cultureEntryHistoryPromise = null;
+      });
+  }
+  return cultureEntryHistoryPromise;
+}
+
 export interface CultureAntibioticOption {
   value: string;
   label: string;
@@ -93,15 +137,9 @@ export function CultureSensitivityEditor({
   const form = Form.useFormInstance();
   const noGrowth = Form.useWatch([...baseName, 'noGrowth']);
   const noGrowthResult = Form.useWatch([...baseName, 'noGrowthResult']);
-  const [organismHistory, setOrganismHistory] = useState<string[]>(
-    () => getCultureHistoryValues('organism'),
-  );
-  const [conditionHistory, setConditionHistory] = useState<string[]>(
-    () => getCultureHistoryValues('condition'),
-  );
-  const [colonyCountHistory, setColonyCountHistory] = useState<string[]>(
-    () => getCultureHistoryValues('colonyCount'),
-  );
+  const [organismHistory, setOrganismHistory] = useState<string[]>([]);
+  const [conditionHistory, setConditionHistory] = useState<string[]>([]);
+  const [colonyCountHistory, setColonyCountHistory] = useState<string[]>([]);
   const organismOptions = useMemo(
     () => mergeAutoCompleteOptions([], organismHistory),
     [organismHistory],
@@ -118,16 +156,38 @@ export function CultureSensitivityEditor({
   );
   const rememberHistoryForField = useCallback(
     (field: 'organism' | 'condition' | 'colonyCount', rawValue: string) => {
-      const next = rememberCultureHistoryValue(field, rawValue);
+      const trimmed = rawValue.trim();
+      if (!trimmed) return;
       if (field === 'organism') {
-        setOrganismHistory(next);
+        setOrganismHistory((current) => mergeHistoryValues([trimmed], current));
+        cultureEntryHistoryCache = {
+          ...(cultureEntryHistoryCache ?? EMPTY_CULTURE_ENTRY_HISTORY),
+          microorganisms: mergeHistoryValues(
+            [trimmed],
+            cultureEntryHistoryCache?.microorganisms ?? [],
+          ),
+        };
         return;
       }
       if (field === 'condition') {
-        setConditionHistory(next);
+        setConditionHistory((current) => mergeHistoryValues([trimmed], current));
+        cultureEntryHistoryCache = {
+          ...(cultureEntryHistoryCache ?? EMPTY_CULTURE_ENTRY_HISTORY),
+          conditions: mergeHistoryValues(
+            [trimmed],
+            cultureEntryHistoryCache?.conditions ?? [],
+          ),
+        };
         return;
       }
-      setColonyCountHistory(next);
+      setColonyCountHistory((current) => mergeHistoryValues([trimmed], current));
+      cultureEntryHistoryCache = {
+        ...(cultureEntryHistoryCache ?? EMPTY_CULTURE_ENTRY_HISTORY),
+        colonyCounts: mergeHistoryValues(
+          [trimmed],
+          cultureEntryHistoryCache?.colonyCounts ?? [],
+        ),
+      };
     },
     [],
   );
@@ -192,6 +252,23 @@ export function CultureSensitivityEditor({
     borderRadius: 10,
     background: palette.cardBackground,
   };
+
+  useEffect(() => {
+    let active = true;
+    void loadCultureEntryHistory()
+      .then((history) => {
+        if (!active) return;
+        setOrganismHistory(history.microorganisms ?? []);
+        setConditionHistory(history.conditions ?? []);
+        setColonyCountHistory(history.colonyCounts ?? []);
+      })
+      .catch(() => {
+        // Ignore history fetch failure and continue with built-in options.
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   useEffect(() => {
     if (!noGrowth) return;

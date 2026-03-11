@@ -144,6 +144,15 @@ export class WorklistController {
     );
   }
 
+  @Get('culture-entry-history')
+  async getCultureEntryHistory(@Req() req: RequestWithUser) {
+    const labId = req.user?.labId;
+    if (!labId) {
+      throw new Error('Lab ID not found in token');
+    }
+    return this.worklistService.getCultureEntryHistory(labId);
+  }
+
   @Get(':id/detail')
   async getWorklistItemDetail(
     @Req() req: RequestWithUser,

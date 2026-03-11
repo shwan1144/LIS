@@ -97,6 +97,11 @@ export interface WorklistOrderTestsPayload {
     patientAgeDisplay: string | null;
     items: WorklistItem[];
 }
+export interface CultureEntryHistoryDto {
+    microorganisms: string[];
+    conditions: string[];
+    colonyCounts: string[];
+}
 export declare class WorklistService {
     private readonly orderTestRepo;
     private readonly orderRepo;
@@ -108,6 +113,8 @@ export declare class WorklistService {
     private readonly departmentRepo;
     private readonly panelStatusService;
     private readonly auditService;
+    private static readonly CULTURE_HISTORY_MAX_ITEMS;
+    private static readonly CULTURE_HISTORY_MAX_VALUE_LENGTH;
     private readonly logger;
     private readonly worklistPerfLogThresholdMs;
     constructor(orderTestRepo: Repository<OrderTest>, orderRepo: Repository<Order>, testRepo: Repository<Test>, testAntibioticRepo: Repository<TestAntibiotic>, antibioticRepo: Repository<Antibiotic>, labRepo: Repository<Lab>, userDeptRepo: Repository<UserDepartmentAssignment>, departmentRepo: Repository<Department>, panelStatusService: PanelStatusService, auditService: AuditService);
@@ -144,6 +151,7 @@ export declare class WorklistService {
         departmentId?: string;
     }, userId?: string): Promise<WorklistOrderTestsPayload>;
     getWorklistItemDetail(orderTestId: string, labId: string, userId?: string): Promise<WorklistItem>;
+    getCultureEntryHistory(labId: string): Promise<CultureEntryHistoryDto>;
     enterResult(orderTestId: string, labId: string, actor: LabActorContext, data: {
         resultValue?: number | null;
         resultText?: string | null;
@@ -176,6 +184,13 @@ export declare class WorklistService {
     private normalizeCultureResultFromStorage;
     private summarizeCultureResult;
     private normalizeCultureResultInput;
+    private appendCultureEntryHistorySafe;
+    private appendCultureEntryHistory;
+    private collectCultureEntryHistory;
+    private normalizeCultureEntryHistory;
+    private normalizeHistoryList;
+    private prependUniqueHistoryValues;
+    private areHistoryArraysEqual;
     private attachCultureAntibioticIds;
     private findMatchingResultTextOption;
     private resolveFlagFromResultText;
