@@ -699,6 +699,15 @@ export function OrdersPage() {
     };
   }, [patientPickerModalOpen, patientPickerSearchInput]);
 
+  // Debounced auto-search: sync listQuery from listQueryInput after 400ms of idle typing
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setListQuery(listQueryInput.trim());
+      setListPage(1);
+    }, 400);
+    return () => window.clearTimeout(timer);
+  }, [listQueryInput]);
+
   useEffect(() => {
     void loadOrderHistory();
   }, [loadOrderHistory]);
@@ -2035,109 +2044,12 @@ export function OrdersPage() {
 
   return (
     <div className="orders-page-shell">
-      <Card size="small" className="orders-page-header-card">
-        <div className="orders-page-header-row">
-          <div className="orders-page-heading-block">
-            <Title level={4} style={{ marginTop: 0, marginBottom: 2 }}>
-              Orders {listTotal > 0 && (
-                <Text type="secondary" style={{ fontWeight: 'normal', fontSize: 14 }}>({listTotal} total)</Text>
-              )}
-            </Title>
-            <Text type="secondary">Create orders with fast summary response and background detail hydration.</Text>
-          </div>
-          <div className="orders-page-header-meta">
-            {selectedPatient ? (
-              <div className="orders-header-context">
-                <div className="orders-header-context-row orders-header-context-top">
-                  <div className="orders-header-top-main">
-                    <Tag color={isSelectedLocked ? 'success' : 'processing'} style={{ margin: 0 }}>
-                      {isSelectedLocked ? 'Locked order' : 'Draft order'}
-                    </Tag>
-                    <Text strong className="orders-header-patient-name" title={getPatientName(selectedPatient)}>
-                      {getPatientName(selectedPatient)}
-                    </Text>
-                  </div>
-                  <div className="orders-header-top-side">
-                    {selectedCreatedOrderSummary ? (
-                      <Tag color="blue" style={{ margin: 0 }}>
-                        Order #{selectedCreatedOrderSummary.orderNumber || selectedCreatedOrderSummary.id.substring(0, 8)}
-                      </Tag>
-                    ) : nextOrderNumber ? (
-                      <Tag color="gold" style={{ margin: 0 }}>Next #{nextOrderNumber}</Tag>
-                    ) : null}
-                  </div>
-                </div>
-                <div className="orders-header-context-row orders-header-context-bottom">
-                  {isSelectedLocked && selectedCreatedOrderSummary ? (
-                    <>
-                      <div className="orders-header-bottom-main">
-                        <span className="orders-header-context-item">
-                          <Text type="secondary">Shift:</Text>
-                          <Text strong>
-                            {selectedCreatedOrderSummary.shift?.name ||
-                              selectedCreatedOrderSummary.shift?.code ||
-                              currentShiftLabel ||
-                              '-'}
-                          </Text>
-                        </span>
-                        <span className="orders-header-context-item">
-                          <Text type="secondary">Time:</Text>
-                          <Text strong>{dayjs(selectedCreatedOrderSummary.registeredAt).format('YYYY-MM-DD HH:mm')}</Text>
-                        </span>
-                        <span className="orders-header-context-item orders-header-referred-item">
-                          <Text type="secondary">Referred by:</Text>
-                          <Text
-                            strong
-                            className="orders-header-referred-value"
-                            title={selectedCreatedOrder?.notes?.trim() || '-'}
-                          >
-                            {selectedCreatedOrder?.notes?.trim() || '-'}
-                          </Text>
-                        </span>
-                      </div>
-                      <div className="orders-header-bottom-side">
-                        <Tag
-                          color="success"
-                          icon={<LockOutlined />}
-                          className="orders-header-lock-tag"
-                          style={{ margin: 0 }}
-                        >
-                          Locked for delete - test list can still be edited
-                        </Tag>
-                      </div>
-                    </>
-                  ) : (
-                    <div className="orders-header-bottom-main">
-                      <span className="orders-header-context-item">
-                        <Text type="secondary">Shift:</Text>
-                        <Text strong>{currentShiftLabel || '-'}</Text>
-                      </span>
-                    </div>
-                  )}
-                </div>
-              </div>
-            ) : (
-              <div className="orders-header-context">
-                <div className="orders-header-context-row orders-header-context-top">
-                  <Tag color="default" style={{ margin: 0 }}>
-                    No selection
-                  </Tag>
-                </div>
-                <div className="orders-header-context-row orders-header-context-bottom">
-                  <Text type="secondary">Select a row to begin</Text>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-      </Card>
-
       <Row gutter={[16, 16]} className="orders-main-grid">
         <Col xs={24} md={12} lg={10}>
           <Card
             className="orders-history-card"
-            style={{ minWidth: 260, height: 'calc(100vh - 252px)', display: 'flex', flexDirection: 'column' }}
-            title="Order History"
+            style={{ minWidth: 260, height: 'calc(100vh - 140px)', display: 'flex', flexDirection: 'column' }}
+            title={<>Order History {listTotal > 0 && <Text type="secondary" style={{ fontWeight: 'normal', fontSize: 13 }}>({listTotal})</Text>}</>}
             extra={
               <Space>
                 <Button
@@ -2182,7 +2094,6 @@ export function OrdersPage() {
                   allowClear
                   prefix={<SearchOutlined />}
                   onChange={(e) => setListQueryInput(e.target.value)}
-                  onPressEnter={handleApplyHistorySearch}
                   disabled={historyRefreshing || patientBootstrapLoading}
                 />
                 <Space
@@ -2378,7 +2289,7 @@ export function OrdersPage() {
         <Col xs={24} md={12} lg={14}>
           <Card
             className="orders-right-card orders-workspace-card"
-            style={{ height: 'calc(100vh - 252px)', display: 'flex', flexDirection: 'column' }}
+            style={{ height: 'calc(100vh - 140px)', display: 'flex', flexDirection: 'column' }}
             bodyStyle={{
               overflow: 'hidden',
               paddingTop: 12,

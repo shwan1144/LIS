@@ -49,7 +49,10 @@ type GfaGraphic = {
   width: number;
 };
 
-const textGraphicCache = new Map<string, Promise<GfaGraphic>>();
+const textGraphicCache = new Map<string, GfaGraphic>();
+const textGraphicInFlightCache = new Map<string, Promise<GfaGraphic>>();
+const compositeLayerGraphicCache = new Map<string, GfaGraphic>();
+const compositeLayerGraphicInFlightCache = new Map<string, Promise<GfaGraphic>>();
 
 type LayoutMetrics = {
   barcodeBoxWidth: number;
@@ -82,6 +85,21 @@ type LayoutMetrics = {
   topRowHeight: number;
 };
 
+type CompositeRasterLabelLayerParams = {
+  geometry: ZebraLabelGeometry;
+  label: SampleLabelViewModel;
+  layout: LayoutMetrics;
+  patientIdText: string;
+  patientIdTopOffset: number;
+  patientNameText: string;
+  nameTopOffset: number;
+  registeredAtText: string;
+  sequenceText: string;
+  sexText: string;
+  sexTopOffset: number;
+  testCodesText: string;
+};
+
 export type { ZebraLabelPrinterConfig, ZebraLabelGeometry };
 
 export async function generateZebraLabelZpl(params: {
@@ -104,6 +122,13 @@ export function resolveZebraLabelGeometry(
   printerConfig?: ZebraLabelPrinterConfig | null,
 ): ZebraLabelGeometry {
   return resolveLabelGeometry(printerConfig, DEFAULT_LABEL_LAYOUT_SPEC);
+}
+
+export function clearLabelGraphicCache(): void {
+  textGraphicCache.clear();
+  textGraphicInFlightCache.clear();
+  compositeLayerGraphicCache.clear();
+  compositeLayerGraphicInFlightCache.clear();
 }
 
 async function buildZplDocument(
@@ -164,7 +189,7 @@ async function buildZplDocument(
     patientIdGraphic,
   ] = await Promise.all([
     patientNameShouldRenderGraphic
-      ? renderTextGraphic({
+      ? cachedRenderTextGraphic({
         align: 'start',
         fontSize: patientNameFontSize,
         fontWeight: 700,
@@ -175,7 +200,7 @@ async function buildZplDocument(
         width: layout.nameWidth,
       })
       : Promise.resolve(null),
-    renderTextGraphic({
+    cachedRenderTextGraphic({
       align: 'center',
       fontSize: Math.max(11, Math.round(geometry.heightDots * 0.062)),
       fontWeight: 600,
@@ -185,7 +210,7 @@ async function buildZplDocument(
       width: layout.sequenceMetaWidth,
     }),
     testCodesText
-      ? renderTextGraphic({
+      ? cachedRenderTextGraphic({
         align: 'center',
         fontSize: Math.max(11, Math.round(geometry.heightDots * 0.066)),
         fontWeight: 700,
@@ -196,7 +221,7 @@ async function buildZplDocument(
         width: layout.barcodeBoxWidth,
       })
       : Promise.resolve(null),
-    renderTextGraphic({
+    cachedRenderTextGraphic({
       align: 'center',
       fontSize: Math.max(13, Math.round(geometry.heightDots * 0.076)),
       fontWeight: 700,
@@ -206,7 +231,7 @@ async function buildZplDocument(
       width: layout.sequenceMainWidth,
     }),
     needsRasterText(patientIdText)
-      ? renderTextGraphic({
+      ? cachedRenderTextGraphic({
         align: 'center',
         fontSize: Math.max(14, Math.round(geometry.heightDots * 0.078)),
         fontWeight: 700,
@@ -326,20 +351,9 @@ async function buildZplDocument(
   return lines.filter(Boolean).join('\n');
 }
 
-async function buildCompositeRasterLabelDocument(params: {
-  geometry: ZebraLabelGeometry;
-  label: SampleLabelViewModel;
-  layout: LayoutMetrics;
-  patientIdText: string;
-  patientIdTopOffset: number;
-  patientNameText: string;
-  nameTopOffset: number;
-  registeredAtText: string;
-  sequenceText: string;
-  sexText: string;
-  sexTopOffset: number;
-  testCodesText: string;
-}): Promise<string> {
+async function buildCompositeRasterLabelDocument(
+  params: CompositeRasterLabelLayerParams,
+): Promise<string> {
   const textLayerGraphic = await renderCompositeRasterLabelLayer(params);
   const moduleWidth = pickCode128ModuleWidth(
     params.label.barcodeValue,
@@ -370,20 +384,39 @@ async function buildCompositeRasterLabelDocument(params: {
   ].join('\n');
 }
 
-async function renderCompositeRasterLabelLayer(params: {
-  geometry: ZebraLabelGeometry;
-  label: SampleLabelViewModel;
-  layout: LayoutMetrics;
-  patientIdText: string;
-  patientIdTopOffset: number;
-  patientNameText: string;
-  nameTopOffset: number;
-  registeredAtText: string;
-  sequenceText: string;
-  sexText: string;
-  sexTopOffset: number;
-  testCodesText: string;
-}): Promise<GfaGraphic> {
+async function renderCompositeRasterLabelLayer(
+  params: CompositeRasterLabelLayerParams,
+): Promise<GfaGraphic> {
+  const cacheKey = buildCompositeLayerCacheKey(params);
+  const cached = compositeLayerGraphicCache.get(cacheKey);
+  if (cached) {
+    return cached;
+  }
+
+  const inFlight = compositeLayerGraphicInFlightCache.get(cacheKey);
+  if (inFlight) {
+    return inFlight;
+  }
+
+  const promise = renderCompositeRasterLabelLayerUncached(params)
+    .then((graphic) => {
+      compositeLayerGraphicCache.set(cacheKey, graphic);
+      return graphic;
+    })
+    .catch((error) => {
+      compositeLayerGraphicCache.delete(cacheKey);
+      throw error;
+    })
+    .finally(() => {
+      compositeLayerGraphicInFlightCache.delete(cacheKey);
+    });
+  compositeLayerGraphicInFlightCache.set(cacheKey, promise);
+  return promise;
+}
+
+async function renderCompositeRasterLabelLayerUncached(
+  params: CompositeRasterLabelLayerParams,
+): Promise<GfaGraphic> {
   const allText = [
     params.patientNameText,
     params.sexText,
@@ -766,8 +799,8 @@ function computeLayout(geometry: ZebraLabelGeometry): LayoutMetrics {
   };
 }
 
-async function renderTextGraphic(options: TextGraphicOptions): Promise<GfaGraphic> {
-  const cacheKey = JSON.stringify({
+function buildTextGraphicCacheKey(options: TextGraphicOptions): string {
+  return JSON.stringify({
     align: options.align ?? 'start',
     fontSize: options.fontSize,
     fontWeight: options.fontWeight ?? 400,
@@ -780,22 +813,63 @@ async function renderTextGraphic(options: TextGraphicOptions): Promise<GfaGraphi
     text: collapseWhitespace(options.text),
     width: Math.floor(options.width),
   });
+}
+
+function buildCompositeLayerCacheKey(params: CompositeRasterLabelLayerParams): string {
+  return JSON.stringify({
+    geometry: {
+      dpiX: params.geometry.dpiX,
+      dpiY: params.geometry.dpiY,
+      heightDots: params.geometry.heightDots,
+      widthDots: params.geometry.widthDots,
+    },
+    layout: params.layout,
+    offsets: {
+      nameTopOffset: params.nameTopOffset,
+      patientIdTopOffset: params.patientIdTopOffset,
+      sexTopOffset: params.sexTopOffset,
+    },
+    text: {
+      barcodeText: collapseWhitespace(params.label.barcodeText),
+      patientIdText: collapseWhitespace(params.patientIdText),
+      patientNameText: collapseWhitespace(params.patientNameText),
+      registeredAtText: collapseWhitespace(params.registeredAtText),
+      sequenceText: collapseWhitespace(params.sequenceText),
+      sexText: collapseWhitespace(params.sexText),
+      testCodesText: collapseWhitespace(params.testCodesText),
+    },
+  });
+}
+
+async function cachedRenderTextGraphic(options: TextGraphicOptions): Promise<GfaGraphic> {
+  const cacheKey = buildTextGraphicCacheKey(options);
   const cached = textGraphicCache.get(cacheKey);
   if (cached) {
     return cached;
   }
 
-  const promise = renderTextGraphicUncached(options);
-  textGraphicCache.set(cacheKey, promise);
-  try {
-    return await promise;
-  } catch (error) {
-    textGraphicCache.delete(cacheKey);
-    throw error;
+  const inFlight = textGraphicInFlightCache.get(cacheKey);
+  if (inFlight) {
+    return inFlight;
   }
+
+  const promise = renderTextGraphic(options)
+    .then((graphic) => {
+      textGraphicCache.set(cacheKey, graphic);
+      return graphic;
+    })
+    .catch((error) => {
+      textGraphicCache.delete(cacheKey);
+      throw error;
+    })
+    .finally(() => {
+      textGraphicInFlightCache.delete(cacheKey);
+    });
+  textGraphicInFlightCache.set(cacheKey, promise);
+  return promise;
 }
 
-async function renderTextGraphicUncached(options: TextGraphicOptions): Promise<GfaGraphic> {
+async function renderTextGraphic(options: TextGraphicOptions): Promise<GfaGraphic> {
   const width = Math.max(1, Math.floor(options.width));
   const height = Math.max(1, Math.floor(options.height));
   const rotation = options.rotation ?? 0;

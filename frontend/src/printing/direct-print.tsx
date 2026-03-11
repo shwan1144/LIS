@@ -8,6 +8,7 @@ import axios from 'axios';
 import { jsPDF } from 'jspdf';
 import html2canvas from 'html2canvas';
 import {
+  clearLabelGraphicCache,
   generateZebraLabelZpl,
   resolveZebraLabelGeometry,
   type ZebraLabelPrinterConfig,
@@ -420,83 +421,87 @@ export async function directPrintLabels(params: {
   let printerConfig: GatewayPrinterConfigResponse = {};
 
   try {
-    printerConfig = await fetchGatewayPrinterConfig(params.printerName);
-    if (typeof printerConfig.paperSize === 'string' && printerConfig.paperSize.trim()) {
-      paperSize = printerConfig.paperSize.trim();
-    }
-  } catch {
-    // fall back to default label size when printer details cannot be read
-  }
-
-  const geometry = resolveZebraLabelGeometry(printerConfig as ZebraLabelPrinterConfig);
-  const capabilityProfile = resolvePrinterCapabilityProfile({
-    printerConfig,
-    printerName: params.printerName,
-  });
-  const labelsElement = buildLabelsPrintElement(params);
-
-  if (isZebraPrinterName(params.printerName)) {
     try {
-      const zplResult = await measureAsync(() =>
-        generateZebraLabelZpl({
-          departments: params.departments,
-          labelSequenceBy: params.labelSequenceBy,
-          order: params.order,
-          printerConfig,
-        }),
-      );
-      const dispatchResult = await measureAsync(() =>
-        gatewayPrintRaw({
-          contentType: 'zpl',
-          jobName,
-          printerName: params.printerName,
-          raw: zplResult.result,
-        }),
-      );
-      recordLabelPrintTelemetry({
-        capabilityProfile,
-        dispatchMs: dispatchResult.durationMs,
-        generationMs: zplResult.durationMs,
-        jobName,
-        labelCount,
-        payloadBytes: utf8ByteLength(zplResult.result),
-        printerName: params.printerName,
-        strategy: 'zebra_raw_zpl',
-        totalMs: nowMs() - printStart,
-      });
-      return { mode: 'zpl' };
-    } catch (rawError) {
-      const rawMessage = getDirectPrintErrorMessage(rawError);
-      throw new Error(`Native Zebra print failed (${rawMessage}).`);
+      printerConfig = await fetchGatewayPrinterConfig(params.printerName);
+      if (typeof printerConfig.paperSize === 'string' && printerConfig.paperSize.trim()) {
+        paperSize = printerConfig.paperSize.trim();
+      }
+    } catch {
+      // fall back to default label size when printer details cannot be read
     }
-  }
 
-  const pdfResult = await measureAsync(() =>
-    renderLabelsToPdf(
-      labelsElement,
-      geometry.pageWidthMm,
-      geometry.pageHeightMm,
-    ),
-  );
-  const dispatchResult = await measureAsync(() =>
-    gatewayPrintPdf(pdfResult.result, params.printerName, jobName, {
-      orientation: 'landscape',
-      paperSize,
-      scale: 'noscale',
-    }),
-  );
-  recordLabelPrintTelemetry({
-    capabilityProfile,
-    dispatchMs: dispatchResult.durationMs,
-    generationMs: pdfResult.durationMs,
-    jobName,
-    labelCount,
-    payloadBytes: pdfResult.result.size,
-    printerName: params.printerName,
-    strategy: 'gateway_pdf',
-    totalMs: nowMs() - printStart,
-  });
-  return { mode: 'pdf' };
+    const geometry = resolveZebraLabelGeometry(printerConfig as ZebraLabelPrinterConfig);
+    const capabilityProfile = resolvePrinterCapabilityProfile({
+      printerConfig,
+      printerName: params.printerName,
+    });
+    const labelsElement = buildLabelsPrintElement(params);
+
+    if (isZebraPrinterName(params.printerName)) {
+      try {
+        const zplResult = await measureAsync(() =>
+          generateZebraLabelZpl({
+            departments: params.departments,
+            labelSequenceBy: params.labelSequenceBy,
+            order: params.order,
+            printerConfig,
+          }),
+        );
+        const dispatchResult = await measureAsync(() =>
+          gatewayPrintRaw({
+            contentType: 'zpl',
+            jobName,
+            printerName: params.printerName,
+            raw: zplResult.result,
+          }),
+        );
+        recordLabelPrintTelemetry({
+          capabilityProfile,
+          dispatchMs: dispatchResult.durationMs,
+          generationMs: zplResult.durationMs,
+          jobName,
+          labelCount,
+          payloadBytes: utf8ByteLength(zplResult.result),
+          printerName: params.printerName,
+          strategy: 'zebra_raw_zpl',
+          totalMs: nowMs() - printStart,
+        });
+        return { mode: 'zpl' };
+      } catch (rawError) {
+        const rawMessage = getDirectPrintErrorMessage(rawError);
+        throw new Error(`Native Zebra print failed (${rawMessage}).`);
+      }
+    }
+
+    const pdfResult = await measureAsync(() =>
+      renderLabelsToPdf(
+        labelsElement,
+        geometry.pageWidthMm,
+        geometry.pageHeightMm,
+      ),
+    );
+    const dispatchResult = await measureAsync(() =>
+      gatewayPrintPdf(pdfResult.result, params.printerName, jobName, {
+        orientation: 'landscape',
+        paperSize,
+        scale: 'noscale',
+      }),
+    );
+    recordLabelPrintTelemetry({
+      capabilityProfile,
+      dispatchMs: dispatchResult.durationMs,
+      generationMs: pdfResult.durationMs,
+      jobName,
+      labelCount,
+      payloadBytes: pdfResult.result.size,
+      printerName: params.printerName,
+      strategy: 'gateway_pdf',
+      totalMs: nowMs() - printStart,
+    });
+    return { mode: 'pdf' };
+  } finally {
+    clearLabelGraphicCache();
+  }
 }
 
 export async function directPrintReportPdf(params: {
