@@ -1514,6 +1514,10 @@ export function WorklistPage() {
                   (target.status === 'VERIFIED' && !canAdminEditVerified);
                 const parameterDefinitions = target.parameterDefinitions ?? [];
                 const hasParams = parameterDefinitions.length > 0;
+                const isCultureEntry =
+                  !isPanelRoot &&
+                  !hasParams &&
+                  target.resultEntryType === 'CULTURE_SENSITIVITY';
                 const displayFlag =
                   target.testType === 'PANEL'
                     ? null
@@ -1645,16 +1649,10 @@ export function WorklistPage() {
                               </Form.Item>
                             ))}
                           </Space>
-                        ) : target.resultEntryType === 'CULTURE_SENSITIVITY' ? (
-                          <CultureSensitivityEditor
-                            baseName={[target.id, 'cultureResult']}
-                            antibioticOptions={getCultureOptionsForTarget(target)}
-                            interpretationOptions={
-                              target.cultureConfig?.interpretationOptions ?? ['S', 'I', 'R']
-                            }
-                            micUnit={target.cultureConfig?.micUnit ?? null}
-                            disabled={isReadOnly}
-                          />
+                        ) : isCultureEntry ? (
+                          <Text type="secondary" style={{ fontSize: 11 }}>
+                            Culture details below
+                          </Text>
                         ) : (
                           <Form.Item
                             name={[target.id, target.resultEntryType === 'NUMERIC' ? 'resultValue' : 'resultText']}
@@ -1750,6 +1748,29 @@ export function WorklistPage() {
                         {formatReferenceRange(target)}
                       </div>
                     </div>
+                    {isCultureEntry && (
+                      <div
+                        style={{
+                          margin: '0 6px 8px',
+                          padding: 8,
+                          borderRadius: 8,
+                          border: isDark
+                            ? '1px solid rgba(148,163,184,0.2)'
+                            : '1px solid #dbeafe',
+                          background: isDark ? 'rgba(2,6,23,0.24)' : '#f8fbff',
+                        }}
+                      >
+                        <CultureSensitivityEditor
+                          baseName={[target.id, 'cultureResult']}
+                          antibioticOptions={getCultureOptionsForTarget(target)}
+                          interpretationOptions={
+                            target.cultureConfig?.interpretationOptions ?? ['S', 'I', 'R']
+                          }
+                          micUnit={target.cultureConfig?.micUnit ?? null}
+                          disabled={isReadOnly}
+                        />
+                      </div>
+                    )}
                   </div>
                 );
               })}

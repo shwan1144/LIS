@@ -186,7 +186,7 @@ async function buildZplDocument(
     testCodesText && needsRasterText(testCodesText)
       ? renderTextGraphic({
         align: 'center',
-        fontSize: Math.max(10, Math.round(geometry.heightDots * 0.06)),
+        fontSize: Math.max(11, Math.round(geometry.heightDots * 0.066)),
         fontWeight: 700,
         height: layout.testHeight,
         lineHeight: 1.05,
@@ -197,7 +197,7 @@ async function buildZplDocument(
       : Promise.resolve(null),
     renderTextGraphic({
       align: 'center',
-      fontSize: Math.max(12, Math.round(geometry.heightDots * 0.07)),
+      fontSize: Math.max(13, Math.round(geometry.heightDots * 0.076)),
       fontWeight: 700,
       height: geometry.heightDots - (layout.borderThickness * 2),
       rotation: 270,
@@ -207,7 +207,7 @@ async function buildZplDocument(
     needsRasterText(patientIdText)
       ? renderTextGraphic({
         align: 'center',
-        fontSize: Math.max(13, Math.round(geometry.heightDots * 0.071)),
+        fontSize: Math.max(14, Math.round(geometry.heightDots * 0.078)),
         fontWeight: 700,
         height: geometry.heightDots - (layout.borderThickness * 2),
         rotation: 270,
@@ -249,8 +249,8 @@ async function buildZplDocument(
       ? graphicToZpl(layout.patientIdX, layout.borderThickness, patientIdGraphic)
       : nativeTextField({
         align: 'C',
-        fontHeight: Math.max(18, Math.round(geometry.heightDots * 0.08)),
-        fontWidth: Math.max(14, Math.round(geometry.heightDots * 0.068)),
+        fontHeight: Math.max(19, Math.round(geometry.heightDots * 0.086)),
+        fontWidth: Math.max(15, Math.round(geometry.heightDots * 0.074)),
         orientation: 'R',
         text: patientIdText,
         width: geometry.heightDots,
@@ -302,8 +302,8 @@ async function buildZplDocument(
       ? graphicToZpl(layout.barcodeX, layout.testY, testCodesGraphic)
       : nativeTextField({
         align: 'C',
-        fontHeight: Math.max(11, Math.round(geometry.heightDots * 0.064)),
-        fontWidth: Math.max(9, Math.round(geometry.heightDots * 0.052)),
+        fontHeight: Math.max(12, Math.round(geometry.heightDots * 0.07)),
+        fontWidth: Math.max(10, Math.round(geometry.heightDots * 0.058)),
         lineSpacing: 0,
         maxLines: 2,
         text: testCodesText,
@@ -407,7 +407,7 @@ async function renderCompositeRasterLabelLayer(params: {
   appendTextBox(root, {
     align: 'center',
     fontFamily: getCanvasFontFamily(params.sequenceText),
-    fontSize: Math.max(12, Math.round(params.geometry.heightDots * 0.07)),
+    fontSize: Math.max(13, Math.round(params.geometry.heightDots * 0.076)),
     fontWeight: 700,
     height: params.geometry.heightDots - (lineWidth * 2),
     left: lineWidth,
@@ -431,7 +431,7 @@ async function renderCompositeRasterLabelLayer(params: {
   appendTextBox(root, {
     align: 'center',
     fontFamily: getCanvasFontFamily(params.patientIdText),
-    fontSize: Math.max(13, Math.round(params.geometry.heightDots * 0.071)),
+    fontSize: Math.max(14, Math.round(params.geometry.heightDots * 0.078)),
     fontWeight: 600,
     height: params.geometry.heightDots - (lineWidth * 2),
     left: params.geometry.widthDots - params.layout.rightStripWidth + lineWidth,
@@ -478,7 +478,7 @@ async function renderCompositeRasterLabelLayer(params: {
   appendTextBox(root, {
     align: 'center',
     fontFamily: getCanvasFontFamily(params.testCodesText),
-    fontSize: Math.max(10, Math.round(params.geometry.heightDots * 0.06)),
+    fontSize: Math.max(11, Math.round(params.geometry.heightDots * 0.066)),
     fontWeight: 700,
     height: params.layout.testHeight,
     lineHeight: 1.05,

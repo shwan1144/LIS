@@ -33,7 +33,6 @@ import {
   PlusOutlined,
   ReloadOutlined,
   SearchOutlined,
-  EditOutlined,
 } from '@ant-design/icons';
 import { useLocation } from 'react-router-dom';
 import dayjs from 'dayjs';
@@ -73,9 +72,9 @@ import {
   normalizePatientFormPayload,
   type PatientFormValues,
 } from '../components/patients/PatientFormFields';
+import { PrintPreviewModal } from '../components/Print';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
-import { PrintPreviewModal } from '../components/Print';
 import {
   directPrintLabels,
   directPrintReceipt,
@@ -323,8 +322,8 @@ const TubeIcon = ({ color }: { color: string }) => (
 );
 
 export function OrdersPage() {
-  const location = useLocation();
   const { isDark } = useTheme();
+  const location = useLocation();
   const { user, lab, currentShiftId, currentShiftLabel } = useAuth();
   const [submitting, setSubmitting] = useState(false);
 
@@ -1530,8 +1529,12 @@ export function OrdersPage() {
     setPatientPickerModalOpen(true);
   };
 
-  const openPatientCreateModal = () => {
-    patientCreateForm.setFieldsValue(getPatientFormInitialValues());
+  const openPatientCreateModal = (defaultName?: string) => {
+    const initialValues = getPatientFormInitialValues();
+    if (typeof defaultName === 'string' && defaultName.trim()) {
+      initialValues.fullName = defaultName.trim();
+    }
+    patientCreateForm.setFieldsValue(initialValues);
     setPatientCreateModalOpen(true);
   };
 
@@ -2813,7 +2816,7 @@ export function OrdersPage() {
       </Row>
 
       <Modal
-        title="Find patient"
+        title={null}
         open={patientPickerModalOpen}
         width={840}
         footer={null}
@@ -2824,35 +2827,51 @@ export function OrdersPage() {
         className={`orders-patient-picker-modal${isDark ? ' orders-patient-picker-modal-dark' : ''}`}
       >
         <div className="orders-patient-picker-shell">
-          <div className="orders-patient-picker-toolbar">
-            <div className="orders-patient-picker-toolbar-copy">
-              <Text strong className="orders-patient-picker-heading">
-                Search existing patients
-              </Text>
-              <Text type="secondary">
-                Type a name, phone number, national ID, or patient ID.
-              </Text>
+          <div className="orders-patient-picker-header">
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+              <div>
+                <Title level={4} style={{ margin: 0 }}>Find patient</Title>
+                <Text type="secondary">Search existing patients by name, ID, or phone.</Text>
+              </div>
             </div>
-            <Button icon={<PlusOutlined />} onClick={openPatientCreateModal}>
-              New patient
-            </Button>
+            <div style={{ marginTop: 16 }}>
+              <Input
+                size="large"
+                allowClear
+                autoFocus
+                prefix={<SearchOutlined />}
+                placeholder="Start typing to search patients"
+                value={patientPickerSearchInput}
+                onChange={(event) => setPatientPickerSearchInput(event.target.value)}
+                suffix={
+                  <Button
+                    type="primary"
+                    size="small"
+                    icon={<PlusOutlined />}
+                    onClick={() => openPatientCreateModal(patientPickerSearchInput)}
+                    disabled={
+                      patientPickerSearchLoading ||
+                      patientPickerQuery.length < 1 ||
+                      patientPickerSearchResults.length > 0
+                    }
+                    className={`orders-patient-picker-input-btn ${patientPickerQuery.length >= 1 &&
+                      patientPickerSearchResults.length === 0 &&
+                      !patientPickerSearchLoading
+                      ? 'is-active'
+                      : ''
+                      }`}
+                  >
+                    New patient
+                  </Button>
+                }
+              />
+            </div>
           </div>
 
-          <Input
-            size="large"
-            allowClear
-            autoFocus
-            prefix={<SearchOutlined />}
-            placeholder="Start typing to search patients"
-            value={patientPickerSearchInput}
-            onChange={(event) => setPatientPickerSearchInput(event.target.value)}
-          />
-
-          <div className="orders-patient-picker-results-panel">
+          <div className="orders-patient-picker-body">
             {patientPickerSearchLoading ? (
               <div className="orders-patient-picker-empty-state">
-                <Spin size="small" />
-                <Text type="secondary">Searching patients...</Text>
+                <Spin tip="Searching..." />
               </div>
             ) : patientPickerQuery.length < 1 ? (
               <div className="orders-patient-picker-empty-state">
@@ -2905,74 +2924,37 @@ export function OrdersPage() {
             )}
           </div>
 
-          <div className="orders-patient-picker-footer-slot">
-            {patientPickerSelectedPatient ? (
-              <div className="orders-patient-picker-selected-card">
-                <div className="orders-patient-picker-selected-copy">
-                  <div className="orders-patient-picker-selected-header">
-                    <UserOutlined className="orders-patient-picker-selected-icon" />
-                    <div className="orders-patient-picker-selected-identity">
-                      <Text className="orders-patient-picker-selected-label" type="secondary">
-                        Patient selected
-                      </Text>
-                      <Text strong className="orders-patient-picker-selected-name">
-                        {formatPatientPickerValue(getPatientName(patientPickerSelectedPatient))}
-                      </Text>
-                    </div>
-                  </div>
-                  <div className="orders-patient-picker-selected-meta">
-                    <div className="orders-patient-picker-meta-item">
-                      <Text type="secondary">ID</Text>
-                      <Text strong>{formatPatientPickerValue(patientPickerSelectedPatient.patientNumber)}</Text>
-                    </div>
-                    <div className="orders-patient-picker-meta-item">
-                      <Text type="secondary">DOB</Text>
-                      <Text strong>{formatPatientPickerValue(patientPickerSelectedPatient.dateOfBirth)}</Text>
-                    </div>
-                    <div className="orders-patient-picker-meta-item">
-                      <Text type="secondary">Phone</Text>
-                      <Text strong>{formatPatientPickerValue(patientPickerSelectedPatient.phone)}</Text>
-                    </div>
-                    <div className="orders-patient-picker-meta-item">
-                      <Text type="secondary">National ID</Text>
-                      <Text strong>{formatPatientPickerValue(patientPickerSelectedPatient.nationalId)}</Text>
-                    </div>
+          <div className="orders-patient-picker-footer">
+            <div style={{ flex: 1, minWidth: 0 }}>
+              {patientPickerSelectedPatient ? (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <UserOutlined style={{ fontSize: 20, color: '#1677ff' }} />
+                  <div style={{ minWidth: 0 }}>
+                    <Text strong style={{ display: 'block' }}>{getPatientName(patientPickerSelectedPatient)}</Text>
+                    <Text type="secondary">ID: {patientPickerSelectedPatient.patientNumber}</Text>
                   </div>
                 </div>
-                <div className="orders-patient-picker-selected-actions">
-                  <Button
-                    icon={<EditOutlined />}
-                    onClick={openPatientEditModal}
-                    className="orders-patient-picker-edit-btn"
-                  >
-                    Edit
-                  </Button>
-                  <Button
-                    type="primary"
-                    icon={<ShoppingCartOutlined />}
-                    onClick={handlePatientPickerGoToOrder}
-                    className="orders-patient-picker-order-btn"
-                  >
-                    Go to order
-                  </Button>
-                </div>
-              </div>
-            ) : (
-              <div className="orders-patient-picker-footer-placeholder">
-                <Text className="orders-patient-picker-footer-placeholder-title" strong>
-                  Select a patient
-                </Text>
-                <Text type="secondary">
-                  Choose a row above to enable Edit and Go to order.
-                </Text>
-              </div>
-            )}
+              ) : (
+                <Text type="secondary">Select a patient to proceed</Text>
+              )}
+            </div>
+            <Space>
+              <Button onClick={closePatientPickerModal}>Cancel</Button>
+              <Button
+                type="primary"
+                icon={<ShoppingCartOutlined />}
+                disabled={!patientPickerSelectedPatient}
+                onClick={handlePatientPickerGoToOrder}
+              >
+                Go to order
+              </Button>
+            </Space>
           </div>
         </div>
       </Modal>
 
       <Modal
-        title="Register patient"
+        title={null}
         open={patientCreateModalOpen}
         footer={null}
         width={840}
@@ -2986,34 +2968,44 @@ export function OrdersPage() {
         }}
         className={`orders-patient-form-modal${isDark ? ' orders-patient-form-modal-dark' : ''}`}
       >
-        <Form
-          form={patientCreateForm}
-          layout="vertical"
-          initialValues={getPatientFormInitialValues()}
-          onFinish={handlePatientPickerCreate}
-        >
-          <PatientFormFields />
-          <Form.Item>
-            <Space>
-              <Button type="primary" htmlType="submit" loading={patientCreateSubmitting}>
-                Register
-              </Button>
-              <Button
-                onClick={() => {
-                  if (patientCreateSubmitting) return;
-                  setPatientCreateModalOpen(false);
-                  patientCreateForm.resetFields();
-                }}
-              >
-                Cancel
-              </Button>
-            </Space>
-          </Form.Item>
-        </Form>
+        <div className="orders-patient-form-shell">
+          <div className="orders-patient-form-header">
+            <Title level={4} style={{ margin: 0 }}>Register patient</Title>
+            <Text type="secondary">Enter the patient's information to create a new record.</Text>
+          </div>
+          <div className="orders-patient-form-body">
+            <Form
+              form={patientCreateForm}
+              layout="vertical"
+              initialValues={getPatientFormInitialValues()}
+              onFinish={handlePatientPickerCreate}
+            >
+              <PatientFormFields />
+            </Form>
+          </div>
+          <div className="orders-patient-form-footer">
+            <Button
+              onClick={() => {
+                if (patientCreateSubmitting) return;
+                setPatientCreateModalOpen(false);
+                patientCreateForm.resetFields();
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="primary"
+              onClick={() => patientCreateForm.submit()}
+              loading={patientCreateSubmitting}
+            >
+              Register
+            </Button>
+          </div>
+        </div>
       </Modal>
 
       <Modal
-        title="Edit patient"
+        title={null}
         open={patientEditModalOpen}
         footer={null}
         width={840}
@@ -3027,38 +3019,48 @@ export function OrdersPage() {
         }}
         className={`orders-patient-form-modal${isDark ? ' orders-patient-form-modal-dark' : ''}`}
       >
-        <Form
-          form={patientEditForm}
-          layout="vertical"
-          initialValues={getPatientFormInitialValues(patientPickerSelectedPatient)}
-          onFinish={handlePatientPickerEdit}
-        >
-          {patientPickerSelectedPatient ? (
-            <Form.Item label="Patient ID">
-              <Text strong>{patientPickerSelectedPatient.patientNumber}</Text>
-              <Text type="secondary" style={{ marginLeft: 8 }}>
-                (cannot be changed)
-              </Text>
-            </Form.Item>
-          ) : null}
-          <PatientFormFields />
-          <Form.Item>
-            <Space>
-              <Button type="primary" htmlType="submit" loading={patientEditSubmitting}>
-                Save
-              </Button>
-              <Button
-                onClick={() => {
-                  if (patientEditSubmitting) return;
-                  setPatientEditModalOpen(false);
-                  patientEditForm.resetFields();
-                }}
-              >
-                Cancel
-              </Button>
-            </Space>
-          </Form.Item>
-        </Form>
+        <div className="orders-patient-form-shell">
+          <div className="orders-patient-form-header">
+            <Title level={4} style={{ margin: 0 }}>Edit patient</Title>
+            <Text type="secondary">Update the existing patient information below.</Text>
+          </div>
+          <div className="orders-patient-form-body">
+            <Form
+              form={patientEditForm}
+              layout="vertical"
+              initialValues={getPatientFormInitialValues(patientPickerSelectedPatient)}
+              onFinish={handlePatientPickerEdit}
+            >
+              {patientPickerSelectedPatient ? (
+                <Form.Item label="Patient ID">
+                  <Text strong>{patientPickerSelectedPatient.patientNumber}</Text>
+                  <Text type="secondary" style={{ marginLeft: 8 }}>
+                    (cannot be changed)
+                  </Text>
+                </Form.Item>
+              ) : null}
+              <PatientFormFields />
+            </Form>
+          </div>
+          <div className="orders-patient-form-footer">
+            <Button
+              onClick={() => {
+                if (patientEditSubmitting) return;
+                setPatientEditModalOpen(false);
+                patientEditForm.resetFields();
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="primary"
+              onClick={() => patientEditForm.submit()}
+              loading={patientEditSubmitting}
+            >
+              Save
+            </Button>
+          </div>
+        </div>
       </Modal>
 
       <Modal

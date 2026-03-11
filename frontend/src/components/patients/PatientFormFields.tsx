@@ -22,14 +22,16 @@ export const PATIENT_FORM_TODAY_ISO = new Date(
 
 export function PatientFormFields() {
   return (
-    <>
-      <Form.Item
-        name="fullName"
-        label="Full name"
-        rules={[{ required: true, message: 'Required' }]}
-      >
-        <Input placeholder="Full name" />
-      </Form.Item>
+    <div className="orders-patient-form-grid">
+      <div className="orders-patient-form-grid-item-full">
+        <Form.Item
+          name="fullName"
+          label="Full name"
+          rules={[{ required: true, message: 'Required' }]}
+        >
+          <Input placeholder="Full name" />
+        </Form.Item>
+      </div>
       <Form.Item name="nationalId" label="National ID">
         <Input placeholder="National ID" />
       </Form.Item>
@@ -49,10 +51,12 @@ export function PatientFormFields() {
           <Radio.Button value="O">Other</Radio.Button>
         </Radio.Group>
       </Form.Item>
-      <Form.Item name="address" label="Address">
-        <Input.TextArea rows={2} placeholder="Address" />
-      </Form.Item>
-    </>
+      <div className="orders-patient-form-grid-item-full">
+        <Form.Item name="address" label="Address">
+          <Input.TextArea rows={2} placeholder="Address" />
+        </Form.Item>
+      </div>
+    </div>
   );
 }
 

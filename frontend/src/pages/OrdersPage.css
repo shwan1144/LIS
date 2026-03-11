@@ -1708,12 +1708,12 @@ html[data-theme='dark'] .order-dock-action-row .ant-btn-primary:not(.locked-orde
   height: 700px;
   display: flex;
   flex-direction: column;
-  border-radius: 20px;
-  border: 1px solid rgba(22, 119, 255, 0.14);
+  border-radius: 12px;
+  border: 1px solid rgba(22, 119, 255, 0.1);
   background:
-    radial-gradient(circle at top right, rgba(105, 177, 255, 0.14), transparent 32%),
-    linear-gradient(180deg, #ffffff 0%, #f7fbff 100%);
-  box-shadow: 0 24px 60px rgba(15, 23, 42, 0.18);
+    radial-gradient(circle at top right, rgba(105, 177, 255, 0.08), transparent 32%),
+    linear-gradient(180deg, #ffffff 0%, #f8faff 100%);
+  box-shadow: 0 20px 50px rgba(15, 23, 42, 0.12);
   overflow: hidden;
 }
 
@@ -1724,20 +1724,58 @@ html[data-theme='dark'] .order-dock-action-row .ant-btn-primary:not(.locked-orde
   margin-bottom: 0;
 }
 
-.orders-patient-picker-modal .ant-modal-body {
-  padding: 16px 24px 24px;
+.orders-patient-picker-modal .ant-modal-body,
+.orders-patient-form-modal .ant-modal-body {
+  padding: 0;
   flex: 1 1 auto;
   min-height: 0;
   overflow: hidden;
-  /* Disable modal-level scroll for picker */
 }
 
-.orders-patient-form-modal .ant-modal-body {
-  padding: 16px 24px 24px;
-  flex: 1 1 auto;
-  min-height: 0;
+.orders-patient-form-shell,
+.orders-patient-picker-shell {
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  height: 100%;
+}
+
+.orders-patient-form-header,
+.orders-patient-picker-header {
+  padding: 24px 24px 16px;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.1);
+  background: rgba(248, 250, 252, 0.4);
+}
+
+.orders-patient-form-body {
+  padding: 24px;
   overflow-y: auto;
-  /* Keep form-level scroll for registration */
+}
+
+.orders-patient-picker-body {
+  padding: 16px 24px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.orders-patient-form-footer,
+.orders-patient-picker-footer {
+  padding: 16px 24px 24px;
+  border-top: 1px solid rgba(148, 163, 184, 0.1);
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  background: rgba(248, 250, 252, 0.5);
+}
+
+.orders-patient-form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px 24px;
+}
+
+.orders-patient-form-grid-item-full {
+  grid-column: span 2;
 }
 
 .orders-patient-picker-modal .ant-modal-body>div:first-child {
@@ -2024,6 +2062,33 @@ html[data-theme='dark'] .order-dock-action-row .ant-btn-primary:not(.locked-orde
 
 .orders-patient-picker-order-btn {
   box-shadow: 0 4px 12px rgba(22, 119, 255, 0.2) !important;
+}
+
+.orders-patient-picker-input-btn.ant-btn {
+  height: 32px !important;
+  border-radius: 8px !important;
+  font-weight: 600 !important;
+  transition: all 0.3s ease !important;
+  margin-right: -4px;
+}
+
+.orders-patient-picker-input-btn.is-active.ant-btn {
+  border-color: #16a34a !important;
+  background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%) !important;
+  color: #ffffff !important;
+  box-shadow: 0 4px 10px rgba(22, 163, 74, 0.24) !important;
+}
+
+.orders-patient-picker-input-btn.is-active.ant-btn:not(:disabled):hover {
+  background: linear-gradient(135deg, #2edb6d 0%, #15803d 100%) !important;
+  border-color: #15803d !important;
+  transform: translateY(-1px);
+}
+
+html[data-theme='dark'] .orders-patient-picker-input-btn.is-active.ant-btn {
+  border-color: rgba(74, 222, 128, 0.5) !important;
+  background: linear-gradient(135deg, #22c55e 0%, #15803d 100%) !important;
+  box-shadow: 0 6px 16px rgba(20, 83, 45, 0.36) !important;
 }
 
 html[data-theme='dark'] .orders-patient-picker-modal .ant-modal-content,

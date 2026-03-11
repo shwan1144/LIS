@@ -136,16 +136,35 @@ async function gatewayPrintRaw(params: {
   printerName: string;
   raw: string;
 }): Promise<void> {
-  await axios.post(
+  const payload = {
+    contentType: params.contentType,
+    jobName: params.jobName,
+    printerName: params.printerName,
+    rawBase64: utf8ToBase64(params.raw),
+  };
+  const candidateEndpoints = [
     `${GATEWAY_URL}/local/print-raw`,
-    {
-      contentType: params.contentType,
-      jobName: params.jobName,
-      printerName: params.printerName,
-      rawBase64: utf8ToBase64(params.raw),
-    },
-    { timeout: GATEWAY_PRINT_TIMEOUT_MS },
-  );
+    `${GATEWAY_URL}/local/printer-raw`,
+    `${GATEWAY_URL}/print-raw`,
+    `${GATEWAY_URL}/printer-raw`,
+  ];
+
+  let lastError: unknown;
+  for (const endpoint of candidateEndpoints) {
+    try {
+      await axios.post(endpoint, payload, { timeout: GATEWAY_PRINT_TIMEOUT_MS });
+      return;
+    } catch (error) {
+      const status = axios.isAxiosError(error) ? error.response?.status : undefined;
+      if (status === 404) {
+        lastError = error;
+        continue;
+      }
+      throw error;
+    }
+  }
+
+  throw lastError ?? new Error('Gateway RAW print route not found.');
 }
 
 async function convertHtmlToPdf(element: HTMLElement): Promise<Blob> {

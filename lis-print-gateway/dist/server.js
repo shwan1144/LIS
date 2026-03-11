@@ -195,7 +195,12 @@ class PrintServer {
                 await this.handlePrintRequest(res, payload);
                 return;
             }
-            if (req.method === 'POST' && url.pathname === '/local/print-raw') {
+            // Keep backward compatibility with older desktop clients and cached bundles.
+            if (req.method === 'POST' &&
+                (url.pathname === '/local/print-raw' ||
+                    url.pathname === '/local/printer-raw' ||
+                    url.pathname === '/print-raw' ||
+                    url.pathname === '/printer-raw')) {
                 const payload = await this.readJsonBody(req);
                 await this.handleRawPrintRequest(res, payload);
                 return;

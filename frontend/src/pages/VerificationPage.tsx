@@ -3,6 +3,7 @@ import {
   Button,
   Card,
   DatePicker,
+  Form,
   Input,
   Modal,
   Select,
@@ -21,12 +22,14 @@ import {
 import type { ColumnsType } from 'antd/es/table';
 import dayjs from 'dayjs';
 import {
+  getAntibiotics,
   getDepartments,
   getWorklistOrderTests,
   getWorklistOrders,
   getWorklistStats,
   rejectResult,
   verifyMultipleResults,
+  type AntibioticDto,
   type DepartmentDto,
   type VerificationRowStatusFilter,
   type WorklistItem,
@@ -34,6 +37,7 @@ import {
   type WorklistOrderSummaryDto,
   type WorklistStats,
 } from '../api/client';
+import { CultureSensitivityEditor } from '../components/CultureSensitivityEditor';
 import { WorklistStatusDashboard } from '../components/WorklistStatusDashboard';
 import { useFillToViewportBottom } from '../hooks/useFillToViewportBottom';
 import {
@@ -41,7 +45,11 @@ import {
   type WorklistOrderGroupSummary,
 } from './worklistGrouping';
 import { useTheme } from '../contexts/ThemeContext';
-import { formatCultureResultSummary } from '../utils/culture-sensitivity';
+import {
+  buildCultureAntibioticOptions,
+  formatCultureResultSummary,
+  normalizeCultureResultForForm,
+} from '../utils/culture-sensitivity';
 import {
   RESULT_FLAG_COLOR as FLAG_COLOR,
   RESULT_FLAG_LABEL as FLAG_LABEL,
@@ -171,10 +179,12 @@ export function VerificationPage() {
   const [dateFilter, setDateFilter] = useState<dayjs.Dayjs | null>(dayjs());
   const [departmentId, setDepartmentId] = useState<string | ''>('');
   const [departments, setDepartments] = useState<DepartmentDto[]>([]);
+  const [antibiotics, setAntibiotics] = useState<AntibioticDto[]>([]);
   const [page, setPage] = useState(1);
   const [size] = useState(25);
   const [verificationStatusFilter, setVerificationStatusFilter] =
     useState<VerificationRowStatusFilter>('unverified');
+  const [reviewForm] = Form.useForm<any>();
 
   const [expandedOrderKeys, setExpandedOrderKeys] = useState<Key[]>([]);
   const [groupsByOrderKey, setGroupsByOrderKey] = useState<
@@ -213,7 +223,8 @@ export function VerificationPage() {
     setReviewAppliedDepartmentId(null);
     setRejectContext(null);
     setRejectReason('');
-  }, []);
+    reviewForm.resetFields();
+  }, [reviewForm]);
 
   const loadRows = useCallback(async () => {
     setLoading(true);
@@ -251,6 +262,12 @@ export function VerificationPage() {
     void getDepartments()
       .then(setDepartments)
       .catch(() => undefined);
+  }, []);
+
+  useEffect(() => {
+    void getAntibiotics(true)
+      .then(setAntibiotics)
+      .catch(() => setAntibiotics([]));
   }, []);
 
   useEffect(() => {
@@ -318,11 +335,27 @@ export function VerificationPage() {
       group: WorklistOrderGroupSummary,
       appliedDepartmentId: string | null,
     ) => {
+      reviewForm.resetFields();
+      const cultureFormValues: Record<string, unknown> = {};
+      for (const item of group.items) {
+        if (
+          item.testType === 'PANEL' ||
+          item.resultEntryType !== 'CULTURE_SENSITIVITY'
+        ) {
+          continue;
+        }
+        cultureFormValues[item.id] = {
+          cultureResult: normalizeCultureResultForForm(item.cultureResult),
+        };
+      }
+      if (Object.keys(cultureFormValues).length > 0) {
+        reviewForm.setFieldsValue(cultureFormValues);
+      }
       setReviewOrder(payload);
       setReviewGroup(group);
       setReviewAppliedDepartmentId(appliedDepartmentId);
     },
-    [],
+    [reviewForm],
   );
 
   const orderedReviewItems = useMemo(
@@ -341,6 +374,15 @@ export function VerificationPage() {
   const completedIdsInModal = useMemo(
     () => collectCompletedIds(orderedReviewItems),
     [orderedReviewItems],
+  );
+
+  const getCultureOptionsForTarget = useCallback(
+    (target: WorklistItem) =>
+      buildCultureAntibioticOptions(
+        antibiotics,
+        target.cultureAntibioticIds,
+      ),
+    [antibiotics],
   );
 
   const openReviewModalForGroup = useCallback(
@@ -708,27 +750,27 @@ export function VerificationPage() {
             border-color 0.18s ease;
         }
         .verification-orders-table .verification-order-row:hover > td {
-          background: ${isDark ? 'rgba(34,197,94,0.08)' : 'rgba(34,197,94,0.05)'} !important;
+          background: ${isDark ? 'rgba(148,163,184,0.12)' : '#f5f7fb'} !important;
         }
         .verification-orders-table .verification-order-row-expanded > td {
-          background: ${isDark ? 'rgba(34,197,94,0.12)' : '#effdf5'} !important;
-          border-top: 1px solid ${isDark ? 'rgba(74,222,128,0.46)' : '#86efac'} !important;
+          background: ${isDark ? 'rgba(59,130,246,0.1)' : '#f3f8ff'} !important;
+          border-top: none !important;
           border-bottom: 0 !important;
         }
         .verification-orders-table .verification-order-row-expanded > td:first-child {
-          border-left: 2px solid ${isDark ? '#22c55e' : '#16a34a'} !important;
+          border-left: none !important;
           border-top-left-radius: 10px !important;
         }
         .verification-orders-table .verification-order-row-expanded > td:last-child {
-          border-right: 1px solid ${isDark ? 'rgba(74,222,128,0.46)' : '#bbf7d0'} !important;
+          border-right: none !important;
           border-top-right-radius: 10px !important;
         }
         .verification-orders-table .ant-table-expanded-row > td {
           padding: 6px 10px 10px !important;
           background: transparent !important;
-          border-left: 2px solid ${isDark ? '#22c55e' : '#16a34a'} !important;
-          border-right: 1px solid ${isDark ? 'rgba(74,222,128,0.46)' : '#bbf7d0'} !important;
-          border-bottom: 1px solid ${isDark ? 'rgba(74,222,128,0.46)' : '#bbf7d0'} !important;
+          border-left: none !important;
+          border-right: none !important;
+          border-bottom: none !important;
           border-bottom-left-radius: 10px !important;
           border-bottom-right-radius: 10px !important;
         }
@@ -1007,159 +1049,193 @@ export function VerificationPage() {
               ) : null}
             </div>
 
-            {orderedReviewItems.map((item, index) => {
-              const isPanelRoot = item.testType === 'PANEL' && !item.parentOrderTestId;
-              const isPanelChild = Boolean(item.parentOrderTestId);
-              const perRowActionEnabled =
-                reviewGroup.groupKind === 'single' &&
-                item.testType !== 'PANEL' &&
-                item.status === 'COMPLETED';
+            <Form form={reviewForm} component={false}>
+              {orderedReviewItems.map((item, index) => {
+                const isPanelRoot = item.testType === 'PANEL' && !item.parentOrderTestId;
+                const isPanelChild = Boolean(item.parentOrderTestId);
+                const isCultureEntry =
+                  item.testType !== 'PANEL' &&
+                  item.resultEntryType === 'CULTURE_SENSITIVITY';
+                const perRowActionEnabled =
+                  reviewGroup.groupKind === 'single' &&
+                  item.testType !== 'PANEL' &&
+                  item.status === 'COMPLETED';
 
-              return (
-                <div key={item.id}>
-                  {firstPanelIndex > 0 && index === firstPanelIndex && (
+                return (
+                  <div key={item.id}>
+                    {firstPanelIndex > 0 && index === firstPanelIndex && (
+                      <div
+                        style={{
+                          borderTop: isDark
+                            ? '1px dashed rgba(145,202,255,0.65)'
+                            : '1px dashed #91caff',
+                          marginTop: 1,
+                          paddingTop: 3,
+                          marginBottom: 1,
+                        }}
+                      >
+                        <Text strong style={{ fontSize: 11 }}>
+                          Panel Tests
+                        </Text>
+                      </div>
+                    )}
                     <div
                       style={{
-                        borderTop: isDark
-                          ? '1px dashed rgba(145,202,255,0.65)'
-                          : '1px dashed #91caff',
-                        marginTop: 1,
-                        paddingTop: 3,
-                        marginBottom: 1,
-                      }}
-                    >
-                      <Text strong style={{ fontSize: 11 }}>
-                        Panel Tests
-                      </Text>
-                    </div>
-                  )}
-                  <div
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      padding: '1px 6px',
-                      borderBottom:
-                        index < orderedReviewItems.length - 1
+                        display: 'flex',
+                        alignItems: 'center',
+                        padding: '1px 6px',
+                        borderBottom:
+                          index < orderedReviewItems.length - 1
+                            ? isDark
+                              ? '1px solid rgba(255,255,255,0.05)'
+                              : '1px solid #f0f0f0'
+                            : 'none',
+                        backgroundColor: isPanelRoot
                           ? isDark
-                            ? '1px solid rgba(255,255,255,0.05)'
-                            : '1px solid #f0f0f0'
-                          : 'none',
-                      backgroundColor: isPanelRoot
-                        ? isDark
-                          ? 'rgba(114,46,209,0.14)'
-                          : 'rgba(114,46,209,0.08)'
-                        : 'transparent',
-                    }}
-                  >
-                    <div style={{ flex: '1 1 32%', paddingRight: 8, textAlign: 'center' }}>
-                      <Space size={6}>
-                        {isPanelRoot && (
-                          <Tag color="purple" style={{ margin: 0, fontSize: 11 }}>
-                            Panel
-                          </Tag>
-                        )}
-                        {item.rejectionReason?.trim() && (
-                          <Tag color="error" style={{ margin: 0, fontSize: 11 }}>
-                            Rejected
-                          </Tag>
-                        )}
-                      </Space>
-                      <div style={{ marginTop: 1, paddingLeft: isPanelChild ? 10 : 0 }}>
-                        <Text
-                          strong={isPanelRoot}
-                          style={{
-                            fontSize: 12,
-                            lineHeight: '14px',
-                            display: 'block',
-                            whiteSpace: 'normal',
-                            wordBreak: 'break-word',
-                          }}
-                        >
-                          {item.testName}
-                        </Text>
-                      </div>
-                      {item.rejectionReason?.trim() && (
-                        <Text type="danger" style={{ display: 'block', fontSize: 11 }}>
-                          {item.rejectionReason}
-                        </Text>
-                      )}
-                    </div>
-
-                    <div style={{ flex: '1 1 18%', paddingRight: 8, textAlign: 'center' }}>
-                      <Text style={{ fontSize: 12 }}>{isPanelRoot ? 'Panel group' : formatResult(item)}</Text>
-                    </div>
-
-                    <div style={{ flex: '1 1 8%', textAlign: 'center', fontSize: 12 }}>
-                      {item.testUnit || '-'}
-                    </div>
-
-                    <div style={{ flex: '1 1 9%', textAlign: 'center' }}>
-                      {item.flag ? (
-                        <Tag color={FLAG_COLOR[item.flag] || 'default'} style={{ margin: 0, fontSize: 11 }}>
-                          {FLAG_LABEL[item.flag] || item.flag}
-                        </Tag>
-                      ) : (
-                        <Text type="secondary" style={{ fontSize: 12 }}>
-                          -
-                        </Text>
-                      )}
-                    </div>
-
-                    <div style={{ flex: '1 1 8%', textAlign: 'center' }}>
-                      <Tag color={STATUS_COLOR[item.status] || 'default'} style={{ margin: 0, fontSize: 11 }}>
-                        {item.status.replace('_', ' ')}
-                      </Tag>
-                    </div>
-
-                    <div
-                      style={{
-                        flex: '1 1 9%',
-                        textAlign: 'center',
-                        fontSize: 12,
-                        whiteSpace: 'pre-wrap',
-                        wordBreak: 'break-word',
+                            ? 'rgba(114,46,209,0.14)'
+                            : 'rgba(114,46,209,0.08)'
+                          : 'transparent',
                       }}
                     >
-                      {formatReferenceRange(item)}
-                    </div>
-
-                    {reviewGroup.groupKind === 'single' ? (
-                      <div style={{ flex: '1 1 16%', textAlign: 'right' }}>
-                        <Space size={6} style={{ justifyContent: 'flex-end' }}>
-                          <Button
-                            type="link"
-                            size="small"
-                            icon={<CheckCircleOutlined />}
-                            disabled={!perRowActionEnabled || working}
-                            onClick={() => {
-                              void verifyIds(
-                                [item.id],
-                                'Only completed results can be verified',
-                                false,
-                              );
-                            }}
-                          >
-                            Verify
-                          </Button>
-                          <Button
-                            type="link"
-                            danger
-                            size="small"
-                            icon={<CloseCircleOutlined />}
-                            disabled={!perRowActionEnabled || working}
-                            onClick={() => {
-                              openRejectDialog([item.id], false);
-                            }}
-                          >
-                            Reject
-                          </Button>
+                      <div style={{ flex: '1 1 32%', paddingRight: 8, textAlign: 'center' }}>
+                        <Space size={6}>
+                          {isPanelRoot && (
+                            <Tag color="purple" style={{ margin: 0, fontSize: 11 }}>
+                              Panel
+                            </Tag>
+                          )}
+                          {item.rejectionReason?.trim() && (
+                            <Tag color="error" style={{ margin: 0, fontSize: 11 }}>
+                              Rejected
+                            </Tag>
+                          )}
                         </Space>
+                        <div style={{ marginTop: 1, paddingLeft: isPanelChild ? 10 : 0 }}>
+                          <Text
+                            strong={isPanelRoot}
+                            style={{
+                              fontSize: 12,
+                              lineHeight: '14px',
+                              display: 'block',
+                              whiteSpace: 'normal',
+                              wordBreak: 'break-word',
+                            }}
+                          >
+                            {item.testName}
+                          </Text>
+                        </div>
+                        {item.rejectionReason?.trim() && (
+                          <Text type="danger" style={{ display: 'block', fontSize: 11 }}>
+                            {item.rejectionReason}
+                          </Text>
+                        )}
                       </div>
-                    ) : null}
+
+                      <div style={{ flex: '1 1 18%', paddingRight: 8, textAlign: 'center' }}>
+                        <Text style={{ fontSize: 12 }}>
+                          {isPanelRoot
+                            ? 'Panel group'
+                            : isCultureEntry
+                              ? 'Culture details'
+                              : formatResult(item)}
+                        </Text>
+                      </div>
+
+                      <div style={{ flex: '1 1 8%', textAlign: 'center', fontSize: 12 }}>
+                        {item.testUnit || '-'}
+                      </div>
+
+                      <div style={{ flex: '1 1 9%', textAlign: 'center' }}>
+                        {item.flag ? (
+                          <Tag color={FLAG_COLOR[item.flag] || 'default'} style={{ margin: 0, fontSize: 11 }}>
+                            {FLAG_LABEL[item.flag] || item.flag}
+                          </Tag>
+                        ) : (
+                          <Text type="secondary" style={{ fontSize: 12 }}>
+                            -
+                          </Text>
+                        )}
+                      </div>
+
+                      <div style={{ flex: '1 1 8%', textAlign: 'center' }}>
+                        <Tag color={STATUS_COLOR[item.status] || 'default'} style={{ margin: 0, fontSize: 11 }}>
+                          {item.status.replace('_', ' ')}
+                        </Tag>
+                      </div>
+
+                      <div
+                        style={{
+                          flex: '1 1 9%',
+                          textAlign: 'center',
+                          fontSize: 12,
+                          whiteSpace: 'pre-wrap',
+                          wordBreak: 'break-word',
+                        }}
+                      >
+                        {formatReferenceRange(item)}
+                      </div>
+
+                      {reviewGroup.groupKind === 'single' ? (
+                        <div style={{ flex: '1 1 16%', textAlign: 'right' }}>
+                          <Space size={6} style={{ justifyContent: 'flex-end' }}>
+                            <Button
+                              type="link"
+                              size="small"
+                              icon={<CheckCircleOutlined />}
+                              disabled={!perRowActionEnabled || working}
+                              onClick={() => {
+                                void verifyIds(
+                                  [item.id],
+                                  'Only completed results can be verified',
+                                  false,
+                                );
+                              }}
+                            >
+                              Verify
+                            </Button>
+                            <Button
+                              type="link"
+                              danger
+                              size="small"
+                              icon={<CloseCircleOutlined />}
+                              disabled={!perRowActionEnabled || working}
+                              onClick={() => {
+                                openRejectDialog([item.id], false);
+                              }}
+                            >
+                              Reject
+                            </Button>
+                          </Space>
+                        </div>
+                      ) : null}
+                    </div>
+                    {isCultureEntry && (
+                      <div
+                        style={{
+                          margin: '0 6px 8px',
+                          padding: 8,
+                          borderRadius: 8,
+                          border: isDark
+                            ? '1px solid rgba(148,163,184,0.2)'
+                            : '1px solid #dbeafe',
+                          background: isDark ? 'rgba(2,6,23,0.24)' : '#f8fbff',
+                        }}
+                      >
+                        <CultureSensitivityEditor
+                          baseName={[item.id, 'cultureResult']}
+                          antibioticOptions={getCultureOptionsForTarget(item)}
+                          interpretationOptions={
+                            item.cultureConfig?.interpretationOptions ?? ['S', 'I', 'R']
+                          }
+                          micUnit={item.cultureConfig?.micUnit ?? null}
+                          disabled
+                        />
+                      </div>
+                    )}
                   </div>
-                </div>
-              );
-            })}
+                );
+              })}
+            </Form>
           </div >
         ) : null}
       </Modal >

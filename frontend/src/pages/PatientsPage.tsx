@@ -14,6 +14,7 @@ import {
 import { SearchOutlined, PlusOutlined, ShoppingCartOutlined, EditOutlined } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import { useLocation, useNavigate } from 'react-router-dom';
+import { useTheme } from '../contexts/ThemeContext';
 import {
   searchPatients,
   createPatient,
@@ -31,6 +32,7 @@ import {
 const { Title, Text } = Typography;
 
 export function PatientsPage() {
+  const { isDark } = useTheme();
   const navigate = useNavigate();
   const location = useLocation();
   const [data, setData] = useState<PatientDto[]>([]);
@@ -184,15 +186,33 @@ export function PatientsPage() {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             onPressEnter={onSearch}
-            style={{ width: 280 }}
+            style={{ width: 400 }}
             allowClear
+            suffix={
+              <Button
+                type="primary"
+                size="small"
+                icon={<PlusOutlined />}
+                onClick={() => {
+                  const initialValues = getPatientFormInitialValues();
+                  if (search.trim()) {
+                    initialValues.fullName = search.trim();
+                  }
+                  form.setFieldsValue(initialValues);
+                  setModalOpen(true);
+                }}
+                disabled={loading || !search.trim() || total > 0}
+                className={`orders-patient-picker-input-btn ${search.trim() && total === 0 && !loading ? 'is-active' : ''
+                  }`}
+              >
+                New patient
+              </Button>
+            }
           />
           <Button type="primary" icon={<SearchOutlined />} onClick={onSearch}>
             Search
           </Button>
-          <Button type="default" icon={<PlusOutlined />} onClick={() => setModalOpen(true)}>
-            New patient
-          </Button>
+
         </Space>
         <Table
           rowKey="id"
@@ -212,63 +232,79 @@ export function PatientsPage() {
       </Card>
 
       <Modal
-        title="Edit patient"
+        title={null}
         open={editModalOpen}
         onCancel={() => { setEditModalOpen(false); setEditingPatient(null); editForm.resetFields(); }}
         footer={null}
+        width={840}
         destroyOnClose
+        className={`orders-patient-form-modal${isDark ? ' orders-patient-form-modal-dark' : ''}`}
       >
-        <Form
-          form={editForm}
-          layout="vertical"
-          onFinish={handleUpdate}
-          initialValues={getPatientFormInitialValues(editingPatient)}
-        >
-          {editingPatient && (
-            <Form.Item label="Patient ID">
-              <Text strong>{editingPatient.patientNumber}</Text>
-              <Text type="secondary" style={{ marginLeft: 8 }}>(cannot be changed)</Text>
-            </Form.Item>
-          )}
-          <PatientFormFields />
-          <Form.Item>
-            <Space>
-              <Button type="primary" htmlType="submit" loading={submitting}>
-                Save
-              </Button>
-              <Button onClick={() => { setEditModalOpen(false); setEditingPatient(null); editForm.resetFields(); }}>
-                Cancel
-              </Button>
-            </Space>
-          </Form.Item>
-        </Form>
+        <div className="orders-patient-form-shell">
+          <div className="orders-patient-form-header">
+            <Title level={4} style={{ margin: 0 }}>Edit patient</Title>
+            <Text type="secondary">Update the existing patient information below.</Text>
+          </div>
+          <div className="orders-patient-form-body">
+            <Form
+              form={editForm}
+              layout="vertical"
+              onFinish={handleUpdate}
+              initialValues={getPatientFormInitialValues(editingPatient)}
+            >
+              {editingPatient && (
+                <Form.Item label="Patient ID">
+                  <Text strong>{editingPatient.patientNumber}</Text>
+                  <Text type="secondary" style={{ marginLeft: 8 }}>(cannot be changed)</Text>
+                </Form.Item>
+              )}
+              <PatientFormFields />
+            </Form>
+          </div>
+          <div className="orders-patient-form-footer">
+            <Button onClick={() => { setEditModalOpen(false); setEditingPatient(null); editForm.resetFields(); }}>
+              Cancel
+            </Button>
+            <Button type="primary" onClick={() => editForm.submit()} loading={submitting}>
+              Save
+            </Button>
+          </div>
+        </div>
       </Modal>
 
       <Modal
-        title="Register patient"
+        title={null}
         open={modalOpen}
         onCancel={() => { setModalOpen(false); form.resetFields(); }}
         footer={null}
+        width={840}
         destroyOnClose
+        className={`orders-patient-form-modal${isDark ? ' orders-patient-form-modal-dark' : ''}`}
       >
-        <Form
-          form={form}
-          layout="vertical"
-          onFinish={handleCreate}
-          initialValues={getPatientFormInitialValues()}
-        >
-          <PatientFormFields />
-          <Form.Item>
-            <Space>
-              <Button type="primary" htmlType="submit" loading={submitting}>
-                Register
-              </Button>
-              <Button onClick={() => { setModalOpen(false); form.resetFields(); }}>
-                Cancel
-              </Button>
-            </Space>
-          </Form.Item>
-        </Form>
+        <div className="orders-patient-form-shell">
+          <div className="orders-patient-form-header">
+            <Title level={4} style={{ margin: 0 }}>Register patient</Title>
+            <Text type="secondary">Enter the patient's information to create a new record.</Text>
+          </div>
+          <div className="orders-patient-form-body">
+            <Form
+              form={form}
+              layout="vertical"
+              onFinish={handleCreate}
+              initialValues={getPatientFormInitialValues()}
+            >
+              <PatientFormFields />
+            </Form>
+          </div>
+          <div className="orders-patient-form-footer">
+            <Button onClick={() => { setModalOpen(false); form.resetFields(); }}>
+              Cancel
+            </Button>
+            <Button type="primary" onClick={() => form.submit()} loading={submitting}>
+              Register
+            </Button>
+          </div>
+        </div>
       </Modal>
     </div>
   );

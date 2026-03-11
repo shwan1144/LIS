@@ -419,7 +419,7 @@
 .label-test-row {
   flex: 1;
   min-height: var(--label-test-row-height, 6.4mm);
-  font-size: var(--label-test-font-size, 6.3px);
+  font-size: var(--label-test-font-size, 6.8px);
   font-weight: 600;
   padding: 0.3px 1.2px 0;
   overflow: hidden;
