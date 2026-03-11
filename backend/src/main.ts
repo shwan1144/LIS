@@ -331,6 +331,22 @@ async function ensureGatewayDedupSchema(dataSource: DataSource): Promise<void> {
         END IF;
       END $$;
     `,
+    `
+      DO $$
+      BEGIN
+        IF EXISTS (SELECT 1 FROM pg_type WHERE typname = 'audit_logs_action_enum') THEN
+          ALTER TYPE "audit_logs_action_enum" ADD VALUE IF NOT EXISTS 'PLATFORM_LOGIN';
+          ALTER TYPE "audit_logs_action_enum" ADD VALUE IF NOT EXISTS 'PLATFORM_LOGIN_FAILED';
+          ALTER TYPE "audit_logs_action_enum" ADD VALUE IF NOT EXISTS 'PLATFORM_LAB_CREATE';
+          ALTER TYPE "audit_logs_action_enum" ADD VALUE IF NOT EXISTS 'PLATFORM_LAB_UPDATE';
+          ALTER TYPE "audit_logs_action_enum" ADD VALUE IF NOT EXISTS 'PLATFORM_LAB_STATUS_CHANGE';
+          ALTER TYPE "audit_logs_action_enum" ADD VALUE IF NOT EXISTS 'PLATFORM_TEST_TRANSFER';
+          ALTER TYPE "audit_logs_action_enum" ADD VALUE IF NOT EXISTS 'PLATFORM_SENSITIVE_READ';
+          ALTER TYPE "audit_logs_action_enum" ADD VALUE IF NOT EXISTS 'PLATFORM_IMPERSONATE_START';
+          ALTER TYPE "audit_logs_action_enum" ADD VALUE IF NOT EXISTS 'PLATFORM_IMPERSONATE_STOP';
+        END IF;
+      END $$;
+    `,
   ];
 
   for (const sql of sqlStatements) {
