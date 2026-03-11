@@ -18,6 +18,8 @@ const tests_service_1 = require("./tests.service");
 const create_test_dto_1 = require("./dto/create-test.dto");
 const update_test_dto_1 = require("./dto/update-test.dto");
 const jwt_auth_guard_1 = require("../auth/jwt-auth.guard");
+const roles_guard_1 = require("../auth/roles.guard");
+const roles_decorator_1 = require("../auth/roles.decorator");
 let TestsController = class TestsController {
     constructor(testsService) {
         this.testsService = testsService;
@@ -120,6 +122,7 @@ __decorate([
 ], TestsController.prototype, "findAll", null);
 __decorate([
     (0, common_1.Post)('seed/all'),
+    (0, roles_decorator_1.Roles)('LAB_ADMIN', 'SUPER_ADMIN'),
     __param(0, (0, common_1.Req)()),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [Object]),
@@ -127,6 +130,7 @@ __decorate([
 ], TestsController.prototype, "seedAll", null);
 __decorate([
     (0, common_1.Post)('seed/cbc'),
+    (0, roles_decorator_1.Roles)('LAB_ADMIN', 'SUPER_ADMIN'),
     __param(0, (0, common_1.Req)()),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [Object]),
@@ -134,6 +138,7 @@ __decorate([
 ], TestsController.prototype, "seedCBC", null);
 __decorate([
     (0, common_1.Post)('seed/chemistry'),
+    (0, roles_decorator_1.Roles)('LAB_ADMIN', 'SUPER_ADMIN'),
     __param(0, (0, common_1.Req)()),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [Object]),
@@ -141,6 +146,7 @@ __decorate([
 ], TestsController.prototype, "seedChemistry", null);
 __decorate([
     (0, common_1.Post)('seed/urinalysis'),
+    (0, roles_decorator_1.Roles)('LAB_ADMIN', 'SUPER_ADMIN'),
     __param(0, (0, common_1.Req)()),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", [Object]),
@@ -156,6 +162,7 @@ __decorate([
 ], TestsController.prototype, "getPricing", null);
 __decorate([
     (0, common_1.Patch)(':id/pricing'),
+    (0, roles_decorator_1.Roles)('LAB_ADMIN', 'SUPER_ADMIN'),
     __param(0, (0, common_1.Req)()),
     __param(1, (0, common_1.Param)('id', common_1.ParseUUIDPipe)),
     __param(2, (0, common_1.Body)()),
@@ -173,6 +180,7 @@ __decorate([
 ], TestsController.prototype, "findOne", null);
 __decorate([
     (0, common_1.Post)(),
+    (0, roles_decorator_1.Roles)('LAB_ADMIN', 'SUPER_ADMIN'),
     (0, common_1.UsePipes)(new common_1.ValidationPipe({ whitelist: true, transform: true })),
     __param(0, (0, common_1.Req)()),
     __param(1, (0, common_1.Body)()),
@@ -182,6 +190,7 @@ __decorate([
 ], TestsController.prototype, "create", null);
 __decorate([
     (0, common_1.Patch)(':id'),
+    (0, roles_decorator_1.Roles)('LAB_ADMIN', 'SUPER_ADMIN'),
     (0, common_1.UsePipes)(new common_1.ValidationPipe({ whitelist: true, transform: true })),
     __param(0, (0, common_1.Req)()),
     __param(1, (0, common_1.Param)('id', common_1.ParseUUIDPipe)),
@@ -192,6 +201,7 @@ __decorate([
 ], TestsController.prototype, "update", null);
 __decorate([
     (0, common_1.Delete)(':id'),
+    (0, roles_decorator_1.Roles)('LAB_ADMIN', 'SUPER_ADMIN'),
     __param(0, (0, common_1.Req)()),
     __param(1, (0, common_1.Param)('id', common_1.ParseUUIDPipe)),
     __metadata("design:type", Function),
@@ -200,6 +210,7 @@ __decorate([
 ], TestsController.prototype, "delete", null);
 __decorate([
     (0, common_1.Patch)(':id/toggle-active'),
+    (0, roles_decorator_1.Roles)('LAB_ADMIN', 'SUPER_ADMIN'),
     __param(0, (0, common_1.Req)()),
     __param(1, (0, common_1.Param)('id', common_1.ParseUUIDPipe)),
     __metadata("design:type", Function),
@@ -208,7 +219,7 @@ __decorate([
 ], TestsController.prototype, "toggleActive", null);
 exports.TestsController = TestsController = __decorate([
     (0, common_1.Controller)('tests'),
-    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
+    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard, roles_guard_1.RolesGuard),
     __metadata("design:paramtypes", [tests_service_1.TestsService])
 ], TestsController);
 //# sourceMappingURL=tests.controller.js.map

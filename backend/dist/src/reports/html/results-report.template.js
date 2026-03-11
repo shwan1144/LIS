@@ -562,9 +562,8 @@ function buildResultsReportHtml(input) {
     }
     const culturePagesHtml = culturePageItems
         .map((item, index) => {
-        const shouldBreakBefore = regularTests.length > 0 || index > 0 || panelPageSections.length > 0;
         return `
-      <div class="page culture-page" style="page-break-before: ${shouldBreakBefore ? 'always' : 'auto'};">
+      <div class="page culture-page" style="page-break-before: always; break-before: page;">
         ${pageHeaderHtml}
         <div class="content">
           <div class="panel-page-title">${escapeHtml(item.testName)}</div>

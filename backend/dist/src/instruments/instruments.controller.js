@@ -16,6 +16,8 @@ exports.InstrumentsController = void 0;
 const common_1 = require("@nestjs/common");
 const instruments_service_1 = require("./instruments.service");
 const jwt_auth_guard_1 = require("../auth/jwt-auth.guard");
+const roles_guard_1 = require("../auth/roles.guard");
+const roles_decorator_1 = require("../auth/roles.decorator");
 let InstrumentsController = class InstrumentsController {
     constructor(instrumentsService) {
         this.instrumentsService = instrumentsService;
@@ -142,6 +144,7 @@ __decorate([
 ], InstrumentsController.prototype, "findOne", null);
 __decorate([
     (0, common_1.Post)(),
+    (0, roles_decorator_1.Roles)('LAB_ADMIN', 'SUPER_ADMIN'),
     __param(0, (0, common_1.Req)()),
     __param(1, (0, common_1.Body)()),
     __metadata("design:type", Function),
@@ -150,6 +153,7 @@ __decorate([
 ], InstrumentsController.prototype, "create", null);
 __decorate([
     (0, common_1.Patch)(':id'),
+    (0, roles_decorator_1.Roles)('LAB_ADMIN', 'SUPER_ADMIN'),
     __param(0, (0, common_1.Req)()),
     __param(1, (0, common_1.Param)('id', common_1.ParseUUIDPipe)),
     __param(2, (0, common_1.Body)()),
@@ -159,6 +163,7 @@ __decorate([
 ], InstrumentsController.prototype, "update", null);
 __decorate([
     (0, common_1.Delete)(':id'),
+    (0, roles_decorator_1.Roles)('LAB_ADMIN', 'SUPER_ADMIN'),
     __param(0, (0, common_1.Req)()),
     __param(1, (0, common_1.Param)('id', common_1.ParseUUIDPipe)),
     __metadata("design:type", Function),
@@ -167,6 +172,7 @@ __decorate([
 ], InstrumentsController.prototype, "delete", null);
 __decorate([
     (0, common_1.Patch)(':id/toggle-active'),
+    (0, roles_decorator_1.Roles)('LAB_ADMIN', 'SUPER_ADMIN'),
     __param(0, (0, common_1.Req)()),
     __param(1, (0, common_1.Param)('id', common_1.ParseUUIDPipe)),
     __metadata("design:type", Function),
@@ -175,6 +181,7 @@ __decorate([
 ], InstrumentsController.prototype, "toggleActive", null);
 __decorate([
     (0, common_1.Post)(':id/restart'),
+    (0, roles_decorator_1.Roles)('LAB_ADMIN', 'SUPER_ADMIN'),
     __param(0, (0, common_1.Req)()),
     __param(1, (0, common_1.Param)('id', common_1.ParseUUIDPipe)),
     __metadata("design:type", Function),
@@ -183,6 +190,7 @@ __decorate([
 ], InstrumentsController.prototype, "restartConnection", null);
 __decorate([
     (0, common_1.Post)(':id/send-test-order'),
+    (0, roles_decorator_1.Roles)('LAB_ADMIN', 'SUPER_ADMIN'),
     __param(0, (0, common_1.Req)()),
     __param(1, (0, common_1.Param)('id', common_1.ParseUUIDPipe)),
     __param(2, (0, common_1.Body)()),
@@ -200,6 +208,7 @@ __decorate([
 ], InstrumentsController.prototype, "getMappings", null);
 __decorate([
     (0, common_1.Post)(':id/mappings'),
+    (0, roles_decorator_1.Roles)('LAB_ADMIN', 'SUPER_ADMIN'),
     __param(0, (0, common_1.Req)()),
     __param(1, (0, common_1.Param)('id', common_1.ParseUUIDPipe)),
     __param(2, (0, common_1.Body)()),
@@ -209,6 +218,7 @@ __decorate([
 ], InstrumentsController.prototype, "createMapping", null);
 __decorate([
     (0, common_1.Patch)(':id/mappings/:mappingId'),
+    (0, roles_decorator_1.Roles)('LAB_ADMIN', 'SUPER_ADMIN'),
     __param(0, (0, common_1.Req)()),
     __param(1, (0, common_1.Param)('id', common_1.ParseUUIDPipe)),
     __param(2, (0, common_1.Param)('mappingId', common_1.ParseUUIDPipe)),
@@ -219,6 +229,7 @@ __decorate([
 ], InstrumentsController.prototype, "updateMapping", null);
 __decorate([
     (0, common_1.Delete)(':id/mappings/:mappingId'),
+    (0, roles_decorator_1.Roles)('LAB_ADMIN', 'SUPER_ADMIN'),
     __param(0, (0, common_1.Req)()),
     __param(1, (0, common_1.Param)('id', common_1.ParseUUIDPipe)),
     __param(2, (0, common_1.Param)('mappingId', common_1.ParseUUIDPipe)),
@@ -239,6 +250,7 @@ __decorate([
 ], InstrumentsController.prototype, "getMessages", null);
 __decorate([
     (0, common_1.Post)(':id/simulate'),
+    (0, roles_decorator_1.Roles)('LAB_ADMIN', 'SUPER_ADMIN'),
     __param(0, (0, common_1.Req)()),
     __param(1, (0, common_1.Param)('id', common_1.ParseUUIDPipe)),
     __param(2, (0, common_1.Body)()),
@@ -248,7 +260,7 @@ __decorate([
 ], InstrumentsController.prototype, "simulateMessage", null);
 exports.InstrumentsController = InstrumentsController = __decorate([
     (0, common_1.Controller)('instruments'),
-    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
+    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard, roles_guard_1.RolesGuard),
     __metadata("design:paramtypes", [instruments_service_1.InstrumentsService])
 ], InstrumentsController);
 //# sourceMappingURL=instruments.controller.js.map

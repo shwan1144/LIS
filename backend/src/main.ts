@@ -793,11 +793,12 @@ async function bootstrap() {
           styleSrc: ["'self'", "'unsafe-inline'"],
           imgSrc: ["'self'", 'data:'],
           objectSrc: ["'none'"],
-          frameAncestors: ["'none'"],
+          frameAncestors: ["*"],
           baseUri: ["'self'"],
         },
       },
       crossOriginEmbedderPolicy: false,
+      frameguard: false,
     }),
   );
   const apiBodyLimit = resolveApiBodyLimit();

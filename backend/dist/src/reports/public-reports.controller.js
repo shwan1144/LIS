@@ -43,16 +43,38 @@ function extractErrorMessage(error, fallback) {
     return fallback;
 }
 function renderPendingPage(status) {
+    const now = new Date();
+    const registeredAtMs = new Date(status.registeredAt || now).getTime();
+    const elapsedMinutes = Math.max(0, (now.getTime() - registeredAtMs) / 60000);
     const testsHtml = (status.tests || []).map(t => {
         const isCompleted = t.isVerified;
         const statusText = isCompleted ? 'Completed' : 'Pending';
         const statusColor = isCompleted ? '#10b981' : '#f59e0b';
-        const icon = isCompleted ? '✓' : '⌛';
+        let percent = 0;
+        if (isCompleted) {
+            percent = 100;
+        }
+        else if (t.expectedCompletionMinutes && t.expectedCompletionMinutes > 0) {
+            percent = Math.floor((elapsedMinutes / t.expectedCompletionMinutes) * 100);
+            if (percent > 95)
+                percent = 95;
+        }
+        else {
+            percent = 50;
+        }
         return `
       <div class="test-item">
-        <div class="test-name" dir="auto">${escapeHtml(t.testName)}</div>
-        <div class="test-status" style="color: ${statusColor}">
-          <span class="icon">${icon}</span> ${statusText}
+        <div class="test-header">
+          <div class="test-name" dir="auto">${escapeHtml(t.testName)}</div>
+          <div class="test-status" style="color: ${statusColor}">${statusText}</div>
+        </div>
+        <div class="test-progress-container">
+          <div class="progress-bar-bg">
+            <div class="progress-bar-fill ${isCompleted ? 'completed-fill' : ''}" style="width: ${percent}%;"></div>
+          </div>
+          <div class="expected-text">
+             ${!isCompleted && t.expectedCompletionMinutes ? `Estimated time: ${t.expectedCompletionMinutes} min` : ''}
+          </div>
         </div>
       </div>
     `;
@@ -73,20 +95,21 @@ function renderPendingPage(status) {
     .sub-msg { font-size: 0.95rem; color: #64748b; }
     .msg-ku, .msg-ar { font-size: 1.25rem; margin-bottom: 0.25rem; }
     .sub-msg-ku, .sub-msg-ar { font-size: 1rem; }
-    
-    .progress-container { margin-bottom: 1.5rem; display: flex; flex-direction: column; gap: 0.5rem; border-top: 1px solid #e2e8f0; padding-top: 1.5rem; }
-    .progress-bar-bg { background: #e2e8f0; height: 10px; border-radius: 5px; overflow: hidden; width: 100%; }
-    .progress-bar-fill { background: #3b82f6; height: 100%; transition: width 0.3s ease; }
-    .progress-text { display: flex; justify-content: space-between; font-size: 0.85rem; color: #64748b; font-weight: 600; }
 
-    .test-list { display: flex; flex-direction: column; gap: 0.5rem; max-height: 350px; overflow-y: auto; padding-right: 0.5rem; margin-bottom: 2rem; }
+    .test-list { display: flex; flex-direction: column; gap: 0.75rem; max-height: 350px; overflow-y: auto; padding-right: 0.5rem; margin-bottom: 2rem; margin-top: 1rem; border-top: 1px solid #e2e8f0; padding-top: 1.5rem; }
     .test-list::-webkit-scrollbar { width: 6px; }
     .test-list::-webkit-scrollbar-track { background: transparent; }
     .test-list::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
-    .test-item { display: flex; justify-content: space-between; align-items: center; padding: 0.75rem 1rem; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 0.5rem; gap: 1rem; }
-    .test-name { font-weight: 500; font-size: 0.95rem; color: #334155; word-break: break-word; flex: 1; text-align: left; }
-    .test-status { font-size: 0.85rem; font-weight: 600; display: flex; align-items: center; gap: 0.25rem; white-space: nowrap; }
-    .test-status .icon { font-size: 1rem; }
+    .test-item { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 0.5rem; padding: 1rem; display: flex; flex-direction: column; gap: 0.5rem; }
+    .test-header { display: flex; justify-content: space-between; align-items: center; gap: 1rem; }
+    .test-name { font-weight: 600; font-size: 0.95rem; color: #334155; word-break: break-word; flex: 1; text-align: left; }
+    .test-status { font-size: 0.85rem; font-weight: 700; white-space: nowrap; }
+    
+    .test-progress-container { display: flex; flex-direction: column; gap: 0.25rem; margin-top: 0.25rem; }
+    .progress-bar-bg { background: #e2e8f0; height: 6px; border-radius: 3px; overflow: hidden; width: 100%; }
+    .progress-bar-fill { background: #3b82f6; height: 100%; transition: width 0.3s ease; }
+    .completed-fill { background: #10b981; }
+    .expected-text { font-size: 0.75rem; color: #94a3b8; text-align: right; min-height: 12px; }
     
     .refresh { font-size: 0.875rem; color: #94a3b8; text-align: center; border-top: 1px solid #e2e8f0; padding-top: 1rem; }
   </style>
@@ -110,16 +133,6 @@ function renderPendingPage(status) {
       <div class="sub-msg">Please wait while the report is being completed</div>
     </div>
     
-    <div class="progress-container">
-      <div class="progress-bar-bg">
-        <div class="progress-bar-fill" style="width: ${status.progressPercent}%"></div>
-      </div>
-      <div class="progress-text">
-        <span>Overall Progress</span>
-        <span>${status.progressPercent}%</span>
-      </div>
-    </div>
-
     <div class="test-list">
       ${testsHtml}
     </div>

@@ -17,6 +17,8 @@ const common_1 = require("@nestjs/common");
 const unmatched_results_service_1 = require("./unmatched-results.service");
 const jwt_auth_guard_1 = require("../auth/jwt-auth.guard");
 const lab_actor_context_1 = require("../types/lab-actor-context");
+const roles_guard_1 = require("../auth/roles.guard");
+const roles_decorator_1 = require("../auth/roles.decorator");
 let UnmatchedResultsController = class UnmatchedResultsController {
     constructor(unmatchedService) {
         this.unmatchedService = unmatchedService;
@@ -83,6 +85,7 @@ __decorate([
 ], UnmatchedResultsController.prototype, "findOne", null);
 __decorate([
     (0, common_1.Post)(':id/resolve'),
+    (0, roles_decorator_1.Roles)('LAB_ADMIN', 'SUPER_ADMIN'),
     __param(0, (0, common_1.Req)()),
     __param(1, (0, common_1.Param)('id', common_1.ParseUUIDPipe)),
     __param(2, (0, common_1.Body)()),
@@ -92,7 +95,7 @@ __decorate([
 ], UnmatchedResultsController.prototype, "resolve", null);
 exports.UnmatchedResultsController = UnmatchedResultsController = __decorate([
     (0, common_1.Controller)('unmatched-results'),
-    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
+    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard, roles_guard_1.RolesGuard),
     __metadata("design:paramtypes", [unmatched_results_service_1.UnmatchedResultsService])
 ], UnmatchedResultsController);
 //# sourceMappingURL=unmatched-results.controller.js.map

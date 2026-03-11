@@ -18,6 +18,8 @@ const jwt_auth_guard_1 = require("../auth/jwt-auth.guard");
 const antibiotics_service_1 = require("./antibiotics.service");
 const create_antibiotic_dto_1 = require("./dto/create-antibiotic.dto");
 const update_antibiotic_dto_1 = require("./dto/update-antibiotic.dto");
+const roles_guard_1 = require("../auth/roles.guard");
+const roles_decorator_1 = require("../auth/roles.decorator");
 let AntibioticsController = class AntibioticsController {
     constructor(antibioticsService) {
         this.antibioticsService = antibioticsService;
@@ -73,6 +75,7 @@ __decorate([
 ], AntibioticsController.prototype, "findOne", null);
 __decorate([
     (0, common_1.Post)(),
+    (0, roles_decorator_1.Roles)('LAB_ADMIN', 'SUPER_ADMIN'),
     (0, common_1.UsePipes)(new common_1.ValidationPipe({ whitelist: true, transform: true })),
     __param(0, (0, common_1.Req)()),
     __param(1, (0, common_1.Body)()),
@@ -82,6 +85,7 @@ __decorate([
 ], AntibioticsController.prototype, "create", null);
 __decorate([
     (0, common_1.Patch)(':id'),
+    (0, roles_decorator_1.Roles)('LAB_ADMIN', 'SUPER_ADMIN'),
     (0, common_1.UsePipes)(new common_1.ValidationPipe({ whitelist: true, transform: true })),
     __param(0, (0, common_1.Req)()),
     __param(1, (0, common_1.Param)('id', common_1.ParseUUIDPipe)),
@@ -92,6 +96,7 @@ __decorate([
 ], AntibioticsController.prototype, "update", null);
 __decorate([
     (0, common_1.Delete)(':id'),
+    (0, roles_decorator_1.Roles)('LAB_ADMIN', 'SUPER_ADMIN'),
     __param(0, (0, common_1.Req)()),
     __param(1, (0, common_1.Param)('id', common_1.ParseUUIDPipe)),
     __metadata("design:type", Function),
@@ -100,7 +105,7 @@ __decorate([
 ], AntibioticsController.prototype, "remove", null);
 exports.AntibioticsController = AntibioticsController = __decorate([
     (0, common_1.Controller)('antibiotics'),
-    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),
+    (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard, roles_guard_1.RolesGuard),
     __metadata("design:paramtypes", [antibiotics_service_1.AntibioticsService])
 ], AntibioticsController);
 //# sourceMappingURL=antibiotics.controller.js.map

@@ -826,6 +826,7 @@ let ReportsService = ReportsService_1 = class ReportsService {
                 resultValue,
                 unit: test?.unit || null,
                 verifiedAt: ot.verifiedAt ? ot.verifiedAt.toISOString() : null,
+                expectedCompletionMinutes: typeof test?.expectedCompletionMinutes === 'number' ? test.expectedCompletionMinutes : null,
             };
         })
             .sort((a, b) => {
