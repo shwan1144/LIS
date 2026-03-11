@@ -407,12 +407,34 @@ let ReportsService = ReportsService_1 = class ReportsService {
         const port = String(process.env.PORT ?? '3000').trim() || '3000';
         return `http://localhost:${port}`;
     }
+    isValidLabSubdomain(value) {
+        return /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/.test(value);
+    }
+    resolvePublicResultsLabBaseDomain() {
+        const raw = String(process.env.PUBLIC_RESULTS_LAB_BASE_DOMAIN ?? 'medilis.net')
+            .trim()
+            .toLowerCase();
+        if (!raw)
+            return null;
+        const normalized = raw
+            .replace(/^https?:\/\//, '')
+            .replace(/\/.*$/, '')
+            .trim()
+            .toLowerCase();
+        if (!normalized)
+            return null;
+        if (normalized.includes('..'))
+            return null;
+        if (!/^[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?$/.test(normalized))
+            return null;
+        return normalized;
+    }
     resolveOrderQrValue(order) {
         const orderId = encodeURIComponent(order.id);
-        const labSubdomain = order.lab?.subdomain?.trim().toLowerCase();
-        const baseDomain = String(process.env.APP_BASE_DOMAIN ?? '').trim().toLowerCase();
-        if (labSubdomain && baseDomain) {
-            return `https://${labSubdomain}.${baseDomain}/public/results/${orderId}`;
+        const labSubdomain = String(order.lab?.subdomain ?? '').trim().toLowerCase();
+        const labBaseDomain = this.resolvePublicResultsLabBaseDomain();
+        if (labBaseDomain && this.isValidLabSubdomain(labSubdomain)) {
+            return `https://${labSubdomain}.${labBaseDomain}/public/results/${orderId}`;
         }
         const baseUrl = this.resolvePublicResultsBaseUrl();
         return `${baseUrl}/public/results/${orderId}`;
@@ -813,6 +835,10 @@ let ReportsService = ReportsService_1 = class ReportsService {
             const test = ot.test;
             const departmentName = test?.department?.name ||
                 'General Department';
+            const rawExpectedCompletionMinutes = Number(test?.expectedCompletionMinutes ?? 0);
+            const expectedCompletionMinutes = Number.isFinite(rawExpectedCompletionMinutes) && rawExpectedCompletionMinutes > 0
+                ? Math.round(rawExpectedCompletionMinutes)
+                : null;
             const formattedValue = formatResultValue(ot);
             const resultValue = formattedValue === 'Pending' ? null : formattedValue;
             return {
@@ -820,13 +846,13 @@ let ReportsService = ReportsService_1 = class ReportsService {
                 testCode: test?.code || '-',
                 testName: test?.name || 'Unknown test',
                 departmentName,
+                expectedCompletionMinutes,
                 status: ot.status,
                 isVerified: ot.status === 'VERIFIED' || !!ot.verifiedAt,
                 hasResult: resultValue !== null,
                 resultValue,
                 unit: test?.unit || null,
                 verifiedAt: ot.verifiedAt ? ot.verifiedAt.toISOString() : null,
-                expectedCompletionMinutes: typeof test?.expectedCompletionMinutes === 'number' ? test.expectedCompletionMinutes : null,
             };
         })
             .sort((a, b) => {

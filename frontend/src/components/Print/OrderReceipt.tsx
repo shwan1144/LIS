@@ -3,6 +3,7 @@ import { QRCodeSVG } from 'qrcode.react';
 import dayjs from 'dayjs';
 import type { OrderDto } from '../../api/client';
 import { formatPatientAgeDisplay } from '../../utils/patient-age';
+import { buildPublicResultUrl } from '../../utils/public-result-link';
 import './print.css';
 
 interface OrderReceiptProps {
@@ -28,8 +29,10 @@ export const OrderReceipt = forwardRef<HTMLDivElement, OrderReceiptProps>(
       order.patient.dateOfBirth,
       order.registeredAt,
     );
-    const apiBase = (import.meta.env.VITE_API_URL || window.location.origin).replace(/\/+$/, '');
-    const patientResultUrl = `${apiBase}/public/results/${order.id}`;
+    const patientResultUrl = buildPublicResultUrl(order.id, {
+      labSubdomain: order.lab?.subdomain ?? null,
+      apiBaseUrl: import.meta.env.VITE_API_URL || window.location.origin,
+    });
     const onlineResultsEnabled = order.lab?.enableOnlineResults !== false;
     const qrValue = onlineResultsEnabled ? patientResultUrl : (order.orderNumber || order.id);
     const qrNote = onlineResultsEnabled ? 'Scan to check result status' : 'QR shows order number';

@@ -38,6 +38,7 @@ export interface PublicResultTestItem {
   testCode: string;
   testName: string;
   departmentName: string;
+  expectedCompletionMinutes: number | null;
   status: string;
   isVerified: boolean;
   hasResult: boolean;
@@ -548,9 +549,35 @@ export class ReportsService implements OnModuleInit, OnModuleDestroy {
     return `http://localhost:${port}`;
   }
 
+  private isValidLabSubdomain(value: string): boolean {
+    return /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/.test(value);
+  }
+
+  private resolvePublicResultsLabBaseDomain(): string | null {
+    const raw = String(process.env.PUBLIC_RESULTS_LAB_BASE_DOMAIN ?? 'medilis.net')
+      .trim()
+      .toLowerCase();
+    if (!raw) return null;
+    const normalized = raw
+      .replace(/^https?:\/\//, '')
+      .replace(/\/.*$/, '')
+      .trim()
+      .toLowerCase();
+    if (!normalized) return null;
+    if (normalized.includes('..')) return null;
+    if (!/^[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?$/.test(normalized)) return null;
+    return normalized;
+  }
+
   private resolveOrderQrValue(order: Order): string {
-    const baseUrl = this.resolvePublicResultsBaseUrl();
     const orderId = encodeURIComponent(order.id);
+    const labSubdomain = String(order.lab?.subdomain ?? '').trim().toLowerCase();
+    const labBaseDomain = this.resolvePublicResultsLabBaseDomain();
+    if (labBaseDomain && this.isValidLabSubdomain(labSubdomain)) {
+      return `https://${labSubdomain}.${labBaseDomain}/public/results/${orderId}`;
+    }
+
+    const baseUrl = this.resolvePublicResultsBaseUrl();
     return `${baseUrl}/public/results/${orderId}`;
   }
 
@@ -1053,6 +1080,11 @@ export class ReportsService implements OnModuleInit, OnModuleDestroy {
         const departmentName =
           (test as unknown as { department?: { name?: string | null } })?.department?.name ||
           'General Department';
+        const rawExpectedCompletionMinutes = Number(test?.expectedCompletionMinutes ?? 0);
+        const expectedCompletionMinutes =
+          Number.isFinite(rawExpectedCompletionMinutes) && rawExpectedCompletionMinutes > 0
+            ? Math.round(rawExpectedCompletionMinutes)
+            : null;
         const formattedValue = formatResultValue(ot);
         const resultValue = formattedValue === 'Pending' ? null : formattedValue;
         return {
@@ -1060,6 +1092,7 @@ export class ReportsService implements OnModuleInit, OnModuleDestroy {
           testCode: test?.code || '-',
           testName: test?.name || 'Unknown test',
           departmentName,
+          expectedCompletionMinutes,
           status: ot.status,
           isVerified: ot.status === 'VERIFIED' || !!ot.verifiedAt,
           hasResult: resultValue !== null,

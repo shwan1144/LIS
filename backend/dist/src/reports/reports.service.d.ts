@@ -12,13 +12,13 @@ export interface PublicResultTestItem {
     testCode: string;
     testName: string;
     departmentName: string;
+    expectedCompletionMinutes: number | null;
     status: string;
     isVerified: boolean;
     hasResult: boolean;
     resultValue: string | null;
     unit: string | null;
     verifiedAt: string | null;
-    expectedCompletionMinutes: number | null;
 }
 export interface PublicResultStatus {
     orderId: string;
@@ -79,6 +79,8 @@ export declare class ReportsService implements OnModuleInit, OnModuleDestroy {
     private buildReportPdfCacheKey;
     private normalizeAbsoluteUrlBase;
     private resolvePublicResultsBaseUrl;
+    private isValidLabSubdomain;
+    private resolvePublicResultsLabBaseDomain;
     private resolveOrderQrValue;
     private generateOrderQrDataUrl;
     private getCachedPdf;

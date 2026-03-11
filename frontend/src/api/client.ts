@@ -89,6 +89,7 @@ export interface LabDto {
   id: string;
   code: string;
   name: string;
+  subdomain?: string | null;
   timezone?: string;
   labelSequenceBy?: 'tube_type' | 'department';
   sequenceResetBy?: 'day' | 'shift';
@@ -542,6 +543,114 @@ export interface AdminOrdersResult {
   totalPages: number;
 }
 
+export type AdminMarketingChannel = 'WHATSAPP' | 'VIBER' | 'SMS';
+export type AdminMarketingBatchStatus =
+  | 'QUEUED'
+  | 'RUNNING'
+  | 'COMPLETED'
+  | 'COMPLETED_WITH_ERRORS'
+  | 'FAILED';
+export type AdminMarketingRecipientStatus = 'PENDING' | 'SENT' | 'FAILED' | 'SKIPPED';
+
+export interface AdminBulkMessagingLabConfigDto {
+  labId: string;
+  channels: Record<AdminMarketingChannel, {
+    enabled: boolean;
+    webhookUrl: string | null;
+    hasAuthToken: boolean;
+    senderLabel: string | null;
+    timeoutMs: number;
+    maxRetries: number;
+    updatedAt: string | null;
+  }>;
+}
+
+export interface AdminBulkMessagingTemplatesDto {
+  labId: string;
+  templates: Record<AdminMarketingChannel, {
+    templateText: string;
+    updatedAt: string | null;
+  }>;
+}
+
+export interface AdminBulkMessagingPreviewDto {
+  matchedOrdersCount: number;
+  phonesWithValueCount: number;
+  phonesWithoutValueCount: number;
+  uniquePhonesCount: number;
+  excludedCount: number;
+  finalSendCount: number;
+  maxBatchUniquePhones: number;
+}
+
+export interface AdminBulkMessagingSendResultDto {
+  batchId: string;
+  queuedRecipientsCount: number;
+  uniquePhonesCount: number;
+  channels: AdminMarketingChannel[];
+}
+
+export interface AdminBulkMessagingJobItemDto {
+  id: string;
+  labId: string;
+  status: AdminMarketingBatchStatus;
+  channels: AdminMarketingChannel[];
+  requestedRecipientsCount: number;
+  sentCount: number;
+  failedCount: number;
+  skippedCount: number;
+  startedAt: string | null;
+  completedAt: string | null;
+  createdAt: string;
+  errorMessage: string | null;
+}
+
+export interface AdminBulkMessagingJobsResultDto {
+  items: AdminBulkMessagingJobItemDto[];
+  total: number;
+  page: number;
+  size: number;
+  totalPages: number;
+}
+
+export interface AdminBulkMessagingJobDetailDto {
+  batch: {
+    id: string;
+    labId: string;
+    status: AdminMarketingBatchStatus;
+    channels: AdminMarketingChannel[];
+    scope: Record<string, unknown>;
+    excludedPhones: string[];
+    requestedRecipientsCount: number;
+    sentCount: number;
+    failedCount: number;
+    skippedCount: number;
+    startedAt: string | null;
+    completedAt: string | null;
+    createdAt: string;
+    errorMessage: string | null;
+  };
+  recipients: {
+    items: Array<{
+      id: string;
+      channel: AdminMarketingChannel;
+      status: AdminMarketingRecipientStatus;
+      recipientName: string | null;
+      recipientPhoneRaw: string | null;
+      recipientPhoneNormalized: string;
+      attemptCount: number;
+      sentAt: string | null;
+      errorMessage: string | null;
+      orderId: string | null;
+      patientId: string | null;
+    }>;
+    total: number;
+    page: number;
+    size: number;
+    totalPages: number;
+  };
+}
+
 export interface AdminAuditLogItem {
   id: string;
   actorType: 'LAB_USER' | 'PLATFORM_USER' | null;
@@ -700,6 +809,110 @@ export async function getAdminOrderResultsPdf(orderId: string): Promise<Blob> {
   const res = await api.get<Blob>(`/admin/api/orders/${orderId}/results`, {
     responseType: 'blob',
   });
+  return res.data;
+}
+
+export async function getAdminBulkMessagingLabConfig(
+  labId: string,
+): Promise<AdminBulkMessagingLabConfigDto> {
+  const res = await api.get<AdminBulkMessagingLabConfigDto>(`/admin/api/bulk-messaging/labs/${labId}/config`);
+  return res.data;
+}
+
+export async function updateAdminBulkMessagingLabConfig(
+  labId: string,
+  data: {
+    channels: Partial<Record<AdminMarketingChannel, {
+      enabled?: boolean;
+      webhookUrl?: string | null;
+      authToken?: string | null;
+      senderLabel?: string | null;
+      timeoutMs?: number;
+      maxRetries?: number;
+    }>>;
+  },
+): Promise<AdminBulkMessagingLabConfigDto> {
+  const res = await api.patch<AdminBulkMessagingLabConfigDto>(
+    `/admin/api/bulk-messaging/labs/${labId}/config`,
+    data,
+    { timeout: ADMIN_WRITE_TIMEOUT_MS },
+  );
+  return res.data;
+}
+
+export async function getAdminBulkMessagingTemplates(
+  labId: string,
+): Promise<AdminBulkMessagingTemplatesDto> {
+  const res = await api.get<AdminBulkMessagingTemplatesDto>(`/admin/api/bulk-messaging/labs/${labId}/templates`);
+  return res.data;
+}
+
+export async function updateAdminBulkMessagingTemplates(
+  labId: string,
+  data: {
+    templates: Partial<Record<AdminMarketingChannel, string | null>>;
+  },
+): Promise<AdminBulkMessagingTemplatesDto> {
+  const res = await api.patch<AdminBulkMessagingTemplatesDto>(
+    `/admin/api/bulk-messaging/labs/${labId}/templates`,
+    data,
+    { timeout: ADMIN_WRITE_TIMEOUT_MS },
+  );
+  return res.data;
+}
+
+export async function previewAdminBulkMessaging(data: {
+  labId: string;
+  status?: AdminOrderListItem['status'];
+  q?: string;
+  dateFrom?: string;
+  dateTo?: string;
+  excludedPhones?: string[] | string;
+}): Promise<AdminBulkMessagingPreviewDto> {
+  const res = await api.post<AdminBulkMessagingPreviewDto>('/admin/api/bulk-messaging/preview', data);
+  return res.data;
+}
+
+export async function sendAdminBulkMessaging(data: {
+  labId: string;
+  status?: AdminOrderListItem['status'];
+  q?: string;
+  dateFrom?: string;
+  dateTo?: string;
+  excludedPhones?: string[] | string;
+  channels: AdminMarketingChannel[];
+  templateOverrides?: Partial<Record<AdminMarketingChannel, string | null>>;
+}): Promise<AdminBulkMessagingSendResultDto> {
+  const res = await api.post<AdminBulkMessagingSendResultDto>(
+    '/admin/api/bulk-messaging/send',
+    data,
+    { timeout: ADMIN_WRITE_TIMEOUT_MS },
+  );
+  return res.data;
+}
+
+export async function getAdminBulkMessagingJobs(params?: {
+  labId?: string;
+  status?: AdminMarketingBatchStatus;
+  dateFrom?: string;
+  dateTo?: string;
+  page?: number;
+  size?: number;
+}): Promise<AdminBulkMessagingJobsResultDto> {
+  const res = await api.get<AdminBulkMessagingJobsResultDto>('/admin/api/bulk-messaging/jobs', { params });
+  return res.data;
+}
+
+export async function getAdminBulkMessagingJobDetail(
+  batchId: string,
+  params?: {
+    status?: AdminMarketingRecipientStatus;
+    channel?: AdminMarketingChannel;
+    page?: number;
+    size?: number;
+  },
+): Promise<AdminBulkMessagingJobDetailDto> {
+  const res = await api.get<AdminBulkMessagingJobDetailDto>(`/admin/api/bulk-messaging/jobs/${batchId}`, { params });
   return res.data;
 }
 

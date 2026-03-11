@@ -24,6 +24,7 @@ import {
   GlobalOutlined,
   LinkOutlined,
   LogoutOutlined,
+  MessageOutlined,
   NotificationOutlined,
   UnorderedListOutlined,
   QrcodeOutlined,
@@ -113,6 +114,7 @@ export function AdminLayout() {
     if (location.pathname === '/') return '/';
     if (location.pathname === '/labs') return '/labs';
     if (location.pathname.startsWith('/orders')) return '/orders';
+    if (location.pathname.startsWith('/bulk-messaging')) return '/bulk-messaging';
     if (location.pathname.startsWith('/audit')) return '/audit';
     if (location.pathname.startsWith('/labs/users')) return '/labs/users';
     if (location.pathname.startsWith('/labs/online-results')) return '/labs/online-results';
@@ -451,6 +453,7 @@ export function AdminLayout() {
               { key: '/', icon: <DashboardOutlined />, label: 'Dashboard' },
               { key: '/labs', icon: <ApartmentOutlined />, label: 'Labs' },
               { key: '/orders', icon: <UnorderedListOutlined />, label: 'Orders' },
+              { key: '/bulk-messaging', icon: <MessageOutlined />, label: 'Bulk Messaging' },
               { key: '/audit', icon: <FileSearchOutlined />, label: 'Audit Logs' },
               { key: '/labs/users', icon: <TeamOutlined />, label: 'Lab Users' },
               { key: '/labs/online-results', icon: <QrcodeOutlined />, label: 'Online Results QR' },

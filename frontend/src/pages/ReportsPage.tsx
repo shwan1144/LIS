@@ -66,6 +66,7 @@ import {
   formatCultureResultSummary,
   normalizeCultureResultForForm,
 } from '../utils/culture-sensitivity';
+import { buildPublicResultUrl } from '../utils/public-result-link';
 import { normalizeResultFlag } from '../utils/result-flag';
 import {
   directPrintReceipt,
@@ -333,13 +334,16 @@ function formatReferenceRange(
 function buildResultsMessage(
   order: Pick<OrderHistoryItemDto, 'id' | 'orderNumber' | 'registeredAt' | 'patient'>,
   labName?: string | null,
+  labSubdomain?: string | null,
 ): string {
   const patientName = order.patient?.fullName?.trim() || 'بەڕێز نەخۆش';
   const orderDateTime = dayjs(order.registeredAt).format('YYYY-MM-DD HH:mm');
   const displayLabName = (labName ?? '').trim() || 'تاقیگەی ئێمە';
 
-  const apiBase = (import.meta.env.VITE_API_URL || window.location.origin).replace(/\/+$/, '');
-  const resultUrl = `${apiBase}/public/results/${order.id}`;
+  const resultUrl = buildPublicResultUrl(order.id, {
+    labSubdomain: labSubdomain ?? null,
+    apiBaseUrl: import.meta.env.VITE_API_URL || window.location.origin,
+  });
 
   return [
     `سڵاو بەێز ${patientName}`,
@@ -1100,7 +1104,7 @@ export function ReportsPage() {
     }
 
     const cleanedPhone = cleanPhoneNumber(phone);
-    const messageText = buildResultsMessage(order, lab?.name);
+    const messageText = buildResultsMessage(order, lab?.name, lab?.subdomain ?? null);
     void trackReportAction(order.id, 'WHATSAPP');
 
     const url = `https://wa.me/${cleanedPhone}?text=${encodeURIComponent(messageText)}`;
@@ -1127,7 +1131,7 @@ export function ReportsPage() {
     }
 
     const cleanedPhone = cleanPhoneNumber(phone);
-    const messageText = buildResultsMessage(order, lab?.name);
+    const messageText = buildResultsMessage(order, lab?.name, lab?.subdomain ?? null);
     void trackReportAction(order.id, 'VIBER');
 
     const url = `viber://chat?number=${encodeURIComponent(cleanedPhone)}&text=${encodeURIComponent(messageText)}`;

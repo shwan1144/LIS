@@ -24,6 +24,14 @@ function escapeHtml(value) {
         .replace(/"/g, '&quot;')
         .replace(/'/g, '&#039;');
 }
+function serializeForInlineScript(value) {
+    return JSON.stringify(value)
+        .replace(/</g, '\\u003c')
+        .replace(/>/g, '\\u003e')
+        .replace(/&/g, '\\u0026')
+        .replace(/\u2028/g, '\\u2028')
+        .replace(/\u2029/g, '\\u2029');
+}
 function extractErrorMessage(error, fallback) {
     if (error instanceof common_1.HttpException) {
         const response = error.getResponse();
@@ -43,42 +51,9 @@ function extractErrorMessage(error, fallback) {
     return fallback;
 }
 function renderPendingPage(status) {
-    const now = new Date();
-    const registeredAtMs = new Date(status.registeredAt || now).getTime();
-    const elapsedMinutes = Math.max(0, (now.getTime() - registeredAtMs) / 60000);
-    const testsHtml = (status.tests || []).map(t => {
-        const isCompleted = t.isVerified;
-        const statusText = isCompleted ? 'Completed' : 'Pending';
-        const statusColor = isCompleted ? '#10b981' : '#f59e0b';
-        let percent = 0;
-        if (isCompleted) {
-            percent = 100;
-        }
-        else if (t.expectedCompletionMinutes && t.expectedCompletionMinutes > 0) {
-            percent = Math.floor((elapsedMinutes / t.expectedCompletionMinutes) * 100);
-            if (percent > 95)
-                percent = 95;
-        }
-        else {
-            percent = 50;
-        }
-        return `
-      <div class="test-item">
-        <div class="test-header">
-          <div class="test-name" dir="auto">${escapeHtml(t.testName)}</div>
-          <div class="test-status" style="color: ${statusColor}">${statusText}</div>
-        </div>
-        <div class="test-progress-container">
-          <div class="progress-bar-bg">
-            <div class="progress-bar-fill ${isCompleted ? 'completed-fill' : ''}" style="width: ${percent}%;"></div>
-          </div>
-          <div class="expected-text">
-             ${!isCompleted && t.expectedCompletionMinutes ? `Estimated time: ${t.expectedCompletionMinutes} min` : ''}
-          </div>
-        </div>
-      </div>
-    `;
-    }).join('');
+    const statusPath = `/public/results/${encodeURIComponent(status.orderId)}/status`;
+    const pdfPath = `/public/results/${encodeURIComponent(status.orderId)}/pdf`;
+    const initialStatusJson = serializeForInlineScript(status);
     return `<!doctype html>
 <html lang="en">
 <head>
@@ -86,70 +61,524 @@ function renderPendingPage(status) {
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Result Status</title>
   <style>
-    body { margin: 0; font-family: system-ui, -apple-system, sans-serif; background: #f8fafc; color: #0f172a; display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 2rem 0; box-sizing: border-box; }
-    .card { background: #fff; padding: 2rem; border-radius: 1rem; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1); max-width: 90%; width: 500px; }
-    .patient { font-size: 1.1rem; color: #475569; margin-bottom: 1.5rem; padding-bottom: 1rem; border-bottom: 1px solid #e2e8f0; font-weight: 600; text-align: center; }
-    
-    .msg-block { margin-bottom: 1.5rem; text-align: center; }
-    .msg { font-size: 1.15rem; font-weight: 700; color: #2563eb; margin-bottom: 0.25rem; }
-    .sub-msg { font-size: 0.95rem; color: #64748b; }
-    .msg-ku, .msg-ar { font-size: 1.25rem; margin-bottom: 0.25rem; }
-    .sub-msg-ku, .sub-msg-ar { font-size: 1rem; }
+    :root {
+      color-scheme: light;
+      --bg: #f1f5f9;
+      --card-bg: #ffffff;
+      --ink: #0f172a;
+      --muted: #64748b;
+      --line: #e2e8f0;
+      --blue: #2563eb;
+      --blue-soft: #dbeafe;
+      --green: #16a34a;
+      --green-soft: #dcfce7;
+      --amber: #d97706;
+      --amber-soft: #ffedd5;
+      --slate-soft: #e2e8f0;
+      --danger: #dc2626;
+      --danger-soft: #fee2e2;
+    }
 
-    .test-list { display: flex; flex-direction: column; gap: 0.75rem; max-height: 350px; overflow-y: auto; padding-right: 0.5rem; margin-bottom: 2rem; margin-top: 1rem; border-top: 1px solid #e2e8f0; padding-top: 1.5rem; }
-    .test-list::-webkit-scrollbar { width: 6px; }
-    .test-list::-webkit-scrollbar-track { background: transparent; }
-    .test-list::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
-    .test-item { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 0.5rem; padding: 1rem; display: flex; flex-direction: column; gap: 0.5rem; }
-    .test-header { display: flex; justify-content: space-between; align-items: center; gap: 1rem; }
-    .test-name { font-weight: 600; font-size: 0.95rem; color: #334155; word-break: break-word; flex: 1; text-align: left; }
-    .test-status { font-size: 0.85rem; font-weight: 700; white-space: nowrap; }
-    
-    .test-progress-container { display: flex; flex-direction: column; gap: 0.25rem; margin-top: 0.25rem; }
-    .progress-bar-bg { background: #e2e8f0; height: 6px; border-radius: 3px; overflow: hidden; width: 100%; }
-    .progress-bar-fill { background: #3b82f6; height: 100%; transition: width 0.3s ease; }
-    .completed-fill { background: #10b981; }
-    .expected-text { font-size: 0.75rem; color: #94a3b8; text-align: right; min-height: 12px; }
-    
-    .refresh { font-size: 0.875rem; color: #94a3b8; text-align: center; border-top: 1px solid #e2e8f0; padding-top: 1rem; }
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+      background: linear-gradient(180deg, #e2e8f0 0%, #f8fafc 40%, #f8fafc 100%);
+      color: var(--ink);
+      min-height: 100vh;
+      padding: 18px;
+    }
+
+    .wrap {
+      max-width: 860px;
+      margin: 0 auto;
+    }
+
+    .card {
+      background: var(--card-bg);
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      box-shadow: 0 10px 30px rgb(15 23 42 / 0.08);
+      overflow: hidden;
+    }
+
+    .header {
+      padding: 20px 20px 14px;
+      border-bottom: 1px solid var(--line);
+      background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+    }
+
+    .top-line {
+      margin: 0;
+      line-height: 1.55;
+      font-size: 1.04rem;
+      font-weight: 700;
+      color: #1d4ed8;
+    }
+
+    .top-line + .top-line {
+      margin-top: 6px;
+      color: #0f766e;
+    }
+
+    .watermark {
+      margin-top: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      align-items: flex-start;
+    }
+
+    .watermark img {
+      max-height: 58px;
+      max-width: 100%;
+      object-fit: contain;
+      border-radius: 8px;
+      border: 1px solid var(--line);
+      background: #fff;
+    }
+
+    .watermark .wm-text {
+      font-size: 0.78rem;
+      color: var(--muted);
+      font-weight: 600;
+      letter-spacing: 0.02em;
+    }
+
+    .summary {
+      padding: 14px 20px;
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 6px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .summary-row {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: baseline;
+      font-size: 0.92rem;
+      color: var(--muted);
+    }
+
+    .summary-row strong {
+      color: var(--ink);
+      font-weight: 700;
+    }
+
+    .overall {
+      padding: 14px 20px;
+      border-bottom: 1px solid var(--line);
+      background: #fcfdff;
+    }
+
+    .overall-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+      gap: 8px;
+      color: var(--muted);
+      font-size: 0.88rem;
+      font-weight: 600;
+    }
+
+    .overall-track {
+      height: 11px;
+      border-radius: 999px;
+      background: var(--slate-soft);
+      overflow: hidden;
+    }
+
+    .overall-fill {
+      height: 100%;
+      width: 0;
+      background: linear-gradient(90deg, #1d4ed8 0%, #3b82f6 100%);
+      transition: width 0.35s ease;
+    }
+
+    .tests {
+      padding: 14px 20px 18px;
+      display: grid;
+      gap: 10px;
+    }
+
+    .test-row {
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 10px;
+      background: #fff;
+    }
+
+    .test-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .test-name {
+      font-weight: 700;
+      font-size: 0.92rem;
+      color: var(--ink);
+      line-height: 1.3;
+    }
+
+    .test-dept {
+      margin-top: 2px;
+      font-size: 0.78rem;
+      color: var(--muted);
+    }
+
+    .badge {
+      font-size: 0.73rem;
+      font-weight: 700;
+      padding: 3px 9px;
+      border-radius: 999px;
+      white-space: nowrap;
+      border: 1px solid transparent;
+    }
+
+    .badge-verified {
+      color: #166534;
+      background: var(--green-soft);
+      border-color: #86efac;
+    }
+
+    .badge-progress {
+      color: #92400e;
+      background: var(--amber-soft);
+      border-color: #fdba74;
+    }
+
+    .badge-pending {
+      color: #334155;
+      background: #f1f5f9;
+      border-color: #cbd5e1;
+    }
+
+    .badge-rejected {
+      color: #991b1b;
+      background: var(--danger-soft);
+      border-color: #fecaca;
+    }
+
+    .bar-track {
+      margin-top: 8px;
+      height: 8px;
+      border-radius: 999px;
+      background: var(--slate-soft);
+      overflow: hidden;
+    }
+
+    .bar-fill {
+      height: 100%;
+      width: 0;
+      border-radius: inherit;
+      transition: width 0.35s ease;
+      background: linear-gradient(90deg, #3b82f6 0%, #2563eb 100%);
+    }
+
+    .bar-fill.verified {
+      background: linear-gradient(90deg, #22c55e 0%, #16a34a 100%);
+    }
+
+    .bar-fill.neutral {
+      background: linear-gradient(90deg, #94a3b8 0%, #64748b 100%);
+    }
+
+    .bar-fill.overdue {
+      background: linear-gradient(90deg, #f97316 0%, #dc2626 100%);
+    }
+
+    .test-meta {
+      margin-top: 6px;
+      min-height: 1.1em;
+      font-size: 0.77rem;
+      color: var(--muted);
+      font-weight: 600;
+    }
+
+    .footer {
+      border-top: 1px solid var(--line);
+      padding: 10px 20px 14px;
+      color: var(--muted);
+      font-size: 0.8rem;
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      gap: 8px;
+    }
+
+    @media (max-width: 640px) {
+      body {
+        padding: 10px;
+      }
+
+      .header,
+      .summary,
+      .overall,
+      .tests,
+      .footer {
+        padding-left: 12px;
+        padding-right: 12px;
+      }
+
+      .top-line {
+        font-size: 0.97rem;
+      }
+
+      .summary-row {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 2px;
+      }
+    }
   </style>
 </head>
 <body>
-  <div class="card">
-    <div class="patient" dir="auto">${escapeHtml(status.patientName)}</div>
-    
-    <div class="msg-block" dir="rtl">
-      <div class="msg msg-ku">ئەنجامەکان هێشتا کاریان لەسەر دەکرێت</div>
-      <div class="sub-msg sub-msg-ku">تکایە چاوەڕێ بکە تا ڕاپۆرتەکە تەواو دەبێت</div>
-    </div>
-    
-    <div class="msg-block" dir="rtl">
-      <div class="msg msg-ar">النتائج لا تزال قيد المعالجة</div>
-      <div class="sub-msg sub-msg-ar">يرجى الانتظار حتى يكتمل التقرير</div>
-    </div>
-    
-    <div class="msg-block">
-      <div class="msg">Result is still in processing</div>
-      <div class="sub-msg">Please wait while the report is being completed</div>
-    </div>
-    
-    <div class="test-list">
-      ${testsHtml}
-    </div>
+  <div class="wrap">
+    <div class="card">
+      <div class="header">
+        <p class="top-line" dir="rtl">تکایە چاوەڕێ بکە، ئەنجامی تاقیکردنەوەکانت بە شێوەی خۆکار نوێ دەبێتەوە.</p>
+        <p class="top-line" dir="rtl">يرجى الانتظار، يتم تحديث حالة التحاليل تلقائياً حتى اكتمال النتيجة.</p>
+        <div class="watermark" id="wm-wrap" style="display:none;">
+          <img id="wm-image" alt="Online watermark" style="display:none;" />
+          <div class="wm-text" id="wm-text" style="display:none;"></div>
+        </div>
+      </div>
 
-    <div class="refresh">
-      Auto refresh in <span id="refresh-sec">30</span>s
+      <div class="summary">
+        <div class="summary-row"><span>Patient</span><strong id="patient-name">-</strong></div>
+        <div class="summary-row"><span>Order</span><strong id="order-number">-</strong></div>
+        <div class="summary-row"><span>Registered</span><strong id="registered-at">-</strong></div>
+      </div>
+
+      <div class="overall">
+        <div class="overall-head">
+          <span id="overall-label">Progress</span>
+          <span id="overall-stats">0 / 0</span>
+        </div>
+        <div class="overall-track">
+          <div class="overall-fill" id="overall-fill"></div>
+        </div>
+      </div>
+
+      <div class="tests" id="tests-list"></div>
+
+      <div class="footer">
+        <div id="polling-note">Checking every 5 seconds...</div>
+        <div id="last-updated">-</div>
+      </div>
     </div>
   </div>
+
   <script>
     (function () {
-      var sec = 30;
-      var node = document.getElementById('refresh-sec');
-      setInterval(function () {
-        sec -= 1;
-        if (node) node.textContent = String(sec);
-        if (sec <= 0) window.location.reload();
-      }, 1000);
+      var state = ${initialStatusJson};
+      var statusUrl = ${JSON.stringify(statusPath)};
+      var pdfUrl = ${JSON.stringify(pdfPath)};
+
+      function escapeHtml(value) {
+        var s = value == null ? '' : String(value);
+        return s
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;')
+          .replace(/'/g, '&#039;');
+      }
+
+      function normalizeTestStatus(status) {
+        var normalized = String(status || '').trim().toUpperCase();
+        if (normalized === 'VERIFIED') return 'VERIFIED';
+        if (normalized === 'COMPLETED') return 'COMPLETED';
+        if (normalized === 'IN_PROGRESS') return 'IN_PROGRESS';
+        if (normalized === 'REJECTED') return 'REJECTED';
+        return 'PENDING';
+      }
+
+      function formatDateTime(iso) {
+        if (!iso) return '-';
+        var dt = new Date(iso);
+        if (isNaN(dt.getTime())) return '-';
+        return dt.toLocaleString();
+      }
+
+      function updateWatermark(current) {
+        var wrap = document.getElementById('wm-wrap');
+        var image = document.getElementById('wm-image');
+        var text = document.getElementById('wm-text');
+        if (!wrap || !image || !text) return;
+
+        var hasImage = !!current.onlineResultWatermarkDataUrl;
+        var hasText = !!current.onlineResultWatermarkText;
+
+        if (!hasImage && !hasText) {
+          wrap.style.display = 'none';
+          return;
+        }
+
+        wrap.style.display = 'flex';
+
+        if (hasImage) {
+          image.src = String(current.onlineResultWatermarkDataUrl);
+          image.style.display = 'block';
+        } else {
+          image.removeAttribute('src');
+          image.style.display = 'none';
+        }
+
+        if (hasText) {
+          text.textContent = String(current.onlineResultWatermarkText);
+          text.style.display = 'block';
+        } else {
+          text.textContent = '';
+          text.style.display = 'none';
+        }
+      }
+
+      function resolveTestProgress(current, test, nowMs) {
+        var status = normalizeTestStatus(test.status);
+        if (test.isVerified || status === 'VERIFIED') {
+          return { percent: 100, barClass: 'verified', meta: 'Verified' };
+        }
+
+        var expected = Number(test.expectedCompletionMinutes || 0);
+        var registeredAtMs = Date.parse(current.registeredAt || '');
+
+        if (isFinite(expected) && expected > 0 && isFinite(registeredAtMs)) {
+          var totalMs = Math.round(expected) * 60 * 1000;
+          var elapsedMs = Math.max(0, nowMs - registeredAtMs);
+          var percent = Math.round((elapsedMs / totalMs) * 100);
+          if (percent < 0) percent = 0;
+          if (percent > 100) percent = 100;
+
+          var dueAtMs = registeredAtMs + totalMs;
+          var remainingMs = dueAtMs - nowMs;
+          if (remainingMs >= 0) {
+            var remainingMinutes = Math.max(1, Math.ceil(remainingMs / (60 * 1000)));
+            return { percent: percent, barClass: '', meta: 'ETA ' + remainingMinutes + ' min' };
+          }
+
+          var overdueMinutes = Math.max(1, Math.ceil(Math.abs(remainingMs) / (60 * 1000)));
+          return { percent: 100, barClass: 'overdue', meta: 'Overdue ' + overdueMinutes + ' min' };
+        }
+
+        var neutralPercent = status === 'IN_PROGRESS' ? 45 : 20;
+        return { percent: neutralPercent, barClass: 'neutral', meta: '' };
+      }
+
+      function getStatusBadge(status) {
+        if (status === 'VERIFIED') {
+          return { label: 'Verified', className: 'badge badge-verified' };
+        }
+        if (status === 'COMPLETED' || status === 'IN_PROGRESS') {
+          return { label: 'In progress', className: 'badge badge-progress' };
+        }
+        if (status === 'REJECTED') {
+          return { label: 'Rejected', className: 'badge badge-rejected' };
+        }
+        return { label: 'Pending', className: 'badge badge-pending' };
+      }
+
+      function render(current) {
+        var patientNode = document.getElementById('patient-name');
+        var orderNode = document.getElementById('order-number');
+        var registeredNode = document.getElementById('registered-at');
+        var overallStatsNode = document.getElementById('overall-stats');
+        var overallFillNode = document.getElementById('overall-fill');
+        var overallLabelNode = document.getElementById('overall-label');
+        var testsNode = document.getElementById('tests-list');
+        var lastUpdatedNode = document.getElementById('last-updated');
+
+        if (!patientNode || !orderNode || !registeredNode || !overallStatsNode || !overallFillNode || !overallLabelNode || !testsNode) {
+          return;
+        }
+
+        updateWatermark(current);
+
+        patientNode.textContent = String(current.patientName || '-');
+        orderNode.textContent = String(current.orderNumber || '-');
+        registeredNode.textContent = formatDateTime(current.registeredAt);
+
+        var reportableCount = Number(current.reportableCount || 0);
+        var verifiedCount = Number(current.verifiedCount || 0);
+        var progressPercent = Number(current.progressPercent || 0);
+        if (!isFinite(progressPercent) || progressPercent < 0) progressPercent = 0;
+        if (progressPercent > 100) progressPercent = 100;
+
+        overallLabelNode.textContent = 'Overall progress ' + progressPercent + '%';
+        overallStatsNode.textContent = verifiedCount + ' / ' + reportableCount;
+        overallFillNode.style.width = progressPercent + '%';
+
+        var nowMs = Date.now();
+        var rows = [];
+        var tests = Array.isArray(current.tests) ? current.tests : [];
+
+        for (var i = 0; i < tests.length; i += 1) {
+          var test = tests[i] || {};
+          var status = normalizeTestStatus(test.status);
+          var badge = getStatusBadge(status);
+          var progress = resolveTestProgress(current, test, nowMs);
+          var meta = progress.meta ? '<div class="test-meta">' + escapeHtml(progress.meta) + '</div>' : '<div class="test-meta"></div>';
+
+          rows.push(
+            '<div class="test-row">' +
+              '<div class="test-head">' +
+                '<div class="test-name">' + escapeHtml(test.testCode || '-') + ' - ' + escapeHtml(test.testName || '-') + '</div>' +
+                '<span class="' + badge.className + '">' + escapeHtml(badge.label) + '</span>' +
+              '</div>' +
+              '<div class="test-dept">' + escapeHtml(test.departmentName || '-') + '</div>' +
+              '<div class="bar-track"><div class="bar-fill ' + progress.barClass + '" style="width:' + progress.percent + '%"></div></div>' +
+              meta +
+            '</div>'
+          );
+        }
+
+        if (rows.length === 0) {
+          rows.push('<div class="test-row"><div class="test-name">No reportable tests yet.</div></div>');
+        }
+
+        testsNode.innerHTML = rows.join('');
+        if (lastUpdatedNode) {
+          lastUpdatedNode.textContent = 'Last update: ' + new Date().toLocaleTimeString();
+        }
+      }
+
+      async function pollStatus() {
+        try {
+          var response = await fetch(statusUrl, {
+            method: 'GET',
+            cache: 'no-store',
+            headers: {
+              Accept: 'application/json'
+            }
+          });
+          if (!response.ok) {
+            return;
+          }
+          var nextState = await response.json();
+          if (nextState && nextState.ready) {
+            window.location.replace(pdfUrl);
+            return;
+          }
+          state = nextState;
+          render(state);
+        } catch {
+          // Keep current state on intermittent errors and retry on next interval.
+        }
+      }
+
+      if (state && state.ready) {
+        window.location.replace(pdfUrl);
+        return;
+      }
+
+      render(state);
+      window.setInterval(pollStatus, 5000);
     })();
   </script>
 </body>
@@ -186,32 +615,30 @@ let PublicReportsController = class PublicReportsController {
     constructor(reportsService) {
         this.reportsService = reportsService;
     }
+    async getResultStatusJson(orderId, res) {
+        try {
+            const status = await this.reportsService.getPublicResultStatus(orderId);
+            res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+            res.setHeader('Pragma', 'no-cache');
+            res.setHeader('Expires', '0');
+            return res.status(200).json(status);
+        }
+        catch (error) {
+            const statusCode = error instanceof common_1.HttpException ? error.getStatus() : 500;
+            const message = extractErrorMessage(error, 'Unable to load result status.');
+            res.setHeader('Cache-Control', 'no-store');
+            return res.status(statusCode).json({ message });
+        }
+    }
     async getResultStatusPage(orderId, res) {
         try {
             const status = await this.reportsService.getPublicResultStatus(orderId);
             if (status.ready) {
-                const pdfUrl = `/public/results/${orderId}/pdf`;
-                res.setHeader('Content-Type', 'text/html; charset=utf-8');
-                return res.status(200).send(`
-        <!doctype html>
-        <html>
-        <head><title>Result Ready</title></head>
-        <body>
-          <script>
-            try {
-              if (window.top) {
-                window.top.location.href = '${pdfUrl}';
-              } else {
-                window.location.href = '${pdfUrl}';
-              }
-            } catch (e) {
-              window.location.href = '${pdfUrl}';
+                return res.redirect(`/public/results/${orderId}/pdf`);
             }
-          </script>
-        </body>
-        </html>
-      `);
-            }
+            res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+            res.setHeader('Pragma', 'no-cache');
+            res.setHeader('Expires', '0');
             res.setHeader('Content-Type', 'text/html; charset=utf-8');
             return res.status(200).send(renderPendingPage(status));
         }
@@ -238,6 +665,14 @@ let PublicReportsController = class PublicReportsController {
     }
 };
 exports.PublicReportsController = PublicReportsController;
+__decorate([
+    (0, common_1.Get)(':id/status'),
+    __param(0, (0, common_1.Param)('id', common_1.ParseUUIDPipe)),
+    __param(1, (0, common_1.Res)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, Object]),
+    __metadata("design:returntype", Promise)
+], PublicReportsController.prototype, "getResultStatusJson", null);
 __decorate([
     (0, common_1.Get)(':id'),
     __param(0, (0, common_1.Param)('id', common_1.ParseUUIDPipe)),
