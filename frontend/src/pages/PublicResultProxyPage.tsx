@@ -312,9 +312,18 @@ export function PublicResultProxyPage() {
         </div>
 
         <div className="public-result-summary">
-          <div className="public-result-summary-row"><span>Patient</span><strong>{current?.patientName || '-'}</strong></div>
-          <div className="public-result-summary-row"><span>Order</span><strong>{current?.orderNumber || '-'}</strong></div>
-          <div className="public-result-summary-row"><span>Registered</span><strong>{formatDateTime(current?.registeredAt)}</strong></div>
+          <div className="public-result-summary-row">
+            <span lang="ckb" dir="rtl">ناو</span>
+            <strong>{current?.patientName || '-'}</strong>
+          </div>
+          <div className="public-result-summary-row">
+            <span lang="ckb" dir="rtl">داواكاری</span>
+            <strong>{current?.orderNumber || '-'}</strong>
+          </div>
+          <div className="public-result-summary-row">
+            <span lang="ckb" dir="rtl">بەرواری تۆمار</span>
+            <strong>{formatDateTime(current?.registeredAt)}</strong>
+          </div>
         </div>
 
         <div className="public-result-overall">
@@ -398,7 +407,7 @@ export function PublicResultProxyPage() {
         .public-result-summary {
           padding: 14px 20px;
           display: grid;
-          gap: 6px;
+          gap: 8px;
           border-bottom: 1px solid #e2e8f0;
         }
         .public-result-summary-row {
@@ -406,12 +415,13 @@ export function PublicResultProxyPage() {
           justify-content: space-between;
           gap: 12px;
           align-items: baseline;
-          font-size: 0.92rem;
+          font-size: 1.03rem;
           color: #64748b;
         }
         .public-result-summary-row strong {
           color: #0f172a;
           font-weight: 700;
+          font-size: 1.08rem;
         }
         .public-result-overall {
           padding: 14px 20px;
@@ -424,7 +434,7 @@ export function PublicResultProxyPage() {
           align-items: center;
           margin-bottom: 8px;
           color: #64748b;
-          font-size: 0.88rem;
+          font-size: 0.95rem;
           font-weight: 600;
         }
         .public-result-overall-track {
@@ -458,17 +468,17 @@ export function PublicResultProxyPage() {
         }
         .public-result-test-name {
           font-weight: 700;
-          font-size: 0.92rem;
+          font-size: 1rem;
           color: #0f172a;
           line-height: 1.3;
         }
         .public-result-test-dept {
           margin-top: 2px;
-          font-size: 0.78rem;
+          font-size: 0.9rem;
           color: #64748b;
         }
         .badge {
-          font-size: 0.73rem;
+          font-size: 0.82rem;
           font-weight: 700;
           padding: 3px 9px;
           border-radius: 999px;
@@ -521,7 +531,7 @@ export function PublicResultProxyPage() {
         .public-result-test-meta {
           margin-top: 6px;
           min-height: 1.1em;
-          font-size: 0.77rem;
+          font-size: 0.88rem;
           color: #64748b;
           font-weight: 600;
         }
@@ -529,7 +539,7 @@ export function PublicResultProxyPage() {
           border-top: 1px solid #e2e8f0;
           padding: 10px 20px 14px;
           color: #64748b;
-          font-size: 0.8rem;
+          font-size: 0.9rem;
           display: flex;
           justify-content: space-between;
           gap: 8px;
@@ -557,12 +567,12 @@ export function PublicResultProxyPage() {
             padding-right: 12px;
           }
           .public-result-top-line {
-            font-size: 0.97rem;
+            font-size: 1.02rem;
           }
           .public-result-summary-row {
             flex-direction: column;
             align-items: flex-start;
-            gap: 2px;
+            gap: 4px;
           }
         }
       `}</style>

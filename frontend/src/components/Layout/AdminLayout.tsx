@@ -12,6 +12,7 @@ import {
   Segmented,
   Select,
   Space,
+  Switch,
   Tag,
   Typography,
   message,
@@ -24,14 +25,17 @@ import {
   GlobalOutlined,
   LinkOutlined,
   LogoutOutlined,
+  MoonOutlined,
   NotificationOutlined,
-  UnorderedListOutlined,
   QrcodeOutlined,
-  TeamOutlined,
   SettingOutlined,
+  SunOutlined,
+  TeamOutlined,
+  UnorderedListOutlined,
 } from '@ant-design/icons';
 import dayjs, { type Dayjs } from 'dayjs';
 import { useAuth } from '../../contexts/AuthContext';
+import { useTheme } from '../../contexts/ThemeContext';
 import {
   getAdminImpersonationStatus,
   startAdminImpersonation,
@@ -78,6 +82,7 @@ export function AdminLayout() {
   const navigate = useNavigate();
   const location = useLocation();
   const { user, logout, refreshToken, replaceTokens } = useAuth();
+  const { isDark, toggleTheme } = useTheme();
   const [labs, setLabs] = useState<AdminLabDto[]>([]);
   const [selectedLabId, setSelectedLabId] = useState<string | null>(null);
   const [datePreset, setDatePreset] = useState<AdminDatePreset>('7d');
@@ -363,10 +368,10 @@ export function AdminLayout() {
   };
 
   return (
-    <Layout style={{ minHeight: '100vh' }}>
+    <Layout className="lab-app-shell" style={{ minHeight: '100vh' }}>
       <Header
         style={{
-          background: '#111827',
+          background: '#001529',
           padding: '0 24px',
         }}
       >
@@ -435,6 +440,14 @@ export function AdminLayout() {
                 <Button onClick={openStartImpersonation}>Start impersonation</Button>
               )
             ) : null}
+            <Switch
+              checked={isDark}
+              onChange={toggleTheme}
+              size="small"
+              checkedChildren={<MoonOutlined />}
+              unCheckedChildren={<SunOutlined />}
+              style={{ marginRight: 8 }}
+            />
             <Text style={{ color: 'rgba(255,255,255,0.85)' }}>{user?.username}</Text>
             <Button icon={<LogoutOutlined />} onClick={() => void handleLogout()}>
               Log out
@@ -443,8 +456,14 @@ export function AdminLayout() {
         </div>
       </Header>
       <Layout>
-        <Sider width={220} style={{ background: '#e5edf7' }}>
+        <Sider
+          className="lab-app-sider"
+          width={228}
+          style={{ background: isDark ? '#141414' : '#e5edf7' }}
+          theme={isDark ? 'dark' : 'light'}
+        >
           <Menu
+            className="lab-app-menu"
             mode="inline"
             selectedKeys={[selectedMenuKey]}
             items={[
@@ -462,7 +481,7 @@ export function AdminLayout() {
             style={{ height: '100%', borderRight: 0 }}
           />
         </Sider>
-        <Content style={{ padding: 24, background: '#dce5f0' }}>
+        <Content style={{ padding: '12px 24px 24px', background: isDark ? '#141414' : '#dce5f0' }}>
           <div style={{ marginBottom: 12 }}>
             <Space size={12} wrap>
               <Badge status={selectedLabId ? 'processing' : 'default'} text={<Text strong>{scopeLabel}</Text>} />
