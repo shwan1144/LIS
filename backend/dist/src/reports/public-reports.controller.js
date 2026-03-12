@@ -15,6 +15,15 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.PublicReportsController = void 0;
 const common_1 = require("@nestjs/common");
 const reports_service_1 = require("./reports.service");
+const PUBLIC_RESULTS_HTML_CSP = [
+    "default-src 'self'",
+    "script-src 'self' 'unsafe-inline'",
+    "style-src 'self' 'unsafe-inline'",
+    "img-src 'self' data:",
+    "object-src 'none'",
+    "base-uri 'self'",
+    "frame-ancestors 'none'",
+].join('; ');
 function escapeHtml(value) {
     const s = value == null ? '' : String(value);
     return s
@@ -615,12 +624,20 @@ let PublicReportsController = class PublicReportsController {
     constructor(reportsService) {
         this.reportsService = reportsService;
     }
+    applyNoStoreHeaders(res) {
+        res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+        res.setHeader('Pragma', 'no-cache');
+        res.setHeader('Expires', '0');
+    }
+    applyHtmlHeaders(res) {
+        this.applyNoStoreHeaders(res);
+        res.setHeader('Content-Type', 'text/html; charset=utf-8');
+        res.setHeader('Content-Security-Policy', PUBLIC_RESULTS_HTML_CSP);
+    }
     async getResultStatusJson(orderId, res) {
         try {
             const status = await this.reportsService.getPublicResultStatus(orderId);
-            res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
-            res.setHeader('Pragma', 'no-cache');
-            res.setHeader('Expires', '0');
+            this.applyNoStoreHeaders(res);
             return res.status(200).json(status);
         }
         catch (error) {
@@ -636,16 +653,13 @@ let PublicReportsController = class PublicReportsController {
             if (status.ready) {
                 return res.redirect(`/public/results/${orderId}/pdf`);
             }
-            res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
-            res.setHeader('Pragma', 'no-cache');
-            res.setHeader('Expires', '0');
-            res.setHeader('Content-Type', 'text/html; charset=utf-8');
+            this.applyHtmlHeaders(res);
             return res.status(200).send(renderPendingPage(status));
         }
         catch (error) {
             const statusCode = error instanceof common_1.HttpException ? error.getStatus() : 500;
             const message = extractErrorMessage(error, 'Unable to load result status.');
-            res.setHeader('Content-Type', 'text/html; charset=utf-8');
+            this.applyHtmlHeaders(res);
             return res.status(statusCode).send(renderErrorPage(statusCode, message));
         }
     }
