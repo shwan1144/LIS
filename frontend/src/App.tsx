@@ -34,7 +34,6 @@ import { AdminLabReportDesignPage } from './pages/admin/AdminLabReportDesignPage
 import { AdminSettingsPage } from './pages/admin/AdminSettingsPage';
 import { AdminLabDetailsPage } from './pages/admin/AdminLabDetailsPage';
 import { AdminAnnouncementsPage } from './pages/admin/AdminAnnouncementsPage';
-import { AdminBulkMessagingPage } from './pages/admin/AdminBulkMessagingPage';
 import { PublicResultProxyPage } from './pages/PublicResultProxyPage';
 import { Outlet } from 'react-router-dom';
 import { getCurrentAuthScope } from './utils/tenant-scope';
@@ -136,7 +135,6 @@ function AppContent() {
                 <Route path="labs/online-results" element={<AdminLabOnlineResultsPage />} />
                 <Route path="labs/report-design" element={<AdminLabReportDesignPage />} />
                 <Route path="announcements" element={<AdminAnnouncementsPage />} />
-                <Route path="bulk-messaging" element={<AdminBulkMessagingPage />} />
                 <Route path="settings" element={<AdminSettingsPage />} />
               </Route>
             ) : (

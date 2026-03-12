@@ -28,7 +28,6 @@ const user_department_assignment_entity_1 = require("../entities/user-department
 const user_lab_assignment_entity_1 = require("../entities/user-lab-assignment.entity");
 const user_shift_assignment_entity_1 = require("../entities/user-shift-assignment.entity");
 const user_entity_1 = require("../entities/user.entity");
-const marketing_message_entity_1 = require("../entities/marketing-message.entity");
 exports.DATABASE_ENTITIES = [
     admin_lab_portal_token_entity_1.AdminLabPortalToken,
     lab_entity_1.Lab,
@@ -62,9 +61,5 @@ exports.DATABASE_ENTITIES = [
     gateway_entity_1.GatewayActivationCode,
     gateway_entity_1.GatewayToken,
     gateway_entity_1.GatewayMessageReceipt,
-    marketing_message_entity_1.LabMessagingChannelConfig,
-    marketing_message_entity_1.LabMarketingTemplate,
-    marketing_message_entity_1.MarketingMessageBatch,
-    marketing_message_entity_1.MarketingMessageRecipient,
 ];
 //# sourceMappingURL=entities.js.map

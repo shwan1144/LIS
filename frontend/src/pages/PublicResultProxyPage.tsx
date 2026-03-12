@@ -130,7 +130,7 @@ export function PublicResultProxyPage() {
   const [status, setStatus] = useState<PublicResultStatus | null>(null);
   const [statusError, setStatusError] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
-  const [pdfObjectUrl, setPdfObjectUrl] = useState<string | null>(null);
+  const [pdfOpenUrl, setPdfOpenUrl] = useState<string | null>(null);
   const [pdfError, setPdfError] = useState<string | null>(null);
   const [pdfLoading, setPdfLoading] = useState<boolean>(false);
 
@@ -149,14 +149,6 @@ export function PublicResultProxyPage() {
     .filter(Boolean)[0]
     ?.toLowerCase();
   const isPdfMode = remainderSegment === 'pdf';
-
-  useEffect(() => {
-    return () => {
-      if (pdfObjectUrl) {
-        URL.revokeObjectURL(pdfObjectUrl);
-      }
-    };
-  }, [pdfObjectUrl]);
 
   useEffect(() => {
     if (!id || isPdfMode || !apiStatusUrl) return;
@@ -230,10 +222,8 @@ export function PublicResultProxyPage() {
         const blob = await response.blob();
         if (cancelled) return;
         const nextUrl = URL.createObjectURL(blob);
-        setPdfObjectUrl((prev) => {
-          if (prev) URL.revokeObjectURL(prev);
-          return nextUrl;
-        });
+        setPdfOpenUrl(nextUrl);
+        window.location.replace(nextUrl);
       } catch (error) {
         if (cancelled) return;
         setPdfError(error instanceof Error ? error.message : 'Unable to load PDF.');
@@ -264,7 +254,7 @@ export function PublicResultProxyPage() {
   if (isPdfMode) {
     return (
       <div className="public-result-pdf-shell">
-        {pdfLoading ? <div className="public-result-pdf-message">Loading PDF result...</div> : null}
+        {pdfLoading ? <div className="public-result-pdf-message">Opening PDF result...</div> : null}
         {pdfError ? (
           <div className="public-result-pdf-message">
             <div>{pdfError}</div>
@@ -275,28 +265,20 @@ export function PublicResultProxyPage() {
             ) : null}
           </div>
         ) : null}
-        {!pdfLoading && !pdfError && pdfObjectUrl ? (
-          <iframe
-            title="Public Result PDF"
-            src={pdfObjectUrl}
-            className="public-result-pdf-frame"
-          />
+        {!pdfLoading && !pdfError && pdfOpenUrl ? (
+          <div className="public-result-pdf-message">
+            <div>PDF is ready.</div>
+            <a href={pdfOpenUrl}>Open PDF</a>
+          </div>
         ) : null}
         <style>{`
           .public-result-pdf-shell {
             min-height: 100vh;
             background: #f8fafc;
             display: flex;
-            align-items: stretch;
+            align-items: center;
             justify-content: center;
             padding: 10px;
-          }
-          .public-result-pdf-frame {
-            width: min(980px, 100%);
-            min-height: calc(100vh - 20px);
-            border: 1px solid #e2e8f0;
-            border-radius: 10px;
-            background: #fff;
           }
           .public-result-pdf-message {
             margin: auto;
@@ -587,4 +569,3 @@ export function PublicResultProxyPage() {
     </div>
   );
 }
-
