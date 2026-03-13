@@ -2033,40 +2033,55 @@ export function ReportsPage() {
           max-width: calc(100vw - 32px) !important;
         }
         .panel-entry-modal .ant-modal-content {
-          border-radius: 14px;
+          border-radius: 10px;
           overflow: hidden;
         }
         .panel-entry-modal .ant-modal-header {
-          padding: 11px 14px;
+          padding: 8px 10px;
           margin-bottom: 0;
         }
         .panel-entry-modal .ant-modal-body {
-          padding: 8px 12px 12px !important;
+          padding: 6px 10px 8px !important;
           max-height: calc(100vh - 140px);
           overflow-y: auto;
         }
         .panel-entry-modal .panel-entry-summary {
-          margin-bottom: 8px;
-          padding: 9px 10px;
+          margin-bottom: 4px;
+          padding: 6px 8px;
           border-radius: 6px;
         }
         .panel-entry-modal .panel-entry-grid-head {
-          padding: 5px 8px !important;
+          padding: 3px 6px !important;
           margin-bottom: 0 !important;
+          font-size: 10px !important;
         }
         .panel-entry-modal .panel-entry-grid-row {
-          padding: 4px 8px !important;
+          padding: 2px 6px !important;
           margin-bottom: 0 !important;
         }
         .panel-entry-modal .panel-entry-grid-row .ant-form-item {
           margin-bottom: 0;
         }
         .panel-entry-modal .panel-entry-params {
-          margin-top: 6px !important;
-          padding: 8px 10px !important;
+          margin-top: 4px !important;
+          padding: 6px 8px !important;
         }
         .panel-entry-modal .panel-entry-footer {
-          margin-top: 8px !important;
+          margin-top: 4px !important;
+        }
+        .panel-entry-modal .ant-input-number,
+        .panel-entry-modal .ant-input,
+        .panel-entry-modal .ant-select-selector,
+        .panel-entry-modal .ant-btn {
+          min-height: 28px !important;
+        }
+        .panel-entry-modal .ant-input-number-input {
+          height: 26px !important;
+        }
+        .panel-entry-modal .ant-tag {
+          font-size: 10px;
+          line-height: 16px;
+          padding-inline: 6px;
         }
         @media (max-width: 992px) {
           .panel-entry-modal .ant-modal {
@@ -2074,7 +2089,7 @@ export function ReportsPage() {
           }
           .panel-entry-modal .ant-modal-body {
             max-height: calc(100vh - 116px);
-            padding: 10px 12px 12px !important;
+            padding: 8px 10px 10px !important;
           }
         }
       `}</style>
@@ -2306,7 +2321,7 @@ export function ReportsPage() {
 
                       return (
                         <div key={target.id} className={isPanel ? 'panel-entry-grid-row' : undefined} style={{
-                          marginBottom: isPanel ? 0 : 10,
+                          marginBottom: isPanel ? 0 : 6,
                           padding: isPanel ? undefined : 0,
                           alignItems: 'center',
                           borderBottom: isPanel && idx < targetItems.length - 1 ? (isDark ? '1px solid rgba(255,255,255,0.05)' : '1px solid #f0f0f0') : 'none'
@@ -2340,7 +2355,7 @@ export function ReportsPage() {
                                             style={{ width: '100%', textAlign: 'center' }}
                                             placeholder="Value"
                                             precision={2}
-                                            size={isPanel ? 'small' : 'large'}
+                                            size="small"
                                           />
                                         </Form.Item>
                                         {target.test?.resultEntryType === 'NUMERIC' && !isPanel && target.test?.unit && <Text type="secondary">{target.test.unit}</Text>}
@@ -2351,7 +2366,7 @@ export function ReportsPage() {
                                         showSearch
                                         style={{ ...panelResultControlStyle, textAlign: 'center' }}
                                         dropdownStyle={{ textAlign: 'center' }}
-                                        size={isPanel ? 'small' : 'large'}
+                                        size="small"
                                         placeholder="Select"
                                         options={[
                                           ...(target.test?.resultTextOptions ?? []).map((o) => ({ label: o.value, value: o.value })),
@@ -2359,7 +2374,7 @@ export function ReportsPage() {
                                         ]}
                                       />
                                     ) : (
-                                      <Input style={{ ...panelResultControlStyle, textAlign: 'center' }} size={isPanel ? 'small' : 'large'} placeholder="Result text" />
+                                      <Input style={{ ...panelResultControlStyle, textAlign: 'center' }} size="small" placeholder="Result text" />
                                     )}
                                   </Form.Item>
                                 )
@@ -2458,7 +2473,7 @@ export function ReportsPage() {
                 );
               })()}
 
-              <Form.Item className="panel-entry-footer" style={{ marginBottom: 0, marginTop: 12 }}>
+              <Form.Item className="panel-entry-footer" style={{ marginBottom: 0, marginTop: 6 }}>
                 <Space style={{ width: '100%', justifyContent: 'flex-end' }} size="middle">
                   <Button
                     onClick={() => {

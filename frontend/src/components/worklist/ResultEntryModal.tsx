@@ -274,9 +274,6 @@ export function ResultEntryModal({
         <div className="result-entry-modal__title">
           <div className="result-entry-modal__title-copy">
             <Title level={4}>Enter Result</Title>
-            <Text type="secondary">
-              Compact result entry for single tests, panels, and culture groups.
-            </Text>
           </div>
         </div>
       }

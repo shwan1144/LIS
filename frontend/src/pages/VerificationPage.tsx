@@ -832,12 +832,65 @@ export function VerificationPage() {
           flex-wrap: wrap;
         }
         .verification-review-modal .ant-modal-header {
-          padding: 5px 8px !important;
+          padding: 8px 10px !important;
         }
         .verification-review-modal .ant-modal-body {
-          padding: 5px 8px 6px !important;
+          padding: 6px 10px 8px !important;
           max-height: calc(100vh - 140px);
           overflow-y: auto;
+        }
+        .verification-review-summary {
+          margin-bottom: 4px;
+          padding: 6px 8px;
+          border-radius: 6px;
+        }
+        .verification-review-actions {
+          display: flex;
+          justify-content: flex-end;
+          gap: 4px;
+          margin-bottom: 4px;
+        }
+        .verification-review-note {
+          display: block;
+          margin-bottom: 4px;
+          font-size: 10px !important;
+        }
+        .verification-review-grid-head {
+          display: flex;
+          padding: 3px 6px;
+          border-radius: 4px 4px 0 0;
+          background: ${isDark ? 'rgba(255,255,255,0.04)' : '#f3f4f6'};
+          border-bottom: 1px solid ${isDark ? 'rgba(255,255,255,0.08)' : '#d1d5db'};
+          font-weight: 600;
+          font-size: 10px;
+          text-transform: uppercase;
+          letter-spacing: 0.05em;
+        }
+        .verification-review-row {
+          display: flex;
+          align-items: center;
+          padding: 3px 6px;
+          border-radius: 4px;
+        }
+        .verification-review-panel-break {
+          margin-top: 1px;
+          margin-bottom: 1px;
+          padding-top: 2px;
+        }
+        .verification-review-culture {
+          margin: 0 6px 6px;
+          padding: 6px;
+          border-radius: 6px;
+        }
+        .verification-review-modal .ant-btn-sm {
+          height: 26px;
+          padding-inline: 7px;
+          font-size: 12px;
+        }
+        .verification-review-modal .ant-tag {
+          font-size: 10px;
+          line-height: 16px;
+          padding-inline: 6px;
         }
       `}</style>
 
@@ -980,6 +1033,7 @@ export function VerificationPage() {
         ) : reviewOrder && reviewGroup ? (
           <div>
             <div
+              className="verification-review-summary"
               style={{
                 marginBottom: 6,
                 padding: '6px 8px',
@@ -998,7 +1052,7 @@ export function VerificationPage() {
               </Space>
             </div>
 
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 6, marginBottom: 6 }}>
+            <div className="verification-review-actions">
               <Button
                 type="primary"
                 icon={<CheckCircleOutlined />}
@@ -1032,24 +1086,15 @@ export function VerificationPage() {
             </div>
 
             {reviewGroup.groupKind === 'single' && (
-              <Text type="secondary" style={{ fontSize: 11, display: 'block', marginBottom: 6 }}>
+              <Text type="secondary" className="verification-review-note">
                 Per-test Verify/Reject is available for single tests and keeps this modal open.
               </Text>
             )}
 
             <div
+              className="verification-review-grid-head"
               style={{
-                display: 'flex',
-                backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : '#f5f5f5',
-                borderRadius: '6px 6px 0 0',
-                borderBottom: isDark
-                  ? '1px solid rgba(255,255,255,0.1)'
-                  : '1px solid #e8e8e8',
-                fontWeight: 600,
-                fontSize: 11,
-                textTransform: 'uppercase',
-                letterSpacing: '0.5px',
-                padding: '2px 6px',
+                backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : '#f3f4f6',
               }}
             >
               <div style={{ flex: '1 1 32%', textAlign: 'center' }}>Test</div>
@@ -1079,13 +1124,11 @@ export function VerificationPage() {
                   <div key={item.id}>
                     {firstPanelIndex > 0 && index === firstPanelIndex && (
                       <div
+                        className="verification-review-panel-break"
                         style={{
                           borderTop: isDark
                             ? '1px dashed rgba(145,202,255,0.65)'
                             : '1px dashed #91caff',
-                          marginTop: 1,
-                          paddingTop: 3,
-                          marginBottom: 1,
                         }}
                       >
                         <Text strong style={{ fontSize: 11 }}>
@@ -1094,10 +1137,8 @@ export function VerificationPage() {
                       </div>
                     )}
                     <div
+                      className="verification-review-row"
                       style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        padding: '1px 6px',
                         borderBottom:
                           index < orderedReviewItems.length - 1
                             ? isDark
@@ -1225,10 +1266,8 @@ export function VerificationPage() {
                     </div>
                     {isCultureEntry && (
                       <div
+                        className="verification-review-culture"
                         style={{
-                          margin: '0 6px 8px',
-                          padding: 8,
-                          borderRadius: 8,
                           border: isDark
                             ? '1px solid rgba(148,163,184,0.2)'
                             : '1px solid #dbeafe',
