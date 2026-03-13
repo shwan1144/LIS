@@ -29,7 +29,6 @@ import {
   PrinterOutlined,
   UserOutlined,
   DeleteOutlined,
-  LockOutlined,
   PlusOutlined,
   ReloadOutlined,
   SearchOutlined,
@@ -52,8 +51,10 @@ import {
   getLabSettings,
   updateOrderPayment,
   updateOrderDiscount,
+  updateOrderNotes,
   updateOrderTests,
   updateOrderDeliveryMethods,
+  cancelOrder,
   updatePatient,
   type CreateOrderDto,
   type DeliveryMethod,
@@ -109,11 +110,21 @@ function getPatientName(p: PatientDto) {
   return p.fullName?.trim() || '';
 }
 
+function getTodayHistoryDateRange(
+  timeZone: string | null | undefined,
+): [dayjs.Dayjs, dayjs.Dayjs] {
+  const todayDateKey = formatDateKeyForTimeZone(new Date(), timeZone);
+  const today = dayjs(`${todayDateKey}T00:00:00`);
+  return [today, today];
+}
+
 interface OrderListRow {
   rowId: string;
   patient: PatientDto;
   createdOrder: OrderHistoryItemDto | null;
 }
+
+type OrderHistoryStatusFilter = 'ACTIVE' | 'REGISTERED' | 'COMPLETED' | 'CANCELLED';
 
 type PrintActionType = 'receipt' | 'labels';
 
@@ -130,10 +141,11 @@ const CREATE_ORDER_TIMEOUT_MS = 15_000;
 const CREATE_ORDER_SLOW_FEEDBACK_MS = 1_200;
 const PATIENT_PICKER_PAGE_SIZE = 8;
 const PATIENT_PICKER_DEBOUNCE_MS = 250;
-const ORDER_STATUS_FILTERS: Array<{ label: string; value: 'ALL' | OrderStatus }> = [
-  { label: 'All statuses', value: 'ALL' },
+const ORDER_STATUS_FILTERS: Array<{ label: string; value: OrderHistoryStatusFilter }> = [
+  { label: 'Active orders', value: 'ACTIVE' },
   { label: 'Registered', value: 'REGISTERED' },
   { label: 'Completed', value: 'COMPLETED' },
+  { label: 'Cancelled', value: 'CANCELLED' },
 ];
 const ORDER_STATUS_TAG_COLORS: Record<OrderStatus, string> = {
   REGISTERED: 'blue',
@@ -357,11 +369,10 @@ export function OrdersPage() {
   const [listTotal, setListTotal] = useState(0);
   const [listQueryInput, setListQueryInput] = useState('');
   const [listQuery, setListQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'ALL' | OrderStatus>('ALL');
-  const [historyDateRange, setHistoryDateRange] = useState<[dayjs.Dayjs, dayjs.Dayjs]>([
-    dayjs().startOf('day'),
-    dayjs().startOf('day'),
-  ]);
+  const [statusFilter, setStatusFilter] = useState<OrderHistoryStatusFilter>('ACTIVE');
+  const [historyDateRange, setHistoryDateRange] = useState<[dayjs.Dayjs, dayjs.Dayjs]>(() =>
+    getTodayHistoryDateRange(lab?.timezone),
+  );
   const [historyShiftFilter, setHistoryShiftFilter] = useState<string>('ALL');
   const [historyShiftOptions, setHistoryShiftOptions] = useState<ShiftDto[]>([]);
   const [draftPatient, setDraftPatient] = useState<PatientDto | null>(null);
@@ -415,9 +426,11 @@ export function OrdersPage() {
   const [updatingDiscount, setUpdatingDiscount] = useState(false);
   const [partialPaymentModalOpen, setPartialPaymentModalOpen] = useState(false);
   const [partialPaymentAmount, setPartialPaymentAmount] = useState<number>(0);
-  const [editTestsModalOpen, setEditTestsModalOpen] = useState(false);
+  const [lockedOrderEditMode, setLockedOrderEditMode] = useState(false);
+  const [lockedOrderReferredByDraft, setLockedOrderReferredByDraft] = useState('');
   const [editingTests, setEditingTests] = useState<SelectedTest[]>([]);
   const [savingEditedTests, setSavingEditedTests] = useState(false);
+  const [cancellingOrder, setCancellingOrder] = useState(false);
   const [editTestsRemovalReasonModalOpen, setEditTestsRemovalReasonModalOpen] = useState(false);
   const [editTestsRemovalReason, setEditTestsRemovalReason] = useState('');
   const [orderDetailsCache, setOrderDetailsCache] = useState<Record<string, OrderDto>>({});
@@ -438,6 +451,7 @@ export function OrdersPage() {
     if (!selectedCreatedOrderSummary) return null;
     return orderDetailsCache[selectedCreatedOrderSummary.id] ?? null;
   }, [orderDetailsCache, selectedCreatedOrderSummary]);
+  const selectedOrderIsCancelled = selectedCreatedOrderSummary?.status === 'CANCELLED';
   const selectedOrderIsToday = useMemo(() => {
     if (!selectedCreatedOrder) return null;
     return (
@@ -464,17 +478,21 @@ export function OrdersPage() {
     updatingPayment ||
     updatingDiscount ||
     savingDeliveryMethods ||
-    savingEditedTests;
+    savingEditedTests ||
+    cancellingOrder;
   const lockedOrderActionsBusy =
     nonPrintBusy ||
     anyPrintInFlight;
   const lockedOrderBaseActionsDisabled = lockedOrderActionsBusy || !lockedOrderContextActive;
+  const lockedOrderMutationActionsDisabled =
+    lockedOrderBaseActionsDisabled || selectedOrderIsCancelled;
   const lockedOrderDetailActionsDisabled =
-    nonPrintBusy || !lockedOrderContextActive || !selectedCreatedOrder;
+    nonPrintBusy || !lockedOrderContextActive || !selectedCreatedOrder || selectedOrderIsCancelled;
   const lockedOrderEditTestsDisabled =
     lockedOrderActionsBusy ||
     !lockedOrderContextActive ||
     !selectedCreatedOrder ||
+    selectedOrderIsCancelled ||
     selectedOrderIsToday === false;
   const lockedOrderBaseActionDisabledTitle = lockedOrderActionsBusy
     ? 'Please wait until the current action finishes.'
@@ -487,6 +505,8 @@ export function OrdersPage() {
       ? 'Select a locked order to use these actions.'
       : !selectedCreatedOrder
         ? 'Order details are still loading.'
+        : selectedOrderIsCancelled
+          ? 'Cancelled orders cannot be printed.'
         : undefined;
   const lockedOrderEditTestsDisabledReason = lockedOrderActionsBusy
     ? 'Please wait until the current action finishes.'
@@ -494,6 +514,8 @@ export function OrdersPage() {
       ? 'Select a locked order to use these actions.'
       : !selectedCreatedOrder
         ? 'Order details are still loading.'
+        : selectedOrderIsCancelled
+          ? 'Cancelled orders are read-only.'
         : selectedOrderIsToday === false
           ? ONLY_TODAYS_ORDERS_EDITABLE_MESSAGE
           : undefined;
@@ -515,8 +537,6 @@ export function OrdersPage() {
   const canAdminOverrideLockedTestRemoval =
     Boolean(user?.isImpersonation) ||
     canAccessAction(user?.role, 'orders.force_remove_locked_tests');
-  const editTestsOrderNumber =
-    selectedCreatedOrder?.orderNumber ?? selectedCreatedOrderSummary?.orderNumber ?? null;
 
   const loadOrderHistory = useCallback(
     async (options?: {
@@ -542,7 +562,7 @@ export function OrdersPage() {
           page: effectivePage,
           size: ORDER_PAGE_SIZE,
           search: listQuery.trim() || undefined,
-          status: statusFilter === 'ALL' ? undefined : statusFilter,
+          status: statusFilter === 'ACTIVE' ? undefined : statusFilter,
           startDate: historyDateRange[0].format('YYYY-MM-DD'),
           endDate: historyDateRange[1].format('YYYY-MM-DD'),
           shiftId: historyShiftFilter === 'ALL' ? undefined : historyShiftFilter,
@@ -1177,13 +1197,28 @@ export function OrdersPage() {
     }
   }, []);
 
+  useEffect(() => {
+    setLockedOrderEditMode(false);
+    setEditingTests([]);
+    setLockedOrderReferredByDraft('');
+    setEditTestsRemovalReason('');
+    setEditTestsRemovalReasonModalOpen(false);
+  }, [selectedCreatedOrderSummary?.id]);
+
   const openEditTestsModal = () => {
     if (!selectedCreatedOrder) return;
     const currentRootTests = getRootOrderTests(selectedCreatedOrder);
     setEditingTests(currentRootTests);
+    setLockedOrderReferredByDraft(selectedCreatedOrder.notes?.trim() || '');
     setEditTestsRemovalReason('');
     setEditTestsRemovalReasonModalOpen(false);
-    setEditTestsModalOpen(true);
+    setLockedOrderEditMode(true);
+  };
+
+  const closeLockedOrderEditor = () => {
+    setLockedOrderEditMode(false);
+    setEditTestsRemovalReason('');
+    setEditTestsRemovalReasonModalOpen(false);
   };
 
   const handleAddEditingTest = (testId: string) => {
@@ -1317,24 +1352,52 @@ export function OrdersPage() {
       return;
     }
 
+    const originalRootTests = getRootOrderTests(selectedCreatedOrder);
+    const originalTestIds = [...new Set(originalRootTests.map((test) => test.testId))].sort();
+    const nextTestIds = [...new Set(editingTests.map((test) => test.testId))].sort();
+    const testsChanged =
+      originalTestIds.length !== nextTestIds.length ||
+      originalTestIds.some((testId, index) => testId !== nextTestIds[index]);
+    const normalizedNotes = lockedOrderReferredByDraft.trim();
+    const originalNotes = (selectedCreatedOrder.notes ?? '').trim();
+    const notesChanged = normalizedNotes !== originalNotes;
+
+    if (!testsChanged && !notesChanged) {
+      closeLockedOrderEditor();
+      message.info('No changes to save.');
+      return;
+    }
+
     setSavingEditedTests(true);
     try {
-      const updated = await updateOrderTests(selectedCreatedOrder.id, {
-        testIds: editingTests.map((test) => test.testId),
-        forceRemoveVerified: payload?.forceRemoveVerified,
-        removalReason: payload?.removalReason,
-      });
-      applyUpdatedOrderToList(updated);
-      setEditTestsModalOpen(false);
+      let updated: OrderDto | null = null;
+
+      if (notesChanged) {
+        updated = await updateOrderNotes(selectedCreatedOrder.id, {
+          notes: normalizedNotes || null,
+        });
+        applyUpdatedOrderToList(updated);
+      }
+
+      if (testsChanged) {
+        updated = await updateOrderTests(selectedCreatedOrder.id, {
+          testIds: editingTests.map((test) => test.testId),
+          forceRemoveVerified: payload?.forceRemoveVerified,
+          removalReason: payload?.removalReason,
+        });
+        applyUpdatedOrderToList(updated);
+      }
+
+      closeLockedOrderEditor();
       setEditTestsRemovalReason('');
       setEditTestsRemovalReasonModalOpen(false);
-      message.success('Order tests updated. Order number and sequence stay unchanged.');
+      message.success('Order updated. Order number and sequence stay unchanged.');
     } catch (error: unknown) {
       const msg =
         error && typeof error === 'object' && 'response' in error
           ? (error as { response?: { data?: { message?: string } } }).response?.data?.message
           : null;
-      message.error(msg || 'Failed to update order tests');
+      message.error(msg || 'Failed to update order');
     } finally {
       setSavingEditedTests(false);
     }
@@ -1633,6 +1696,10 @@ export function OrdersPage() {
 
   const openPrint = async (order: OrderDto, type: PrintActionType) => {
     if (nonPrintBusy || printingAction[type]) return;
+    if (order.status === 'CANCELLED') {
+      message.error('Cancelled orders cannot be printed.');
+      return;
+    }
     const sequence = ++printRequestSequenceRef.current;
     setPrintingAction((current) => ({
       ...current,
@@ -1693,6 +1760,10 @@ export function OrdersPage() {
 
   const handleLockedEditTests = () => {
     if (lockedOrderActionsBusy || !lockedOrderContextActive || !selectedCreatedOrderSummary) return;
+    if (lockedOrderEditMode) {
+      closeLockedOrderEditor();
+      return;
+    }
     if (!selectedCreatedOrder) {
       void fetchOrderDetails(selectedCreatedOrderSummary.id, 'auto');
       message.info('Order details are still loading. Please try again in a moment.');
@@ -1716,7 +1787,7 @@ export function OrdersPage() {
   };
 
   const handleLockedMarkPaid = async () => {
-    if (lockedOrderBaseActionsDisabled || !selectedCreatedOrderSummary) return;
+    if (lockedOrderMutationActionsDisabled || !selectedCreatedOrderSummary) return;
     setUpdatingPayment(true);
     try {
       const updated = await updateOrderPayment(selectedCreatedOrderSummary.id, {
@@ -1732,7 +1803,7 @@ export function OrdersPage() {
   };
 
   const handleLockedMarkUnpaid = async () => {
-    if (lockedOrderBaseActionsDisabled || !selectedCreatedOrderSummary) return;
+    if (lockedOrderMutationActionsDisabled || !selectedCreatedOrderSummary) return;
     setUpdatingPayment(true);
     try {
       const updated = await updateOrderPayment(selectedCreatedOrderSummary.id, {
@@ -1749,7 +1820,7 @@ export function OrdersPage() {
   };
 
   const handleLockedOpenPartialPayment = () => {
-    if (lockedOrderBaseActionsDisabled || !selectedCreatedOrderSummary) return;
+    if (lockedOrderMutationActionsDisabled || !selectedCreatedOrderSummary) return;
     setPartialPaymentAmount(
       selectedCreatedOrderSummary?.paidAmount != null ? Number(selectedCreatedOrderSummary.paidAmount) : 0,
     );
@@ -1763,6 +1834,10 @@ export function OrdersPage() {
 
   const handleSaveDeliveryPreferences = async () => {
     if (!selectedCreatedOrderSummary || !isSelectedLocked) return;
+    if (selectedOrderIsCancelled) {
+      message.info('Cancelled orders are read-only.');
+      return;
+    }
     setSavingDeliveryMethods(true);
     try {
       const updated = await updateOrderDeliveryMethods(selectedCreatedOrderSummary.id, {
@@ -1800,6 +1875,9 @@ export function OrdersPage() {
 
   const handleSummaryDiscountCommit = async (nextDiscount?: number) => {
     if (!isSelectedLocked || !selectedCreatedOrderSummary) return;
+    if (selectedOrderIsCancelled) {
+      return;
+    }
     const normalized = Math.round(Math.min(100, Math.max(0, nextDiscount ?? discountPercent)) * 100) / 100;
     const serverDiscount = Math.min(
       100,
@@ -1902,12 +1980,75 @@ export function OrdersPage() {
       : `${summaryTotalAmount.toFixed(0)} IQD`;
 
   const currentPaymentStatus = selectedCreatedOrderSummary?.paymentStatus ?? 'unpaid';
+  const selectedOrderCancelDisabledReason = (() => {
+    if (lockedOrderActionsBusy) {
+      return cancellingOrder
+        ? 'Cancellation is already in progress.'
+        : 'Please wait until the current action finishes.';
+    }
+    if (!lockedOrderContextActive) {
+      return 'Select a locked order to cancel it.';
+    }
+    if (!selectedCreatedOrder) {
+      return 'Order details are still loading.';
+    }
+    if (selectedOrderIsCancelled) {
+      return 'Order is already cancelled.';
+    }
+    if (selectedOrderIsToday === false) {
+      return "Only today's orders can be cancelled.";
+    }
+    if ((selectedCreatedOrder.paymentStatus ?? 'unpaid') !== 'unpaid') {
+      return 'Only unpaid orders can be cancelled.';
+    }
+    return undefined;
+  })();
+  const lockedOrderCancelDisabled = Boolean(selectedOrderCancelDisabledReason);
   const lockedDeliveryMethods = normalizeDeliveryMethods(
     selectedCreatedOrder?.deliveryMethods ?? selectedCreatedOrderSummary?.deliveryMethods ?? [],
   );
   const hasLockedDeliveryMethodChanges =
     lockedDeliveryMethods.length !== selectedDeliveryMethods.length ||
     lockedDeliveryMethods.some((method, idx) => method !== selectedDeliveryMethods[idx]);
+  const handleLockedCancelOrder = () => {
+    if (selectedOrderCancelDisabledReason) {
+      message.info(selectedOrderCancelDisabledReason);
+      return;
+    }
+    if (!selectedCreatedOrderSummary?.id) {
+      return;
+    }
+
+    Modal.confirm({
+      title: 'Cancel this order?',
+      content:
+        'The order will be marked as cancelled. Order number, barcode, and sequence numbers will stay unchanged.',
+      okText: 'Cancel order',
+      okButtonProps: { danger: true },
+      cancelText: 'Keep order',
+      onOk: async () => {
+        setCancellingOrder(true);
+        try {
+          const updated = await cancelOrder(selectedCreatedOrderSummary.id);
+          applyUpdatedOrderToList(updated);
+          setLockedOrderEditMode(false);
+          setEditTestsRemovalReasonModalOpen(false);
+          setEditTestsRemovalReason('');
+          await loadOrderHistory({ mode: 'soft' });
+          message.success('Order cancelled. Numbering was preserved.');
+        } catch (error: unknown) {
+          const msg =
+            error && typeof error === 'object' && 'response' in error
+              ? (error as { response?: { data?: { message?: string } } }).response?.data?.message
+              : null;
+          message.error(msg || 'Failed to cancel order');
+          throw error;
+        } finally {
+          setCancellingOrder(false);
+        }
+      },
+    });
+  };
   const orderDockBar = selectedPatient ? (
     <div className={`order-dock-bar${isDark ? ' order-dock-bar-dark' : ''}`}>
       <div className="order-dock-summary-grid">
@@ -1928,7 +2069,7 @@ export function OrdersPage() {
               value={discountPercent}
               onChange={handleSummaryDiscountChange}
               onBlur={() => void handleSummaryDiscountCommit()}
-              disabled={submitting || updatingDiscount}
+              disabled={submitting || updatingDiscount || (isSelectedLocked && selectedOrderIsCancelled)}
               style={{ width: 70 }}
             />
             <span className="order-summary-suffix">%</span>
@@ -1957,13 +2098,26 @@ export function OrdersPage() {
             <Tooltip title={lockedOrderEditTestsDisabledReason}>
               <span>
                 <Button
-                  icon={<PlusOutlined />}
+                  icon={<EditOutlined />}
                   onClick={handleLockedEditTests}
                   size="large"
                   loading={savingEditedTests}
                   disabled={lockedOrderEditTestsDisabled}
                 >
-                  Edit tests
+                  {lockedOrderEditMode ? 'Close editor' : 'Edit order'}
+                </Button>
+              </span>
+            </Tooltip>
+            <Tooltip title={selectedOrderCancelDisabledReason}>
+              <span>
+                <Button
+                  danger
+                  onClick={handleLockedCancelOrder}
+                  size="large"
+                  loading={cancellingOrder}
+                  disabled={lockedOrderCancelDisabled}
+                >
+                  Cancel order
                 </Button>
               </span>
             </Tooltip>
@@ -1995,8 +2149,8 @@ export function OrdersPage() {
                   loading={updatingPayment}
                   onClick={() => void handleLockedMarkPaid()}
                   size="large"
-                  disabled={lockedOrderBaseActionsDisabled}
-                  title={lockedOrderBaseActionDisabledTitle}
+                  disabled={lockedOrderMutationActionsDisabled}
+                  title={selectedOrderIsCancelled ? 'Cancelled orders are read-only.' : lockedOrderBaseActionDisabledTitle}
                 >
                   Mark as paid
                 </Button>
@@ -2004,8 +2158,8 @@ export function OrdersPage() {
                   loading={updatingPayment}
                   onClick={handleLockedOpenPartialPayment}
                   size="large"
-                  disabled={lockedOrderBaseActionsDisabled}
-                  title={lockedOrderBaseActionDisabledTitle}
+                  disabled={lockedOrderMutationActionsDisabled}
+                  title={selectedOrderIsCancelled ? 'Cancelled orders are read-only.' : lockedOrderBaseActionDisabledTitle}
                 >
                   Partially paid
                 </Button>
@@ -2022,8 +2176,8 @@ export function OrdersPage() {
                   backgroundColor: 'rgba(82, 196, 26, 0.1)',
                 }}
                 onClick={() => void handleLockedMarkUnpaid()}
-                disabled={lockedOrderBaseActionsDisabled}
-                title={lockedOrderBaseActionDisabledTitle}
+                disabled={lockedOrderMutationActionsDisabled}
+                title={selectedOrderIsCancelled ? 'Cancelled orders are read-only.' : lockedOrderBaseActionDisabledTitle}
               >
                 Paid (Click to Unpay)
               </Button>
@@ -2035,8 +2189,8 @@ export function OrdersPage() {
                   loading={updatingPayment}
                   onClick={() => void handleLockedMarkPaid()}
                   size="large"
-                  disabled={lockedOrderBaseActionsDisabled}
-                  title={lockedOrderBaseActionDisabledTitle}
+                  disabled={lockedOrderMutationActionsDisabled}
+                  title={selectedOrderIsCancelled ? 'Cancelled orders are read-only.' : lockedOrderBaseActionDisabledTitle}
                 >
                   Mark as paid
                 </Button>
@@ -2050,8 +2204,8 @@ export function OrdersPage() {
                     backgroundColor: 'rgba(250, 173, 20, 0.1)',
                   }}
                   onClick={handleLockedOpenPartialPayment}
-                  disabled={lockedOrderBaseActionsDisabled}
-                  title={lockedOrderBaseActionDisabledTitle}
+                  disabled={lockedOrderMutationActionsDisabled}
+                  title={selectedOrderIsCancelled ? 'Cancelled orders are read-only.' : lockedOrderBaseActionDisabledTitle}
                 >
                   Partially paid
                   {selectedCreatedOrderSummary?.paidAmount != null &&
@@ -2142,7 +2296,7 @@ export function OrdersPage() {
                   wrap
                   className="orders-history-filter-row"
                 >
-                  <Select<'ALL' | OrderStatus>
+                  <Select<OrderHistoryStatusFilter>
                     style={{ minWidth: 170 }}
                     value={statusFilter}
                     options={ORDER_STATUS_FILTERS}
@@ -2351,18 +2505,24 @@ export function OrdersPage() {
                 <div className="locked-order-content">
                   <Card type="inner" className="orders-section-card" title="Tests in this order">
                     <Text type="secondary" style={{ display: 'block', marginBottom: 8 }}>
-                      You can update tests for this order without changing order number or existing label sequence numbers.
+                      {selectedOrderIsCancelled
+                        ? 'This order is cancelled. Order number, barcode, and sequence numbers are preserved, but the order is read-only and cannot be printed.'
+                        : 'You can update tests for this order without changing order number or existing label sequence numbers.'}
                     </Text>
                     {selectedOrderDetailsLoading ? (
                       <Spin tip="Loading order details..." />
                     ) : selectedCreatedOrder ? (() => {
                       const orderTests = sortRootOrderTestsForReadonly(getRootOrderTests(selectedCreatedOrder));
+                      const displayedLockedOrderTests = lockedOrderEditMode
+                        ? sortRootOrderTestsForReadonly(editingTests)
+                        : orderTests;
+                      const lockedOrderReferredByValue = selectedCreatedOrder.notes?.trim() || '';
 
                       let lockedTubesRequired: { tubeType: string; color: string; count: number }[] = [];
-                      if (orderTests.length > 0) {
+                      if (displayedLockedOrderTests.length > 0) {
                         const groups = new Set<string>();
                         const typeByGroup = new Map<string, string>();
-                        orderTests.forEach((t) => {
+                        displayedLockedOrderTests.forEach((t) => {
                           const type = t.tubeType || 'OTHER';
                           let groupKey = type;
                           if (printLabelSequenceBy === 'department') {
@@ -2388,13 +2548,109 @@ export function OrdersPage() {
                       return (
                         <Row gutter={[12, 12]}>
                           <Col span={18}>
-                            {orderTests.length === 0 ? (
-                              <Text type="secondary">No tests in this order.</Text>
+                            {lockedOrderEditMode ? (
+                              <div className="orders-edit-tests-shell">
+                                <div className="order-draft-referred-row">
+                                  <Text strong style={{ display: 'block', marginBottom: 6 }}>
+                                    Referred by
+                                  </Text>
+                                  <AutoComplete
+                                    value={lockedOrderReferredByDraft}
+                                    onChange={setLockedOrderReferredByDraft}
+                                    options={referringDoctorOptions.map((name) => ({ value: name }))}
+                                    placeholder="Select from list or type doctor name"
+                                    style={{ width: '100%', marginBottom: 12 }}
+                                    filterOption={(inputValue, option) =>
+                                      String(option?.value ?? '')
+                                        .toLowerCase()
+                                        .includes(inputValue.toLowerCase())
+                                    }
+                                    allowClear
+                                  />
+                                </div>
+
+                                <div className="orders-edit-tests-toolbar">
+                                  <div className="orders-edit-tests-toolbar-copy">
+                                    <Text strong>Add another test</Text>
+                                    <Text type="secondary">Search by code, abbreviation, or test name.</Text>
+                                  </div>
+                                  <Select
+                                    showSearch
+                                    className="orders-edit-tests-select"
+                                    placeholder="Add test by code or name"
+                                    value={null}
+                                    loading={loadingTests}
+                                    onChange={handleAddEditingTest}
+                                    optionFilterProp="label"
+                                    filterOption={(input, option) => {
+                                      const label = String(option?.label ?? '').toLowerCase();
+                                      const variants = buildKeyboardSearchVariants(input);
+                                      if (variants.length === 0) return true;
+                                      return variants.some((variant) => label.includes(variant));
+                                    }}
+                                    options={testOptions.map((test) => ({
+                                      value: test.id,
+                                      label: (test as any).abbreviation
+                                        ? `${test.code} - ${(test as any).abbreviation} - ${test.name} (${test.tubeType})`
+                                        : `${test.code} - ${test.name} (${test.tubeType})`,
+                                    }))}
+                                  />
+                                </div>
+
+                                {editingTests.length === 0 ? (
+                                  <div className="orders-edit-tests-empty">
+                                    <Text strong>No tests selected</Text>
+                                    <Text type="secondary">
+                                      Keep at least one test in the order, or add new tests from the search field above.
+                                    </Text>
+                                  </div>
+                                ) : (
+                                  <Table
+                                    className="orders-edit-tests-table"
+                                    dataSource={editingTests}
+                                    columns={editTestsTableColumns}
+                                    rowKey="testId"
+                                    rowClassName={(test) =>
+                                      `orders-edit-tests-table-row${test.blocked ? ' is-blocked' : ''}${test.adminReasonRequired ? ' is-admin-review' : ''
+                                      }`
+                                    }
+                                    pagination={false}
+                                    size="small"
+                                    tableLayout="fixed"
+                                    scroll={{ y: 360, x: 760 }}
+                                  />
+                                )}
+
+                                <Space style={{ width: '100%', justifyContent: 'flex-end', marginTop: 16 }}>
+                                  <Button onClick={closeLockedOrderEditor} disabled={savingEditedTests}>
+                                    Discard changes
+                                  </Button>
+                                  <Button
+                                    type="primary"
+                                    onClick={() => void handleSaveEditedTests()}
+                                    loading={savingEditedTests}
+                                  >
+                                    Save changes
+                                  </Button>
+                                </Space>
+                              </div>
+                            ) : orderTests.length === 0 ? (
+                              <Space direction="vertical" size={8}>
+                                <Text strong>Referred by</Text>
+                                <Text type="secondary">{lockedOrderReferredByValue || 'Himself'}</Text>
+                                <Text type="secondary">No tests in this order.</Text>
+                              </Space>
                             ) : (
                               <div
                                 className={`order-tests-readonly-wrapper${isDark ? ' order-tests-readonly-wrapper-dark' : ''
                                   }`}
                               >
+                                <div className="order-draft-referred-row" style={{ marginBottom: 12 }}>
+                                  <Text strong style={{ display: 'block', marginBottom: 6 }}>
+                                    Referred by
+                                  </Text>
+                                  <Text type="secondary">{lockedOrderReferredByValue || 'Himself'}</Text>
+                                </div>
                                 <div className="order-tests-readonly-grid-header">
                                   <span className="order-tests-readonly-label">Selected tests</span>
                                   <Text type="secondary" className="order-tests-readonly-count">
@@ -2513,7 +2769,7 @@ export function OrdersPage() {
                                     key={method}
                                     size="small"
                                     type={selectedDeliveryMethods.includes(method) ? 'primary' : 'default'}
-                                    disabled={lockedOrderBaseActionsDisabled}
+                                    disabled={lockedOrderMutationActionsDisabled}
                                     onClick={() => toggleDeliveryMethod(method)}
                                   >
                                     {DELIVERY_METHOD_LABELS[method]}
@@ -2525,7 +2781,7 @@ export function OrdersPage() {
                                 size="small"
                                 onClick={() => void handleSaveDeliveryPreferences()}
                                 loading={savingDeliveryMethods}
-                                disabled={lockedOrderBaseActionsDisabled || !hasLockedDeliveryMethodChanges}
+                                disabled={lockedOrderMutationActionsDisabled || !hasLockedDeliveryMethodChanges}
                               >
                                 Save preferences
                               </Button>
@@ -3085,98 +3341,6 @@ export function OrdersPage() {
             </>
           )}
         </Space>
-      </Modal>
-
-      <Modal
-        title={
-          <div className="orders-edit-tests-modal-heading">
-            <span className="orders-edit-tests-modal-icon">
-              <LockOutlined />
-            </span>
-            <div className="orders-edit-tests-modal-heading-copy">
-              <span className="orders-edit-tests-modal-title">Edit tests in order</span>
-              <span className="orders-edit-tests-modal-subtitle">
-                {editTestsOrderNumber ? `Locked order #${editTestsOrderNumber}` : 'Locked order editor'}
-              </span>
-            </div>
-          </div>
-        }
-        open={editTestsModalOpen}
-        width={900}
-        className={`orders-edit-tests-modal${isDark ? ' orders-edit-tests-modal-dark' : ''}`}
-        onCancel={() => {
-          if (!savingEditedTests) {
-            setEditTestsModalOpen(false);
-            setEditTestsRemovalReasonModalOpen(false);
-            setEditTestsRemovalReason('');
-          }
-        }}
-        onOk={handleSaveEditedTests}
-        okText="Save tests"
-        okButtonProps={{ loading: savingEditedTests }}
-        cancelButtonProps={{ disabled: savingEditedTests }}
-        destroyOnClose
-      >
-        <div className="orders-edit-tests-shell">
-          <Text className="orders-edit-tests-description" type="secondary">
-            Remove pending, completed, and rejected tests here. Removing a panel removes the whole
-            panel. Verified tests and in-progress panels require lab-admin override with a reason.
-            Other in-progress tests stay locked. Order number and sample sequence numbers stay
-            unchanged.
-          </Text>
-
-          <div className="orders-edit-tests-toolbar">
-            <div className="orders-edit-tests-toolbar-copy">
-              <Text strong>Add another test</Text>
-              <Text type="secondary">Search by code, abbreviation, or test name.</Text>
-            </div>
-            <Select
-              showSearch
-              className="orders-edit-tests-select"
-              placeholder="Add test by code or name"
-              value={null}
-              loading={loadingTests}
-              onChange={handleAddEditingTest}
-              optionFilterProp="label"
-              filterOption={(input, option) => {
-                const label = String(option?.label ?? '').toLowerCase();
-                const variants = buildKeyboardSearchVariants(input);
-                if (variants.length === 0) return true;
-                return variants.some((variant) => label.includes(variant));
-              }}
-              options={testOptions.map((test) => ({
-                value: test.id,
-                label: (test as any).abbreviation
-                  ? `${test.code} - ${(test as any).abbreviation} - ${test.name} (${test.tubeType})`
-                  : `${test.code} - ${test.name} (${test.tubeType})`,
-              }))}
-            />
-          </div>
-
-          {editingTests.length === 0 ? (
-            <div className="orders-edit-tests-empty">
-              <Text strong>No tests selected</Text>
-              <Text type="secondary">
-                Keep at least one test in the order, or add new tests from the search field above.
-              </Text>
-            </div>
-          ) : (
-            <Table
-              className="orders-edit-tests-table"
-              dataSource={editingTests}
-              columns={editTestsTableColumns}
-              rowKey="testId"
-              rowClassName={(test) =>
-                `orders-edit-tests-table-row${test.blocked ? ' is-blocked' : ''}${test.adminReasonRequired ? ' is-admin-review' : ''
-                }`
-              }
-              pagination={false}
-              size="small"
-              tableLayout="fixed"
-              scroll={{ y: 360, x: 760 }}
-            />
-          )}
-        </div>
       </Modal>
 
       <Modal

@@ -27,7 +27,6 @@ const user_department_assignment_entity_1 = require("../entities/user-department
 const department_entity_1 = require("../entities/department.entity");
 const audit_service_1 = require("../audit/audit.service");
 const audit_log_entity_1 = require("../entities/audit-log.entity");
-const order_entity_2 = require("../entities/order.entity");
 const panel_status_service_1 = require("../panels/panel-status.service");
 const normal_range_util_1 = require("../tests/normal-range.util");
 const lab_timezone_util_1 = require("../database/lab-timezone.util");
@@ -125,6 +124,9 @@ let WorklistService = WorklistService_1 = class WorklistService {
                     .innerJoin('ot.test', 'test')
                     .leftJoin('test.department', 'department')
                     .where('order.labId = :labId', { labId })
+                    .andWhere('order.status != :cancelledOrderStatus', {
+                    cancelledOrderStatus: order_entity_1.OrderStatus.CANCELLED,
+                })
                     .andWhere('ot.status IN (:...statuses)', { statuses });
                 if (allowedDepartmentIds && allowedDepartmentIds.length > 0) {
                     qb.andWhere('test.departmentId IN (:...allowedDepartmentIds)', {
@@ -1809,7 +1811,7 @@ let WorklistService = WorklistService_1 = class WorklistService {
     }
     async syncOrderStatus(orderId) {
         const order = await this.orderRepo.findOne({ where: { id: orderId } });
-        if (!order || order.status === order_entity_2.OrderStatus.CANCELLED) {
+        if (!order || order.status === order_entity_1.OrderStatus.CANCELLED) {
             return;
         }
         const tests = await this.orderTestRepo
@@ -1823,7 +1825,7 @@ let WorklistService = WorklistService_1 = class WorklistService {
         }
         const statuses = tests.map((t) => t.status);
         const allFinalized = statuses.every((s) => s === order_test_entity_1.OrderTestStatus.VERIFIED || s === order_test_entity_1.OrderTestStatus.REJECTED);
-        const nextStatus = allFinalized ? order_entity_2.OrderStatus.COMPLETED : order_entity_2.OrderStatus.REGISTERED;
+        const nextStatus = allFinalized ? order_entity_1.OrderStatus.COMPLETED : order_entity_1.OrderStatus.REGISTERED;
         if (order.status !== nextStatus) {
             order.status = nextStatus;
             await this.orderRepo.save(order);

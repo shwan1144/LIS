@@ -12,7 +12,7 @@ import {
   OrderTestStatus,
   ResultFlag,
 } from '../entities/order-test.entity';
-import { Order } from '../entities/order.entity';
+import { Order, OrderStatus } from '../entities/order.entity';
 import { Test } from '../entities/test.entity';
 import { Antibiotic } from '../entities/antibiotic.entity';
 import { Lab, LabCultureEntryHistory } from '../entities/lab.entity';
@@ -28,7 +28,6 @@ import type {
 } from '../entities/test.entity';
 import { AuditService } from '../audit/audit.service';
 import { AuditAction } from '../entities/audit-log.entity';
-import { OrderStatus } from '../entities/order.entity';
 import { PanelStatusService } from '../panels/panel-status.service';
 import { LabActorContext } from '../types/lab-actor-context';
 import { resolveNormalText, resolveNumericRange } from '../tests/normal-range.util';
@@ -244,6 +243,9 @@ export class WorklistService {
           .innerJoin('ot.test', 'test')
           .leftJoin('test.department', 'department')
           .where('order.labId = :labId', { labId })
+          .andWhere('order.status != :cancelledOrderStatus', {
+            cancelledOrderStatus: OrderStatus.CANCELLED,
+          })
           .andWhere('ot.status IN (:...statuses)', { statuses });
 
         if (allowedDepartmentIds && allowedDepartmentIds.length > 0) {

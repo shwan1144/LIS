@@ -1545,6 +1545,14 @@ export async function updateOrderDiscount(
   return res.data;
 }
 
+export async function updateOrderNotes(
+  orderId: string,
+  data: { notes?: string | null },
+): Promise<OrderDto> {
+  const res = await api.patch<OrderDto>(`/orders/${orderId}/notes`, data);
+  return res.data;
+}
+
 export async function updateOrderTests(
   orderId: string,
   data: {
@@ -1562,6 +1570,14 @@ export async function updateOrderDeliveryMethods(
   data: { deliveryMethods?: DeliveryMethod[] },
 ): Promise<OrderDto> {
   const res = await api.patch<OrderDto>(`/orders/${orderId}/delivery-methods`, data);
+  return res.data;
+}
+
+export async function cancelOrder(
+  orderId: string,
+  data: { reason?: string } = {},
+): Promise<OrderDto> {
+  const res = await api.patch<OrderDto>(`/orders/${orderId}/cancel`, data);
   return res.data;
 }
 

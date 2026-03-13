@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type Key } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type Key } from 'react';
 import {
   Button,
   Card,
@@ -29,6 +29,7 @@ import {
   getWorklistOrders,
   getWorklistStats,
   type AntibioticDto,
+  type CultureResultPayload,
   type DepartmentDto,
   type ResultFlag,
   type TestParameterDefinition,
@@ -107,6 +108,128 @@ function normalizeNumericResultInput(value: unknown): string | null {
     return null;
   }
   return normalized;
+}
+
+type ResultSubmissionPayload = {
+  resultValue: number | null;
+  resultText: string | null;
+  resultParameters: Record<string, string> | null;
+  cultureResult: CultureResultPayload | null;
+};
+
+function sortResultParameters(
+  resultParameters: Record<string, string> | null,
+): Record<string, string> | null {
+  if (!resultParameters) return null;
+  const sortedEntries = Object.entries(resultParameters).sort(([a], [b]) =>
+    a.localeCompare(b),
+  );
+  return sortedEntries.length > 0 ? Object.fromEntries(sortedEntries) : null;
+}
+
+function buildResultSubmissionPayload(
+  target: WorklistItem,
+  itemValues: Record<string, unknown>,
+  antibioticById: Map<string, AntibioticDto>,
+): ResultSubmissionPayload {
+  const rawParams = (itemValues.resultParameters ?? {}) as Record<string, unknown>;
+  const rawCustomParams = (itemValues.resultParametersCustom ?? {}) as Record<string, unknown>;
+  const resultParamsEntries: Array<[string, string]> = [];
+
+  for (const [code, rawValue] of Object.entries(rawParams)) {
+    const value = rawValue != null ? String(rawValue).trim() : '';
+    if (!value) continue;
+    if (value === '__other__') {
+      const customValue =
+        rawCustomParams[code] != null
+          ? String(rawCustomParams[code]).trim()
+          : '';
+      if (!customValue) continue;
+      resultParamsEntries.push([code, customValue]);
+      continue;
+    }
+    resultParamsEntries.push([code, value]);
+  }
+
+  const resultParameters = sortResultParameters(Object.fromEntries(resultParamsEntries));
+  const resultEntryType = target.resultEntryType ?? 'NUMERIC';
+  const normalizedNumericInput = normalizeNumericResultInput(itemValues.resultValue);
+  let resultValue = itemValues.resultValue ?? null;
+  let resultText =
+    typeof itemValues.resultText === 'string' ? itemValues.resultText.trim() : null;
+  let cultureResult: CultureResultPayload | null = null;
+
+  if (resultEntryType === 'NUMERIC') {
+    resultValue = normalizedNumericInput !== null ? Number(normalizedNumericInput) : null;
+    resultText = normalizedNumericInput;
+  } else if (resultEntryType === 'QUALITATIVE') {
+    if (resultText === '__other__') {
+      resultText =
+        typeof itemValues.customResultText === 'string'
+          ? itemValues.customResultText.trim() || null
+          : null;
+    }
+    resultValue = null;
+  } else if (resultEntryType === 'TEXT') {
+    resultValue = null;
+  } else if (resultEntryType === 'CULTURE_SENSITIVITY') {
+    cultureResult = buildCultureResultPayloadFromForm(
+      itemValues.cultureResult,
+      antibioticById,
+    );
+    resultValue = null;
+    resultText = null;
+  }
+
+  return {
+    resultValue: resultValue === null ? null : Number(resultValue),
+    resultText,
+    resultParameters:
+      resultEntryType === 'CULTURE_SENSITIVITY' ? null : resultParameters,
+    cultureResult,
+  };
+}
+
+function hasMeaningfulResultSubmissionPayload(
+  payload: ResultSubmissionPayload,
+): boolean {
+  if (payload.resultValue !== null && payload.resultValue !== undefined) {
+    return true;
+  }
+
+  if (typeof payload.resultText === 'string' && payload.resultText.trim().length > 0) {
+    return true;
+  }
+
+  if (payload.resultParameters) {
+    return Object.values(payload.resultParameters).some(
+      (value) => String(value ?? '').trim().length > 0,
+    );
+  }
+
+  if (payload.cultureResult) {
+    if (payload.cultureResult.noGrowth === true) {
+      return true;
+    }
+    if (
+      typeof payload.cultureResult.notes === 'string' &&
+      payload.cultureResult.notes.trim().length > 0
+    ) {
+      return true;
+    }
+    return payload.cultureResult.isolates.some((isolate) => {
+      const hasOrganism =
+        typeof isolate.organism === 'string' && isolate.organism.trim().length > 0;
+      const hasAntibiotics = isolate.antibiotics.some(
+        (row) =>
+          typeof row.interpretation === 'string' &&
+          row.interpretation.trim().length > 0,
+      );
+      return hasOrganism && hasAntibiotics;
+    });
+  }
+
+  return false;
 }
 
 function formatReferenceRange(item: WorklistItem): string {
@@ -327,6 +450,7 @@ export function WorklistPage() {
   const [submitting, setSubmitting] = useState(false);
   const [liveFlags, setLiveFlags] = useState<Record<string, ResultFlag | null>>({});
   const [resultForm] = Form.useForm<any>();
+  const initialModalFormValuesRef = useRef<Record<string, Record<string, unknown>>>({});
   const antibioticById = useMemo(
     () => new Map(antibiotics.map((antibiotic) => [antibiotic.id, antibiotic])),
     [antibiotics],
@@ -345,6 +469,7 @@ export function WorklistPage() {
     setModalAppliedDepartmentId(null);
     setLoadingAllTests(false);
     setLiveFlags({});
+    initialModalFormValuesRef.current = {};
     resultForm.resetFields();
   }, [resultForm]);
 
@@ -358,7 +483,12 @@ export function WorklistPage() {
       setModalGroup(group);
       setModalAppliedDepartmentId(appliedDepartmentId);
       const sortedItems = sortModalItems(group.items);
-      resultForm.setFieldsValue(buildInitialFormValues(sortedItems));
+      const initialFormValues = buildInitialFormValues(sortedItems);
+      initialModalFormValuesRef.current = initialFormValues as Record<
+        string,
+        Record<string, unknown>
+      >;
+      resultForm.setFieldsValue(initialFormValues);
       const initialFlags: Record<string, ResultFlag | null> = {};
       for (const item of sortedItems) {
         if (item.testType !== 'PANEL') {
@@ -764,68 +894,48 @@ export function WorklistPage() {
         return;
       }
 
+      const targetSubmissions = targets.map((target) => {
+        const itemValues = (values[target.id] ?? {}) as Record<string, unknown>;
+        const initialItemValues =
+          initialModalFormValuesRef.current[target.id] ?? {};
+        const payload = buildResultSubmissionPayload(
+          target,
+          itemValues,
+          antibioticById,
+        );
+        const initialPayload = buildResultSubmissionPayload(
+          target,
+          initialItemValues,
+          antibioticById,
+        );
+
+        return {
+          target,
+          payload,
+          changed:
+            JSON.stringify(payload) !== JSON.stringify(initialPayload),
+          isVerifiedOverride:
+            canAdminEditVerified && target.status === 'VERIFIED',
+        };
+      });
+
+      const submissions = targetSubmissions.filter(
+        ({ changed, payload }) =>
+          changed && hasMeaningfulResultSubmissionPayload(payload),
+      );
+
+      if (submissions.length === 0) {
+        message.info('Enter or change at least one result before saving.');
+        return;
+      }
+
       await Promise.all(
-        targets.map(async (target) => {
-          const itemValues = values[target.id] || {};
-          const rawParams = itemValues.resultParameters ?? {};
-          const rawCustomParams = itemValues.resultParametersCustom ?? {};
-          const resultParamsEntries: Array<[string, string]> = [];
-
-          for (const [code, rawValue] of Object.entries(rawParams)) {
-            const value = rawValue != null ? String(rawValue).trim() : '';
-            if (!value) continue;
-            if (value === '__other__') {
-              const customValue =
-                rawCustomParams[code] != null
-                  ? String(rawCustomParams[code]).trim()
-                  : '';
-              if (!customValue) continue;
-              resultParamsEntries.push([code, customValue]);
-              continue;
-            }
-            resultParamsEntries.push([code, value]);
-          }
-
-          const resultParameters = Object.fromEntries(resultParamsEntries);
-          const hasResultParameters = Object.keys(resultParameters).length > 0;
-          const resultEntryType = target.resultEntryType ?? 'NUMERIC';
-          const normalizedNumericInput = normalizeNumericResultInput(itemValues.resultValue);
-          let resultValue = itemValues.resultValue ?? null;
-          let resultText = itemValues.resultText?.trim() || null;
-          let cultureResult = null;
-
-          if (resultEntryType === 'NUMERIC') {
-            resultValue = normalizedNumericInput !== null ? Number(normalizedNumericInput) : null;
-            resultText = normalizedNumericInput;
-          } else if (resultEntryType === 'QUALITATIVE') {
-            if (resultText === '__other__') {
-              resultText = itemValues.customResultText?.trim() || null;
-            }
-            resultValue = null;
-          } else if (resultEntryType === 'TEXT') {
-            resultValue = null;
-          } else if (resultEntryType === 'CULTURE_SENSITIVITY') {
-            cultureResult = buildCultureResultPayloadFromForm(
-              itemValues.cultureResult,
-              antibioticById,
-            );
-            resultValue = null;
-            resultText = null;
-          }
-
-          const isVerifiedOverride =
-            canAdminEditVerified && target.status === 'VERIFIED';
-
+        submissions.map(async ({ target, payload, isVerifiedOverride }) => {
           await enterResult(target.id, {
-            resultValue,
-            resultText,
-            resultParameters:
-              resultEntryType === 'CULTURE_SENSITIVITY'
-                ? null
-                : hasResultParameters
-                  ? resultParameters
-                  : null,
-            cultureResult,
+            resultValue: payload.resultValue,
+            resultText: payload.resultText,
+            resultParameters: payload.resultParameters,
+            cultureResult: payload.cultureResult,
             ...(isVerifiedOverride ? { forceEditVerified: true } : {}),
           });
         }),

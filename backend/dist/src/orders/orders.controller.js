@@ -21,6 +21,8 @@ const update_payment_dto_1 = require("./dto/update-payment.dto");
 const update_order_tests_dto_1 = require("./dto/update-order-tests.dto");
 const update_order_discount_dto_1 = require("./dto/update-order-discount.dto");
 const update_order_delivery_methods_dto_1 = require("./dto/update-order-delivery-methods.dto");
+const update_order_notes_dto_1 = require("./dto/update-order-notes.dto");
+const cancel_order_dto_1 = require("./dto/cancel-order.dto");
 const create_order_response_dto_1 = require("./dto/create-order-response.dto");
 const jwt_auth_guard_1 = require("../auth/jwt-auth.guard");
 const roles_guard_1 = require("../auth/roles.guard");
@@ -148,6 +150,14 @@ let OrdersController = OrdersController_1 = class OrdersController {
         }
         return this.ordersService.updateDiscount(id, labId, dto.discountPercent);
     }
+    async updateOrderNotes(req, id, dto) {
+        const labId = req.user?.labId;
+        const actor = (0, lab_actor_context_1.buildLabActorContext)(req.user);
+        if (!labId) {
+            throw new Error('Lab ID not found in token');
+        }
+        return this.ordersService.updateNotes(id, labId, dto.notes, actor);
+    }
     async updateOrderTests(req, id, dto) {
         const labId = req.user?.labId;
         const actor = (0, lab_actor_context_1.buildLabActorContext)(req.user);
@@ -165,6 +175,14 @@ let OrdersController = OrdersController_1 = class OrdersController {
             throw new Error('Lab ID not found in token');
         }
         return this.ordersService.updateDeliveryMethods(id, labId, dto.deliveryMethods);
+    }
+    async cancelOrder(req, id, dto) {
+        const labId = req.user?.labId;
+        const actor = (0, lab_actor_context_1.buildLabActorContext)(req.user);
+        if (!labId) {
+            throw new Error('Lab ID not found in token');
+        }
+        return this.ordersService.cancelOrder(id, labId, actor, dto.reason);
     }
 };
 exports.OrdersController = OrdersController;
@@ -290,6 +308,17 @@ __decorate([
     __metadata("design:returntype", Promise)
 ], OrdersController.prototype, "updateDiscount", null);
 __decorate([
+    (0, common_1.Patch)(':id/notes'),
+    (0, roles_decorator_1.Roles)(...lab_role_matrix_1.LAB_ROLE_GROUPS.ORDERS_WORKFLOW),
+    (0, common_1.UsePipes)(new common_1.ValidationPipe({ whitelist: true })),
+    __param(0, (0, common_1.Req)()),
+    __param(1, (0, common_1.Param)('id', common_1.ParseUUIDPipe)),
+    __param(2, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, String, update_order_notes_dto_1.UpdateOrderNotesDto]),
+    __metadata("design:returntype", Promise)
+], OrdersController.prototype, "updateOrderNotes", null);
+__decorate([
     (0, common_1.Patch)(':id/tests'),
     (0, roles_decorator_1.Roles)(...lab_role_matrix_1.LAB_ROLE_GROUPS.ORDERS_WORKFLOW),
     (0, common_1.UsePipes)(new common_1.ValidationPipe({ whitelist: true })),
@@ -311,6 +340,17 @@ __decorate([
     __metadata("design:paramtypes", [Object, String, update_order_delivery_methods_dto_1.UpdateOrderDeliveryMethodsDto]),
     __metadata("design:returntype", Promise)
 ], OrdersController.prototype, "updateOrderDeliveryMethods", null);
+__decorate([
+    (0, common_1.Patch)(':id/cancel'),
+    (0, roles_decorator_1.Roles)(...lab_role_matrix_1.LAB_ROLE_GROUPS.ORDERS_WORKFLOW),
+    (0, common_1.UsePipes)(new common_1.ValidationPipe({ whitelist: true })),
+    __param(0, (0, common_1.Req)()),
+    __param(1, (0, common_1.Param)('id', common_1.ParseUUIDPipe)),
+    __param(2, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, String, cancel_order_dto_1.CancelOrderDto]),
+    __metadata("design:returntype", Promise)
+], OrdersController.prototype, "cancelOrder", null);
 exports.OrdersController = OrdersController = OrdersController_1 = __decorate([
     (0, common_1.Controller)('orders'),
     (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard, roles_guard_1.RolesGuard),

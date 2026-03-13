@@ -20,6 +20,8 @@ import { UpdateOrderPaymentDto } from './dto/update-payment.dto';
 import { UpdateOrderTestsDto } from './dto/update-order-tests.dto';
 import { UpdateOrderDiscountDto } from './dto/update-order-discount.dto';
 import { UpdateOrderDeliveryMethodsDto } from './dto/update-order-delivery-methods.dto';
+import { UpdateOrderNotesDto } from './dto/update-order-notes.dto';
+import { CancelOrderDto } from './dto/cancel-order.dto';
 import {
   CreateOrderView,
   OrderDetailView,
@@ -250,6 +252,22 @@ export class OrdersController {
     return this.ordersService.updateDiscount(id, labId, dto.discountPercent);
   }
 
+  @Patch(':id/notes')
+  @Roles(...LAB_ROLE_GROUPS.ORDERS_WORKFLOW)
+  @UsePipes(new ValidationPipe({ whitelist: true }))
+  async updateOrderNotes(
+    @Req() req: RequestWithUser,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UpdateOrderNotesDto,
+  ) {
+    const labId = req.user?.labId;
+    const actor = buildLabActorContext(req.user);
+    if (!labId) {
+      throw new Error('Lab ID not found in token');
+    }
+    return this.ordersService.updateNotes(id, labId, dto.notes, actor);
+  }
+
   @Patch(':id/tests')
   @Roles(...LAB_ROLE_GROUPS.ORDERS_WORKFLOW)
   @UsePipes(new ValidationPipe({ whitelist: true }))
@@ -282,5 +300,21 @@ export class OrdersController {
       throw new Error('Lab ID not found in token');
     }
     return this.ordersService.updateDeliveryMethods(id, labId, dto.deliveryMethods);
+  }
+
+  @Patch(':id/cancel')
+  @Roles(...LAB_ROLE_GROUPS.ORDERS_WORKFLOW)
+  @UsePipes(new ValidationPipe({ whitelist: true }))
+  async cancelOrder(
+    @Req() req: RequestWithUser,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: CancelOrderDto,
+  ) {
+    const labId = req.user?.labId;
+    const actor = buildLabActorContext(req.user);
+    if (!labId) {
+      throw new Error('Lab ID not found in token');
+    }
+    return this.ordersService.cancelOrder(id, labId, actor, dto.reason);
   }
 }

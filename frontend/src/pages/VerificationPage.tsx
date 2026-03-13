@@ -1000,9 +1000,15 @@ export function VerificationPage() {
 
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 6, marginBottom: 6 }}>
               <Button
+                type="primary"
                 icon={<CheckCircleOutlined />}
                 loading={working}
                 disabled={completedIdsInModal.length === 0}
+                style={{
+                  backgroundColor: '#16a34a',
+                  borderColor: '#16a34a',
+                  color: '#ffffff',
+                }}
                 onClick={() => {
                   void verifyIds(
                     completedIdsInModal,
@@ -1014,6 +1020,7 @@ export function VerificationPage() {
                 Verify All
               </Button>
               <Button
+                type="primary"
                 danger
                 icon={<CloseCircleOutlined />}
                 loading={working}

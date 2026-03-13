@@ -4,6 +4,8 @@ import { UpdateOrderPaymentDto } from './dto/update-payment.dto';
 import { UpdateOrderTestsDto } from './dto/update-order-tests.dto';
 import { UpdateOrderDiscountDto } from './dto/update-order-discount.dto';
 import { UpdateOrderDeliveryMethodsDto } from './dto/update-order-delivery-methods.dto';
+import { UpdateOrderNotesDto } from './dto/update-order-notes.dto';
+import { CancelOrderDto } from './dto/cancel-order.dto';
 import { CreateOrderView, OrderDetailView, OrderResultStatus } from './dto/create-order-response.dto';
 interface RequestWithUser {
     user: {
@@ -59,7 +61,9 @@ export declare class OrdersController {
     findOne(req: RequestWithUser, id: string, view?: OrderDetailView): Promise<import("../entities/order.entity").Order>;
     updatePayment(req: RequestWithUser, id: string, dto: UpdateOrderPaymentDto): Promise<import("../entities/order.entity").Order>;
     updateDiscount(req: RequestWithUser, id: string, dto: UpdateOrderDiscountDto): Promise<import("../entities/order.entity").Order>;
+    updateOrderNotes(req: RequestWithUser, id: string, dto: UpdateOrderNotesDto): Promise<import("../entities/order.entity").Order>;
     updateOrderTests(req: RequestWithUser, id: string, dto: UpdateOrderTestsDto): Promise<import("../entities/order.entity").Order>;
     updateOrderDeliveryMethods(req: RequestWithUser, id: string, dto: UpdateOrderDeliveryMethodsDto): Promise<import("../entities/order.entity").Order>;
+    cancelOrder(req: RequestWithUser, id: string, dto: CancelOrderDto): Promise<import("../entities/order.entity").Order>;
 }
 export {};

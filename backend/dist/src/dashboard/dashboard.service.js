@@ -50,6 +50,7 @@ let DashboardService = class DashboardService {
                 .innerJoin('ot.sample', 's')
                 .innerJoin('s.order', 'o')
                 .where('o.labId = :labId', { labId })
+                .andWhere('o.status != :cancelled', { cancelled: order_entity_1.OrderStatus.CANCELLED })
                 .andWhere('ot.parentOrderTestId IS NULL')
                 .andWhere('ot.status = :status', { status: order_test_entity_1.OrderTestStatus.COMPLETED })
                 .getCount(),
@@ -268,6 +269,9 @@ let DashboardService = class DashboardService {
             .innerJoin('s.order', 'o')
             .innerJoin('ot.test', 't')
             .where('o.labId = :labId', { labId })
+            .andWhere('o.status != :cancelledOrderStatus', {
+            cancelledOrderStatus: order_entity_1.OrderStatus.CANCELLED,
+        })
             .andWhere('o.registeredAt BETWEEN :startDate AND :endDate', { startDate, endDate })
             .andWhere('ot.parentOrderTestId IS NULL');
         if (filters.shiftId) {
@@ -282,6 +286,9 @@ let DashboardService = class DashboardService {
         const qb = this.orderRepo
             .createQueryBuilder('o')
             .where('o.labId = :labId', { labId })
+            .andWhere('o.status != :cancelledOrderStatus', {
+            cancelledOrderStatus: order_entity_1.OrderStatus.CANCELLED,
+        })
             .andWhere('o.registeredAt BETWEEN :startDate AND :endDate', { startDate, endDate });
         if (filters.shiftId) {
             qb.andWhere('o.shiftId = :shiftId', { shiftId: filters.shiftId });
@@ -307,9 +314,33 @@ let DashboardService = class DashboardService {
     }
     async getOrderStatsForPeriod(labId, startDate, endDate, filters) {
         const base = this.buildFilteredOrdersQuery(labId, startDate, endDate, filters);
+        const statusBase = this.orderRepo
+            .createQueryBuilder('o')
+            .where('o.labId = :labId', { labId })
+            .andWhere('o.registeredAt BETWEEN :startDate AND :endDate', { startDate, endDate });
+        if (filters.shiftId) {
+            statusBase.andWhere('o.shiftId = :shiftId', { shiftId: filters.shiftId });
+        }
+        statusBase.andWhere((subQueryBuilder) => {
+            const sub = subQueryBuilder
+                .subQuery()
+                .select('1')
+                .from(order_test_entity_1.OrderTest, 'ot')
+                .innerJoin('ot.sample', 's')
+                .innerJoin('ot.test', 't')
+                .where('s.orderId = o.id')
+                .andWhere('ot.parentOrderTestId IS NULL');
+            if (filters.departmentId) {
+                sub.andWhere('t.departmentId = :departmentId');
+            }
+            return `EXISTS ${sub.getQuery()}`;
+        });
+        if (filters.departmentId) {
+            statusBase.setParameter('departmentId', filters.departmentId);
+        }
         const [totalRow, statusRows, shiftRows, revenueRow] = await Promise.all([
             base.clone().select('COUNT(*)', 'count').getRawOne(),
-            base
+            statusBase
                 .clone()
                 .select('o.status', 'status')
                 .addSelect('COUNT(*)', 'count')
@@ -425,6 +456,7 @@ let DashboardService = class DashboardService {
             .innerJoin('ot.test', 't')
             .select('EXTRACT(EPOCH FROM (ot.verifiedAt - o.registeredAt)) / 60', 'minutes')
             .where('o.labId = :labId', { labId })
+            .andWhere('o.status != :cancelled', { cancelled: order_entity_1.OrderStatus.CANCELLED })
             .andWhere('ot.verifiedAt IS NOT NULL')
             .andWhere('ot.parentOrderTestId IS NULL')
             .andWhere('o.registeredAt BETWEEN :startDate AND :endDate', { startDate, endDate });
@@ -475,6 +507,7 @@ let DashboardService = class DashboardService {
             .innerJoin('s.order', 'o')
             .select('AVG(EXTRACT(EPOCH FROM (ot.verifiedAt - o.registeredAt)) / 3600.0)', 'avgHours')
             .where('o.labId = :labId', { labId })
+            .andWhere('o.status != :cancelled', { cancelled: order_entity_1.OrderStatus.CANCELLED })
             .andWhere('ot.verifiedAt IS NOT NULL')
             .andWhere('ot.parentOrderTestId IS NULL')
             .andWhere('o.registeredAt BETWEEN :startDate AND :endDate', { startDate, endDate })
@@ -493,6 +526,7 @@ let DashboardService = class DashboardService {
             .innerJoin('s.order', 'o')
             .innerJoin('ot.test', 't')
             .where('o.labId = :labId', { labId })
+            .andWhere('o.status != :cancelled', { cancelled: order_entity_1.OrderStatus.CANCELLED })
             .andWhere('ot.parentOrderTestId IS NULL')
             .andWhere('ot.status = :verified', { verified: order_test_entity_1.OrderTestStatus.VERIFIED })
             .andWhere('o.registeredAt BETWEEN :startDate AND :endDate', { startDate, endDate });

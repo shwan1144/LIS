@@ -88,11 +88,13 @@ export declare class OrdersService {
         paidAmount?: number;
     }): Promise<Order>;
     updateDiscount(id: string, labId: string, discountPercent: number): Promise<Order>;
+    updateNotes(id: string, labId: string, notes: string | null | undefined, actor: LabActorContext): Promise<Order>;
     updateDeliveryMethods(id: string, labId: string, deliveryMethods?: unknown[]): Promise<Order>;
     updateOrderTests(id: string, labId: string, testIds: string[], actor: LabActorContext, actorRole?: string, options?: {
         forceRemoveVerified?: boolean;
         removalReason?: string | null;
     }): Promise<Order>;
+    cancelOrder(id: string, labId: string, actor: LabActorContext, reason?: string): Promise<Order>;
     private splitSamplesForDepartmentLabels;
     private resolveSampleDepartmentScope;
     private buildSampleGroupingKey;
@@ -139,6 +141,8 @@ export declare class OrdersService {
     private resolveOrderHistoryPerfLogThresholdMs;
     private resolveOrderTestInsertChunkSize;
     private elapsedMs;
+    private assertOrderNotCancelled;
+    private assertOrderCancellable;
     private assertOrderTestsEditableToday;
     private stripHeavyOrderPayload;
     private stripHeavyOrderTestsPayload;

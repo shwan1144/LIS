@@ -571,6 +571,7 @@ export class OrdersService {
     if (!order) {
       throw new NotFoundException('Order not found');
     }
+    this.assertOrderNotCancelled(order);
     order.paymentStatus = data.paymentStatus;
     if (data.paidAmount !== undefined) {
       order.paidAmount = data.paidAmount;
@@ -588,9 +589,7 @@ export class OrdersService {
     if (!order) {
       throw new NotFoundException('Order not found');
     }
-    if (order.status === OrderStatus.CANCELLED) {
-      throw new BadRequestException('Cancelled order cannot be edited');
-    }
+    this.assertOrderNotCancelled(order);
 
     const normalizedDiscount = Math.min(100, Math.max(0, Number(discountPercent ?? 0)));
     const totalAmount = Math.round(Number(order.totalAmount ?? 0) * 100) / 100;
@@ -616,6 +615,52 @@ export class OrdersService {
     return this.findOne(id, labId);
   }
 
+  async updateNotes(
+    id: string,
+    labId: string,
+    notes: string | null | undefined,
+    actor: LabActorContext,
+  ): Promise<Order> {
+    const order = await this.orderRepo.findOne({
+      where: { id, labId },
+      relations: ['lab'],
+    });
+    if (!order) {
+      throw new NotFoundException('Order not found');
+    }
+    this.assertOrderNotCancelled(order);
+    this.assertOrderTestsEditableToday(order);
+
+    const normalizedNotes = typeof notes === 'string' ? notes.trim() || null : null;
+    const previousNotes = order.notes ?? null;
+
+    await this.orderRepo.update(
+      { id, labId },
+      { notes: normalizedNotes },
+    );
+
+    if (previousNotes !== normalizedNotes) {
+      await this.auditService.log({
+        actorType: actor.actorType,
+        actorId: actor.actorId,
+        labId,
+        userId: actor.userId,
+        action: AuditAction.ORDER_UPDATE,
+        entityType: 'order',
+        entityId: id,
+        oldValues: {
+          notes: previousNotes,
+        },
+        newValues: {
+          notes: normalizedNotes,
+        },
+        description: `Updated referred by for order ${order.orderNumber ?? id}`,
+      });
+    }
+
+    return this.findOne(id, labId);
+  }
+
   async updateDeliveryMethods(
     id: string,
     labId: string,
@@ -625,6 +670,7 @@ export class OrdersService {
     if (!order) {
       throw new NotFoundException('Order not found');
     }
+    this.assertOrderNotCancelled(order);
 
     order.deliveryMethods = this.normalizeDeliveryMethods(deliveryMethods);
     await this.orderRepo.save(order);
@@ -664,9 +710,7 @@ export class OrdersService {
       if (!order) {
         throw new NotFoundException('Order not found');
       }
-      if (order.status === OrderStatus.CANCELLED) {
-        throw new BadRequestException('Cancelled order cannot be edited');
-      }
+      this.assertOrderNotCancelled(order);
       this.assertOrderTestsEditableToday(order);
 
       const allOrderTests = order.samples.flatMap((sample) => sample.orderTests ?? []);
@@ -975,6 +1019,73 @@ export class OrdersService {
     }
 
     return this.findOne(updateResult.orderId, labId);
+  }
+
+  async cancelOrder(
+    id: string,
+    labId: string,
+    actor: LabActorContext,
+    reason?: string,
+  ): Promise<Order> {
+    const normalizedReason = reason?.trim() || null;
+
+    const cancelResult = await this.orderRepo.manager.transaction(async (manager) => {
+      const orderRepo = manager.getRepository(Order);
+      const order = await orderRepo.findOne({
+        where: { id, labId },
+        relations: ['patient', 'lab', 'samples', 'samples.orderTests'],
+      });
+
+      if (!order) {
+        throw new NotFoundException('Order not found');
+      }
+      if (order.status === OrderStatus.CANCELLED) {
+        throw new BadRequestException('Order is already cancelled');
+      }
+
+      this.assertOrderCancellable(order);
+
+      const rootTests = (order.samples ?? [])
+        .flatMap((sample) => sample.orderTests ?? [])
+        .filter((orderTest) => !orderTest.parentOrderTestId);
+
+      await orderRepo.update(
+        { id: order.id, labId },
+        { status: OrderStatus.CANCELLED },
+      );
+
+      return {
+        orderId: order.id,
+        orderNumber: order.orderNumber,
+        previousStatus: order.status,
+        sampleCount: order.samples?.length ?? 0,
+        rootTestsCount: rootTests.length,
+      };
+    });
+
+    await this.auditService.log({
+      actorType: actor.actorType,
+      actorId: actor.actorId,
+      labId,
+      userId: actor.userId,
+      action: AuditAction.ORDER_CANCEL,
+      entityType: 'order',
+      entityId: cancelResult.orderId,
+      oldValues: {
+        status: cancelResult.previousStatus,
+      },
+      newValues: {
+        status: OrderStatus.CANCELLED,
+        reason: normalizedReason,
+        sampleCount: cancelResult.sampleCount,
+        rootTestsCount: cancelResult.rootTestsCount,
+      },
+      description: normalizedReason
+        ? `Cancelled order ${cancelResult.orderNumber ?? cancelResult.orderId}: ${normalizedReason}`
+        : `Cancelled order ${cancelResult.orderNumber ?? cancelResult.orderId}`,
+    });
+
+    return this.findOne(cancelResult.orderId, labId);
   }
 
   private splitSamplesForDepartmentLabels(
@@ -1470,12 +1581,18 @@ export class OrdersService {
       'today',
     );
 
-    return this.orderRepo.count({
-      where: {
-        labId,
-        registeredAt: Between(startOfDay, endOfDay),
-      },
-    });
+    const row = await this.orderRepo
+      .createQueryBuilder('order')
+      .select('COUNT(*)', 'count')
+      .where('order.labId = :labId', { labId })
+      .andWhere('order.status != :cancelled', { cancelled: OrderStatus.CANCELLED })
+      .andWhere('order.registeredAt BETWEEN :startDate AND :endDate', {
+        startDate: startOfDay,
+        endDate: endOfDay,
+      })
+      .getRawOne<{ count: string }>();
+
+    return parseInt(row?.count ?? '0', 10) || 0;
   }
 
   async getTodayPatients(labId: string): Promise<
@@ -1505,6 +1622,9 @@ export class OrdersService {
     >();
 
     for (const order of orders) {
+      if (order.status === OrderStatus.CANCELLED) {
+        continue;
+      }
       const patientId = order.patientId;
       if (!patientMap.has(patientId)) {
         patientMap.set(patientId, {
@@ -1542,6 +1662,7 @@ export class OrdersService {
       .select(`TO_CHAR(${dateExpr}, 'YYYY-MM-DD')`, 'date')
       .addSelect('COUNT(*)', 'count')
       .where('order.labId = :labId', { labId })
+      .andWhere('order.status != :cancelled', { cancelled: OrderStatus.CANCELLED })
       .andWhere('order.registeredAt BETWEEN :startDate AND :endDate', {
         startDate,
         endDate,
@@ -1586,6 +1707,7 @@ export class OrdersService {
         .createQueryBuilder('order')
         .select('COUNT(*)', 'count')
         .where('order.labId = :labId', { labId })
+        .andWhere('order.status != :cancelled', { cancelled: OrderStatus.CANCELLED })
         .andWhere('order.registeredAt BETWEEN :startDate AND :endDate', base)
         .getRawOne(),
       this.orderRepo
@@ -1603,6 +1725,7 @@ export class OrdersService {
         .addSelect('MAX(COALESCE(shift.name, shift.code))', 'shiftName')
         .addSelect('COUNT(*)', 'count')
         .where('order.labId = :labId', { labId })
+        .andWhere('order.status != :cancelled', { cancelled: OrderStatus.CANCELLED })
         .andWhere('order.registeredAt BETWEEN :startDate AND :endDate', base)
         .groupBy('order.shiftId')
         .getRawMany(),
@@ -1610,6 +1733,7 @@ export class OrdersService {
         .createQueryBuilder('order')
         .select('COALESCE(SUM(order.finalAmount), 0)', 'revenue')
         .where('order.labId = :labId', { labId })
+        .andWhere('order.status != :cancelled', { cancelled: OrderStatus.CANCELLED })
         .andWhere('order.registeredAt BETWEEN :startDate AND :endDate', base)
         .getRawOne(),
     ]);
@@ -1639,7 +1763,17 @@ export class OrdersService {
     labId: string,
     params: OrderListQueryParams,
   ): Promise<void> {
-    if (params.status) {
+    if (params.status === OrderStatus.CANCELLED) {
+      qb.andWhere('order.status = :cancelledStatus', {
+        cancelledStatus: OrderStatus.CANCELLED,
+      });
+    } else {
+      qb.andWhere('order.status != :cancelledStatus', {
+        cancelledStatus: OrderStatus.CANCELLED,
+      });
+    }
+
+    if (params.status && params.status !== OrderStatus.CANCELLED) {
       if (params.status === OrderStatus.COMPLETED) {
         qb.andWhere(
           `(EXISTS (
@@ -1908,6 +2042,23 @@ export class OrdersService {
 
   private elapsedMs(startedAt: bigint): number {
     return Number(process.hrtime.bigint() - startedAt) / 1_000_000;
+  }
+
+  private assertOrderNotCancelled(
+    order: Pick<Order, 'status'>,
+    message = 'Cancelled order cannot be edited',
+  ): void {
+    if (order.status === OrderStatus.CANCELLED) {
+      throw new BadRequestException(message);
+    }
+  }
+
+  private assertOrderCancellable(order: Order): void {
+    this.assertOrderTestsEditableToday(order);
+
+    if (this.normalizePaymentStatus(order.paymentStatus) !== 'unpaid') {
+      throw new BadRequestException('Only unpaid orders can be cancelled.');
+    }
   }
 
   private assertOrderTestsEditableToday(order: Order): void {
