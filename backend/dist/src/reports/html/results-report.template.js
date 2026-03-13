@@ -320,14 +320,14 @@ function buildResultsReportHtml(input) {
             : `<div class="header-spacer" aria-hidden="true"></div>`}
     <div class="patient-info${hasOrderQr ? ' has-order-qr' : ''}">
       <div class="patient-info-col">
-        <div class="info-item"><span class="label">Name :</span><span class="name-value ${patientNameIsRtl ? 'rtl-text' : ''}">${escapeHtml(patientName)}</span></div>
-        <div class="info-item"><span class="label">Age/Sex:</span>${escapeHtml(ageSex)}</div>
-        <div class="info-item"><span class="label">Referred By:</span><span class="name-value ${referredByIsRtl ? 'rtl-text' : ''}">${escapeHtml(referredByDisplay)}</span></div>
+        <div class="info-item"><span class="label">Name :</span><span class="info-value name-value ${patientNameIsRtl ? 'rtl-text' : ''}">${escapeHtml(patientName)}</span></div>
+        <div class="info-item"><span class="label">Age/Sex:</span><span class="info-value">${escapeHtml(ageSex)}</span></div>
+        <div class="info-item"><span class="label">Referred By:</span><span class="info-value name-value ${referredByIsRtl ? 'rtl-text' : ''}">${escapeHtml(referredByDisplay)}</span></div>
       </div>
       <div class="patient-info-col">
-        <div class="info-item"><span class="label">Visit Date:</span>${escapeHtml(visitDate)}</div>
-        <div class="info-item"><span class="label">Order No:</span>${escapeHtml(orderNumber)}</div>
-        <div class="info-item"><span class="label">Patient ID:</span>${escapeHtml(patientId)}</div>
+        <div class="info-item"><span class="label">Visit Date:</span><span class="info-value">${escapeHtml(visitDate)}</span></div>
+        <div class="info-item"><span class="label">Order No:</span><span class="info-value">${escapeHtml(orderNumber)}</span></div>
+        <div class="info-item"><span class="label">Patient ID:</span><span class="info-value">${escapeHtml(patientId)}</span></div>
       </div>
       ${hasOrderQr
         ? `<div class="patient-info-qr"><img class="patient-info-qr-image" ${orderQrUrlAttr} alt="Order QR Code" /><div class="patient-info-qr-caption">Order QR</div></div>`
@@ -677,6 +677,8 @@ function buildResultsReportHtml(input) {
       --patient-info-label-weight: ${reportStyle.patientInfo.labelFontWeight};
       --patient-info-value-weight: ${reportStyle.patientInfo.valueFontWeight};
       --patient-info-align: ${reportStyle.patientInfo.textAlign};
+      --patient-info-label-align: ${reportStyle.patientInfo.labelTextAlign};
+      --patient-info-value-align: ${reportStyle.patientInfo.valueTextAlign};
       --patient-info-radius: ${reportStyle.patientInfo.borderRadiusPx}px;
       --patient-info-padding-y: ${reportStyle.patientInfo.paddingYpx}px;
       --patient-info-padding-x: ${reportStyle.patientInfo.paddingXpx}px;
@@ -711,13 +713,17 @@ function buildResultsReportHtml(input) {
       --culture-font-family: ${cultureSectionFontFamily};
       --culture-section-title-color: ${reportStyle.cultureSection.sectionTitleColor};
       --culture-section-title-border-color: ${reportStyle.cultureSection.sectionTitleBorderColor};
+      --culture-section-title-align: ${reportStyle.cultureSection.sectionTitleAlign};
       --culture-no-growth-bg: ${reportStyle.cultureSection.noGrowthBackgroundColor};
       --culture-no-growth-border: ${reportStyle.cultureSection.noGrowthBorderColor};
       --culture-no-growth-text: ${reportStyle.cultureSection.noGrowthTextColor};
       --culture-meta-text: ${reportStyle.cultureSection.metaTextColor};
+      --culture-meta-align: ${reportStyle.cultureSection.metaTextAlign};
       --culture-comment-text: ${reportStyle.cultureSection.commentTextColor};
+      --culture-comment-align: ${reportStyle.cultureSection.commentTextAlign};
       --culture-notes-text: ${reportStyle.cultureSection.notesTextColor};
       --culture-notes-border: ${reportStyle.cultureSection.notesBorderColor};
+      --culture-notes-align: ${reportStyle.cultureSection.notesTextAlign};
       --culture-ast-gap: ${reportStyle.cultureSection.astGridGapPx}px;
       --culture-ast-min-height: ${reportStyle.cultureSection.astMinHeightPx}px;
       --culture-ast-column-radius: ${reportStyle.cultureSection.astColumnBorderRadiusPx}px;
@@ -833,12 +839,27 @@ function buildResultsReportHtml(input) {
       font-weight: 600;
     }
     .info-item {
+      display: grid;
+      grid-template-columns: minmax(92px, max-content) minmax(0, 1fr);
+      column-gap: 4px;
+      align-items: baseline;
       font-size: var(--patient-info-font-size);
       color: var(--patient-info-text-color);
       font-weight: var(--patient-info-value-weight);
     }
-    .info-item .label { font-weight: var(--patient-info-label-weight); margin-right: 4px; color: var(--patient-info-label-color); }
-    .name-value { display: inline-block; font-weight: var(--patient-info-value-weight); }
+    .info-item .label {
+      display: block;
+      font-weight: var(--patient-info-label-weight);
+      color: var(--patient-info-label-color);
+      text-align: var(--patient-info-label-align);
+    }
+    .info-item .info-value,
+    .name-value {
+      display: block;
+      width: 100%;
+      font-weight: var(--patient-info-value-weight);
+      text-align: var(--patient-info-value-align);
+    }
     .rtl-text {
       direction: rtl;
       unicode-bidi: isolate;
@@ -929,6 +950,7 @@ function buildResultsReportHtml(input) {
       color: var(--culture-section-title-color);
       border-bottom-color: var(--culture-section-title-border-color);
       font-family: var(--culture-font-family);
+      text-align: var(--culture-section-title-align);
     }
     .culture-page .content {
       padding: 0;
@@ -945,6 +967,7 @@ function buildResultsReportHtml(input) {
       border-radius: 6px;
       margin-bottom: 10px;
       font-family: var(--culture-font-family);
+      text-align: var(--culture-meta-align);
     }
     .culture-no-growth-result {
       font-size: 11px;
@@ -952,6 +975,7 @@ function buildResultsReportHtml(input) {
       font-weight: 400;
       margin-bottom: 4px;
       font-family: var(--culture-font-family);
+      text-align: var(--culture-meta-align);
     }
     .culture-isolate-block {
       margin-bottom: 12px;
@@ -965,11 +989,24 @@ function buildResultsReportHtml(input) {
       margin-bottom: 4px;
       color: var(--culture-meta-text);
       font-family: var(--culture-font-family);
+      text-align: var(--culture-meta-align);
     }
     .culture-isolate-title-label { font-weight: 700; }
     .culture-isolate-title-value { font-style: italic; font-weight: 600; color: var(--culture-section-title-color); }
-    .culture-isolate-source { font-size: 11px; color: var(--culture-meta-text); margin-bottom: 4px; font-family: var(--culture-font-family); }
-    .culture-isolate-comment { font-size: 11px; color: var(--culture-comment-text); margin-bottom: 6px; font-family: var(--culture-font-family); }
+    .culture-isolate-source {
+      font-size: 11px;
+      color: var(--culture-meta-text);
+      margin-bottom: 4px;
+      font-family: var(--culture-font-family);
+      text-align: var(--culture-meta-align);
+    }
+    .culture-isolate-comment {
+      font-size: 11px;
+      color: var(--culture-comment-text);
+      margin-bottom: 6px;
+      font-family: var(--culture-font-family);
+      text-align: var(--culture-comment-align);
+    }
     .culture-ast-grid {
       width: 100%;
       display: grid;
@@ -1040,6 +1077,7 @@ function buildResultsReportHtml(input) {
       color: var(--culture-notes-text);
       padding-top: 6px;
       font-family: var(--culture-font-family);
+      text-align: var(--culture-notes-align);
     }
     ${rowStripeCss}
     .report-footer {

@@ -15,6 +15,8 @@ export interface ReportPatientInfoStyle {
     labelFontWeight: 600 | 700 | 800;
     valueFontWeight: 400 | 500 | 600 | 700;
     textAlign: ReportTextAlign;
+    labelTextAlign: ReportTextAlign;
+    valueTextAlign: ReportTextAlign;
     borderRadiusPx: number;
     paddingYpx: number;
     paddingXpx: number;
@@ -63,13 +65,17 @@ export interface ReportCultureSectionStyle {
     fontFamily: ReportFontFamily;
     sectionTitleColor: string;
     sectionTitleBorderColor: string;
+    sectionTitleAlign: ReportTextAlign;
     noGrowthBackgroundColor: string;
     noGrowthBorderColor: string;
     noGrowthTextColor: string;
     metaTextColor: string;
+    metaTextAlign: ReportTextAlign;
     commentTextColor: string;
+    commentTextAlign: ReportTextAlign;
     notesTextColor: string;
     notesBorderColor: string;
+    notesTextAlign: ReportTextAlign;
     astGridGapPx: number;
     astMinHeightPx: number;
     astColumnBorderRadiusPx: number;
