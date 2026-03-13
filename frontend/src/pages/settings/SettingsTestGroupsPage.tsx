@@ -15,6 +15,7 @@ import {
 import { PlusOutlined, EditOutlined, DeleteOutlined, AppstoreAddOutlined } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import { getLabSettings, updateLabSettings, getTests, type TestDto } from '../../api/client';
+import './SettingsTestGroupsPage.css';
 
 const { Title, Text } = Typography;
 
@@ -111,7 +112,7 @@ export function SettingsTestGroupsPage() {
                 return (
                     <Space wrap size={[0, 4]}>
                         {tests.map(t => (
-                            <span key={t.id} style={{ background: '#f0f0f0', padding: '2px 8px', borderRadius: 4, marginRight: 4, display: 'inline-block' }}>
+                            <span key={t.id} className="settings-test-groups-chip">
                                 {t.code}
                             </span>
                         ))}
@@ -145,13 +146,13 @@ export function SettingsTestGroupsPage() {
     ];
 
     return (
-        <div>
-            <Title level={4}>
+        <div className="settings-test-groups-page">
+            <Title level={4} className="settings-test-groups-title">
                 <AppstoreAddOutlined style={{ marginRight: 8 }} />
                 Test Groups
             </Title>
-            <Card>
-                <div style={{ marginBottom: 16 }}>
+            <Card className="settings-test-groups-card">
+                <div className="settings-test-groups-toolbar">
                     <Button type="primary" icon={<PlusOutlined />} onClick={() => openModal()}>
                         Add test group
                     </Button>
@@ -163,6 +164,7 @@ export function SettingsTestGroupsPage() {
                     loading={loading}
                     pagination={false}
                     size="middle"
+                    className="settings-test-groups-table"
                 />
             </Card>
 

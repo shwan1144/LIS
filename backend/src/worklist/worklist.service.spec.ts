@@ -50,6 +50,7 @@ function createTest(overrides: Partial<Test> = {}): Test {
     resultEntryType: 'NUMERIC',
     resultTextOptions: null,
     allowCustomResultText: false,
+    allowPanelSaveWithChildDefaults: false,
     cultureConfig: null,
     numericAgeRanges: null,
     description: null,
@@ -184,6 +185,28 @@ describe('WorklistService result guards', () => {
     expect(auditService.log).not.toHaveBeenCalled();
   });
 
+  it('rejects verifying a rejected result until it is re-entered', async () => {
+    const orderTest = createOrderTest({
+      status: OrderTestStatus.REJECTED,
+      resultValue: 4.2,
+      resultText: '4.2',
+      rejectionReason: 'Review needed',
+    });
+    const orderTestRepo = {
+      findOne: jest.fn().mockResolvedValue(orderTest),
+      save: jest.fn(),
+    };
+    const { service, panelStatusService, auditService } = createService(orderTestRepo);
+
+    await expect(
+      service.verifyResult(orderTest.id, 'lab-1', createActor()),
+    ).rejects.toBeInstanceOf(BadRequestException);
+
+    expect(orderTestRepo.save).not.toHaveBeenCalled();
+    expect(panelStatusService.recomputeAfterChildUpdate).not.toHaveBeenCalled();
+    expect(auditService.log).not.toHaveBeenCalled();
+  });
+
   it('skips blank rows during batch verification', async () => {
     const blank = createOrderTest({
       id: 'blank-test',
@@ -278,5 +301,152 @@ describe('WorklistService result guards', () => {
         },
       },
     );
+  });
+
+  it('clears verified metadata when rejecting a completed result', async () => {
+    const orderTest = createOrderTest({
+      status: OrderTestStatus.COMPLETED,
+      resultValue: 6.1,
+      resultText: '6.1',
+      verifiedAt: new Date('2026-03-01T02:00:00.000Z'),
+      verifiedBy: 'verifier-1',
+    });
+    const orderTestRepo = {
+      findOne: jest.fn().mockResolvedValue(orderTest),
+      save: jest.fn().mockImplementation(async (value: OrderTest) => value),
+    };
+    const { service, panelStatusService, auditService } = createService(orderTestRepo);
+
+    const result = await service.rejectResult(
+      orderTest.id,
+      'lab-1',
+      createActor(),
+      'Need review',
+    );
+
+    expect(result.status).toBe(OrderTestStatus.REJECTED);
+    expect(result.rejectionReason).toBe('Need review');
+    expect(result.verifiedAt).toBeNull();
+    expect(result.verifiedBy).toBeNull();
+    expect(panelStatusService.recomputeAfterChildUpdate).toHaveBeenCalledWith(orderTest.id);
+    expect(auditService.log).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'RESULT_REJECT',
+        newValues: expect.objectContaining({
+          status: OrderTestStatus.REJECTED,
+          rejectionReason: 'Need review',
+        }),
+      }),
+    );
+  });
+
+  it('allows re-saving a rejected result without changing its value', async () => {
+    const orderTest = createOrderTest({
+      status: OrderTestStatus.REJECTED,
+      resultValue: 7.4,
+      resultText: '7.4',
+      resultedAt: new Date('2026-03-01T01:00:00.000Z'),
+      resultedBy: 'tech-1',
+      rejectionReason: 'Recheck value',
+    });
+    const orderTestRepo = {
+      findOne: jest.fn().mockResolvedValue(orderTest),
+      save: jest.fn().mockImplementation(async (value: OrderTest) => value),
+    };
+    const { service, panelStatusService, auditService } = createService(orderTestRepo);
+
+    const result = await service.enterResult(orderTest.id, 'lab-1', createActor(), {
+      resultValue: 7.4,
+      resultText: '7.4',
+    });
+
+    expect(result.status).toBe(OrderTestStatus.COMPLETED);
+    expect(result.rejectionReason).toBeNull();
+    expect(result.resultValue).toBe(7.4);
+    expect(result.resultText).toBe('7.4');
+    expect(panelStatusService.recomputeAfterChildUpdate).toHaveBeenCalledWith(orderTest.id);
+    expect(auditService.log).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'RESULT_UPDATE',
+      }),
+    );
+  });
+
+  it('rejects entering a panel root directly', async () => {
+    const panelTest = createTest({
+      code: 'GUE',
+      name: 'General Urine Examination',
+      type: TestType.PANEL,
+      allowPanelSaveWithChildDefaults: true,
+    });
+    const orderTest = createOrderTest({
+      test: panelTest,
+    });
+    const orderTestRepo = {
+      findOne: jest.fn().mockResolvedValue(orderTest),
+      save: jest.fn(),
+    };
+    const { service, panelStatusService, auditService } = createService(orderTestRepo);
+
+    await expect(
+      service.enterResult(orderTest.id, 'lab-1', createActor(), {
+        resultText: 'ignored',
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+
+    expect(orderTestRepo.save).not.toHaveBeenCalled();
+    expect(panelStatusService.recomputeAfterChildUpdate).not.toHaveBeenCalled();
+    expect(auditService.log).not.toHaveBeenCalled();
+  });
+
+  it('skips panel roots during batch entry and saves child rows only', async () => {
+    const panelRoot = createOrderTest({
+      id: 'panel-root',
+      test: createTest({
+        code: 'CBC',
+        name: 'Complete Blood Count',
+        type: TestType.PANEL,
+        allowPanelSaveWithChildDefaults: true,
+      }),
+    });
+    const child = createOrderTest({
+      id: 'panel-child',
+      parentOrderTestId: panelRoot.id,
+      test: createTest({
+        code: 'HGB',
+        name: 'Hemoglobin',
+      }),
+    });
+    const orderTestRepo = {
+      find: jest.fn().mockResolvedValue([panelRoot, child]),
+      save: jest.fn().mockResolvedValue([child]),
+    };
+    const { service, panelStatusService, auditService } = createService(orderTestRepo);
+
+    const result = await service.batchEnterResults(
+      'lab-1',
+      createActor(),
+      undefined,
+      [
+        {
+          orderTestId: panelRoot.id,
+          resultText: 'ignored',
+        },
+        {
+          orderTestId: child.id,
+          resultValue: 13.4,
+          resultText: '13.4',
+        },
+      ],
+    );
+
+    expect(result).toHaveLength(1);
+    expect(result[0]?.id).toBe(child.id);
+    expect(orderTestRepo.save).toHaveBeenCalledTimes(1);
+    expect(orderTestRepo.save).toHaveBeenCalledWith([child]);
+    expect(panelRoot.status).toBe(OrderTestStatus.PENDING);
+    expect(child.status).toBe(OrderTestStatus.COMPLETED);
+    expect(panelStatusService.recomputePanelStatus).toHaveBeenCalledWith(panelRoot.id);
+    expect(auditService.log).toHaveBeenCalledTimes(1);
   });
 });

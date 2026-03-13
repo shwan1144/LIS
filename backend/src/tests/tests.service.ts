@@ -115,11 +115,14 @@ export class TestsService {
     const resultEntryType = this.normalizeResultEntryType(dto.resultEntryType);
     const resultTextOptions = this.normalizeResultTextOptions(dto.resultTextOptions);
     const allowCustomResultText = dto.allowCustomResultText ?? false;
+    const allowPanelSaveWithChildDefaults =
+      dto.allowPanelSaveWithChildDefaults ?? false;
     const cultureConfig = this.normalizeCultureConfig(dto.cultureConfig, resultEntryType);
     this.validateResultEntryConfig(
       resultEntryType,
       resultTextOptions,
       allowCustomResultText,
+      allowPanelSaveWithChildDefaults,
       cultureConfig,
       dto.type || TestType.SINGLE,
     );
@@ -143,6 +146,7 @@ export class TestsService {
       resultEntryType,
       resultTextOptions,
       allowCustomResultText,
+      allowPanelSaveWithChildDefaults,
       cultureConfig,
       numericAgeRanges: this.normalizeNumericAgeRanges(dto.numericAgeRanges),
       description: dto.description?.trim() || null,
@@ -227,6 +231,10 @@ export class TestsService {
       dto.allowCustomResultText !== undefined
         ? dto.allowCustomResultText
         : (test.allowCustomResultText ?? false);
+    const nextAllowPanelSaveWithChildDefaults =
+      dto.allowPanelSaveWithChildDefaults !== undefined
+        ? dto.allowPanelSaveWithChildDefaults
+        : (test.allowPanelSaveWithChildDefaults ?? false);
     const nextCultureConfig =
       dto.cultureConfig !== undefined
         ? this.normalizeCultureConfig(dto.cultureConfig, nextResultEntryType)
@@ -236,6 +244,7 @@ export class TestsService {
       nextResultEntryType,
       nextResultTextOptions,
       nextAllowCustomResultText,
+      nextAllowPanelSaveWithChildDefaults,
       nextCultureConfig,
       test.type ?? previousType,
     );
@@ -243,6 +252,7 @@ export class TestsService {
     test.resultEntryType = nextResultEntryType;
     test.resultTextOptions = nextResultTextOptions;
     test.allowCustomResultText = nextAllowCustomResultText;
+    test.allowPanelSaveWithChildDefaults = nextAllowPanelSaveWithChildDefaults;
     test.cultureConfig = nextCultureConfig;
 
     const saved = await this.testRepo.save(test);
@@ -491,6 +501,7 @@ export class TestsService {
     resultEntryType: TestResultEntryType,
     resultTextOptions: TestResultTextOption[] | null,
     allowCustomResultText: boolean,
+    allowPanelSaveWithChildDefaults: boolean,
     cultureConfig: TestCultureConfig | null,
     testType: TestType,
   ): void {
@@ -518,6 +529,12 @@ export class TestsService {
       );
     }
 
+    if (allowPanelSaveWithChildDefaults && testType !== TestType.PANEL) {
+      throw new BadRequestException(
+        'allowPanelSaveWithChildDefaults can only be enabled for panel tests',
+      );
+    }
+
     if (resultEntryType !== 'CULTURE_SENSITIVITY' && cultureConfig) {
       throw new BadRequestException(
         'cultureConfig is only valid for CULTURE_SENSITIVITY result entry type',
@@ -533,6 +550,11 @@ export class TestsService {
       if (allowCustomResultText) {
         throw new BadRequestException(
           'allowCustomResultText cannot be enabled for CULTURE_SENSITIVITY tests',
+        );
+      }
+      if (allowPanelSaveWithChildDefaults) {
+        throw new BadRequestException(
+          'allowPanelSaveWithChildDefaults cannot be enabled for CULTURE_SENSITIVITY tests',
         );
       }
       if (!cultureConfig || !cultureConfig.interpretationOptions.length) {
@@ -1354,6 +1376,7 @@ export class TestsService {
         test.resultEntryType = data.resultEntryType;
         test.resultTextOptions = data.resultTextOptions ?? null;
         test.allowCustomResultText = data.allowCustomResultText ?? false;
+        test.allowPanelSaveWithChildDefaults = false;
         test.unit = data.unit ?? null;
         test.normalMin = data.normalMin ?? null;
         test.normalMax = data.normalMax ?? null;
@@ -1370,6 +1393,7 @@ export class TestsService {
           resultEntryType: data.resultEntryType,
           resultTextOptions: data.resultTextOptions ?? null,
           allowCustomResultText: data.allowCustomResultText ?? false,
+          allowPanelSaveWithChildDefaults: false,
           unit: data.unit ?? null,
           normalMin: data.normalMin ?? null,
           normalMax: data.normalMax ?? null,
@@ -1388,6 +1412,7 @@ export class TestsService {
       panel.type = TestType.PANEL;
       panel.tubeType = TubeType.URINE;
       panel.isActive = true;
+      panel.allowPanelSaveWithChildDefaults = true;
       panel.childTestIds = null;
       panel.sortOrder = 2;
       panel.description =
@@ -1401,6 +1426,7 @@ export class TestsService {
         name: 'General Urine Examination',
         type: TestType.PANEL,
         tubeType: TubeType.URINE,
+        allowPanelSaveWithChildDefaults: true,
         childTestIds: null,
         description:
           'General Urine Examination panel with physical, chemical, and microscopic subtests.',

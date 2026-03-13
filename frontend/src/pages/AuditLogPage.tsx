@@ -33,6 +33,7 @@ import {
   getAuditActions,
   type AuditLogItem,
 } from '../api/client';
+import { useTheme } from '../contexts/ThemeContext';
 
 const { Title, Text } = Typography;
 const { Search } = Input;
@@ -69,6 +70,7 @@ const actionConfig: Record<string, { color: string; icon: React.ReactNode; label
 };
 
 export function AuditLogPage() {
+  const isDark = useTheme().theme === 'dark';
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState<AuditLogItem[]>([]);
   const [total, setTotal] = useState(0);
@@ -123,6 +125,25 @@ export function AuditLogPage() {
   const openDetailModal = (item: AuditLogItem) => {
     setDetailItem(item);
     setDetailModalOpen(true);
+  };
+
+  const jsonBlockStyle = {
+    margin: 0,
+    fontSize: 11,
+    maxHeight: 150,
+    overflow: 'auto' as const,
+    padding: 8,
+    borderRadius: 6,
+    border: isDark ? '1px solid rgba(96, 165, 250, 0.18)' : '1px solid #d9e4f2',
+    background: isDark ? 'rgba(15, 23, 42, 0.9)' : '#f8fbff',
+    color: isDark ? 'rgba(226, 232, 240, 0.96)' : '#0f172a',
+  };
+
+  const entityCodeStyle = {
+    fontSize: 11,
+    color: isDark ? 'rgba(226, 232, 240, 0.96)' : '#0f172a',
+    background: isDark ? 'rgba(30, 41, 59, 0.95)' : '#f3f7fb',
+    borderColor: isDark ? 'rgba(96, 165, 250, 0.18)' : '#d9e4f2',
   };
 
   const formatJson = (obj: Record<string, unknown> | null) => {
@@ -289,21 +310,21 @@ export function AuditLogPage() {
               {detailItem.entityType || '—'}
             </Descriptions.Item>
             <Descriptions.Item label="Entity ID">
-              <Text code style={{ fontSize: 11 }}>{detailItem.entityId || '—'}</Text>
+              <Text code style={entityCodeStyle}>{detailItem.entityId || '—'}</Text>
             </Descriptions.Item>
             <Descriptions.Item label="Description" span={2}>
               {detailItem.description || '—'}
             </Descriptions.Item>
             {detailItem.oldValues && (
               <Descriptions.Item label="Old Values" span={2}>
-                <pre style={{ margin: 0, fontSize: 11, maxHeight: 150, overflow: 'auto', background: '#f5f5f5', padding: 8, borderRadius: 4 }}>
+                <pre style={jsonBlockStyle}>
                   {formatJson(detailItem.oldValues)}
                 </pre>
               </Descriptions.Item>
             )}
             {detailItem.newValues && (
               <Descriptions.Item label="New Values" span={2}>
-                <pre style={{ margin: 0, fontSize: 11, maxHeight: 150, overflow: 'auto', background: '#f5f5f5', padding: 8, borderRadius: 4 }}>
+                <pre style={jsonBlockStyle}>
                   {formatJson(detailItem.newValues)}
                 </pre>
               </Descriptions.Item>

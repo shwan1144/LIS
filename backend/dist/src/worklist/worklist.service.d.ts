@@ -30,6 +30,7 @@ export interface WorklistItem {
     resultEntryType: TestResultEntryType;
     resultTextOptions: TestResultTextOption[] | null;
     allowCustomResultText: boolean;
+    allowPanelSaveWithChildDefaults: boolean;
     cultureConfig: TestCultureConfig | null;
     cultureAntibioticIds: string[];
     tubeType: string | null;
@@ -52,6 +53,7 @@ export interface WorklistItem {
     parameterDefinitions: TestParameterDefinition[] | null;
     resultParameters: Record<string, string> | null;
     rejectionReason: string | null;
+    sortOrder: number;
     panelSortOrder: number | null;
 }
 export declare enum WorklistView {

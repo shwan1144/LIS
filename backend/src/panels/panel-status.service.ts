@@ -37,7 +37,14 @@ export class PanelStatusService {
     // Use actual child rows on this order (historical-safe, avoids test definition drift).
     const children = await this.orderTestRepo.find({
       where: { parentOrderTestId: parent.id },
-      select: ['id', 'status'],
+      select: [
+        'id',
+        'status',
+        'resultValue',
+        'resultText',
+        'resultParameters',
+        'cultureResult',
+      ],
     });
 
     if (children.length === 0) {

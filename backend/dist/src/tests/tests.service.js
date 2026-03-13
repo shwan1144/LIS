@@ -71,8 +71,9 @@ let TestsService = class TestsService {
         const resultEntryType = this.normalizeResultEntryType(dto.resultEntryType);
         const resultTextOptions = this.normalizeResultTextOptions(dto.resultTextOptions);
         const allowCustomResultText = dto.allowCustomResultText ?? false;
+        const allowPanelSaveWithChildDefaults = dto.allowPanelSaveWithChildDefaults ?? false;
         const cultureConfig = this.normalizeCultureConfig(dto.cultureConfig, resultEntryType);
-        this.validateResultEntryConfig(resultEntryType, resultTextOptions, allowCustomResultText, cultureConfig, dto.type || test_entity_1.TestType.SINGLE);
+        this.validateResultEntryConfig(resultEntryType, resultTextOptions, allowCustomResultText, allowPanelSaveWithChildDefaults, cultureConfig, dto.type || test_entity_1.TestType.SINGLE);
         const test = this.testRepo.create({
             labId,
             code: normalizedCode,
@@ -92,6 +93,7 @@ let TestsService = class TestsService {
             resultEntryType,
             resultTextOptions,
             allowCustomResultText,
+            allowPanelSaveWithChildDefaults,
             cultureConfig,
             numericAgeRanges: this.normalizeNumericAgeRanges(dto.numericAgeRanges),
             description: dto.description?.trim() || null,
@@ -183,13 +185,17 @@ let TestsService = class TestsService {
         const nextAllowCustomResultText = dto.allowCustomResultText !== undefined
             ? dto.allowCustomResultText
             : (test.allowCustomResultText ?? false);
+        const nextAllowPanelSaveWithChildDefaults = dto.allowPanelSaveWithChildDefaults !== undefined
+            ? dto.allowPanelSaveWithChildDefaults
+            : (test.allowPanelSaveWithChildDefaults ?? false);
         const nextCultureConfig = dto.cultureConfig !== undefined
             ? this.normalizeCultureConfig(dto.cultureConfig, nextResultEntryType)
             : this.normalizeCultureConfig(test.cultureConfig, nextResultEntryType);
-        this.validateResultEntryConfig(nextResultEntryType, nextResultTextOptions, nextAllowCustomResultText, nextCultureConfig, test.type ?? previousType);
+        this.validateResultEntryConfig(nextResultEntryType, nextResultTextOptions, nextAllowCustomResultText, nextAllowPanelSaveWithChildDefaults, nextCultureConfig, test.type ?? previousType);
         test.resultEntryType = nextResultEntryType;
         test.resultTextOptions = nextResultTextOptions;
         test.allowCustomResultText = nextAllowCustomResultText;
+        test.allowPanelSaveWithChildDefaults = nextAllowPanelSaveWithChildDefaults;
         test.cultureConfig = nextCultureConfig;
         const saved = await this.testRepo.save(test);
         await this.syncPanelComponentsForTest(saved, dto, labId);
@@ -374,7 +380,7 @@ let TestsService = class TestsService {
                 : null,
         });
     }
-    validateResultEntryConfig(resultEntryType, resultTextOptions, allowCustomResultText, cultureConfig, testType) {
+    validateResultEntryConfig(resultEntryType, resultTextOptions, allowCustomResultText, allowPanelSaveWithChildDefaults, cultureConfig, testType) {
         if (resultEntryType === 'CULTURE_SENSITIVITY' && testType !== test_entity_1.TestType.SINGLE) {
             throw new common_1.BadRequestException('CULTURE_SENSITIVITY entry mode is only supported for single tests');
         }
@@ -387,6 +393,9 @@ let TestsService = class TestsService {
         if (resultEntryType === 'NUMERIC' && allowCustomResultText) {
             throw new common_1.BadRequestException('allowCustomResultText can only be enabled for QUALITATIVE or TEXT tests');
         }
+        if (allowPanelSaveWithChildDefaults && testType !== test_entity_1.TestType.PANEL) {
+            throw new common_1.BadRequestException('allowPanelSaveWithChildDefaults can only be enabled for panel tests');
+        }
         if (resultEntryType !== 'CULTURE_SENSITIVITY' && cultureConfig) {
             throw new common_1.BadRequestException('cultureConfig is only valid for CULTURE_SENSITIVITY result entry type');
         }
@@ -396,6 +405,9 @@ let TestsService = class TestsService {
             }
             if (allowCustomResultText) {
                 throw new common_1.BadRequestException('allowCustomResultText cannot be enabled for CULTURE_SENSITIVITY tests');
+            }
+            if (allowPanelSaveWithChildDefaults) {
+                throw new common_1.BadRequestException('allowPanelSaveWithChildDefaults cannot be enabled for CULTURE_SENSITIVITY tests');
             }
             if (!cultureConfig || !cultureConfig.interpretationOptions.length) {
                 throw new common_1.BadRequestException('CULTURE_SENSITIVITY tests require at least one interpretation option');
@@ -1050,6 +1062,7 @@ let TestsService = class TestsService {
                 test.resultEntryType = data.resultEntryType;
                 test.resultTextOptions = data.resultTextOptions ?? null;
                 test.allowCustomResultText = data.allowCustomResultText ?? false;
+                test.allowPanelSaveWithChildDefaults = false;
                 test.unit = data.unit ?? null;
                 test.normalMin = data.normalMin ?? null;
                 test.normalMax = data.normalMax ?? null;
@@ -1067,6 +1080,7 @@ let TestsService = class TestsService {
                     resultEntryType: data.resultEntryType,
                     resultTextOptions: data.resultTextOptions ?? null,
                     allowCustomResultText: data.allowCustomResultText ?? false,
+                    allowPanelSaveWithChildDefaults: false,
                     unit: data.unit ?? null,
                     normalMin: data.normalMin ?? null,
                     normalMax: data.normalMax ?? null,
@@ -1084,6 +1098,7 @@ let TestsService = class TestsService {
             panel.type = test_entity_1.TestType.PANEL;
             panel.tubeType = test_entity_1.TubeType.URINE;
             panel.isActive = true;
+            panel.allowPanelSaveWithChildDefaults = true;
             panel.childTestIds = null;
             panel.sortOrder = 2;
             panel.description =
@@ -1098,6 +1113,7 @@ let TestsService = class TestsService {
                 name: 'General Urine Examination',
                 type: test_entity_1.TestType.PANEL,
                 tubeType: test_entity_1.TubeType.URINE,
+                allowPanelSaveWithChildDefaults: true,
                 childTestIds: null,
                 description: 'General Urine Examination panel with physical, chemical, and microscopic subtests.',
                 isActive: true,

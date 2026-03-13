@@ -16,6 +16,15 @@
   height: 100%;
 }
 
+.queue-page-title.ant-typography {
+  margin-top: 0 !important;
+  margin-bottom: 10px !important;
+  font-size: 30px;
+  line-height: 1.2;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
 .queue-filters-block {
   margin-bottom: 16px;
   flex-shrink: 0;
@@ -193,6 +202,10 @@ html[data-theme='dark'] .queue-orders-table .ant-table-thead > tr > th {
 }
 
 @media (max-width: 767px) {
+  .queue-page-title.ant-typography {
+    font-size: 26px;
+  }
+
   .queue-filter-toolbar.ant-space {
     padding: 12px;
     border-radius: 14px;

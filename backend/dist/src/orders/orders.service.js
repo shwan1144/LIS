@@ -291,7 +291,8 @@ let OrdersService = OrdersService_1 = class OrdersService {
                 const completedTestsCount = Number(payload.completedTestsCount ?? 0) || 0;
                 const verifiedTestsCount = Number(payload.verifiedTestsCount ?? 0) || 0;
                 const rejectedTestsCount = Number(payload.rejectedTestsCount ?? 0) || 0;
-                const reportReady = Boolean(payload.reportReady) || readyTestsCount > 0;
+                const reportReady = Boolean(payload.reportReady) ||
+                    (testsCount > 0 && verifiedTestsCount === testsCount);
                 const resultStatus = this.normalizeOrderResultStatus(payload.resultStatus, {
                     testsCount,
                     completedTestsCount,
@@ -1404,7 +1405,6 @@ let OrdersService = OrdersService_1 = class OrdersService {
             .setParameter('readyStatuses', [
             order_test_entity_1.OrderTestStatus.COMPLETED,
             order_test_entity_1.OrderTestStatus.VERIFIED,
-            order_test_entity_1.OrderTestStatus.REJECTED,
         ])
             .setParameter('pendingStatuses', [order_test_entity_1.OrderTestStatus.PENDING, order_test_entity_1.OrderTestStatus.IN_PROGRESS])
             .setParameter('completedStatus', order_test_entity_1.OrderTestStatus.COMPLETED)
@@ -1438,20 +1438,22 @@ let OrdersService = OrdersService_1 = class OrdersService {
             order.completedTestsCount = counts.completedTests;
             order.verifiedTestsCount = counts.verifiedTests;
             order.rejectedTestsCount = counts.rejectedTests;
-            order.reportReady = counts.readyTests > 0;
+            order.reportReady =
+                counts.totalTests > 0 && counts.verifiedTests === counts.totalTests;
             order.resultStatus = this.normalizeOrderResultStatus(undefined, {
                 testsCount: counts.totalTests,
                 completedTestsCount: counts.completedTests,
                 verifiedTestsCount: counts.verifiedTests,
                 rejectedTestsCount: counts.rejectedTests,
             });
-            if (order.status !== order_entity_1.OrderStatus.CANCELLED &&
-                counts.totalTests > 0 &&
-                counts.pendingTests === 0) {
-                order.status = order_entity_1.OrderStatus.COMPLETED;
-            }
-            else if (order.status === order_entity_1.OrderStatus.COMPLETED && counts.pendingTests > 0) {
-                order.status = order_entity_1.OrderStatus.IN_PROGRESS;
+            if (order.status !== order_entity_1.OrderStatus.CANCELLED) {
+                if (counts.totalTests > 0 && counts.verifiedTests === counts.totalTests) {
+                    order.status = order_entity_1.OrderStatus.COMPLETED;
+                }
+                else if (order.status === order_entity_1.OrderStatus.COMPLETED) {
+                    order.status =
+                        counts.pendingTests > 0 ? order_entity_1.OrderStatus.IN_PROGRESS : order_entity_1.OrderStatus.REGISTERED;
+                }
             }
         }
     }

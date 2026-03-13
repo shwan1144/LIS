@@ -105,9 +105,12 @@ function sortModalItems(items: WorklistItem[]): WorklistItem[] {
   const children = items.filter((item) => Boolean(item.parentOrderTestId));
 
   const sortByOrder = (a: WorklistItem, b: WorklistItem) => {
-    const aOrder = a.panelSortOrder ?? 9999;
-    const bOrder = b.panelSortOrder ?? 9999;
-    if (aOrder !== bOrder) return aOrder - bOrder;
+    const aPanelOrder = a.panelSortOrder ?? Number.MAX_SAFE_INTEGER;
+    const bPanelOrder = b.panelSortOrder ?? Number.MAX_SAFE_INTEGER;
+    if (aPanelOrder !== bPanelOrder) return aPanelOrder - bPanelOrder;
+    const aSortOrder = a.sortOrder ?? Number.MAX_SAFE_INTEGER;
+    const bSortOrder = b.sortOrder ?? Number.MAX_SAFE_INTEGER;
+    if (aSortOrder !== bSortOrder) return aSortOrder - bSortOrder;
     return a.testCode.localeCompare(b.testCode);
   };
 
@@ -167,6 +170,48 @@ function resolveGroupByIdentity(
     );
   }
   return groups.find((group) => group.groupId === currentGroup.groupId) ?? null;
+}
+
+function buildHiddenWorklistReviewMessage(groups: WorklistOrderGroupSummary[]): string | null {
+  const pendingGroups = groups.filter((group) => !group.isFullyEntered && group.pending > 0);
+  const rejectedGroups = groups.filter((group) => !group.isFullyEntered && group.rejected > 0);
+  const messages: string[] = [];
+
+  if (pendingGroups.length > 0) {
+    const totalPendingChildren = pendingGroups.reduce((sum, group) => sum + group.pending, 0);
+    if (pendingGroups.length === 1) {
+      messages.push(
+        totalPendingChildren === 1
+          ? '1 group is still hidden because it has 1 pending child test in Worklist.'
+          : `1 group is still hidden because it has ${totalPendingChildren} pending child tests in Worklist.`,
+      );
+    } else {
+      messages.push(
+        totalPendingChildren === 1
+          ? `${pendingGroups.length} groups are still hidden because they have 1 pending child test in Worklist.`
+          : `${pendingGroups.length} groups are still hidden because they have ${totalPendingChildren} pending child tests in Worklist.`,
+      );
+    }
+  }
+
+  if (rejectedGroups.length > 0) {
+    const totalRejectedTests = rejectedGroups.reduce((sum, group) => sum + group.rejected, 0);
+    if (rejectedGroups.length === 1) {
+      messages.push(
+        totalRejectedTests === 1
+          ? '1 group was returned to Worklist because it has 1 rejected test that must be reviewed again.'
+          : `1 group was returned to Worklist because it has ${totalRejectedTests} rejected tests that must be reviewed again.`,
+      );
+    } else {
+      messages.push(
+        totalRejectedTests === 1
+          ? `${rejectedGroups.length} groups were returned to Worklist because they have 1 rejected test that must be reviewed again.`
+          : `${rejectedGroups.length} groups were returned to Worklist because they have ${totalRejectedTests} rejected tests that must be reviewed again.`,
+      );
+    }
+  }
+
+  return messages.length > 0 ? messages.join(' ') : null;
 }
 
 export function VerificationPage() {
@@ -525,7 +570,9 @@ export function VerificationPage() {
       );
       const success = results.filter((result) => result.status === 'fulfilled').length;
       const failed = results.filter((result) => result.status === 'rejected').length;
-      message.success(`Rejected ${success} result(s)${failed > 0 ? `, ${failed} failed` : ''}`);
+      message.success(
+        `Rejected ${success} result(s)${failed > 0 ? `, ${failed} failed` : ''}. Returned to Worklist for review.`,
+      );
       setRejectContext(null);
       setRejectReason('');
       await refreshReviewAfterMutation(rejectContext.closeOnSuccess);
@@ -657,11 +704,14 @@ export function VerificationPage() {
     }
 
     const visibleGroups = cached.groups.filter((group) => group.isFullyEntered);
+    const hiddenPendingPanelMessage = buildHiddenWorklistReviewMessage(cached.groups);
     if (visibleGroups.length === 0) {
       return (
         <div style={{ padding: '6px 8px' }}>
           <Text type="secondary">
-            No fully entered groups available for verification
+            {hiddenPendingPanelMessage
+              ? `No fully entered groups available for verification. ${hiddenPendingPanelMessage}`
+              : 'No fully entered groups available for verification'}
           </Text>
         </div>
       );
@@ -670,6 +720,13 @@ export function VerificationPage() {
     return (
       <div className="verification-group-shell">
         <div className="verification-group-shell-title">Review groups</div>
+        {hiddenPendingPanelMessage ? (
+          <div style={{ marginBottom: 6 }}>
+            <Text type="secondary" style={{ fontSize: 12 }}>
+              {hiddenPendingPanelMessage}
+            </Text>
+          </div>
+        ) : null}
         <div className="verification-group-list">
           {visibleGroups.map((group) => {
             const isEmptyPanel = group.groupKind === 'panel' && group.testsCount === 0;
@@ -696,7 +753,7 @@ export function VerificationPage() {
               >
                 <div className="verification-group-main">
                   <div className="verification-group-title-row">
-                    <Text strong style={{ fontSize: 12 }}>
+                    <Text strong>
                       {group.label}
                     </Text>
                     {group.testsCount === 0 && (
@@ -706,7 +763,9 @@ export function VerificationPage() {
                     )}
                   </div>
                   <Space size={[4, 4]} wrap>
-                    <Tag style={{ margin: 0 }}>{group.testsCount} tests</Tag>
+                    {group.groupKind !== 'panel' && (
+                      <Tag style={{ margin: 0 }}>{group.testsCount} tests</Tag>
+                    )}
                     {group.completed > 0 && (
                       <Tag color="processing" style={{ margin: 0 }}>
                         Completed {group.completed}
@@ -727,6 +786,7 @@ export function VerificationPage() {
                 <Button
                   type="primary"
                   size="small"
+                  className="verification-group-action-btn"
                   disabled={isEmptyPanel}
                   loading={openingGroupKey === `${record.orderId}:${group.groupId}`}
                   onClick={(event) => {
@@ -762,74 +822,94 @@ export function VerificationPage() {
           border-bottom: 0 !important;
         }
         .verification-orders-table .verification-order-row-expanded > td:first-child {
-          border-left: none !important;
-          border-top-left-radius: 10px !important;
+          border-left: 2px solid ${isDark ? '#3b82f6' : '#2563eb'} !important;
         }
         .verification-orders-table .verification-order-row-expanded > td:last-child {
-          border-right: none !important;
-          border-top-right-radius: 10px !important;
+          border-right: 1px solid ${isDark ? 'rgba(96,165,250,0.48)' : '#bfdbfe'} !important;
         }
         .verification-orders-table .ant-table-expanded-row > td {
-          padding: 6px 10px 10px !important;
-          background: transparent !important;
-          border-left: none !important;
-          border-right: none !important;
-          border-bottom: none !important;
-          border-bottom-left-radius: 10px !important;
-          border-bottom-right-radius: 10px !important;
+          padding: 12px 16px 16px !important;
+          background: ${isDark ? 'rgba(15,23,42,0.2)' : '#f8fafc'} !important;
+          border-left: 2px solid ${isDark ? '#3b82f6' : '#2563eb'} !important;
+          border-right: 1px solid ${isDark ? 'rgba(96,165,250,0.48)' : '#bfdbfe'} !important;
+          border-bottom: 1px solid ${isDark ? 'rgba(96,165,250,0.48)' : '#bfdbfe'} !important;
         }
         .verification-group-list {
-          margin-top: 6px;
-          margin-left: 22px;
-          border-left: 2px dashed ${isDark ? 'rgba(148,163,184,0.35)' : '#c7d9ff'};
-          padding-left: 10px;
+          margin-top: 12px;
           display: flex;
           flex-direction: column;
-          gap: 8px;
+          gap: 12px;
         }
         .verification-group-shell {
-          border: 1px solid ${isDark ? 'rgba(148,163,184,0.22)' : '#dbe8ff'};
-          border-radius: 10px;
-          background: ${isDark ? 'rgba(2,6,23,0.36)' : '#f3f8ff'};
-          padding: 8px;
+          border: 1px solid ${isDark ? 'rgba(148,163,184,0.15)' : '#e2e8f0'};
+          border-radius: 12px;
+          background: ${isDark ? 'rgba(15,23,42,0.6)' : '#ffffff'};
+          padding: 16px;
+          margin: 6px 0;
+          box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05);
         }
         .verification-group-shell-title {
-          font-size: 11px;
+          font-size: 13px;
           font-weight: 700;
-          letter-spacing: 0.2px;
-          color: ${isDark ? 'rgba(191,219,254,0.95)' : '#1d4ed8'};
+          letter-spacing: 0.5px;
+          color: ${isDark ? 'rgba(148,163,184,0.9)' : '#64748b'};
           text-transform: uppercase;
+          margin-bottom: 4px;
         }
         .verification-group-item {
           display: flex;
           align-items: center;
           justify-content: space-between;
-          gap: 10px;
           border-radius: 8px;
-          border: 1px solid ${isDark ? 'rgba(148,163,184,0.2)' : '#d9e8ff'};
-          padding: 8px 10px;
+          border: 1px solid ${isDark ? 'rgba(34,197,94,0.3)' : '#bbf7d0'};
+          background: ${isDark ? 'rgba(20,83,45,0.15)' : '#f0fdf4'};
+          padding: 8px 16px;
           cursor: pointer;
+          position: relative;
+          overflow: hidden;
+          transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
         }
-        .verification-group-item-single {
-          background: ${isDark ? 'rgba(30,58,138,0.16)' : '#eef5ff'};
+        .verification-group-item:hover {
+          transform: translateY(-2px);
+          box-shadow: 0 6px 16px -4px rgba(0, 0, 0, 0.08);
+          border-color: ${isDark ? 'rgba(34,197,94,0.5)' : '#86efac'};
+          background: ${isDark ? 'rgba(20,83,45,0.3)' : '#dcfce7'};
         }
-        .verification-group-item-panel {
-          background: ${isDark ? 'rgba(88,28,135,0.16)' : '#f5efff'};
-        }
-        .verification-group-item-culture {
-          background: ${isDark ? 'rgba(14,116,144,0.2)' : '#ecfeff'};
+        .verification-group-item::before {
+          content: "";
+          position: absolute;
+          left: 0;
+          top: 0;
+          bottom: 0;
+          width: 5px;
+          background-color: ${isDark ? '#22c55e' : '#16a34a'};
         }
         .verification-group-main {
           min-width: 0;
           display: flex;
-          flex-direction: column;
-          gap: 4px;
+          flex-direction: row;
+          align-items: center;
+          gap: 16px;
+          flex: 1;
         }
         .verification-group-title-row {
           display: flex;
           align-items: center;
           gap: 8px;
           flex-wrap: wrap;
+          width: 220px;
+          flex-shrink: 0;
+        }
+        .verification-group-title-row > span.ant-typography.ant-typography-strong {
+          font-size: 15px !important;
+          color: ${isDark ? '#f8fafc' : '#0f172a'};
+          letter-spacing: -0.2px;
+        }
+        .verification-group-action-btn.ant-btn {
+          border-radius: 6px;
+          font-weight: 500;
+          padding: 4px 20px;
+          height: 36px;
         }
         .verification-review-modal .ant-modal-header {
           padding: 8px 10px !important;
@@ -894,7 +974,7 @@ export function VerificationPage() {
         }
       `}</style>
 
-      <Title level={4} style={{ marginTop: 0, marginBottom: 10 }}>
+      <Title level={2} className="queue-page-title">
         Verification
       </Title>
       <WorklistStatusDashboard stats={stats} style={{ marginBottom: 12 }} />
@@ -1097,12 +1177,12 @@ export function VerificationPage() {
                 backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : '#f3f4f6',
               }}
             >
-              <div style={{ flex: '1 1 32%', textAlign: 'center' }}>Test</div>
-              <div style={{ flex: '1 1 18%', textAlign: 'center' }}>Result</div>
-              <div style={{ flex: '1 1 8%', textAlign: 'center' }}>Unit</div>
+              <div style={{ flex: '1 1 29%', textAlign: 'center' }}>Test</div>
+              <div style={{ flex: '1 1 15%', textAlign: 'center' }}>Result</div>
+              <div style={{ flex: '1 1 7%', textAlign: 'center' }}>Unit</div>
               <div style={{ flex: '1 1 9%', textAlign: 'center' }}>Flag</div>
               <div style={{ flex: '1 1 8%', textAlign: 'center' }}>Status</div>
-              <div style={{ flex: '1 1 9%', textAlign: 'center' }}>Ref. Range</div>
+              <div style={{ flex: '1 1 16%', textAlign: 'left', paddingLeft: 8 }}>Ref. Range</div>
               {reviewGroup.groupKind === 'single' ? (
                 <div style={{ flex: '1 1 16%', textAlign: 'right' }}>Action</div>
               ) : null}
@@ -1152,7 +1232,7 @@ export function VerificationPage() {
                           : 'transparent',
                       }}
                     >
-                      <div style={{ flex: '1 1 32%', paddingRight: 8, textAlign: 'center' }}>
+                      <div style={{ flex: '1 1 29%', paddingRight: 8, textAlign: 'center' }}>
                         <Space size={6}>
                           {isPanelRoot && (
                             <Tag color="purple" style={{ margin: 0, fontSize: 11 }}>
@@ -1186,7 +1266,7 @@ export function VerificationPage() {
                         )}
                       </div>
 
-                      <div style={{ flex: '1 1 18%', paddingRight: 8, textAlign: 'center' }}>
+                      <div style={{ flex: '1 1 15%', paddingRight: 8, textAlign: 'center' }}>
                         <Text style={{ fontSize: 12 }}>
                           {isPanelRoot
                             ? 'Panel group'
@@ -1196,7 +1276,7 @@ export function VerificationPage() {
                         </Text>
                       </div>
 
-                      <div style={{ flex: '1 1 8%', textAlign: 'center', fontSize: 12 }}>
+                      <div style={{ flex: '1 1 7%', textAlign: 'center', fontSize: 12 }}>
                         {item.testUnit || '-'}
                       </div>
 
@@ -1220,11 +1300,13 @@ export function VerificationPage() {
 
                       <div
                         style={{
-                          flex: '1 1 9%',
-                          textAlign: 'center',
+                          flex: '1 1 16%',
+                          textAlign: 'left',
                           fontSize: 12,
-                          whiteSpace: 'pre-wrap',
+                          whiteSpace: 'pre-line',
+                          lineHeight: '16px',
                           wordBreak: 'break-word',
+                          paddingLeft: 8,
                         }}
                       >
                         {formatReferenceRange(item)}

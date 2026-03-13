@@ -13,7 +13,7 @@ import {
   ResultFlag,
 } from '../entities/order-test.entity';
 import { Order, OrderStatus } from '../entities/order.entity';
-import { Test } from '../entities/test.entity';
+import { Test, TestType } from '../entities/test.entity';
 import { Antibiotic } from '../entities/antibiotic.entity';
 import { Lab, LabCultureEntryHistory } from '../entities/lab.entity';
 import { TestAntibiotic } from '../entities/test-antibiotic.entity';
@@ -64,6 +64,7 @@ export interface WorklistItem {
   resultEntryType: TestResultEntryType;
   resultTextOptions: TestResultTextOption[] | null;
   allowCustomResultText: boolean;
+  allowPanelSaveWithChildDefaults: boolean;
   cultureConfig: TestCultureConfig | null;
   cultureAntibioticIds: string[];
   tubeType: string | null;
@@ -86,6 +87,7 @@ export interface WorklistItem {
   parameterDefinitions: TestParameterDefinition[] | null;
   resultParameters: Record<string, string> | null;
   rejectionReason: string | null;
+  sortOrder: number;
   panelSortOrder: number | null;
 }
 
@@ -345,6 +347,7 @@ export class WorklistService {
         'ot.verifiedAt AS "verifiedAt"',
         'ot.verifiedBy AS "verifiedBy"',
         'ot.parentOrderTestId AS "parentOrderTestId"',
+        'test.sortOrder AS "sortOrder"',
         'ot.panelSortOrder AS "panelSortOrder"',
       ];
       if (view === WorklistView.FULL) {
@@ -352,6 +355,7 @@ export class WorklistService {
           'test.resultEntryType AS "resultEntryType"',
           'test.resultTextOptions AS "resultTextOptions"',
           'test.allowCustomResultText AS "allowCustomResultText"',
+          'test.allowPanelSaveWithChildDefaults AS "allowPanelSaveWithChildDefaults"',
           'test.cultureConfig AS "cultureConfig"',
           'test.parameterDefinitions AS "parameterDefinitions"',
         );
@@ -429,6 +433,7 @@ export class WorklistService {
             (parseJsonField(item.resultTextOptions) as TestResultTextOption[] | null) ??
             null,
           allowCustomResultText: Boolean(item.allowCustomResultText),
+          allowPanelSaveWithChildDefaults: Boolean(item.allowPanelSaveWithChildDefaults),
           cultureConfig:
             this.normalizeCultureConfig(
               parseJsonField(item.cultureConfig) as TestCultureConfig | null,
@@ -461,6 +466,7 @@ export class WorklistService {
           resultParameters:
             (parseJsonField(item.resultParameters) as Record<string, string> | null) ?? null,
           rejectionReason: item.rejectionReason ?? null,
+          sortOrder: item.sortOrder != null ? Number(item.sortOrder) : 0,
           panelSortOrder: item.panelSortOrder != null ? Number(item.panelSortOrder) : null,
         };
       });
@@ -822,6 +828,7 @@ export class WorklistService {
           'test.resultEntryType AS "resultEntryType"',
           'test.resultTextOptions AS "resultTextOptions"',
           'test.allowCustomResultText AS "allowCustomResultText"',
+          'test.allowPanelSaveWithChildDefaults AS "allowPanelSaveWithChildDefaults"',
           'test.cultureConfig AS "cultureConfig"',
           'test.parameterDefinitions AS "parameterDefinitions"',
           'ot.status AS status',
@@ -836,6 +843,7 @@ export class WorklistService {
           'ot.verifiedAt AS "verifiedAt"',
           'ot.verifiedBy AS "verifiedBy"',
           'ot.parentOrderTestId AS "parentOrderTestId"',
+          'test.sortOrder AS "sortOrder"',
           'ot.panelSortOrder AS "panelSortOrder"',
           'parentOt.panelSortOrder AS "parentPanelSortOrder"',
           'parentOt.id AS "parentId"',
@@ -983,6 +991,9 @@ export class WorklistService {
         resultEntryType: this.normalizeResultEntryType(orderTest.test.resultEntryType),
         resultTextOptions: this.normalizeResultTextOptions(orderTest.test.resultTextOptions),
         allowCustomResultText: Boolean(orderTest.test.allowCustomResultText),
+        allowPanelSaveWithChildDefaults: Boolean(
+          orderTest.test.allowPanelSaveWithChildDefaults,
+        ),
         cultureConfig: this.normalizeCultureConfig(orderTest.test.cultureConfig),
         cultureAntibioticIds: [],
         tubeType: orderTest.sample.tubeType,
@@ -1003,6 +1014,7 @@ export class WorklistService {
         parameterDefinitions: orderTest.test.parameterDefinitions ?? null,
         resultParameters: orderTest.resultParameters ?? null,
         rejectionReason: orderTest.rejectionReason ?? null,
+        sortOrder: orderTest.test.sortOrder ?? 0,
         panelSortOrder: orderTest.panelSortOrder ?? null,
       };
       const [withCultureTemplates] = await this.attachCultureAntibioticIds([item]);
@@ -1074,6 +1086,12 @@ export class WorklistService {
       throw new BadRequestException('Cannot modify a verified result');
     }
 
+    if (orderTest.test.type === TestType.PANEL && !orderTest.parentOrderTestId) {
+      throw new BadRequestException(
+        'Panel roots cannot be entered directly. Enter results through the child tests.',
+      );
+    }
+
     if (data.resultValue !== undefined) {
       orderTest.resultValue = data.resultValue;
     }
@@ -1103,7 +1121,6 @@ export class WorklistService {
       data.resultText !== undefined
         ? this.normalizeResultText(data.resultText)
         : undefined;
-
     if (resultEntryType === 'QUALITATIVE') {
       const candidateText =
         normalizedResultTextInput ?? this.normalizeResultText(orderTest.resultText);
@@ -1291,6 +1308,10 @@ export class WorklistService {
         continue;
       }
 
+      if (orderTest.test.type === TestType.PANEL && !orderTest.parentOrderTestId) {
+        continue;
+      }
+
       if (data.resultValue !== undefined) {
         orderTest.resultValue = data.resultValue;
       }
@@ -1316,7 +1337,6 @@ export class WorklistService {
       const resultTextOptions = this.normalizeResultTextOptions(orderTest.test.resultTextOptions);
       const normalizedResultTextInput =
         data.resultText !== undefined ? this.normalizeResultText(data.resultText) : undefined;
-
       if (resultEntryType === 'QUALITATIVE') {
         const candidateText =
           normalizedResultTextInput ?? this.normalizeResultText(orderTest.resultText);
@@ -1478,6 +1498,11 @@ export class WorklistService {
     if (orderTest.status === OrderTestStatus.PENDING) {
       throw new BadRequestException('Cannot verify a test without a result');
     }
+    if (orderTest.status === OrderTestStatus.REJECTED) {
+      throw new BadRequestException(
+        'Rejected results must be reviewed in Worklist before verification',
+      );
+    }
     if (!hasMeaningfulOrderTestResult(orderTest)) {
       throw new BadRequestException(
         'Cannot verify a test without a real result value, text, parameters, or culture data',
@@ -1547,6 +1572,7 @@ export class WorklistService {
       if (
         ot.sample.order.labId !== labId ||
         ot.status === OrderTestStatus.VERIFIED ||
+        ot.status === OrderTestStatus.REJECTED ||
         ot.status === OrderTestStatus.PENDING ||
         !hasMeaningfulOrderTestResult(ot)
       ) {
@@ -1632,8 +1658,8 @@ export class WorklistService {
 
     orderTest.status = OrderTestStatus.REJECTED;
     orderTest.rejectionReason = reason;
-    orderTest.verifiedAt = new Date();
-    orderTest.verifiedBy = actor.userId;
+    orderTest.verifiedAt = null;
+    orderTest.verifiedBy = null;
 
     const saved = await this.orderTestRepo.save(orderTest);
     await this.panelStatusService.recomputeAfterChildUpdate(orderTest.id);
@@ -1748,6 +1774,7 @@ export class WorklistService {
           (parseJsonField(item.resultTextOptions) as TestResultTextOption[] | null) ?? null,
         ),
       allowCustomResultText: Boolean(item.allowCustomResultText),
+      allowPanelSaveWithChildDefaults: Boolean(item.allowPanelSaveWithChildDefaults),
       cultureConfig: this.normalizeCultureConfig(
         parseJsonField(item.cultureConfig) as TestCultureConfig | null,
       ),
@@ -1777,6 +1804,10 @@ export class WorklistService {
       resultParameters:
         (parseJsonField(item.resultParameters) as Record<string, string> | null) ?? null,
       rejectionReason: (item.rejectionReason as string | null) ?? null,
+      sortOrder:
+        item.sortOrder != null
+          ? Number(item.sortOrder)
+          : 0,
       panelSortOrder:
         item.panelSortOrder != null
           ? Number(item.panelSortOrder)
@@ -2530,23 +2561,23 @@ export class WorklistService {
 
     const tests = await this.orderTestRepo
       .createQueryBuilder('ot')
+      .innerJoinAndSelect('ot.test', 'test')
       .innerJoin('ot.sample', 'sample')
       .where('sample.orderId = :orderId', { orderId })
-      .select(['ot.id AS id', 'ot.status AS status'])
-      .getRawMany<{ id: string; status: OrderTestStatus }>();
+      .getMany();
 
     if (tests.length === 0) {
       return;
     }
 
-    const statuses = tests.map((t) => t.status);
-    const allFinalized = statuses.every(
-      (s) => s === OrderTestStatus.VERIFIED || s === OrderTestStatus.REJECTED,
-    );
+    const rootTests = tests.filter((test) => !test.parentOrderTestId);
+    const statuses =
+      rootTests.length > 0 ? rootTests.map((test) => test.status) : tests.map((test) => test.status);
+    const allVerified =
+      statuses.length > 0 &&
+      statuses.every((status) => status === OrderTestStatus.VERIFIED);
 
-    // Requirement: when all tests are data-entered and verified (or rejected),
-    // mark the order as COMPLETED so it appears in Reports by default
-    const nextStatus = allFinalized ? OrderStatus.COMPLETED : OrderStatus.REGISTERED;
+    const nextStatus = allVerified ? OrderStatus.COMPLETED : OrderStatus.REGISTERED;
 
     if (order.status !== nextStatus) {
       order.status = nextStatus;

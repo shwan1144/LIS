@@ -95,6 +95,7 @@ interface SelectedTest {
   testCode: string;
   testName: string;
   tubeType: string;
+  sortOrder?: number | null;
   displayLabel?: string;
   sortCategoryKey?: string;
   price?: number | null;
@@ -278,6 +279,8 @@ function getEditTestActionNote(test: SelectedTest): string | null {
 
 function toOrderHistoryItem(order: OrderDto): OrderHistoryItemDto {
   const readyTestsCount = Number(order.readyTestsCount ?? 0) || 0;
+  const testsCount = Number(order.testsCount ?? 0) || 0;
+  const verifiedTestsCount = Number(order.verifiedTestsCount ?? 0) || 0;
   return {
     id: order.id,
     orderNumber: order.orderNumber,
@@ -294,14 +297,18 @@ function toOrderHistoryItem(order: OrderDto): OrderHistoryItemDto {
     finalAmount: Number(order.finalAmount ?? 0),
     patient: order.patient,
     shift: order.shift,
-    testsCount: Number(order.testsCount ?? 0) || 0,
+    testsCount,
     readyTestsCount,
-    reportReady: Boolean(order.reportReady) || readyTestsCount > 0,
+    reportReady:
+      Boolean(order.reportReady) ||
+      (testsCount > 0 && verifiedTestsCount === testsCount),
   };
 }
 
 function toOrderHistoryItemFromSummary(order: OrderCreateSummaryDto): OrderHistoryItemDto {
   const readyTestsCount = Number(order.readyTestsCount ?? 0) || 0;
+  const testsCount = Number(order.testsCount ?? 0) || 0;
+  const verifiedTestsCount = Number(order.verifiedTestsCount ?? 0) || 0;
   return {
     id: order.id,
     orderNumber: order.orderNumber,
@@ -318,9 +325,11 @@ function toOrderHistoryItemFromSummary(order: OrderCreateSummaryDto): OrderHisto
     finalAmount: Number(order.finalAmount ?? 0),
     patient: order.patient,
     shift: order.shift,
-    testsCount: Number(order.testsCount ?? 0) || 0,
+    testsCount,
     readyTestsCount,
-    reportReady: Boolean(order.reportReady) || readyTestsCount > 0,
+    reportReady:
+      Boolean(order.reportReady) ||
+      (testsCount > 0 && verifiedTestsCount === testsCount),
   };
 }
 
@@ -895,15 +904,18 @@ export function OrdersPage() {
       message.warning('Test already added');
       return;
     }
-    setSelectedTests([
-      ...selectedTests,
-      {
-        testId: test.id,
-        testCode: test.code,
-        testName: test.name,
-        tubeType: test.tubeType,
-      },
-    ]);
+    setSelectedTests((previous) =>
+      sortRootOrderTestsForReadonly([
+        ...previous,
+        {
+          testId: test.id,
+          testCode: test.code,
+          testName: test.name,
+          tubeType: test.tubeType,
+          sortOrder: test.sortOrder,
+        },
+      ]),
+    );
     setTestSearch('');
   };
 
@@ -918,6 +930,10 @@ export function OrdersPage() {
 
   const sortRootOrderTestsForReadonly = (tests: SelectedTest[]): SelectedTest[] =>
     [...tests].sort((a, b) => {
+      const aSortOrder = a.sortOrder ?? Number.MAX_SAFE_INTEGER;
+      const bSortOrder = b.sortOrder ?? Number.MAX_SAFE_INTEGER;
+      if (aSortOrder !== bSortOrder) return aSortOrder - bSortOrder;
+
       const categoryCompare = normalizeSortToken(a.sortCategoryKey).localeCompare(
         normalizeSortToken(b.sortCategoryKey),
         undefined,
@@ -1003,6 +1019,7 @@ export function OrdersPage() {
         testCode: orderTest.test?.code ?? '-',
         testName: orderTest.test?.name ?? 'Unknown',
         tubeType: orderTest.test?.tubeType ?? 'OTHER',
+        sortOrder: testMeta?.sortOrder ?? null,
         displayLabel,
         sortCategoryKey,
         price: orderTest.price != null ? Number(orderTest.price) : null,
@@ -1027,10 +1044,11 @@ export function OrdersPage() {
       testCode: t.code,
       testName: t.name,
       tubeType: t.tubeType,
+      sortOrder: t.sortOrder,
     }));
 
     if (newSelections.length > 0) {
-      setSelectedTests(prev => [...prev, ...newSelections]);
+      setSelectedTests((prev) => sortRootOrderTestsForReadonly([...prev, ...newSelections]));
       message.success(`Added ${newSelections.length} test(s) from group`);
     } else {
       message.info('All tests from this group are already selected');
@@ -2487,7 +2505,7 @@ export function OrdersPage() {
             style={{ height: 'calc(100vh - 140px)', display: 'flex', flexDirection: 'column' }}
             bodyStyle={{
               overflow: 'hidden',
-              paddingTop: 12,
+              paddingTop: 0,
               paddingInline: 12,
               paddingBottom: 0,
               flex: 1,
@@ -2550,16 +2568,16 @@ export function OrdersPage() {
                           <Col span={18}>
                             {lockedOrderEditMode ? (
                               <div className="orders-edit-tests-shell">
-                                <div className="order-draft-referred-row">
-                                  <Text strong style={{ display: 'block', marginBottom: 6 }}>
+                                <div className="order-composer-field order-draft-referred-row">
+                                  <Text strong className="order-composer-field-label">
                                     Referred by
                                   </Text>
                                   <AutoComplete
+                                    className="order-composer-field-control"
                                     value={lockedOrderReferredByDraft}
                                     onChange={setLockedOrderReferredByDraft}
                                     options={referringDoctorOptions.map((name) => ({ value: name }))}
                                     placeholder="Select from list or type doctor name"
-                                    style={{ width: '100%', marginBottom: 12 }}
                                     filterOption={(inputValue, option) =>
                                       String(option?.value ?? '')
                                         .toLowerCase()
@@ -2820,16 +2838,16 @@ export function OrdersPage() {
                         className="orders-section-card order-composer-select-card"
                         title="Select tests"
                       >
-                        <div className="order-draft-referred-row">
-                          <Text strong style={{ display: 'block', marginBottom: 6 }}>
+                        <div className="order-composer-field order-draft-referred-row">
+                          <Text strong className="order-composer-field-label">
                             Referred by
                           </Text>
                           <AutoComplete
+                            className="order-composer-field-control"
                             value={referredBy}
                             onChange={setReferredBy}
                             options={referringDoctorOptions.map((name) => ({ value: name }))}
                             placeholder="Select from list or type doctor name"
-                            style={{ width: '100%', marginBottom: 12 }}
                             filterOption={(inputValue, option) =>
                               String(option?.value ?? '')
                                 .toLowerCase()
@@ -2838,27 +2856,32 @@ export function OrdersPage() {
                             allowClear
                           />
                         </div>
-                        <Select
-                          showSearch
-                          placeholder="Search tests by name or code..."
-                          style={{ width: '100%', marginBottom: 12 }}
-                          value={null}
-                          onChange={handleAddTest}
-                          filterOption={false}
-                          onSearch={setTestSearch}
-                          loading={loadingTests}
-                          notFoundContent={loadingTests ? <Spin size="small" /> : 'No tests found'}
-                          options={filteredTests.map((t) => ({
-                            value: t.id,
-                            label: (
-                              <Space>
-                                <Text strong>{t.code}</Text>
-                                <Text>{(t as any).abbreviation ? `${(t as any).abbreviation} - ${t.name}` : t.name}</Text>
-                                <Text type="secondary">({t.tubeType})</Text>
-                              </Space>
-                            ),
-                          }))}
-                        />
+                        <div className="order-composer-field order-composer-search-row">
+                          <Text strong className="order-composer-field-label">
+                            Search tests
+                          </Text>
+                          <Select
+                            showSearch
+                            className="order-composer-field-control"
+                            placeholder="Search tests by name or code..."
+                            value={null}
+                            onChange={handleAddTest}
+                            filterOption={false}
+                            onSearch={setTestSearch}
+                            loading={loadingTests}
+                            notFoundContent={loadingTests ? <Spin size="small" /> : 'No tests found'}
+                            options={filteredTests.map((t) => ({
+                              value: t.id,
+                              label: (
+                                <Space>
+                                  <Text strong>{t.code}</Text>
+                                  <Text>{(t as any).abbreviation ? `${(t as any).abbreviation} - ${t.name}` : t.name}</Text>
+                                  <Text type="secondary">({t.tubeType})</Text>
+                                </Space>
+                              ),
+                            }))}
+                          />
+                        </div>
 
                         <div className="order-composer-toolbar">
                           <Text strong>Selected tests</Text>

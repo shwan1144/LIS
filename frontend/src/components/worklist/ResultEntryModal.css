@@ -159,7 +159,7 @@
 .result-entry-modal__grid-header,
 .result-entry-modal__grid-row {
   display: grid;
-  grid-template-columns: minmax(250px, 1.8fr) minmax(280px, 1.45fr) 92px 110px 150px;
+  grid-template-columns: minmax(230px, 1.55fr) minmax(250px, 1.25fr) 88px 96px minmax(220px, 1.1fr);
   gap: 8px;
   align-items: flex-start;
 }
@@ -352,7 +352,11 @@
 }
 
 .result-entry-modal__range {
-  white-space: pre-wrap;
+  display: block;
+  width: 100%;
+  white-space: pre-line;
+  text-align: left;
+  line-height: 1.45;
 }
 
 .result-entry-modal--dark .result-entry-modal__unit,
@@ -425,7 +429,7 @@
 
   .result-entry-modal__grid-header,
   .result-entry-modal__grid-row {
-    grid-template-columns: minmax(220px, 1.55fr) minmax(240px, 1.35fr) 82px 96px 128px;
+    grid-template-columns: minmax(210px, 1.45fr) minmax(220px, 1.2fr) 78px 90px minmax(180px, 1fr);
   }
 }
 

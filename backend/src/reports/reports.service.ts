@@ -1005,6 +1005,37 @@ export class ReportsService implements OnModuleInit, OnModuleDestroy {
     );
   }
 
+  private assertAllResultsVerifiedForReport(
+    reportableOrderTests: OrderTest[],
+    verifiedTests: OrderTest[],
+  ): void {
+    if (reportableOrderTests.length === 0) {
+      throw new BadRequestException('No reportable tests found for this order.');
+    }
+
+    if (verifiedTests.length === reportableOrderTests.length) {
+      return;
+    }
+
+    const verifiedIds = new Set(verifiedTests.map((orderTest) => orderTest.id));
+    const unverifiedTests = reportableOrderTests.filter(
+      (orderTest) => !verifiedIds.has(orderTest.id),
+    );
+    const labels = unverifiedTests
+      .slice(0, 5)
+      .map((orderTest) => {
+        const test = orderTest.test as Test | undefined;
+        return test?.code || test?.name || orderTest.id;
+      })
+      .join(', ');
+    const extraCount = unverifiedTests.length - Math.min(unverifiedTests.length, 5);
+    const suffix = extraCount > 0 ? ` (+${extraCount} more)` : '';
+
+    throw new BadRequestException(
+      `Cannot print/download results while some tests are still unverified: ${labels}${suffix}. Verify all results first.`,
+    );
+  }
+
   private async loadOrderResultsSnapshot(
     orderId: string,
     labId?: string,
@@ -1042,7 +1073,7 @@ export class ReportsService implements OnModuleInit, OnModuleDestroy {
 
     const reportableOrderTests = this.getReportableOrderTests(orderTests);
     const verifiedTests = reportableOrderTests.filter(
-      (ot) => ot.status === 'VERIFIED' || !!ot.verifiedAt,
+      (ot) => ot.status === 'VERIFIED',
     );
     const latestVerifiedAt =
       verifiedTests
@@ -1094,7 +1125,7 @@ export class ReportsService implements OnModuleInit, OnModuleDestroy {
           departmentName,
           expectedCompletionMinutes,
           status: ot.status,
-          isVerified: ot.status === 'VERIFIED' || !!ot.verifiedAt,
+          isVerified: ot.status === 'VERIFIED',
           hasResult: resultValue !== null,
           resultValue,
           unit: test?.unit || null,
@@ -1345,6 +1376,7 @@ export class ReportsService implements OnModuleInit, OnModuleDestroy {
 
     if (!bypassResultCompletionCheck) {
       this.assertAllResultsEnteredForReport(reportableOrderTests);
+      this.assertAllResultsVerifiedForReport(reportableOrderTests, verifiedTests);
     }
 
     if (!bypassPaymentCheck && order.paymentStatus !== 'paid') {

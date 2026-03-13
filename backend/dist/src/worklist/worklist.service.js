@@ -211,10 +211,11 @@ let WorklistService = WorklistService_1 = class WorklistService {
                 'ot.verifiedAt AS "verifiedAt"',
                 'ot.verifiedBy AS "verifiedBy"',
                 'ot.parentOrderTestId AS "parentOrderTestId"',
+                'test.sortOrder AS "sortOrder"',
                 'ot.panelSortOrder AS "panelSortOrder"',
             ];
             if (view === WorklistView.FULL) {
-                selectFields.push('test.resultEntryType AS "resultEntryType"', 'test.resultTextOptions AS "resultTextOptions"', 'test.allowCustomResultText AS "allowCustomResultText"', 'test.cultureConfig AS "cultureConfig"', 'test.parameterDefinitions AS "parameterDefinitions"');
+                selectFields.push('test.resultEntryType AS "resultEntryType"', 'test.resultTextOptions AS "resultTextOptions"', 'test.allowCustomResultText AS "allowCustomResultText"', 'test.allowPanelSaveWithChildDefaults AS "allowPanelSaveWithChildDefaults"', 'test.cultureConfig AS "cultureConfig"', 'test.parameterDefinitions AS "parameterDefinitions"');
             }
             const rawItems = await buildBaseQuery()
                 .andWhere('order.id IN (:...orderIds)', { orderIds })
@@ -267,6 +268,7 @@ let WorklistService = WorklistService_1 = class WorklistService {
                     resultTextOptions: parseJsonField(item.resultTextOptions) ??
                         null,
                     allowCustomResultText: Boolean(item.allowCustomResultText),
+                    allowPanelSaveWithChildDefaults: Boolean(item.allowPanelSaveWithChildDefaults),
                     cultureConfig: this.normalizeCultureConfig(parseJsonField(item.cultureConfig)),
                     cultureAntibioticIds: [],
                     tubeType: item.tubeType,
@@ -290,6 +292,7 @@ let WorklistService = WorklistService_1 = class WorklistService {
                         null,
                     resultParameters: parseJsonField(item.resultParameters) ?? null,
                     rejectionReason: item.rejectionReason ?? null,
+                    sortOrder: item.sortOrder != null ? Number(item.sortOrder) : 0,
                     panelSortOrder: item.panelSortOrder != null ? Number(item.panelSortOrder) : null,
                 };
             });
@@ -561,6 +564,7 @@ let WorklistService = WorklistService_1 = class WorklistService {
                 'test.resultEntryType AS "resultEntryType"',
                 'test.resultTextOptions AS "resultTextOptions"',
                 'test.allowCustomResultText AS "allowCustomResultText"',
+                'test.allowPanelSaveWithChildDefaults AS "allowPanelSaveWithChildDefaults"',
                 'test.cultureConfig AS "cultureConfig"',
                 'test.parameterDefinitions AS "parameterDefinitions"',
                 'ot.status AS status',
@@ -575,6 +579,7 @@ let WorklistService = WorklistService_1 = class WorklistService {
                 'ot.verifiedAt AS "verifiedAt"',
                 'ot.verifiedBy AS "verifiedBy"',
                 'ot.parentOrderTestId AS "parentOrderTestId"',
+                'test.sortOrder AS "sortOrder"',
                 'ot.panelSortOrder AS "panelSortOrder"',
                 'parentOt.panelSortOrder AS "parentPanelSortOrder"',
                 'parentOt.id AS "parentId"',
@@ -688,6 +693,7 @@ let WorklistService = WorklistService_1 = class WorklistService {
                 resultEntryType: this.normalizeResultEntryType(orderTest.test.resultEntryType),
                 resultTextOptions: this.normalizeResultTextOptions(orderTest.test.resultTextOptions),
                 allowCustomResultText: Boolean(orderTest.test.allowCustomResultText),
+                allowPanelSaveWithChildDefaults: Boolean(orderTest.test.allowPanelSaveWithChildDefaults),
                 cultureConfig: this.normalizeCultureConfig(orderTest.test.cultureConfig),
                 cultureAntibioticIds: [],
                 tubeType: orderTest.sample.tubeType,
@@ -708,6 +714,7 @@ let WorklistService = WorklistService_1 = class WorklistService {
                 parameterDefinitions: orderTest.test.parameterDefinitions ?? null,
                 resultParameters: orderTest.resultParameters ?? null,
                 rejectionReason: orderTest.rejectionReason ?? null,
+                sortOrder: orderTest.test.sortOrder ?? 0,
                 panelSortOrder: orderTest.panelSortOrder ?? null,
             };
             const [withCultureTemplates] = await this.attachCultureAntibioticIds([item]);
@@ -755,6 +762,9 @@ let WorklistService = WorklistService_1 = class WorklistService {
             canForceEditVerified;
         if (orderTest.status === order_test_entity_1.OrderTestStatus.VERIFIED && !isVerifiedOverride) {
             throw new common_1.BadRequestException('Cannot modify a verified result');
+        }
+        if (orderTest.test.type === test_entity_1.TestType.PANEL && !orderTest.parentOrderTestId) {
+            throw new common_1.BadRequestException('Panel roots cannot be entered directly. Enter results through the child tests.');
         }
         if (data.resultValue !== undefined) {
             orderTest.resultValue = data.resultValue;
@@ -899,6 +909,9 @@ let WorklistService = WorklistService_1 = class WorklistService {
             const canForceEditVerified = actor.isImpersonation || actorRole === 'LAB_ADMIN' || actorRole === 'SUPER_ADMIN';
             const isVerifiedOverride = orderTest.status === order_test_entity_1.OrderTestStatus.VERIFIED && forceEditVerified && canForceEditVerified;
             if (orderTest.status === order_test_entity_1.OrderTestStatus.VERIFIED && !isVerifiedOverride) {
+                continue;
+            }
+            if (orderTest.test.type === test_entity_1.TestType.PANEL && !orderTest.parentOrderTestId) {
                 continue;
             }
             if (data.resultValue !== undefined) {
@@ -1046,6 +1059,9 @@ let WorklistService = WorklistService_1 = class WorklistService {
         if (orderTest.status === order_test_entity_1.OrderTestStatus.PENDING) {
             throw new common_1.BadRequestException('Cannot verify a test without a result');
         }
+        if (orderTest.status === order_test_entity_1.OrderTestStatus.REJECTED) {
+            throw new common_1.BadRequestException('Rejected results must be reviewed in Worklist before verification');
+        }
         if (!(0, order_test_result_util_1.hasMeaningfulOrderTestResult)(orderTest)) {
             throw new common_1.BadRequestException('Cannot verify a test without a real result value, text, parameters, or culture data');
         }
@@ -1098,6 +1114,7 @@ let WorklistService = WorklistService_1 = class WorklistService {
         for (const ot of orderTests) {
             if (ot.sample.order.labId !== labId ||
                 ot.status === order_test_entity_1.OrderTestStatus.VERIFIED ||
+                ot.status === order_test_entity_1.OrderTestStatus.REJECTED ||
                 ot.status === order_test_entity_1.OrderTestStatus.PENDING ||
                 !(0, order_test_result_util_1.hasMeaningfulOrderTestResult)(ot)) {
                 failed++;
@@ -1166,8 +1183,8 @@ let WorklistService = WorklistService_1 = class WorklistService {
         }
         orderTest.status = order_test_entity_1.OrderTestStatus.REJECTED;
         orderTest.rejectionReason = reason;
-        orderTest.verifiedAt = new Date();
-        orderTest.verifiedBy = actor.userId;
+        orderTest.verifiedAt = null;
+        orderTest.verifiedBy = null;
         const saved = await this.orderTestRepo.save(orderTest);
         await this.panelStatusService.recomputeAfterChildUpdate(orderTest.id);
         await this.syncOrderStatus(orderTest.sample.orderId);
@@ -1249,6 +1266,7 @@ let WorklistService = WorklistService_1 = class WorklistService {
             resultEntryType: this.normalizeResultEntryType(item.resultEntryType),
             resultTextOptions: this.normalizeResultTextOptions(parseJsonField(item.resultTextOptions) ?? null),
             allowCustomResultText: Boolean(item.allowCustomResultText),
+            allowPanelSaveWithChildDefaults: Boolean(item.allowPanelSaveWithChildDefaults),
             cultureConfig: this.normalizeCultureConfig(parseJsonField(item.cultureConfig)),
             cultureAntibioticIds: [],
             tubeType: item.tubeType ?? null,
@@ -1271,6 +1289,9 @@ let WorklistService = WorklistService_1 = class WorklistService {
             parameterDefinitions: parseJsonField(item.parameterDefinitions) ?? null,
             resultParameters: parseJsonField(item.resultParameters) ?? null,
             rejectionReason: item.rejectionReason ?? null,
+            sortOrder: item.sortOrder != null
+                ? Number(item.sortOrder)
+                : 0,
             panelSortOrder: item.panelSortOrder != null
                 ? Number(item.panelSortOrder)
                 : null,
@@ -1816,16 +1837,18 @@ let WorklistService = WorklistService_1 = class WorklistService {
         }
         const tests = await this.orderTestRepo
             .createQueryBuilder('ot')
+            .innerJoinAndSelect('ot.test', 'test')
             .innerJoin('ot.sample', 'sample')
             .where('sample.orderId = :orderId', { orderId })
-            .select(['ot.id AS id', 'ot.status AS status'])
-            .getRawMany();
+            .getMany();
         if (tests.length === 0) {
             return;
         }
-        const statuses = tests.map((t) => t.status);
-        const allFinalized = statuses.every((s) => s === order_test_entity_1.OrderTestStatus.VERIFIED || s === order_test_entity_1.OrderTestStatus.REJECTED);
-        const nextStatus = allFinalized ? order_entity_1.OrderStatus.COMPLETED : order_entity_1.OrderStatus.REGISTERED;
+        const rootTests = tests.filter((test) => !test.parentOrderTestId);
+        const statuses = rootTests.length > 0 ? rootTests.map((test) => test.status) : tests.map((test) => test.status);
+        const allVerified = statuses.length > 0 &&
+            statuses.every((status) => status === order_test_entity_1.OrderTestStatus.VERIFIED);
+        const nextStatus = allVerified ? order_entity_1.OrderStatus.COMPLETED : order_entity_1.OrderStatus.REGISTERED;
         if (order.status !== nextStatus) {
             order.status = nextStatus;
             await this.orderRepo.save(order);

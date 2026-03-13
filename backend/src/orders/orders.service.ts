@@ -459,7 +459,9 @@ export class OrdersService {
         const completedTestsCount = Number(payload.completedTestsCount ?? 0) || 0;
         const verifiedTestsCount = Number(payload.verifiedTestsCount ?? 0) || 0;
         const rejectedTestsCount = Number(payload.rejectedTestsCount ?? 0) || 0;
-        const reportReady = Boolean(payload.reportReady) || readyTestsCount > 0;
+        const reportReady =
+          Boolean(payload.reportReady) ||
+          (testsCount > 0 && verifiedTestsCount === testsCount);
         const resultStatus = this.normalizeOrderResultStatus(payload.resultStatus, {
           testsCount,
           completedTestsCount,
@@ -1953,7 +1955,6 @@ export class OrdersService {
       .setParameter('readyStatuses', [
         OrderTestStatus.COMPLETED,
         OrderTestStatus.VERIFIED,
-        OrderTestStatus.REJECTED,
       ])
       .setParameter('pendingStatuses', [OrderTestStatus.PENDING, OrderTestStatus.IN_PROGRESS])
       .setParameter('completedStatus', OrderTestStatus.COMPLETED)
@@ -2000,7 +2001,8 @@ export class OrdersService {
       order.completedTestsCount = counts.completedTests;
       order.verifiedTestsCount = counts.verifiedTests;
       order.rejectedTestsCount = counts.rejectedTests;
-      order.reportReady = counts.readyTests > 0;
+      order.reportReady =
+        counts.totalTests > 0 && counts.verifiedTests === counts.totalTests;
       order.resultStatus = this.normalizeOrderResultStatus(undefined, {
         testsCount: counts.totalTests,
         completedTestsCount: counts.completedTests,
@@ -2008,16 +2010,13 @@ export class OrdersService {
         rejectedTestsCount: counts.rejectedTests,
       });
 
-      // Mark completed only when every root test is data-entered/finalized
-      // (i.e. there are no root tests left in PENDING/IN_PROGRESS).
-      if (
-        order.status !== OrderStatus.CANCELLED &&
-        counts.totalTests > 0 &&
-        counts.pendingTests === 0
-      ) {
-        order.status = OrderStatus.COMPLETED;
-      } else if (order.status === OrderStatus.COMPLETED && counts.pendingTests > 0) {
-        order.status = OrderStatus.IN_PROGRESS;
+      if (order.status !== OrderStatus.CANCELLED) {
+        if (counts.totalTests > 0 && counts.verifiedTests === counts.totalTests) {
+          order.status = OrderStatus.COMPLETED;
+        } else if (order.status === OrderStatus.COMPLETED) {
+          order.status =
+            counts.pendingTests > 0 ? OrderStatus.IN_PROGRESS : OrderStatus.REGISTERED;
+        }
       }
     }
   }

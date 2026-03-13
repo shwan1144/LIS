@@ -246,6 +246,10 @@ export class CreateTestDto {
   @IsOptional()
   allowCustomResultText?: boolean;
 
+  @IsBoolean()
+  @IsOptional()
+  allowPanelSaveWithChildDefaults?: boolean;
+
   @IsOptional()
   @ValidateNested()
   @Type(() => TestCultureConfigDto)

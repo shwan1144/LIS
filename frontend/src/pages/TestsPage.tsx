@@ -352,7 +352,9 @@ export function TestsPage() {
     () =>
       allTests
         .filter((test) => test.type === 'SINGLE')
-        .sort((a, b) => a.code.localeCompare(b.code))
+        .sort((a, b) =>
+          a.sortOrder !== b.sortOrder ? a.sortOrder - b.sortOrder : a.code.localeCompare(b.code),
+        )
         .map((test) => ({
           label: `${test.code} - ${test.name}`,
           value: test.id,
@@ -396,6 +398,7 @@ export function TestsPage() {
         expectedCompletionMinutes: toNumberOrUndefined(fullTest.expectedCompletionMinutes),
         resultEntryType: fullTest.resultEntryType ?? 'NUMERIC',
         allowCustomResultText: Boolean(fullTest.allowCustomResultText),
+        allowPanelSaveWithChildDefaults: Boolean(fullTest.allowPanelSaveWithChildDefaults),
         resultTextOptions: (fullTest.resultTextOptions ?? []).map((option) => ({
           value: option.value,
           flag: option.flag ?? undefined,
@@ -437,6 +440,7 @@ export function TestsPage() {
         numericAgeRanges: [],
         resultEntryType: 'NUMERIC',
         allowCustomResultText: false,
+        allowPanelSaveWithChildDefaults: false,
         resultTextOptions: [],
         cultureConfig: {
           interpretationOptions: ['S', 'I', 'R'],
@@ -567,6 +571,7 @@ export function TestsPage() {
       numericAgeRanges?: TestNumericAgeRange[];
       resultEntryType?: TestResultEntryType;
       allowCustomResultText?: boolean;
+      allowPanelSaveWithChildDefaults?: boolean;
       cultureConfig?: TestCultureConfig | null;
       resultTextOptions?: {
         value: string;
@@ -676,6 +681,8 @@ export function TestsPage() {
         : null,
       resultEntryType: isPanel ? 'NUMERIC' : resultEntryType,
       allowCustomResultText: isPanel ? false : Boolean(values.allowCustomResultText),
+      allowPanelSaveWithChildDefaults:
+        isPanel ? Boolean(values.allowPanelSaveWithChildDefaults) : false,
       cultureConfig: isPanel ? null : normalizedCultureConfig,
       cultureAntibioticIds: isPanel
         ? null
@@ -1138,6 +1145,7 @@ export function TestsPage() {
             sortOrder: 0,
             resultEntryType: 'NUMERIC',
             allowCustomResultText: false,
+            allowPanelSaveWithChildDefaults: false,
             resultTextOptions: [],
             cultureConfig: {
               interpretationOptions: ['S', 'I', 'R'],
@@ -1652,6 +1660,15 @@ export function TestsPage() {
                       options={panelComponentOptions}
                       excludeId={editingTest?.id}
                     />
+                  </Form.Item>
+                  <Form.Item
+                    name="allowPanelSaveWithChildDefaults"
+                    label="Allow save with child default entries"
+                    valuePropName="checked"
+                    extra="If enabled, saving this panel can persist configured child default entries. Child tests without defaults must still be entered manually before save."
+                    style={{ marginBottom: 12 }}
+                  >
+                    <Switch />
                   </Form.Item>
                   <Form.Item name="description" label="Description" style={{ marginBottom: 0 }}>
                     <Input.TextArea rows={3} placeholder="Optional description or notes" />

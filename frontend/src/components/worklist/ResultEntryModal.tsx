@@ -143,7 +143,8 @@ interface ResultEntryModalProps {
   showLoadAllTestsHint: boolean;
   loadingAllTests: boolean;
   saveDisabled: boolean;
-  dirtyCount: number;
+  saveBlockedReason?: string | null;
+  attentionCount: number;
   submittableCount: number;
   hasTouchedChanges: boolean;
   onCancel: () => void;
@@ -171,7 +172,8 @@ export function ResultEntryModal({
   showLoadAllTestsHint,
   loadingAllTests,
   saveDisabled,
-  dirtyCount,
+  saveBlockedReason,
+  attentionCount,
   submittableCount,
   hasTouchedChanges,
   onCancel,
@@ -262,11 +264,14 @@ export function ResultEntryModal({
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [onSubmit, open, saveDisabled, submitting]);
 
-  const footerCopy = hasTouchedChanges
-    ? submittableCount > 0
-      ? `${submittableCount} row${submittableCount === 1 ? '' : 's'} ready to save`
-      : 'Unsaved changes need a valid result before they can be saved'
-    : 'No changes yet';
+  const footerCopy =
+    saveBlockedReason
+      ? saveBlockedReason
+      : submittableCount > 0
+        ? `${submittableCount} row${submittableCount === 1 ? '' : 's'} ready to save`
+        : hasTouchedChanges
+          ? 'Unsaved changes need a valid result before they can be saved'
+          : 'No changes yet';
 
   return (
     <Modal
@@ -286,7 +291,9 @@ export function ResultEntryModal({
           <div className="result-entry-modal__footer-copy">
             <Text type="secondary">
               {footerCopy}
-              {dirtyCount > submittableCount ? ` • ${dirtyCount - submittableCount} row needs attention` : ''}
+              {attentionCount > 0
+                ? ` | ${attentionCount} row${attentionCount === 1 ? '' : 's'} ${attentionCount === 1 ? 'needs' : 'need'} attention`
+                : ''}
             </Text>
           </div>
           <Space>

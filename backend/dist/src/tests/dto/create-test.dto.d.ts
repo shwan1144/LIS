@@ -57,6 +57,7 @@ export declare class CreateTestDto {
     panelComponents?: TestPanelComponentDto[] | null;
     panelComponentTestIds?: string[] | null;
     allowCustomResultText?: boolean;
+    allowPanelSaveWithChildDefaults?: boolean;
     cultureConfig?: TestCultureConfigDto | null;
     cultureAntibioticIds?: string[] | null;
     numericAgeRanges?: TestNumericAgeRangeDto[];

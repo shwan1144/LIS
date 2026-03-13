@@ -96,6 +96,7 @@ export declare class ReportsService implements OnModuleInit, OnModuleDestroy {
     private classifyOrderTestsForReport;
     private isOrderTestResultEntered;
     private assertAllResultsEnteredForReport;
+    private assertAllResultsVerifiedForReport;
     private loadOrderResultsSnapshot;
     getPublicResultStatus(orderId: string): Promise<PublicResultStatus>;
     generatePublicTestResultsPDF(orderId: string): Promise<Buffer>;

@@ -1167,7 +1167,7 @@ export function WorklistPage() {
         <div className="worklist-group-list">
           {cached.groups.map((group) => {
             const isEmptyPanel = group.groupKind === 'panel' && group.testsCount === 0;
-            const groupStateClass = isEmptyPanel
+            const groupStateClass = isEmptyPanel || (group.groupKind === 'panel' && group.isFullyEntered)
               ? ''
               : group.isFullyEntered
                 ? 'worklist-group-item-state-entered'
@@ -1205,7 +1205,9 @@ export function WorklistPage() {
                     )}
                   </div>
                   <Space size={[4, 4]} wrap>
-                    <Tag style={{ margin: 0 }}>{group.testsCount} tests</Tag>
+                    {group.groupKind !== 'panel' && (
+                      <Tag style={{ margin: 0 }}>{group.testsCount} tests</Tag>
+                    )}
                     {group.pending > 0 && (
                       <Tag style={{ margin: 0 }}>Pending {group.pending}</Tag>
                     )}
@@ -1350,14 +1352,18 @@ export function WorklistPage() {
         .worklist-group-main {
           min-width: 0;
           display: flex;
-          flex-direction: column;
-          gap: 4px;
+          flex-direction: row;
+          align-items: center;
+          gap: 16px;
+          flex: 1;
         }
         .worklist-group-title-row {
           display: flex;
           align-items: center;
           gap: 8px;
           flex-wrap: wrap;
+          width: 220px;
+          flex-shrink: 0;
         }
         .worklist-group-action-btn.ant-btn.ant-btn-primary.ant-btn-background-ghost {
           border-radius: 999px;

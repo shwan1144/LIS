@@ -1499,7 +1499,9 @@ function toHistoryItem(order: OrderDto): OrderHistoryItemDto {
     shift: order.shift,
     testsCount,
     readyTestsCount: Number(order.readyTestsCount ?? 0) || 0,
-    reportReady: Boolean(order.reportReady) || Number(order.readyTestsCount ?? 0) > 0,
+    reportReady:
+      Boolean(order.reportReady) ||
+      (testsCount > 0 && verifiedTestsCount === testsCount),
     resultStatus,
     pendingTestsCount,
     completedTestsCount,
@@ -1787,6 +1789,7 @@ export interface TestDto {
   resultEntryType: TestResultEntryType;
   resultTextOptions: TestResultTextOption[] | null;
   allowCustomResultText: boolean;
+  allowPanelSaveWithChildDefaults: boolean;
   cultureConfig: TestCultureConfig | null;
   cultureAntibioticIds?: string[];
   panelComponents?: TestPanelComponent[];
@@ -1822,6 +1825,7 @@ export interface CreateTestDto {
   resultEntryType?: TestResultEntryType;
   resultTextOptions?: TestResultTextOption[] | null;
   allowCustomResultText?: boolean;
+  allowPanelSaveWithChildDefaults?: boolean;
   cultureConfig?: TestCultureConfig | null;
   cultureAntibioticIds?: string[] | null;
   panelComponents?: TestPanelComponent[] | null;
@@ -1977,6 +1981,7 @@ export interface WorklistItem {
   resultEntryType: TestResultEntryType;
   resultTextOptions: TestResultTextOption[] | null;
   allowCustomResultText: boolean;
+  allowPanelSaveWithChildDefaults: boolean;
   cultureConfig: TestCultureConfig | null;
   cultureAntibioticIds: string[];
   tubeType: string | null;
@@ -1997,6 +2002,7 @@ export interface WorklistItem {
   parameterDefinitions: TestParameterDefinition[] | null;
   resultParameters: Record<string, string> | null;
   rejectionReason: string | null;
+  sortOrder: number;
   panelSortOrder: number | null;
 }
 

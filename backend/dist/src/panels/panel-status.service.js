@@ -33,7 +33,14 @@ let PanelStatusService = PanelStatusService_1 = class PanelStatusService {
         }
         const children = await this.orderTestRepo.find({
             where: { parentOrderTestId: parent.id },
-            select: ['id', 'status'],
+            select: [
+                'id',
+                'status',
+                'resultValue',
+                'resultText',
+                'resultParameters',
+                'cultureResult',
+            ],
         });
         if (children.length === 0) {
             const orphanStatus = parent.status === order_test_entity_1.OrderTestStatus.REJECTED

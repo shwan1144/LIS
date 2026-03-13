@@ -182,6 +182,13 @@ async function ensureReportBrandingColumns(dataSource: DataSource): Promise<void
     `ALTER TABLE IF EXISTS "tests" ADD COLUMN IF NOT EXISTS "resultEntryType" varchar(32) NOT NULL DEFAULT 'NUMERIC'`,
     'ALTER TABLE IF EXISTS "tests" ADD COLUMN IF NOT EXISTS "resultTextOptions" jsonb',
     'ALTER TABLE IF EXISTS "tests" ADD COLUMN IF NOT EXISTS "allowCustomResultText" boolean NOT NULL DEFAULT false',
+    'ALTER TABLE IF EXISTS "tests" ADD COLUMN IF NOT EXISTS "allowPanelSaveWithChildDefaults" boolean NOT NULL DEFAULT false',
+    `UPDATE "tests"
+      SET "allowPanelSaveWithChildDefaults" = true
+      WHERE COALESCE("allowPanelSaveWithChildDefaults", false) = false
+        AND COALESCE("allowBlankSaveAsReceived", false) = true`,
+    'ALTER TABLE IF EXISTS "tests" DROP COLUMN IF EXISTS "allowBlankSaveAsReceived"',
+    'ALTER TABLE IF EXISTS "tests" DROP COLUMN IF EXISTS "blankSaveDefaultResultText"',
     'ALTER TABLE IF EXISTS "tests" ADD COLUMN IF NOT EXISTS "cultureConfig" jsonb',
     'ALTER TABLE IF EXISTS "tests" ADD COLUMN IF NOT EXISTS "abbreviation" varchar(32)',
     'ALTER TABLE IF EXISTS "tests" ADD COLUMN IF NOT EXISTS "normalTextMale" text',

@@ -109,7 +109,9 @@ export function DashboardPage() {
           </Space>
         </div>
       ) : null}
-      <Title level={4}>Dashboard</Title>
+      <Title level={2} className="dashboard-page-title">
+        Dashboard
+      </Title>
 
       <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
         {kpiCards.map((item) => (

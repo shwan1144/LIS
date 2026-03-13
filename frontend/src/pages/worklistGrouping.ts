@@ -16,9 +16,12 @@ export interface WorklistOrderGroupSummary {
 }
 
 function sortByOrder(a: WorklistItem, b: WorklistItem): number {
-  const aOrder = a.panelSortOrder ?? 9999;
-  const bOrder = b.panelSortOrder ?? 9999;
-  if (aOrder !== bOrder) return aOrder - bOrder;
+  const aPanelOrder = a.panelSortOrder ?? Number.MAX_SAFE_INTEGER;
+  const bPanelOrder = b.panelSortOrder ?? Number.MAX_SAFE_INTEGER;
+  if (aPanelOrder !== bPanelOrder) return aPanelOrder - bPanelOrder;
+  const aSortOrder = a.sortOrder ?? Number.MAX_SAFE_INTEGER;
+  const bSortOrder = b.sortOrder ?? Number.MAX_SAFE_INTEGER;
+  if (aSortOrder !== bSortOrder) return aSortOrder - bSortOrder;
   return a.testCode.localeCompare(b.testCode);
 }
 
@@ -39,7 +42,7 @@ function buildGroupCounters(actionableItems: WorklistItem[]) {
     verified,
     rejected,
     completedTargetIds,
-    isFullyEntered: actionableItems.length > 0 && pending === 0,
+    isFullyEntered: actionableItems.length > 0 && pending === 0 && rejected === 0,
   };
 }
 
@@ -104,9 +107,11 @@ export function buildWorklistOrderGroups(items: WorklistItem[]): WorklistOrderGr
 
   for (const panelRoot of panelRoots) {
     const children = childrenByParent.get(panelRoot.id) ?? [];
-    const actionableItems = children.filter((item) => item.testType !== 'PANEL');
+    const nonPanelChildren = children.filter((item) => item.testType !== 'PANEL');
+    const actionableItems = nonPanelChildren;
     const counters = buildGroupCounters(actionableItems);
-    const testsCount = actionableItems.length;
+    const testsCount =
+      nonPanelChildren.length > 0 ? nonPanelChildren.length : actionableItems.length;
     groups.push({
       groupId: `panel:${panelRoot.id}`,
       groupKind: 'panel',

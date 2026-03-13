@@ -164,6 +164,10 @@ export class Test {
   @Column({ type: 'boolean', default: false })
   allowCustomResultText: boolean;
 
+  /** Allow a panel to be finalized by saving configured child default entries. */
+  @Column({ type: 'boolean', default: false })
+  allowPanelSaveWithChildDefaults: boolean;
+
   /** Configuration used for CULTURE_SENSITIVITY entry mode. */
   @Column({ type: 'jsonb', nullable: true })
   cultureConfig: TestCultureConfig | null;

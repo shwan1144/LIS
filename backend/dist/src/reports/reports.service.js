@@ -784,6 +784,26 @@ let ReportsService = ReportsService_1 = class ReportsService {
         const suffix = extraCount > 0 ? ` (+${extraCount} more)` : '';
         throw new common_1.BadRequestException(`Cannot print/download results while some tests are pending: ${labels}${suffix}. Enter all results first.`);
     }
+    assertAllResultsVerifiedForReport(reportableOrderTests, verifiedTests) {
+        if (reportableOrderTests.length === 0) {
+            throw new common_1.BadRequestException('No reportable tests found for this order.');
+        }
+        if (verifiedTests.length === reportableOrderTests.length) {
+            return;
+        }
+        const verifiedIds = new Set(verifiedTests.map((orderTest) => orderTest.id));
+        const unverifiedTests = reportableOrderTests.filter((orderTest) => !verifiedIds.has(orderTest.id));
+        const labels = unverifiedTests
+            .slice(0, 5)
+            .map((orderTest) => {
+            const test = orderTest.test;
+            return test?.code || test?.name || orderTest.id;
+        })
+            .join(', ');
+        const extraCount = unverifiedTests.length - Math.min(unverifiedTests.length, 5);
+        const suffix = extraCount > 0 ? ` (+${extraCount} more)` : '';
+        throw new common_1.BadRequestException(`Cannot print/download results while some tests are still unverified: ${labels}${suffix}. Verify all results first.`);
+    }
     async loadOrderResultsSnapshot(orderId, labId) {
         const where = labId ? { id: orderId, labId } : { id: orderId };
         const order = await this.orderRepo.findOne({
@@ -807,7 +827,7 @@ let ReportsService = ReportsService_1 = class ReportsService {
             .addOrderBy('test.code', 'ASC')
             .getMany();
         const reportableOrderTests = this.getReportableOrderTests(orderTests);
-        const verifiedTests = reportableOrderTests.filter((ot) => ot.status === 'VERIFIED' || !!ot.verifiedAt);
+        const verifiedTests = reportableOrderTests.filter((ot) => ot.status === 'VERIFIED');
         const latestVerifiedAt = verifiedTests
             .map((ot) => (ot.verifiedAt ? new Date(ot.verifiedAt) : null))
             .filter((d) => d !== null)
@@ -848,7 +868,7 @@ let ReportsService = ReportsService_1 = class ReportsService {
                 departmentName,
                 expectedCompletionMinutes,
                 status: ot.status,
-                isVerified: ot.status === 'VERIFIED' || !!ot.verifiedAt,
+                isVerified: ot.status === 'VERIFIED',
                 hasResult: resultValue !== null,
                 resultValue,
                 unit: test?.unit || null,
@@ -1036,6 +1056,7 @@ let ReportsService = ReportsService_1 = class ReportsService {
             : verifiedTests;
         if (!bypassResultCompletionCheck) {
             this.assertAllResultsEnteredForReport(reportableOrderTests);
+            this.assertAllResultsVerifiedForReport(reportableOrderTests, verifiedTests);
         }
         if (!bypassPaymentCheck && order.paymentStatus !== 'paid') {
             throw new common_1.ForbiddenException('Order is unpaid or partially paid. Complete payment to download or print results.');

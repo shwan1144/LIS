@@ -2377,6 +2377,7 @@ export class PlatformAdminService {
       resultEntryType: this.normalizeTransferResultEntryType(sourceTest.resultEntryType),
       resultTextOptions: this.cloneTransferredResultTextOptions(sourceTest.resultTextOptions),
       allowCustomResultText: Boolean(sourceTest.allowCustomResultText),
+      allowPanelSaveWithChildDefaults: Boolean(sourceTest.allowPanelSaveWithChildDefaults),
       cultureConfig: this.cloneTransferredCultureConfig(sourceTest.cultureConfig),
       numericAgeRanges: this.cloneTransferredNumericAgeRanges(sourceTest.numericAgeRanges),
       description: this.toNullableTrimmedText(sourceTest.description),

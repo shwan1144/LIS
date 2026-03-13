@@ -53,6 +53,8 @@ function createOrderTest(): OrderTest {
       resultEntryType: 'NUMERIC',
       resultTextOptions: null,
       allowCustomResultText: false,
+      allowPanelSaveWithChildDefaults: false,
+      cultureConfig: null,
       numericAgeRanges: null,
       description: null,
       childTestIds: null,

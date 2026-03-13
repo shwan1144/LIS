@@ -71,6 +71,7 @@ export declare class Test {
     resultEntryType: TestResultEntryType;
     resultTextOptions: TestResultTextOption[] | null;
     allowCustomResultText: boolean;
+    allowPanelSaveWithChildDefaults: boolean;
     cultureConfig: TestCultureConfig | null;
     numericAgeRanges: TestNumericAgeRange[] | null;
     description: string | null;

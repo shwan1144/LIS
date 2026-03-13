@@ -294,6 +294,11 @@ __decorate([
     __metadata("design:type", Boolean)
 ], CreateTestDto.prototype, "allowCustomResultText", void 0);
 __decorate([
+    (0, class_validator_1.IsBoolean)(),
+    (0, class_validator_1.IsOptional)(),
+    __metadata("design:type", Boolean)
+], CreateTestDto.prototype, "allowPanelSaveWithChildDefaults", void 0);
+__decorate([
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.ValidateNested)(),
     (0, class_transformer_1.Type)(() => TestCultureConfigDto),
