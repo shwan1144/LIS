@@ -2353,7 +2353,7 @@ export function ReportsPage() {
                                             size="small"
                                           />
                                         </Form.Item>
-                                        {target.test?.resultEntryType === 'NUMERIC' && !isPanel && target.test?.unit && <Text type="secondary">{target.test.unit}</Text>}
+                                        {target.test?.resultEntryType === 'NUMERIC' && !isPanel && target.test?.unit && <Text type="secondary" style={{ whiteSpace: 'nowrap', flexShrink: 0 }}>{target.test.unit}</Text>}
                                       </div>
                                     ) : target.test?.resultEntryType === 'QUALITATIVE' && (target.test?.resultTextOptions?.length ?? 0) > 0 ? (
                                       <Select
