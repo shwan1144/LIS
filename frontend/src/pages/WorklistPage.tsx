@@ -1205,7 +1205,7 @@ export function WorklistPage() {
                     )}
                   </div>
                   <Space size={[4, 4]} wrap>
-                    <Tag style={{ margin: 0 }}>{group.groupKind === 'panel' ? 1 : group.testsCount} tests</Tag>
+                    <Tag style={{ margin: 0 }}>{group.testsCount} tests</Tag>
                     {group.pending > 0 && (
                       <Tag style={{ margin: 0 }}>Pending {group.pending}</Tag>
                     )}

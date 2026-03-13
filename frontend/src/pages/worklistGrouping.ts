@@ -43,33 +43,6 @@ function buildGroupCounters(actionableItems: WorklistItem[]) {
   };
 }
 
-function buildPanelCounters(panelRoot: WorklistItem, hasChildren: boolean) {
-  if (!hasChildren) {
-    return {
-      pending: 0,
-      completed: 0,
-      verified: 0,
-      rejected: 0,
-      completedTargetIds: [] as string[],
-      isFullyEntered: false,
-    };
-  }
-
-  const pending = panelRoot.status === 'PENDING' || panelRoot.status === 'IN_PROGRESS' ? 1 : 0;
-  const completed = panelRoot.status === 'COMPLETED' ? 1 : 0;
-  const verified = panelRoot.status === 'VERIFIED' ? 1 : 0;
-  const rejected = panelRoot.status === 'REJECTED' ? 1 : 0;
-
-  return {
-    pending,
-    completed,
-    verified,
-    rejected,
-    completedTargetIds: completed > 0 ? [panelRoot.id] : [],
-    isFullyEntered: pending === 0,
-  };
-}
-
 export function buildWorklistOrderGroups(items: WorklistItem[]): WorklistOrderGroupSummary[] {
   const roots = items.filter((item) => !item.parentOrderTestId).sort(sortByOrder);
   const singleRoots = roots.filter(
@@ -132,14 +105,13 @@ export function buildWorklistOrderGroups(items: WorklistItem[]): WorklistOrderGr
   for (const panelRoot of panelRoots) {
     const children = childrenByParent.get(panelRoot.id) ?? [];
     const actionableItems = children.filter((item) => item.testType !== 'PANEL');
-    const counters = buildPanelCounters(panelRoot, actionableItems.length > 0);
+    const counters = buildGroupCounters(actionableItems);
     const testsCount = actionableItems.length;
-    const panelDisplayCount = testsCount > 0 ? 1 : 0;
     groups.push({
       groupId: `panel:${panelRoot.id}`,
       groupKind: 'panel',
       panelRootId: panelRoot.id,
-      label: `Panel: ${panelRoot.testName} (${panelDisplayCount})`,
+      label: `Panel: ${panelRoot.testName} (${testsCount})`,
       testsCount,
       pending: counters.pending,
       completed: counters.completed,

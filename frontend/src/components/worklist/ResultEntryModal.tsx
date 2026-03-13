@@ -386,53 +386,6 @@ export function ResultEntryModal({
                 key={section.id}
                 className={`result-entry-modal__section result-entry-modal__section--${section.kind}`}
               >
-                <div className="result-entry-modal__section-head">
-                  <div>
-                    <span className="result-entry-modal__section-kicker">{section.kind}</span>
-                    <Title level={5} className="result-entry-modal__section-title">
-                      {section.title}
-                    </Title>
-                    <Text className="result-entry-modal__section-subtitle">
-                      {section.subtitle}
-                    </Text>
-                  </div>
-                  <div className="result-entry-modal__section-stats">
-                    <Tag style={{ margin: 0 }}>{section.rows.length} rows</Tag>
-                    <Tag
-                      color={
-                        section.kind === 'panel'
-                          ? 'purple'
-                          : section.kind === 'culture'
-                            ? 'cyan'
-                            : 'blue'
-                      }
-                      style={{ margin: 0 }}
-                    >
-                      {section.kind === 'panel'
-                        ? 'Panel workflow'
-                        : section.kind === 'culture'
-                          ? 'Culture workflow'
-                          : 'Single workflow'}
-                    </Tag>
-                  </div>
-                </div>
-
-                {section.panelRoot ? (
-                  <div className="result-entry-modal__panel-shell">
-                    <div className="result-entry-modal__panel-card">
-                      <div className="result-entry-modal__panel-title">
-                        <Tag color="purple" style={{ margin: 0 }}>
-                          Panel
-                        </Tag>
-                        <Text strong>{section.panelRoot.testName}</Text>
-                      </div>
-                      <div className="result-entry-modal__panel-meta">
-                        Non-editable header. Enter results in the component tests below.
-                      </div>
-                    </div>
-                  </div>
-                ) : null}
-
                 <div className="result-entry-modal__grid">
                   <div className="result-entry-modal__grid-header">
                     <div className="result-entry-modal__grid-header-cell">Test</div>

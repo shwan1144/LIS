@@ -706,7 +706,7 @@ export function VerificationPage() {
                     )}
                   </div>
                   <Space size={[4, 4]} wrap>
-                    <Tag style={{ margin: 0 }}>{group.groupKind === 'panel' ? 1 : group.testsCount} tests</Tag>
+                    <Tag style={{ margin: 0 }}>{group.testsCount} tests</Tag>
                     {group.completed > 0 && (
                       <Tag color="processing" style={{ margin: 0 }}>
                         Completed {group.completed}
