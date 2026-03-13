@@ -86,7 +86,7 @@ const REPORT_BROWSER_PRINT_LOAD_TIMEOUT_MS = 15 * 1000;
 const REPORT_BROWSER_PRINT_FALLBACK_CLEANUP_MS = 5 * 60 * 1000;
 
 type EditResultMode = 'SINGLE' | 'PANEL';
-type ReportStatusFilter = 'COMPLETED' | 'UNVERIFIED' | 'PENDING' | 'REJECTED';
+type ReportStatusFilter = 'ALL' | 'PENDING' | 'COMPLETED' | 'VERIFIED' | 'REJECTED';
 type ReportActionFlagField = 'pdf' | 'print' | 'whatsapp' | 'viber';
 type ResultsPdfCacheEntry = {
   blob: Blob;
@@ -95,10 +95,10 @@ type ResultsPdfCacheEntry = {
   reportDesignFingerprint: string;
 };
 
-const REPORT_STATUS_TO_RESULT_STATUS: Record<ReportStatusFilter, OrderResultStatus> = {
-  COMPLETED: 'VERIFIED',
-  UNVERIFIED: 'COMPLETED',
+const REPORT_STATUS_TO_RESULT_STATUS: Record<Exclude<ReportStatusFilter, 'ALL'>, OrderResultStatus> = {
   PENDING: 'PENDING',
+  COMPLETED: 'COMPLETED',
+  VERIFIED: 'VERIFIED',
   REJECTED: 'REJECTED',
 };
 
@@ -594,7 +594,7 @@ export function ReportsPage() {
     dayjs().endOf('day'),
   ]);
   const [searchText, setSearchText] = useState('');
-  const [statusFilter, setStatusFilter] = useState<ReportStatusFilter>('COMPLETED');
+  const [statusFilter, setStatusFilter] = useState<ReportStatusFilter>('ALL');
   const [downloading, setDownloading] = useState<string | null>(null);
   const ordersPageSize = 25;
 
@@ -754,7 +754,9 @@ export function ReportsPage() {
           startDate: dateRange[0].format('YYYY-MM-DD'),
           endDate: dateRange[1].format('YYYY-MM-DD'),
           search: searchText.trim() || undefined,
-          resultStatus: REPORT_STATUS_TO_RESULT_STATUS[effectiveStatusFilter],
+          resultStatus: effectiveStatusFilter === 'ALL'
+            ? undefined
+            : REPORT_STATUS_TO_RESULT_STATUS[effectiveStatusFilter],
         }),
         getWorklistStats().catch(() => null),
       ]);
@@ -965,7 +967,7 @@ export function ReportsPage() {
     order?: OrderHistoryItemDto,
     options?: { skipPaymentCheck?: boolean },
   ) => {
-    const summaryOrder = order ?? getOrderSummaryById(orderId);
+    const summaryOrder = (order ?? getOrderSummaryById(orderId) ?? undefined) as OrderHistoryItemDto | undefined;
     const resultsFilename = buildResultsPdfFilename(summaryOrder, orderId);
     const skipPaymentCheck = options?.skipPaymentCheck === true;
     if (!skipPaymentCheck && summaryOrder && !canReleaseResults(summaryOrder)) {
@@ -2514,7 +2516,7 @@ export function ReportsPage() {
               onPressEnter={() => {
                 void loadOrders(1);
               }}
-              style={{ width: 260 }}
+              style={{ width: 280 }}
             />
 
             <Select
@@ -2526,11 +2528,12 @@ export function ReportsPage() {
               }}
               placeholder="Status"
               allowClear={false}
-              style={{ width: 180 }}
+              style={{ width: 160 }}
               options={[
-                { value: 'COMPLETED', label: 'Completed' },
-                { value: 'UNVERIFIED', label: 'Unverified' },
+                { value: 'ALL', label: 'All statuses' },
                 { value: 'PENDING', label: 'Pending' },
+                { value: 'COMPLETED', label: 'Completed' },
+                { value: 'VERIFIED', label: 'Verified' },
                 { value: 'REJECTED', label: 'Rejected' },
               ]}
             />

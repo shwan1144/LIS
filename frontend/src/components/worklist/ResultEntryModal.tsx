@@ -145,6 +145,7 @@ interface ResultEntryModalProps {
   saveDisabled: boolean;
   saveBlockedReason?: string | null;
   attentionCount: number;
+  dirtyCount: number;
   submittableCount: number;
   hasTouchedChanges: boolean;
   onCancel: () => void;
@@ -174,6 +175,7 @@ export function ResultEntryModal({
   saveDisabled,
   saveBlockedReason,
   attentionCount,
+  dirtyCount,
   submittableCount,
   hasTouchedChanges,
   onCancel,
@@ -269,9 +271,11 @@ export function ResultEntryModal({
       ? saveBlockedReason
       : submittableCount > 0
         ? `${submittableCount} row${submittableCount === 1 ? '' : 's'} ready to save`
-        : hasTouchedChanges
-          ? 'Unsaved changes need a valid result before they can be saved'
-          : 'No changes yet';
+        : dirtyCount > 0
+          ? 'Results applied. Hit Save to confirm.'
+          : hasTouchedChanges
+            ? 'Unsaved changes need a valid result before they can be saved'
+            : 'No changes yet';
 
   return (
     <Modal

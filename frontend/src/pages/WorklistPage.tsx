@@ -383,6 +383,7 @@ type ResultSubmissionCandidate = {
   target: WorklistItem;
   payload: ResultSubmissionPayload;
   changed: boolean;
+  isEffectivelyChanged: boolean;
   hasMeaningfulPayload: boolean;
   isVerifiedOverride: boolean;
 };
@@ -408,13 +409,24 @@ function buildResultSubmissionCandidates(
       antibioticById,
     );
 
+    const hasMeaningfulPayload = hasMeaningfulResultSubmissionPayload(payload);
+    const changed = JSON.stringify(payload) !== JSON.stringify(initialPayload);
+
     return {
       target,
       payload,
-      changed: JSON.stringify(payload) !== JSON.stringify(initialPayload),
-      hasMeaningfulPayload: hasMeaningfulResultSubmissionPayload(payload),
+      changed,
+      hasMeaningfulPayload,
       isVerifiedOverride:
         canAdminEditVerified && target.status === 'VERIFIED',
+      // If a test is PENDING but has default values applied (meaningful payload),
+      // we treat it as "effectively changed" so that the user can just hit Save
+      // without manually editing the field.
+      // Also allow REJECTED tests to be saved without changes so they can be re-submitted.
+      isEffectivelyChanged:
+        changed ||
+        (target.status === 'PENDING' && hasMeaningfulPayload) ||
+        target.status === 'REJECTED',
     };
   });
 }
@@ -700,14 +712,17 @@ export function WorklistPage() {
   );
 
   const dirtySubmissionCount = useMemo(
-    () => submissionCandidates.filter(({ changed }) => changed).length,
+    () =>
+      submissionCandidates.filter(({ isEffectivelyChanged }) => isEffectivelyChanged)
+        .length,
     [submissionCandidates],
   );
 
   const submittableCandidates = useMemo(
     () =>
       submissionCandidates.filter(
-        ({ changed, hasMeaningfulPayload }) => changed && hasMeaningfulPayload,
+        ({ isEffectivelyChanged, hasMeaningfulPayload }) =>
+          isEffectivelyChanged && hasMeaningfulPayload,
       ),
     [submissionCandidates],
   );
@@ -985,8 +1000,8 @@ export function WorklistPage() {
         antibioticById,
         canAdminEditVerified,
       ).filter(
-        ({ changed, payload }) =>
-          changed && hasMeaningfulResultSubmissionPayload(payload),
+        ({ isEffectivelyChanged, hasMeaningfulPayload }) =>
+          isEffectivelyChanged && hasMeaningfulPayload,
       );
 
       if (submissions.length === 0) {
