@@ -1407,14 +1407,9 @@ export function ReportsPage() {
         width: 220,
         render: (_: unknown, row: ExpandedOrderTestRow) => (
           <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <Tag color="blue" style={{ margin: 0, fontSize: 10, lineHeight: '16px' }}>
-                {row.testCode}
-              </Tag>
-              <Text strong style={{ fontSize: 12 }}>
-                {row.testName}
-              </Text>
-            </div>
+            <Text strong style={{ fontSize: 12 }}>
+              {row.testName}
+            </Text>
             {row.raw.test?.type === 'PANEL' && (
               <Text type="secondary" style={{ fontSize: 10 }}>
                 Panel Test

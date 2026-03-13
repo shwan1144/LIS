@@ -4,7 +4,6 @@ import type { WorklistOrderGroupSummary } from '../../pages/worklistGrouping';
 export interface ResultEntryRowModel {
   target: WorklistItem;
   isReadOnly: boolean;
-  isPanelChild: boolean;
   isCultureEntry: boolean;
   hasParameters: boolean;
 }
@@ -27,7 +26,6 @@ function buildRowModel(
     isReadOnly:
       item.testType === 'PANEL' ||
       (item.status === 'VERIFIED' && !canAdminEditVerified),
-    isPanelChild: Boolean(item.parentOrderTestId),
     isCultureEntry: item.resultEntryType === 'CULTURE_SENSITIVITY',
     hasParameters: (item.parameterDefinitions?.length ?? 0) > 0,
   };

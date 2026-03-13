@@ -472,10 +472,6 @@ export function ResultEntryModal({
                                   <span className="result-entry-modal__test-name">
                                     {target.testName}
                                   </span>
-                                  <span className="result-entry-modal__test-code">
-                                    {target.testCode}
-                                    {row.isPanelChild ? ' • Panel component' : ''}
-                                  </span>
                                 </div>
                                 {renderStatusTags(row, canAdminEditVerified)}
                               </div>
