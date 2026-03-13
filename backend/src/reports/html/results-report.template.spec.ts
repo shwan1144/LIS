@@ -754,6 +754,12 @@ describe('buildResultsReportHtml panel page isolation', () => {
     expect(html).toContain(`--patient-info-bg: ${DEFAULT_REPORT_STYLE_V1.patientInfo.backgroundColor};`);
     expect(html).toContain(`--results-header-bg: ${DEFAULT_REPORT_STYLE_V1.resultsTable.headerBackgroundColor};`);
     expect(html).toContain(
+      `--patient-info-label-align: ${DEFAULT_REPORT_STYLE_V1.patientInfo.labelTextAlign};`,
+    );
+    expect(html).toContain(
+      `--patient-info-value-align: ${DEFAULT_REPORT_STYLE_V1.patientInfo.valueTextAlign};`,
+    );
+    expect(html).toContain(
       `--patient-info-font-family: ${resolveReportFontStackWithArabicFallback(
         DEFAULT_REPORT_STYLE_V1.patientInfo.fontFamily,
       )};`,
@@ -778,6 +784,10 @@ describe('buildResultsReportHtml panel page isolation', () => {
         ...DEFAULT_REPORT_STYLE_V1.cultureSection,
         fontFamily: 'verdana',
         sectionTitleColor: '#102030',
+        sectionTitleAlign: 'center',
+        metaTextAlign: 'right',
+        commentTextAlign: 'center',
+        notesTextAlign: 'right',
         astResistanceBackgroundColor: '#FFECEC',
       },
     };
@@ -804,6 +814,10 @@ describe('buildResultsReportHtml panel page isolation', () => {
       )};`,
     );
     expect(html).toContain('--culture-section-title-color: #102030;');
+    expect(html).toContain('--culture-section-title-align: center;');
+    expect(html).toContain('--culture-meta-align: right;');
+    expect(html).toContain('--culture-comment-align: center;');
+    expect(html).toContain('--culture-notes-align: right;');
     expect(html).toContain('--culture-ast-resistance-bg: #FFECEC;');
     expect(html).toContain('.culture-page .panel-page-title {');
     expect(html).toContain('font-family: var(--culture-font-family);');
@@ -886,10 +900,10 @@ describe('buildResultsReportHtml panel page isolation', () => {
     });
 
     expect(html).toContain(
-      '<span class="label">Referred By:</span><span class="name-value ">Dr Ahmed Ali</span>',
+      '<span class="label">Referred By:</span><span class="info-value name-value ">Dr Ahmed Ali</span>',
     );
     expect(html).not.toContain(
-      '<span class="label">Referred By:</span><span class="name-value ">Patient Address</span>',
+      '<span class="label">Referred By:</span><span class="info-value name-value ">Patient Address</span>',
     );
   });
 
@@ -913,6 +927,6 @@ describe('buildResultsReportHtml panel page isolation', () => {
       comments: [],
     });
 
-    expect(html).toContain('<span class="label">Age/Sex:</span>5 days/Male');
+    expect(html).toContain('<span class="label">Age/Sex:</span><span class="info-value">5 days/Male</span>');
   });
 });

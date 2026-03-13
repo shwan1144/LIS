@@ -173,6 +173,8 @@ function defaultReportStyle(): ReportStyleDto {
       labelFontWeight: 700,
       valueFontWeight: 400,
       textAlign: 'left',
+      labelTextAlign: 'left',
+      valueTextAlign: 'left',
       borderRadiusPx: 6,
       paddingYpx: 10,
       paddingXpx: 12,
@@ -221,13 +223,17 @@ function defaultReportStyle(): ReportStyleDto {
       fontFamily: 'system-sans',
       sectionTitleColor: '#111111',
       sectionTitleBorderColor: '#222222',
+      sectionTitleAlign: 'left',
       noGrowthBackgroundColor: '#F7FEF9',
       noGrowthBorderColor: '#BBF7D0',
       noGrowthTextColor: '#166534',
       metaTextColor: '#334155',
+      metaTextAlign: 'left',
       commentTextColor: '#4B5563',
+      commentTextAlign: 'left',
       notesTextColor: '#111827',
       notesBorderColor: '#D1D5DB',
+      notesTextAlign: 'left',
       astGridGapPx: 6,
       astMinHeightPx: 430,
       astColumnBorderRadiusPx: 6,
@@ -777,6 +783,44 @@ export function AdminLabReportDesignPage() {
   const showCategoryRow = reportStyle.resultsTable.showCategoryRow;
   const culturePreviewFontFamily = resolvePreviewFontStack(reportStyle.cultureSection.fontFamily);
   const culturePreviewGridMinHeight = Math.min(reportStyle.cultureSection.astMinHeightPx, 320);
+  const patientInfoPreviewRowStyle = {
+    display: 'grid',
+    gridTemplateColumns: 'minmax(92px, max-content) minmax(0, 1fr)',
+    columnGap: 4,
+    alignItems: 'baseline',
+  } as const;
+  const patientInfoPreviewLabelStyle = {
+    color: reportStyle.patientInfo.labelColor,
+    fontWeight: reportStyle.patientInfo.labelFontWeight,
+    textAlign: reportStyle.patientInfo.labelTextAlign,
+  } as const;
+  const patientInfoPreviewValueStyle = {
+    display: 'block',
+    width: '100%',
+    fontWeight: reportStyle.patientInfo.valueFontWeight,
+    textAlign: reportStyle.patientInfo.valueTextAlign,
+  } as const;
+  const cultureMetaPreviewStyle = {
+    fontFamily: culturePreviewFontFamily,
+    color: reportStyle.cultureSection.metaTextColor,
+    fontSize: 12,
+    textAlign: reportStyle.cultureSection.metaTextAlign,
+  } as const;
+  const cultureCommentPreviewStyle = {
+    fontFamily: culturePreviewFontFamily,
+    color: reportStyle.cultureSection.commentTextColor,
+    fontSize: 11,
+    textAlign: reportStyle.cultureSection.commentTextAlign,
+  } as const;
+  const cultureNotesPreviewStyle = {
+    marginTop: 8,
+    borderTop: `1px dashed ${reportStyle.cultureSection.notesBorderColor}`,
+    paddingTop: 6,
+    color: reportStyle.cultureSection.notesTextColor,
+    fontSize: 11,
+    fontFamily: culturePreviewFontFamily,
+    textAlign: reportStyle.cultureSection.notesTextAlign,
+  } as const;
   const previewColumnCount = showStatusColumn ? 5 : 4;
   const previewRegularWidths = {
     test: '28%',
@@ -1000,6 +1044,26 @@ export function AdminLabReportDesignPage() {
                                     value={reportStyle.patientInfo.textAlign}
                                     options={ALIGN_OPTIONS as unknown as { label: string; value: string }[]}
                                     onChange={(value) => updatePatientStyle('textAlign', value)}
+                                    disabled={!canMutate}
+                                  />
+                                </div>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                  <Text>Label Alignment</Text>
+                                  <Select
+                                    style={{ width: 120 }}
+                                    value={reportStyle.patientInfo.labelTextAlign}
+                                    options={ALIGN_OPTIONS as unknown as { label: string; value: string }[]}
+                                    onChange={(value) => updatePatientStyle('labelTextAlign', value)}
+                                    disabled={!canMutate}
+                                  />
+                                </div>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                  <Text>Value Alignment</Text>
+                                  <Select
+                                    style={{ width: 120 }}
+                                    value={reportStyle.patientInfo.valueTextAlign}
+                                    options={ALIGN_OPTIONS as unknown as { label: string; value: string }[]}
+                                    onChange={(value) => updatePatientStyle('valueTextAlign', value)}
                                     disabled={!canMutate}
                                   />
                                 </div>
@@ -1382,6 +1446,16 @@ export function AdminLabReportDesignPage() {
                                   disabled={!canMutate}
                                   onChange={(value) => updateCultureStyle('sectionTitleBorderColor', value)}
                                 />
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                  <Text>Title Alignment</Text>
+                                  <Select
+                                    style={{ width: 120 }}
+                                    value={reportStyle.cultureSection.sectionTitleAlign}
+                                    options={ALIGN_OPTIONS as unknown as { label: string; value: string }[]}
+                                    onChange={(value) => updateCultureStyle('sectionTitleAlign', value)}
+                                    disabled={!canMutate}
+                                  />
+                                </div>
                                 <StyleColorControl
                                   label="No Growth Background"
                                   value={reportStyle.cultureSection.noGrowthBackgroundColor}
@@ -1406,12 +1480,32 @@ export function AdminLabReportDesignPage() {
                                   disabled={!canMutate}
                                   onChange={(value) => updateCultureStyle('metaTextColor', value)}
                                 />
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                  <Text>Meta Alignment</Text>
+                                  <Select
+                                    style={{ width: 120 }}
+                                    value={reportStyle.cultureSection.metaTextAlign}
+                                    options={ALIGN_OPTIONS as unknown as { label: string; value: string }[]}
+                                    onChange={(value) => updateCultureStyle('metaTextAlign', value)}
+                                    disabled={!canMutate}
+                                  />
+                                </div>
                                 <StyleColorControl
                                   label="Comment Text"
                                   value={reportStyle.cultureSection.commentTextColor}
                                   disabled={!canMutate}
                                   onChange={(value) => updateCultureStyle('commentTextColor', value)}
                                 />
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                  <Text>Comment Alignment</Text>
+                                  <Select
+                                    style={{ width: 120 }}
+                                    value={reportStyle.cultureSection.commentTextAlign}
+                                    options={ALIGN_OPTIONS as unknown as { label: string; value: string }[]}
+                                    onChange={(value) => updateCultureStyle('commentTextAlign', value)}
+                                    disabled={!canMutate}
+                                  />
+                                </div>
                                 <StyleColorControl
                                   label="Notes Text"
                                   value={reportStyle.cultureSection.notesTextColor}
@@ -1424,6 +1518,16 @@ export function AdminLabReportDesignPage() {
                                   disabled={!canMutate}
                                   onChange={(value) => updateCultureStyle('notesBorderColor', value)}
                                 />
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                  <Text>Notes Alignment</Text>
+                                  <Select
+                                    style={{ width: 120 }}
+                                    value={reportStyle.cultureSection.notesTextAlign}
+                                    options={ALIGN_OPTIONS as unknown as { label: string; value: string }[]}
+                                    onChange={(value) => updateCultureStyle('notesTextAlign', value)}
+                                    disabled={!canMutate}
+                                  />
+                                </div>
                                 <StyleColorControl
                                   label="AST Title Text"
                                   value={reportStyle.cultureSection.astColumnTitleColor}
@@ -1547,41 +1651,17 @@ export function AdminLabReportDesignPage() {
                                 marginBottom: 12,
                               }}
                             >
-                              <div style={{ marginBottom: 6 }}>
-                                <span
-                                  style={{
-                                    color: reportStyle.patientInfo.labelColor,
-                                    fontWeight: reportStyle.patientInfo.labelFontWeight,
-                                    marginRight: 4,
-                                  }}
-                                >
-                                  Name:
-                                </span>
-                                <span style={{ fontWeight: reportStyle.patientInfo.valueFontWeight }}>Sample Patient</span>
+                              <div style={{ ...patientInfoPreviewRowStyle, marginBottom: 6 }}>
+                                <span style={patientInfoPreviewLabelStyle}>Name:</span>
+                                <span style={patientInfoPreviewValueStyle}>Sample Patient</span>
                               </div>
-                              <div style={{ marginBottom: 6 }}>
-                                <span
-                                  style={{
-                                    color: reportStyle.patientInfo.labelColor,
-                                    fontWeight: reportStyle.patientInfo.labelFontWeight,
-                                    marginRight: 4,
-                                  }}
-                                >
-                                  Age/Sex:
-                                </span>
-                                <span style={{ fontWeight: reportStyle.patientInfo.valueFontWeight }}>36 Years/Male</span>
+                              <div style={{ ...patientInfoPreviewRowStyle, marginBottom: 6 }}>
+                                <span style={patientInfoPreviewLabelStyle}>Age/Sex:</span>
+                                <span style={patientInfoPreviewValueStyle}>36 Years/Male</span>
                               </div>
-                              <div>
-                                <span
-                                  style={{
-                                    color: reportStyle.patientInfo.labelColor,
-                                    fontWeight: reportStyle.patientInfo.labelFontWeight,
-                                    marginRight: 4,
-                                  }}
-                                >
-                                  Order No:
-                                </span>
-                                <span style={{ fontWeight: reportStyle.patientInfo.valueFontWeight }}>260304011</span>
+                              <div style={patientInfoPreviewRowStyle}>
+                                <span style={patientInfoPreviewLabelStyle}>Order No:</span>
+                                <span style={patientInfoPreviewValueStyle}>260304011</span>
                               </div>
                             </div>
 
@@ -1751,6 +1831,7 @@ export function AdminLabReportDesignPage() {
                                   borderBottom: `2px solid ${reportStyle.cultureSection.sectionTitleBorderColor}`,
                                   fontSize: 16,
                                   fontWeight: 800,
+                                  textAlign: reportStyle.cultureSection.sectionTitleAlign,
                                   paddingBottom: 4,
                                   marginBottom: 8,
                                 }}
@@ -1767,6 +1848,7 @@ export function AdminLabReportDesignPage() {
                                   marginBottom: 10,
                                   fontFamily: culturePreviewFontFamily,
                                   fontWeight: 700,
+                                  textAlign: reportStyle.cultureSection.metaTextAlign,
                                 }}
                               >
                                 No growth
@@ -1776,23 +1858,23 @@ export function AdminLabReportDesignPage() {
                                     fontSize: 11,
                                     fontWeight: 400,
                                     color: reportStyle.cultureSection.metaTextColor,
+                                    textAlign: reportStyle.cultureSection.metaTextAlign,
                                   }}
                                 >
                                   Result: No growth after 24 hours
                                 </div>
                               </div>
-                              <div
-                                style={{
-                                  marginBottom: 6,
-                                  fontFamily: culturePreviewFontFamily,
-                                  color: reportStyle.cultureSection.metaTextColor,
-                                  fontSize: 12,
-                                }}
-                              >
+                              <div style={{ ...cultureMetaPreviewStyle, marginBottom: 4 }}>
                                 <strong>Microorganism:</strong>{' '}
                                 <span style={{ color: reportStyle.cultureSection.sectionTitleColor, fontStyle: 'italic' }}>
                                   E. coli
                                 </span>
+                              </div>
+                              <div style={{ ...cultureMetaPreviewStyle, marginBottom: 6 }}>
+                                <strong>Source:</strong> Urine
+                              </div>
+                              <div style={{ ...cultureCommentPreviewStyle, marginBottom: 6 }}>
+                                Comment: Clinical correlation advised.
                               </div>
                               <div
                                 style={{
@@ -1862,16 +1944,7 @@ export function AdminLabReportDesignPage() {
                                   </div>
                                 ))}
                               </div>
-                              <div
-                                style={{
-                                  marginTop: 8,
-                                  borderTop: `1px dashed ${reportStyle.cultureSection.notesBorderColor}`,
-                                  paddingTop: 6,
-                                  color: reportStyle.cultureSection.notesTextColor,
-                                  fontSize: 11,
-                                  fontFamily: culturePreviewFontFamily,
-                                }}
-                              >
+                              <div style={cultureNotesPreviewStyle}>
                                 <strong>Notes:</strong>{' '}
                                 <span style={{ color: reportStyle.cultureSection.commentTextColor }}>
                                   Clinical correlation advised.

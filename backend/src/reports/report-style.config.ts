@@ -53,6 +53,8 @@ export interface ReportPatientInfoStyle {
   labelFontWeight: 600 | 700 | 800;
   valueFontWeight: 400 | 500 | 600 | 700;
   textAlign: ReportTextAlign;
+  labelTextAlign: ReportTextAlign;
+  valueTextAlign: ReportTextAlign;
   borderRadiusPx: number;
   paddingYpx: number;
   paddingXpx: number;
@@ -104,13 +106,17 @@ export interface ReportCultureSectionStyle {
   fontFamily: ReportFontFamily;
   sectionTitleColor: string;
   sectionTitleBorderColor: string;
+  sectionTitleAlign: ReportTextAlign;
   noGrowthBackgroundColor: string;
   noGrowthBorderColor: string;
   noGrowthTextColor: string;
   metaTextColor: string;
+  metaTextAlign: ReportTextAlign;
   commentTextColor: string;
+  commentTextAlign: ReportTextAlign;
   notesTextColor: string;
   notesBorderColor: string;
+  notesTextAlign: ReportTextAlign;
   astGridGapPx: number;
   astMinHeightPx: number;
   astColumnBorderRadiusPx: number;
@@ -147,6 +153,8 @@ export const DEFAULT_REPORT_STYLE_V1: ReportStyleConfig = {
     labelFontWeight: 700,
     valueFontWeight: 400,
     textAlign: 'left',
+    labelTextAlign: 'left',
+    valueTextAlign: 'left',
     borderRadiusPx: 6,
     paddingYpx: 10,
     paddingXpx: 12,
@@ -195,13 +203,17 @@ export const DEFAULT_REPORT_STYLE_V1: ReportStyleConfig = {
     fontFamily: DEFAULT_REPORT_FONT_FAMILY,
     sectionTitleColor: '#111111',
     sectionTitleBorderColor: '#222222',
+    sectionTitleAlign: 'left',
     noGrowthBackgroundColor: '#F7FEF9',
     noGrowthBorderColor: '#BBF7D0',
     noGrowthTextColor: '#166534',
     metaTextColor: '#334155',
+    metaTextAlign: 'left',
     commentTextColor: '#4B5563',
+    commentTextAlign: 'left',
     notesTextColor: '#111827',
     notesBorderColor: '#D1D5DB',
+    notesTextAlign: 'left',
     astGridGapPx: 6,
     astMinHeightPx: 430,
     astColumnBorderRadiusPx: 6,
@@ -233,6 +245,8 @@ const PATIENT_INFO_KEYS: Array<keyof ReportPatientInfoStyle> = [
   'labelFontWeight',
   'valueFontWeight',
   'textAlign',
+  'labelTextAlign',
+  'valueTextAlign',
   'borderRadiusPx',
   'paddingYpx',
   'paddingXpx',
@@ -281,13 +295,17 @@ const CULTURE_SECTION_KEYS: Array<keyof ReportCultureSectionStyle> = [
   'fontFamily',
   'sectionTitleColor',
   'sectionTitleBorderColor',
+  'sectionTitleAlign',
   'noGrowthBackgroundColor',
   'noGrowthBorderColor',
   'noGrowthTextColor',
   'metaTextColor',
+  'metaTextAlign',
   'commentTextColor',
+  'commentTextAlign',
   'notesTextColor',
   'notesBorderColor',
+  'notesTextAlign',
   'astGridGapPx',
   'astMinHeightPx',
   'astColumnBorderRadiusPx',
@@ -402,6 +420,16 @@ export function validateAndNormalizeReportStyleConfig(
       patientInfoObj.textAlign,
       TEXT_ALIGN_SET,
       `${fieldName}.patientInfo.textAlign`,
+    ),
+    labelTextAlign: assertFromSet(
+      patientInfoObj.labelTextAlign,
+      TEXT_ALIGN_SET,
+      `${fieldName}.patientInfo.labelTextAlign`,
+    ),
+    valueTextAlign: assertFromSet(
+      patientInfoObj.valueTextAlign,
+      TEXT_ALIGN_SET,
+      `${fieldName}.patientInfo.valueTextAlign`,
     ),
     borderRadiusPx: assertIntRange(
       patientInfoObj.borderRadiusPx,
@@ -587,6 +615,11 @@ export function validateAndNormalizeReportStyleConfig(
       cultureSectionObj.sectionTitleBorderColor,
       `${fieldName}.cultureSection.sectionTitleBorderColor`,
     ),
+    sectionTitleAlign: assertFromSet(
+      cultureSectionObj.sectionTitleAlign,
+      TEXT_ALIGN_SET,
+      `${fieldName}.cultureSection.sectionTitleAlign`,
+    ),
     noGrowthBackgroundColor: assertColor(
       cultureSectionObj.noGrowthBackgroundColor,
       `${fieldName}.cultureSection.noGrowthBackgroundColor`,
@@ -603,9 +636,19 @@ export function validateAndNormalizeReportStyleConfig(
       cultureSectionObj.metaTextColor,
       `${fieldName}.cultureSection.metaTextColor`,
     ),
+    metaTextAlign: assertFromSet(
+      cultureSectionObj.metaTextAlign,
+      TEXT_ALIGN_SET,
+      `${fieldName}.cultureSection.metaTextAlign`,
+    ),
     commentTextColor: assertColor(
       cultureSectionObj.commentTextColor,
       `${fieldName}.cultureSection.commentTextColor`,
+    ),
+    commentTextAlign: assertFromSet(
+      cultureSectionObj.commentTextAlign,
+      TEXT_ALIGN_SET,
+      `${fieldName}.cultureSection.commentTextAlign`,
     ),
     notesTextColor: assertColor(
       cultureSectionObj.notesTextColor,
@@ -614,6 +657,11 @@ export function validateAndNormalizeReportStyleConfig(
     notesBorderColor: assertColor(
       cultureSectionObj.notesBorderColor,
       `${fieldName}.cultureSection.notesBorderColor`,
+    ),
+    notesTextAlign: assertFromSet(
+      cultureSectionObj.notesTextAlign,
+      TEXT_ALIGN_SET,
+      `${fieldName}.cultureSection.notesTextAlign`,
     ),
     astGridGapPx: assertIntRange(
       cultureSectionObj.astGridGapPx,

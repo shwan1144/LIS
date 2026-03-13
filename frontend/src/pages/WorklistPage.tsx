@@ -2,12 +2,10 @@ import { useCallback, useEffect, useMemo, useRef, useState, type Key } from 'rea
 import {
   Button,
   Card,
-  Col,
   DatePicker,
   Form,
   Input,
   Modal,
-  Row,
   Select,
   Space,
   Table,
@@ -32,7 +30,6 @@ import {
   type CultureResultPayload,
   type DepartmentDto,
   type ResultFlag,
-  type TestParameterDefinition,
   type WorklistEntryStatusFilter,
   type WorklistItem,
   type WorklistOrderModalDto,
@@ -41,19 +38,16 @@ import {
 } from '../api/client';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
-import { CultureSensitivityEditor } from '../components/CultureSensitivityEditor';
 import { WorklistStatusDashboard } from '../components/WorklistStatusDashboard';
+import { ResultEntryModal } from '../components/worklist/ResultEntryModal';
+import { buildResultEntrySections } from '../components/worklist/resultEntryModel';
 import { useFillToViewportBottom } from '../hooks/useFillToViewportBottom';
 import {
   buildCultureAntibioticOptions,
   buildCultureResultPayloadFromForm,
   normalizeCultureResultForForm,
 } from '../utils/culture-sensitivity';
-import {
-  RESULT_FLAG_COLOR as FLAG_COLOR,
-  RESULT_FLAG_LABEL as FLAG_LABEL,
-  normalizeResultFlag,
-} from '../utils/result-flag';
+import { normalizeResultFlag } from '../utils/result-flag';
 import {
   buildWorklistOrderGroups,
   type WorklistOrderGroupSummary,
@@ -385,6 +379,46 @@ function buildInitialFormValues(items: WorklistItem[]): Record<string, unknown> 
   return values;
 }
 
+type ResultSubmissionCandidate = {
+  target: WorklistItem;
+  payload: ResultSubmissionPayload;
+  changed: boolean;
+  hasMeaningfulPayload: boolean;
+  isVerifiedOverride: boolean;
+};
+
+function buildResultSubmissionCandidates(
+  targets: WorklistItem[],
+  values: Record<string, any>,
+  initialValues: Record<string, Record<string, unknown>>,
+  antibioticById: Map<string, AntibioticDto>,
+  canAdminEditVerified: boolean,
+): ResultSubmissionCandidate[] {
+  return targets.map((target) => {
+    const itemValues = (values[target.id] ?? {}) as Record<string, unknown>;
+    const initialItemValues = initialValues[target.id] ?? {};
+    const payload = buildResultSubmissionPayload(
+      target,
+      itemValues,
+      antibioticById,
+    );
+    const initialPayload = buildResultSubmissionPayload(
+      target,
+      initialItemValues,
+      antibioticById,
+    );
+
+    return {
+      target,
+      payload,
+      changed: JSON.stringify(payload) !== JSON.stringify(initialPayload),
+      hasMeaningfulPayload: hasMeaningfulResultSubmissionPayload(payload),
+      isVerifiedOverride:
+        canAdminEditVerified && target.status === 'VERIFIED',
+    };
+  });
+}
+
 function resolveGroupByIdentity(
   groups: WorklistOrderGroupSummary[],
   currentGroup: WorklistOrderGroupSummary | null,
@@ -450,6 +484,7 @@ export function WorklistPage() {
   const [submitting, setSubmitting] = useState(false);
   const [liveFlags, setLiveFlags] = useState<Record<string, ResultFlag | null>>({});
   const [resultForm] = Form.useForm<any>();
+  const watchedModalValues = Form.useWatch([], resultForm);
   const initialModalFormValuesRef = useRef<Record<string, Record<string, unknown>>>({});
   const antibioticById = useMemo(
     () => new Map(antibiotics.map((antibiotic) => [antibiotic.id, antibiotic])),
@@ -604,6 +639,11 @@ export function WorklistPage() {
     [modalGroup],
   );
 
+  const resultEntrySections = useMemo(
+    () => buildResultEntrySections(modalGroup, orderedModalItems, canAdminEditVerified),
+    [canAdminEditVerified, modalGroup, orderedModalItems],
+  );
+
   const isEditableTarget = useCallback(
     (item: WorklistItem) => {
       if (item.testType === 'PANEL') return false;
@@ -613,12 +653,14 @@ export function WorklistPage() {
     [canAdminEditVerified],
   );
 
-  const editableTargetIds = useMemo(
-    () =>
-      orderedModalItems
-        .filter((item) => isEditableTarget(item))
-        .map((item) => item.id),
+  const editableTargets = useMemo(
+    () => orderedModalItems.filter((item) => isEditableTarget(item)),
     [isEditableTarget, orderedModalItems],
+  );
+
+  const editableTargetIds = useMemo(
+    () => editableTargets.map((item) => item.id),
+    [editableTargets],
   );
 
   const modalDepartment = useMemo(
@@ -644,33 +686,35 @@ export function WorklistPage() {
     [antibiotics],
   );
 
-  const firstPanelIndex = useMemo(
+  const submissionCandidates = useMemo(
     () =>
-      orderedModalItems.findIndex(
-        (item) => item.testType === 'PANEL' && !item.parentOrderTestId,
+      buildResultSubmissionCandidates(
+        editableTargets,
+        (watchedModalValues ??
+          initialModalFormValuesRef.current) as Record<string, any>,
+        initialModalFormValuesRef.current,
+        antibioticById,
+        canAdminEditVerified,
       ),
-    [orderedModalItems],
+    [antibioticById, canAdminEditVerified, editableTargets, watchedModalValues],
   );
 
-  const focusNextEditableInput = useCallback(
-    (currentTargetId: string) => {
-      const idx = editableTargetIds.indexOf(currentTargetId);
-      if (idx < 0) return;
-      const nextTargetId = editableTargetIds[idx + 1];
-      if (!nextTargetId) return;
-      const targetRoot = document.querySelector(
-        `[data-entry-target-id="${nextTargetId}"]`,
-      ) as HTMLElement | null;
-      if (!targetRoot) return;
-
-      const focusTarget =
-        targetRoot.matches('input,textarea')
-          ? targetRoot
-          : (targetRoot.querySelector('input,textarea') as HTMLElement | null);
-      (focusTarget ?? targetRoot).focus();
-    },
-    [editableTargetIds],
+  const dirtySubmissionCount = useMemo(
+    () => submissionCandidates.filter(({ changed }) => changed).length,
+    [submissionCandidates],
   );
+
+  const submittableCandidates = useMemo(
+    () =>
+      submissionCandidates.filter(
+        ({ changed, hasMeaningfulPayload }) => changed && hasMeaningfulPayload,
+      ),
+    [submissionCandidates],
+  );
+
+  const saveDisabled =
+    submitting || modalLoading || submittableCandidates.length === 0;
+  const hasTouchedChanges = resultForm.isFieldsTouched(true);
 
   const recomputeLiveFlags = useCallback(
     (allValues: Record<string, any>) => {
@@ -733,6 +777,21 @@ export function WorklistPage() {
     },
     [orderedModalItems],
   );
+
+  useEffect(() => {
+    if (!resultModalOpen || orderedModalItems.length === 0) {
+      return;
+    }
+
+    const nextValues =
+      ((watchedModalValues as Record<string, any> | undefined) ??
+        initialModalFormValuesRef.current) as Record<string, any>;
+    if (Object.keys(nextValues).length === 0) {
+      return;
+    }
+
+    recomputeLiveFlags(nextValues);
+  }, [orderedModalItems, recomputeLiveFlags, resultModalOpen, watchedModalValues]);
 
   const openEntryModalForGroup = useCallback(
     async (orderId: string, group: WorklistOrderGroupSummary) => {
@@ -819,6 +878,32 @@ export function WorklistPage() {
     }
   }, [hydrateModalPayload, modalGroup, modalOrder, orderCacheKey]);
 
+  const handleRequestCloseEntryModal = useCallback(async () => {
+    if (submitting) {
+      return;
+    }
+
+    if (!hasTouchedChanges) {
+      closeEntryModal();
+      return;
+    }
+
+    const proceed = await new Promise<boolean>((resolve) => {
+      Modal.confirm({
+        title: 'Discard unsaved changes?',
+        content: 'You have unsaved result edits in this entry session.',
+        okText: 'Discard',
+        cancelText: 'Keep editing',
+        onOk: () => resolve(true),
+        onCancel: () => resolve(false),
+      });
+    });
+
+    if (proceed) {
+      closeEntryModal();
+    }
+  }, [closeEntryModal, hasTouchedChanges, submitting]);
+
   const handleSearch = () => {
     setPage(1);
     void loadRows();
@@ -826,8 +911,7 @@ export function WorklistPage() {
 
   const handleSubmitResult = async (values: Record<string, any>) => {
     if (!modalOrder) return;
-    const targets = orderedModalItems.filter((item) => isEditableTarget(item));
-    if (targets.length === 0) {
+    if (editableTargets.length === 0) {
       const hasVerifiedTargets = orderedModalItems.some(
         (item) => item.testType !== 'PANEL' && item.status === 'VERIFIED',
       );
@@ -843,7 +927,7 @@ export function WorklistPage() {
       return;
     }
 
-    const verifiedOverrideCount = targets.filter(
+    const verifiedOverrideCount = editableTargets.filter(
       (target) => canAdminEditVerified && target.status === 'VERIFIED',
     ).length;
 
@@ -869,13 +953,13 @@ export function WorklistPage() {
         console.debug('[worklist.submit]', {
           orderId: modalOrder.orderId,
           groupId: modalGroup?.groupId,
-          totalTargets: targets.length,
+          totalTargets: editableTargets.length,
           verifiedOverrideCount,
           departmentFilter: modalAppliedDepartmentId,
         });
       }
 
-      const invalidNumericTargets = targets
+      const invalidNumericTargets = editableTargets
         .filter((target) => target.resultEntryType === 'NUMERIC')
         .map((target) => ({
           target,
@@ -894,32 +978,13 @@ export function WorklistPage() {
         return;
       }
 
-      const targetSubmissions = targets.map((target) => {
-        const itemValues = (values[target.id] ?? {}) as Record<string, unknown>;
-        const initialItemValues =
-          initialModalFormValuesRef.current[target.id] ?? {};
-        const payload = buildResultSubmissionPayload(
-          target,
-          itemValues,
-          antibioticById,
-        );
-        const initialPayload = buildResultSubmissionPayload(
-          target,
-          initialItemValues,
-          antibioticById,
-        );
-
-        return {
-          target,
-          payload,
-          changed:
-            JSON.stringify(payload) !== JSON.stringify(initialPayload),
-          isVerifiedOverride:
-            canAdminEditVerified && target.status === 'VERIFIED',
-        };
-      });
-
-      const submissions = targetSubmissions.filter(
+      const submissions = buildResultSubmissionCandidates(
+        editableTargets,
+        values,
+        initialModalFormValuesRef.current,
+        antibioticById,
+        canAdminEditVerified,
+      ).filter(
         ({ changed, payload }) =>
           changed && hasMeaningfulResultSubmissionPayload(payload),
       );
@@ -1325,44 +1390,6 @@ export function WorklistPage() {
           color: ${isDark ? '#fee2e2' : '#7f1d1d'};
           background: ${isDark ? 'rgba(127,29,29,0.3)' : 'rgba(255,241,242,0.94)'};
         }
-        .panel-entry-modal .ant-modal {
-          max-width: calc(100vw - 32px) !important;
-          top: 20px;
-          padding-bottom: 0;
-        }
-        .panel-entry-modal .ant-modal-content {
-          border-radius: 14px;
-          overflow: hidden;
-        }
-        .panel-entry-modal .ant-modal-header {
-          padding: 5px 8px;
-          margin-bottom: 0;
-        }
-        .panel-entry-modal .ant-modal-body {
-          padding: 5px 8px 6px !important;
-          max-height: calc(100vh - 140px);
-          overflow-y: auto;
-        }
-        .panel-entry-modal .ant-form-item {
-          margin-bottom: 0 !important;
-        }
-        .panel-entry-modal .ant-form-item-label {
-          padding-bottom: 0 !important;
-        }
-        .panel-entry-modal .ant-form-item-label > label {
-          font-size: 10px !important;
-          line-height: 1.1 !important;
-          min-height: 12px !important;
-        }
-        .panel-entry-modal .ant-input-number,
-        .panel-entry-modal .ant-input,
-        .panel-entry-modal .ant-select-selector {
-          min-height: 24px !important;
-          height: 24px !important;
-        }
-        .panel-entry-modal .ant-input-number-input {
-          height: 22px !important;
-        }
       `}</style>
 
       <Title level={4} style={{ marginTop: 0, marginBottom: 10 }}>
@@ -1465,437 +1492,39 @@ export function WorklistPage() {
         </Card>
       </div>
 
-      <Modal
-        title={
-          <Space size={8}>
-            <span style={{ fontWeight: 600, fontSize: 15, lineHeight: 1.2 }}>
-              Enter Result
-            </span>
-            {modalOrder && (
-              <Tag color="blue" style={{ margin: 0 }}>
-                {modalOrder.orderNumber}
-              </Tag>
-            )}
-            {modalGroup && (
-              <Tag color="purple" style={{ margin: 0 }}>
-                {modalGroup.label}
-              </Tag>
-            )}
-            {modalDepartment && (
-              <Tag color="geekblue" style={{ margin: 0 }}>
-                Dept: {modalDepartment.code}
-              </Tag>
-            )}
-          </Space>
-        }
+      <ResultEntryModal
         open={resultModalOpen}
+        loading={modalLoading}
+        submitting={submitting}
+        order={modalOrder}
+        group={modalGroup}
+        department={modalDepartment}
+        sections={resultEntrySections}
+        editableTargetIds={editableTargetIds}
+        liveFlags={liveFlags}
+        canAdminEditVerified={canAdminEditVerified}
+        isDark={isDark}
+        form={resultForm}
+        showLoadAllTestsHint={showLoadAllTestsHint}
+        loadingAllTests={loadingAllTests}
+        saveDisabled={saveDisabled}
+        dirtyCount={dirtySubmissionCount}
+        submittableCount={submittableCandidates.length}
+        hasTouchedChanges={hasTouchedChanges}
         onCancel={() => {
-          closeEntryModal();
+          void handleRequestCloseEntryModal();
         }}
-        footer={null}
-        width={980}
-        className="panel-entry-modal"
-        styles={{
-          header: {
-            borderBottom: isDark
-              ? '1px solid rgba(255,255,255,0.08)'
-              : '1px solid #f0f0f0',
-          },
+        onLoadAllTests={() => {
+          void handleLoadAllOrderTests();
         }}
-      >
-        {modalLoading ? (
-          <div style={{ padding: 30, textAlign: 'center' }}>
-            <Text type="secondary">Loading order tests...</Text>
-          </div>
-        ) : modalOrder && modalGroup ? (
-          <div>
-            <div
-              style={{
-                marginBottom: 6,
-                padding: '6px 8px',
-                borderRadius: 6,
-                backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : '#fafafa',
-                border: isDark
-                  ? '1px solid rgba(255,255,255,0.08)'
-                  : '1px solid #f0f0f0',
-              }}
-            >
-              <Row gutter={[8, 2]}>
-                <Col xs={24} sm={12}>
-                  <Text type="secondary" style={{ fontSize: 12 }}>
-                    Patient
-                  </Text>
-                  <div style={{ marginTop: 2 }}>
-                    <Text strong>{modalOrder.patientName}</Text>
-                  </div>
-                </Col>
-                <Col xs={24} sm={12}>
-                  <Text type="secondary" style={{ fontSize: 12 }}>
-                    Order
-                  </Text>
-                  <div style={{ marginTop: 2 }}>
-                    <Text strong>{modalOrder.orderNumber}</Text>
-                  </div>
-                </Col>
-              </Row>
-            </div>
-
-            {showLoadAllTestsHint && (
-              <div
-                style={{
-                  marginBottom: 6,
-                  padding: '6px 8px',
-                  borderRadius: 6,
-                  border: '1px solid #ffe58f',
-                  backgroundColor: '#fffbe6',
-                }}
-              >
-                <Space size={8} wrap>
-                  <Text style={{ fontSize: 12, color: '#ad6800' }}>
-                    No editable tests in this department view.
-                  </Text>
-                  <Button
-                    size="small"
-                    loading={loadingAllTests}
-                    onClick={() => {
-                      void handleLoadAllOrderTests();
-                    }}
-                  >
-                    Load all tests for this order
-                  </Button>
-                </Space>
-              </div>
-            )}
-
-            <div
-              style={{
-                display: 'flex',
-                justifyContent: 'flex-end',
-                gap: 8,
-                marginBottom: 6,
-              }}
-            >
-              <Button
-                onClick={() => {
-                  closeEntryModal();
-                }}
-              >
-                Cancel
-              </Button>
-              <Button
-                type="primary"
-                loading={submitting}
-                onClick={() => {
-                  void resultForm.submit();
-                }}
-              >
-                Save
-              </Button>
-            </div>
-
-            <Form
-              form={resultForm}
-              layout="vertical"
-              onFinish={handleSubmitResult}
-              onValuesChange={(_, allValues) => {
-                recomputeLiveFlags(allValues as Record<string, any>);
-              }}
-            >
-              <div
-                style={{
-                  display: 'flex',
-                  backgroundColor: isDark ? 'rgba(255,255,255,0.04)' : '#f5f5f5',
-                  borderRadius: '6px 6px 0 0',
-                  borderBottom: isDark
-                    ? '1px solid rgba(255,255,255,0.1)'
-                    : '1px solid #e8e8e8',
-                  fontWeight: 600,
-                  fontSize: 11,
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.5px',
-                  padding: '2px 6px',
-                }}
-              >
-                <div style={{ flex: '1 1 40%', textAlign: 'center' }}>Test</div>
-                <div style={{ flex: '1 1 26%', textAlign: 'center' }}>Result</div>
-                <div style={{ flex: '1 1 8%', textAlign: 'center' }}>Unit</div>
-                <div style={{ flex: '1 1 10%', textAlign: 'center' }}>Flag</div>
-                <div style={{ flex: '1 1 16%', textAlign: 'center' }}>Ref. Range</div>
-              </div>
-
-              {orderedModalItems.map((target, index) => {
-                const isPanelRoot =
-                  target.testType === 'PANEL' && !target.parentOrderTestId;
-                const isPanelChild = Boolean(target.parentOrderTestId);
-                const isReadOnly =
-                  isPanelRoot ||
-                  (target.status === 'VERIFIED' && !canAdminEditVerified);
-                const parameterDefinitions = target.parameterDefinitions ?? [];
-                const hasParams = parameterDefinitions.length > 0;
-                const isCultureEntry =
-                  !isPanelRoot &&
-                  !hasParams &&
-                  target.resultEntryType === 'CULTURE_SENSITIVITY';
-                const displayFlag =
-                  target.testType === 'PANEL'
-                    ? null
-                    : (liveFlags[target.id] ?? target.flag ?? null);
-
-                return (
-                  <div key={target.id}>
-                    {firstPanelIndex > 0 && index === firstPanelIndex && (
-                      <div
-                        style={{
-                          borderTop: '1px dashed #91caff',
-                          marginTop: 1,
-                          paddingTop: 3,
-                          marginBottom: 1,
-                        }}
-                      >
-                        <Text strong style={{ fontSize: 11 }}>
-                          Panel Tests
-                        </Text>
-                      </div>
-                    )}
-                    <div
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        padding: '1px 6px',
-                        borderBottom:
-                          index < orderedModalItems.length - 1
-                            ? isDark
-                              ? '1px solid rgba(255,255,255,0.05)'
-                              : '1px solid #f0f0f0'
-                            : 'none',
-                        backgroundColor: isPanelRoot
-                          ? isDark
-                            ? 'rgba(114,46,209,0.14)'
-                            : 'rgba(114,46,209,0.08)'
-                          : 'transparent',
-                      }}
-                    >
-                      <div style={{ flex: '1 1 40%', paddingRight: 8, textAlign: 'center' }}>
-                        <Space size={6}>
-                          {isPanelRoot ? (
-                            <Tag color="purple" style={{ margin: 0, fontSize: 11 }}>
-                              Panel
-                            </Tag>
-                          ) : null}
-                          {target.status === 'REJECTED' ? (
-                            <Tag color="error" style={{ margin: 0, fontSize: 11 }}>
-                              Rejected
-                            </Tag>
-                          ) : null}
-                          {target.status === 'VERIFIED' && canAdminEditVerified ? (
-                            <Tag color="gold" style={{ margin: 0, fontSize: 11 }}>
-                              Verified (admin edit)
-                            </Tag>
-                          ) : null}
-                        </Space>
-                        <div style={{ marginTop: 1, paddingLeft: isPanelChild ? 10 : 0 }}>
-                          <Text
-                            strong={isPanelRoot}
-                            style={{
-                              fontSize: 12,
-                              lineHeight: '14px',
-                              display: 'block',
-                              whiteSpace: 'normal',
-                              wordBreak: 'break-word',
-                            }}
-                          >
-                            {target.testName}
-                          </Text>
-                        </div>
-                        {target.rejectionReason?.trim() && (
-                          <Text type="danger" style={{ display: 'block', fontSize: 11 }}>
-                            {target.rejectionReason}
-                          </Text>
-                        )}
-                      </div>
-
-                      <div style={{ flex: '1 1 26%', paddingRight: 8, textAlign: 'center' }}>
-                        {isPanelRoot ? (
-                          <Text type="secondary" style={{ fontSize: 11 }}>
-                            Panel header
-                          </Text>
-                        ) : hasParams ? (
-                          <Space direction="vertical" style={{ width: '100%' }} size={2}>
-                            {parameterDefinitions.map((definition: TestParameterDefinition) => (
-                              <Form.Item
-                                key={`${target.id}-${definition.code}`}
-                                name={[target.id, 'resultParameters', definition.code]}
-                                style={{ marginBottom: 0 }}
-                                label={
-                                  <span style={{ fontSize: 10 }}>{definition.label}</span>
-                                }
-                              >
-                                {definition.type === 'select' ? (
-                                  <Select
-                                    allowClear
-                                    size="small"
-                                    disabled={isReadOnly}
-                                    data-entry-target-id={target.id}
-                                    options={[
-                                      ...(definition.options ?? []).map((option) => ({
-                                        label: option,
-                                        value: option,
-                                      })),
-                                      { label: 'Other...', value: '__other__' },
-                                    ]}
-                                    onKeyDown={(event) => {
-                                      if (event.key === 'ArrowDown') {
-                                        event.preventDefault();
-                                        focusNextEditableInput(target.id);
-                                      }
-                                    }}
-                                  />
-                                ) : (
-                                  <Input
-                                    size="small"
-                                    disabled={isReadOnly}
-                                    data-entry-target-id={target.id}
-                                    onKeyDown={(event) => {
-                                      if (event.key === 'ArrowDown') {
-                                        event.preventDefault();
-                                        focusNextEditableInput(target.id);
-                                      }
-                                    }}
-                                  />
-                                )}
-                              </Form.Item>
-                            ))}
-                          </Space>
-                        ) : isCultureEntry ? (
-                          <Text type="secondary" style={{ fontSize: 11 }}>
-                            Culture details below
-                          </Text>
-                        ) : (
-                          <Form.Item
-                            name={[target.id, target.resultEntryType === 'NUMERIC' ? 'resultValue' : 'resultText']}
-                            style={{ marginBottom: 0 }}
-                          >
-                            {target.resultEntryType === 'NUMERIC' ? (
-                              <Input
-                                id={`result-input-${target.id}`}
-                                data-entry-target-id={target.id}
-                                style={{ width: '100%', textAlign: 'center' }}
-                                size="small"
-                                disabled={isReadOnly}
-                                inputMode="decimal"
-                                onKeyDown={(event) => {
-                                  if (event.key === 'ArrowDown') {
-                                    event.preventDefault();
-                                    focusNextEditableInput(target.id);
-                                  }
-                                }}
-                              />
-                            ) : target.resultEntryType === 'QUALITATIVE' &&
-                              (target.resultTextOptions?.length ?? 0) > 0 ? (
-                              <Select
-                                id={`result-input-${target.id}`}
-                                data-entry-target-id={target.id}
-                                allowClear
-                                showSearch
-                                size="small"
-                                disabled={isReadOnly}
-                                style={{ textAlign: 'center' }}
-                                dropdownStyle={{ textAlign: 'center' }}
-                                options={[
-                                  ...(target.resultTextOptions ?? []).map((option) => ({
-                                    label: option.value,
-                                    value: option.value,
-                                  })),
-                                  ...(target.allowCustomResultText
-                                    ? [{ label: 'Other...', value: '__other__' }]
-                                    : []),
-                                ]}
-                                onKeyDown={(event) => {
-                                  if (event.key === 'ArrowDown') {
-                                    event.preventDefault();
-                                    focusNextEditableInput(target.id);
-                                  }
-                                }}
-                              />
-                            ) : (
-                              <Input
-                                id={`result-input-${target.id}`}
-                                data-entry-target-id={target.id}
-                                size="small"
-                                disabled={isReadOnly}
-                                style={{ textAlign: 'center' }}
-                                onKeyDown={(event) => {
-                                  if (event.key === 'ArrowDown') {
-                                    event.preventDefault();
-                                    focusNextEditableInput(target.id);
-                                  }
-                                }}
-                              />
-                            )}
-                          </Form.Item>
-                        )}
-                      </div>
-
-                      <div style={{ flex: '1 1 8%', textAlign: 'center', fontSize: 12 }}>
-                        {target.testUnit || '-'}
-                      </div>
-                      <div style={{ flex: '1 1 10%', textAlign: 'center' }}>
-                        {displayFlag ? (
-                          <Tag
-                            color={FLAG_COLOR[displayFlag] || 'default'}
-                            style={{ margin: 0, fontSize: 11 }}
-                          >
-                            {FLAG_LABEL[displayFlag] || displayFlag}
-                          </Tag>
-                        ) : (
-                          <Text type="secondary" style={{ fontSize: 12 }}>
-                            -
-                          </Text>
-                        )}
-                      </div>
-                      <div
-                        style={{
-                          flex: '1 1 16%',
-                          textAlign: 'center',
-                          fontSize: 12,
-                          whiteSpace: 'pre-wrap',
-                          wordBreak: 'break-word',
-                        }}
-                      >
-                        {formatReferenceRange(target)}
-                      </div>
-                    </div>
-                    {isCultureEntry && (
-                      <div
-                        style={{
-                          margin: '0 6px 8px',
-                          padding: 8,
-                          borderRadius: 8,
-                          border: isDark
-                            ? '1px solid rgba(148,163,184,0.2)'
-                            : '1px solid #dbeafe',
-                          background: isDark ? 'rgba(2,6,23,0.24)' : '#f8fbff',
-                        }}
-                      >
-                        <CultureSensitivityEditor
-                          baseName={[target.id, 'cultureResult']}
-                          antibioticOptions={getCultureOptionsForTarget(target)}
-                          interpretationOptions={
-                            target.cultureConfig?.interpretationOptions ?? ['S', 'I', 'R']
-                          }
-                          micUnit={target.cultureConfig?.micUnit ?? null}
-                          disabled={isReadOnly}
-                        />
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </Form>
-          </div>
-        ) : null}
-      </Modal>
+        onSubmit={() => {
+          void resultForm.submit();
+        }}
+        onFinish={handleSubmitResult}
+        onValuesChange={recomputeLiveFlags}
+        getCultureOptionsForTarget={getCultureOptionsForTarget}
+        formatReferenceRange={formatReferenceRange}
+      />
 
     </div>
   );
