@@ -2506,6 +2506,7 @@ export function ReportsPage() {
                 }
               }}
               format="YYYY-MM-DD"
+              style={{ width: 260 }}
             />
 
             <Input
@@ -2516,7 +2517,7 @@ export function ReportsPage() {
               onPressEnter={() => {
                 void loadOrders(1);
               }}
-              style={{ width: 280 }}
+              style={{ width: 260 }}
             />
 
             <Select
@@ -2528,7 +2529,7 @@ export function ReportsPage() {
               }}
               placeholder="Status"
               allowClear={false}
-              style={{ width: 160 }}
+              style={{ width: 260 }}
               options={[
                 { value: 'ALL', label: 'All statuses' },
                 { value: 'PENDING', label: 'Pending' },
