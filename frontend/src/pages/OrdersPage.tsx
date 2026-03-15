@@ -801,9 +801,6 @@ export function OrdersPage() {
         setLoadingTests(false);
       }
     }
-    init();
-  }, []);
-
   useEffect(() => {
     if (historyShiftFilter === 'ALL') return;
     if (historyShiftOptions.some((shift) => shift.id === historyShiftFilter)) return;
@@ -819,6 +816,12 @@ export function OrdersPage() {
         // keep fallback from auth lab state
       });
   }, []);
+
+  useEffect(() => {
+    if (lab?.timezone) {
+      setHistoryDateRange(getTodayHistoryDateRange(lab.timezone));
+    }
+  }, [lab?.timezone]);
 
   useEffect(() => {
     if (selectedTests.length === 0) {
@@ -870,6 +873,7 @@ export function OrdersPage() {
       },
     );
   }, [testOptions, testSearch]);
+
   const tubesRequired = useMemo(() => {
     if (selectedTests.length === 0) return [];
     const groups = new Set<string>();
@@ -913,6 +917,7 @@ export function OrdersPage() {
           testName: test.name,
           tubeType: test.tubeType,
           sortOrder: test.sortOrder,
+          price: test.defaultPrice != null ? Number(test.defaultPrice) : null,
         },
       ]),
     );
@@ -1045,6 +1050,7 @@ export function OrdersPage() {
       testName: t.name,
       tubeType: t.tubeType,
       sortOrder: t.sortOrder,
+      price: t.defaultPrice != null ? Number(t.defaultPrice) : null,
     }));
 
     if (newSelections.length > 0) {
@@ -2884,59 +2890,6 @@ export function OrdersPage() {
                             }))}
                           />
                         </div>
-
-                        <div className="order-composer-toolbar">
-                          <Text strong>Selected tests</Text>
-                          <Text type="secondary">{selectedTests.length} selected</Text>
-                        </div>
-
-                        <div className="order-selected-tests-panel">
-                          {selectedTests.length === 0 ? (
-                            <Empty
-                              image={Empty.PRESENTED_IMAGE_SIMPLE}
-                              description="No tests selected. Use search above or test groups."
-                              style={{ padding: 24 }}
-                            />
-                          ) : (
-                            <Table
-                              dataSource={selectedTests}
-                              rowKey="testId"
-                              pagination={false}
-                              size="small"
-                              scroll={{ y: '100%' }}
-                              className="order-selected-tests-table"
-                              tableLayout="fixed"
-                              columns={[
-                                {
-                                  title: 'Test',
-                                  dataIndex: 'testCode',
-                                  key: 'testCode',
-                                  className: 'order-selected-col-test',
-                                  ellipsis: true,
-                                  render: (_, record) => (
-                                    <Text className="order-selected-test-name" title={record.testName}>
-                                      {record.testName}
-                                    </Text>
-                                  ),
-                                },
-                                {
-                                  title: 'Sample',
-                                  dataIndex: 'tubeType',
-                                  key: 'tubeType',
-                                  className: 'order-selected-col-tube',
-                                  render: (tubeType: string) => (
-                                    <span className="order-selected-test-tube">
-                                      {tubeType || '-'}
-                                    </span>
-                                  ),
-                                },
-                                {
-                                  title: '',
-                                  key: 'action',
-                                  align: 'right',
-                                  className: 'order-selected-col-action',
-                                  width: 52,
-                                  render: (_, record) => (
                                     <Button
                                       type="text"
                                       danger

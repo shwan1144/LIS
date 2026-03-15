@@ -148,7 +148,20 @@ async function buildZplDocument(
   const patientIdMinFontSize = Math.max(9, Math.round(basePatientIdFontSize * 0.62));
   const baseSexFontSize = Math.max(18, Math.round(geometry.heightDots * 0.11));
   const sexMinFontSize = Math.max(9, Math.round(baseSexFontSize * 0.62));
-  const patientNameShouldRenderGraphic = true;
+  const patientNameShouldRenderGraphic = needsRasterText(patientNameText);
+  const registeredAtShouldRenderGraphic = needsRasterText(registeredAtText);
+  const testCodesShouldRenderGraphic = Boolean(testCodesText) && needsRasterText(testCodesText);
+  const sequenceShouldRenderGraphic = needsRasterText(sequenceText);
+  const patientIdShouldRenderGraphic = needsRasterText(patientIdText);
+  const sexShouldRenderGraphic = needsRasterText(sexText);
+  const rasterFieldCount = [
+    patientNameShouldRenderGraphic,
+    registeredAtShouldRenderGraphic,
+    testCodesShouldRenderGraphic,
+    sequenceShouldRenderGraphic,
+    patientIdShouldRenderGraphic,
+    sexShouldRenderGraphic,
+  ].filter(Boolean).length;
   const useEnglishVerticalTweaks = !containsArabic(`${patientNameText} ${sexText}`);
   const englishDownShiftDots = useEnglishVerticalTweaks
     ? Math.max(1, mmToDots(0.3, geometry.dpiY))
@@ -157,14 +170,7 @@ async function buildZplDocument(
     ? Math.max(1, mmToDots(0.25, geometry.dpiY))
     : 0;
 
-  if (requiresCompositeRasterLabelLayer([
-    patientNameText,
-    registeredAtText,
-    testCodesText,
-    sequenceText,
-    patientIdText,
-    sexText,
-  ])) {
+  if (rasterFieldCount >= 4) {
     try {
       return await buildCompositeRasterLabelDocument({
         geometry,
@@ -205,16 +211,18 @@ async function buildZplDocument(
         width: layout.nameWidth,
       })
       : Promise.resolve(null),
-    cachedRenderTextGraphic({
-      align: 'center',
-      fontSize: Math.max(11, Math.round(geometry.heightDots * 0.062)),
-      fontWeight: 600,
-      height: geometry.heightDots - (layout.borderThickness * 2),
-      rotation: 270,
-      text: registeredAtText,
-      width: layout.sequenceMetaWidth,
-    }),
-    testCodesText
+    registeredAtShouldRenderGraphic
+      ? cachedRenderTextGraphic({
+        align: 'center',
+        fontSize: Math.max(11, Math.round(geometry.heightDots * 0.062)),
+        fontWeight: 600,
+        height: geometry.heightDots - (layout.borderThickness * 2),
+        rotation: 270,
+        text: registeredAtText,
+        width: layout.sequenceMetaWidth,
+      })
+      : Promise.resolve(null),
+    testCodesShouldRenderGraphic
       ? cachedRenderTextGraphic({
         align: 'center',
         fontSize: Math.max(11, Math.round(geometry.heightDots * 0.066)),
@@ -226,36 +234,42 @@ async function buildZplDocument(
         width: layout.barcodeBoxWidth,
       })
       : Promise.resolve(null),
-    cachedRenderTextGraphic({
-      align: 'center',
-      fontSize: Math.max(13, Math.round(geometry.heightDots * 0.076)),
-      fontWeight: 700,
-      height: geometry.heightDots - (layout.borderThickness * 2),
-      rotation: 270,
-      text: sequenceText,
-      width: layout.sequenceMainWidth,
-    }),
-    cachedRenderTextGraphic({
-      align: 'center',
-      fontSize: basePatientIdFontSize,
-      fontWeight: 600,
-      height: geometry.heightDots - (layout.borderThickness * 2),
-      minFontSize: patientIdMinFontSize,
-      rotation: 270,
-      shrinkToFitWidth: true,
-      text: patientIdText,
-      width: layout.rightStripWidth - (layout.borderThickness * 2),
-    }),
-    cachedRenderTextGraphic({
-      align: 'center',
-      fontSize: baseSexFontSize,
-      fontWeight: 600,
-      height: layout.sexHeight,
-      minFontSize: sexMinFontSize,
-      shrinkToFitWidth: true,
-      text: sexText,
-      width: layout.sexWidth,
-    }),
+    sequenceShouldRenderGraphic
+      ? cachedRenderTextGraphic({
+        align: 'center',
+        fontSize: Math.max(13, Math.round(geometry.heightDots * 0.076)),
+        fontWeight: 700,
+        height: geometry.heightDots - (layout.borderThickness * 2),
+        rotation: 270,
+        text: sequenceText,
+        width: layout.sequenceMainWidth,
+      })
+      : Promise.resolve(null),
+    patientIdShouldRenderGraphic
+      ? cachedRenderTextGraphic({
+        align: 'center',
+        fontSize: basePatientIdFontSize,
+        fontWeight: 600,
+        height: geometry.heightDots - (layout.borderThickness * 2),
+        minFontSize: patientIdMinFontSize,
+        rotation: 270,
+        shrinkToFitWidth: true,
+        text: patientIdText,
+        width: layout.rightStripWidth - (layout.borderThickness * 2),
+      })
+      : Promise.resolve(null),
+    sexShouldRenderGraphic
+      ? cachedRenderTextGraphic({
+        align: 'center',
+        fontSize: baseSexFontSize,
+        fontWeight: 600,
+        height: layout.sexHeight,
+        minFontSize: sexMinFontSize,
+        shrinkToFitWidth: true,
+        text: sexText,
+        width: layout.sexWidth,
+      })
+      : Promise.resolve(null),
   ]);
 
   const moduleWidth = pickCode128ModuleWidth(
@@ -905,10 +919,10 @@ async function renderTextGraphic(options: TextGraphicOptions): Promise<GfaGraphi
   if (requiresBrowserTextLayout(options.text)) {
     await ensureBrowserFontsReady(options.text);
     try {
-      await drawDomTextToCanvas(sourceContext, textOptions);
+      await drawSvgTextToCanvas(sourceContext, textOptions);
     } catch {
       try {
-        await drawSvgTextToCanvas(sourceContext, textOptions);
+        await drawDomTextToCanvas(sourceContext, textOptions);
       } catch {
         drawTextToFit(sourceContext, textOptions);
       }
