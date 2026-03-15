@@ -983,6 +983,8 @@ export function AdminLabReportDesignPage() {
   const getPreviewHeaderStyle = (column: keyof typeof previewColumnStyles, width: string): CSSProperties => ({
     ...previewHeaderCellStyle,
     width,
+    color: previewColumnStyles[column].textColor,
+    fontSize: previewColumnStyles[column].fontSizePx,
     textAlign: previewColumnStyles[column].textAlign,
   });
   const getPreviewBodyStyle = (

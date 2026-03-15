@@ -1151,6 +1151,10 @@ export function buildResultsReportHtml(input: {
     }
     th.col-test,
     td.col-test { text-align: var(--results-test-align); }
+    th.col-test {
+      color: var(--results-test-color);
+      font-size: var(--results-test-font-size);
+    }
     td.col-test {
       color: var(--results-test-color);
       font-size: var(--results-test-font-size);
@@ -1158,6 +1162,10 @@ export function buildResultsReportHtml(input: {
     }
     th.col-result,
     td.col-result { text-align: var(--results-result-align); }
+    th.col-result {
+      color: var(--results-result-color);
+      font-size: var(--results-result-font-size);
+    }
     td.col-result {
       color: var(--results-result-color);
       font-size: var(--results-result-font-size);
@@ -1165,6 +1173,10 @@ export function buildResultsReportHtml(input: {
     }
     th.col-unit,
     td.col-unit { text-align: var(--results-unit-align); }
+    th.col-unit {
+      color: var(--results-unit-color);
+      font-size: var(--results-unit-font-size);
+    }
     td.col-unit {
       color: var(--results-unit-color);
       font-size: var(--results-unit-font-size);
@@ -1172,6 +1184,10 @@ export function buildResultsReportHtml(input: {
     }
     th.col-status,
     td.col-status { text-align: var(--results-status-align); }
+    th.col-status {
+      color: var(--results-status-column-color);
+      font-size: var(--results-status-font-size);
+    }
     td.col-status {
       color: var(--results-status-column-color);
       font-size: var(--results-status-font-size);
@@ -1179,6 +1195,10 @@ export function buildResultsReportHtml(input: {
     }
     th.col-reference,
     td.col-reference { text-align: var(--results-reference-align); }
+    th.col-reference {
+      color: var(--results-reference-column-color);
+      font-size: var(--results-reference-font-size);
+    }
     td.col-reference {
       color: var(--results-reference-column-color);
       font-size: var(--results-reference-font-size);
@@ -1233,9 +1253,9 @@ export function buildResultsReportHtml(input: {
       font-weight: 800;
       margin-top: 12px;
     }
-    .status-low { color: var(--results-status-low-color); font-weight: 700; }
-    .status-high { color: var(--results-status-high-color); font-weight: 700; }
-    .status-normal { color: var(--results-status-normal-color); font-weight: var(--results-status-weight); }
+    td.col-status.status-low { color: var(--results-status-low-color); font-weight: 700; }
+    td.col-status.status-high { color: var(--results-status-high-color); font-weight: 700; }
+    td.col-status.status-normal { color: var(--results-status-normal-color); font-weight: var(--results-status-weight); }
     .reference-value { color: var(--results-reference-column-color); white-space: pre-wrap; word-break: break-word; }
     .param-abnormal { color: #c00; font-size: 11px; font-weight: 600; margin-left: 4px; }
     tr.abnormal td { background-color: var(--results-abnormal-row-bg); }

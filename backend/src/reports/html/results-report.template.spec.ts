@@ -886,6 +886,7 @@ describe('buildResultsReportHtml panel page isolation', () => {
     expect(html).toContain('--report-title-decoration: none;');
     expect(html).toContain('<div class="report-title">Biochemistry Report</div>');
     expect(html).toContain('--results-status-high-color: #AA0000;');
+    expect(html).toContain('td.col-status.status-high { color: var(--results-status-high-color); font-weight: 700; }');
     expect(html).toContain(
       `--patient-info-rtl-font-family: ${resolveReportRtlFontStack(customStyle.patientInfo.fontFamily)};`,
     );
