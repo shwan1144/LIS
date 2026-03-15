@@ -11,7 +11,7 @@ import {
   ParseUUIDPipe,
   HttpException,
 } from '@nestjs/common';
-import { Response } from 'express';
+import { Request, Response } from 'express';
 import { ReportActionKind, ReportsService } from './reports.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
@@ -32,6 +32,29 @@ interface RequestWithUser {
   };
 }
 
+const RESULTS_PDF_PROFILING_RESPONSE_HEADERS = [
+  'x-report-print-attempt-id',
+  'x-report-pdf-total-ms',
+  'x-report-pdf-snapshot-ms',
+  'x-report-pdf-verifier-lookup-ms',
+  'x-report-pdf-assets-ms',
+  'x-report-pdf-html-ms',
+  'x-report-pdf-render-ms',
+  'x-report-pdf-fallback-ms',
+  'x-report-pdf-cache-hit',
+  'x-report-pdf-inflight-join',
+] as const;
+
+function readSingleHeaderValue(
+  value: string | string[] | undefined,
+): string | null {
+  if (Array.isArray(value)) {
+    const [first] = value;
+    return typeof first === 'string' && first.trim() ? first.trim() : null;
+  }
+  return typeof value === 'string' && value.trim() ? value.trim() : null;
+}
+
 @Controller('reports')
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles(...LAB_ROLE_GROUPS.REPORTS)
@@ -40,6 +63,42 @@ export class ReportsController {
     private readonly reportsService: ReportsService,
     private readonly auditService: AuditService,
   ) {}
+
+  private setResultsPdfProfilingHeaders(
+    res: Response,
+    performance: {
+      correlationId?: string | null;
+      totalMs: number;
+      snapshotMs: number;
+      verifierLookupMs?: number;
+      assetsMs?: number;
+      htmlMs?: number;
+      renderMs?: number;
+      fallbackMs?: number;
+      cacheHit: boolean;
+      inFlightJoin: boolean;
+    },
+  ): void {
+    if (performance.correlationId) {
+      res.setHeader('x-report-print-attempt-id', performance.correlationId);
+    }
+    res.setHeader('x-report-pdf-total-ms', String(performance.totalMs));
+    res.setHeader('x-report-pdf-snapshot-ms', String(performance.snapshotMs));
+    res.setHeader(
+      'x-report-pdf-verifier-lookup-ms',
+      String(performance.verifierLookupMs ?? 0),
+    );
+    res.setHeader('x-report-pdf-assets-ms', String(performance.assetsMs ?? 0));
+    res.setHeader('x-report-pdf-html-ms', String(performance.htmlMs ?? 0));
+    res.setHeader('x-report-pdf-render-ms', String(performance.renderMs ?? 0));
+    res.setHeader('x-report-pdf-fallback-ms', String(performance.fallbackMs ?? 0));
+    res.setHeader('x-report-pdf-cache-hit', String(performance.cacheHit));
+    res.setHeader('x-report-pdf-inflight-join', String(performance.inFlightJoin));
+    res.setHeader(
+      'Access-Control-Expose-Headers',
+      RESULTS_PDF_PROFILING_RESPONSE_HEADERS.join(', '),
+    );
+  }
 
   @Get('orders/action-flags')
   async getOrderActionFlags(
@@ -143,7 +202,7 @@ export class ReportsController {
 
   @Get('orders/:id/results')
   async getTestResultsPDF(
-    @Req() req: RequestWithUser,
+    @Req() req: Request & RequestWithUser,
     @Param('id', ParseUUIDPipe) orderId: string,
     @Res() res: Response,
   ) {
@@ -154,7 +213,12 @@ export class ReportsController {
     }
 
     try {
-      const pdfBuffer = await this.reportsService.generateTestResultsPDF(orderId, labId);
+      const correlationId = readSingleHeaderValue(req.headers['x-report-print-attempt-id']);
+      const { pdf, performance } = await this.reportsService.generateTestResultsPDFWithProfile(
+        orderId,
+        labId,
+        { correlationId },
+      );
       const impersonationAudit =
         actor.isImpersonation && actor.platformUserId
           ? {
@@ -176,12 +240,13 @@ export class ReportsController {
         description: `Generated test results PDF for order ${orderId}`,
         newValues: impersonationAudit,
       });
+      this.setResultsPdfProfilingHeaders(res, performance);
       res.setHeader('Content-Type', 'application/pdf');
       res.setHeader(
         'Content-Disposition',
         `attachment; filename="results-${orderId.substring(0, 8)}.pdf"`,
       );
-      res.send(pdfBuffer);
+      res.send(pdf);
     } catch (error) {
       console.error('Error generating results PDF:', error);
       if (error instanceof HttpException) {

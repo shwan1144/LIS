@@ -1648,11 +1648,79 @@ export async function downloadOrderReceiptPDF(orderId: string): Promise<Blob> {
   return res.data;
 }
 
-export async function downloadTestResultsPDF(orderId: string): Promise<Blob> {
+export interface DownloadTestResultsPdfProfilingHeaders {
+  correlationId?: string;
+  totalMs?: string;
+  snapshotMs?: string;
+  verifierLookupMs?: string;
+  assetsMs?: string;
+  htmlMs?: string;
+  renderMs?: string;
+  fallbackMs?: string;
+  cacheHit?: string;
+  inFlightJoin?: string;
+}
+
+export interface DownloadTestResultsPdfResult {
+  blob: Blob;
+  profilingHeaders: DownloadTestResultsPdfProfilingHeaders;
+}
+
+function readResponseHeader(
+  headers: unknown,
+  key: string,
+): string | undefined {
+  if (!headers || typeof headers !== 'object') {
+    return undefined;
+  }
+
+  const value =
+    (headers as Record<string, unknown>)[key] ??
+    (headers as Record<string, unknown>)[key.toLowerCase()];
+
+  if (typeof value === 'string' && value.trim()) {
+    return value;
+  }
+
+  if (Array.isArray(value)) {
+    const [first] = value;
+    return typeof first === 'string' && first.trim() ? first : undefined;
+  }
+
+  return undefined;
+}
+
+export async function downloadTestResultsPDF(
+  orderId: string,
+  options?: { correlationId?: string },
+): Promise<DownloadTestResultsPdfResult> {
   const res = await api.get(`/reports/orders/${orderId}/results`, {
     responseType: 'blob',
+    headers: options?.correlationId
+      ? {
+          'x-report-print-attempt-id': options.correlationId,
+        }
+      : undefined,
   });
-  return res.data;
+
+  return {
+    blob: res.data,
+    profilingHeaders: {
+      correlationId: readResponseHeader(res.headers, 'x-report-print-attempt-id'),
+      totalMs: readResponseHeader(res.headers, 'x-report-pdf-total-ms'),
+      snapshotMs: readResponseHeader(res.headers, 'x-report-pdf-snapshot-ms'),
+      verifierLookupMs: readResponseHeader(
+        res.headers,
+        'x-report-pdf-verifier-lookup-ms',
+      ),
+      assetsMs: readResponseHeader(res.headers, 'x-report-pdf-assets-ms'),
+      htmlMs: readResponseHeader(res.headers, 'x-report-pdf-html-ms'),
+      renderMs: readResponseHeader(res.headers, 'x-report-pdf-render-ms'),
+      fallbackMs: readResponseHeader(res.headers, 'x-report-pdf-fallback-ms'),
+      cacheHit: readResponseHeader(res.headers, 'x-report-pdf-cache-hit'),
+      inFlightJoin: readResponseHeader(res.headers, 'x-report-pdf-inflight-join'),
+    },
+  };
 }
 
 export type ReportActionKind = 'PDF' | 'PRINT' | 'WHATSAPP' | 'VIBER';

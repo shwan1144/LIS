@@ -55,6 +55,35 @@ export type ReportBrandingOverride = {
     logoDataUrl?: string | null;
     watermarkDataUrl?: string | null;
 };
+type ResultsPdfPerformanceMetrics = {
+    orderId: string;
+    labId: string;
+    correlationId?: string | null;
+    totalMs: number;
+    snapshotMs: number;
+    verifierLookupMs?: number;
+    assetsMs?: number;
+    htmlMs?: number;
+    renderMs?: number;
+    fallbackMs?: number;
+    cacheHit: boolean;
+    inFlightJoin: boolean;
+};
+type GenerateTestResultsPdfOptions = {
+    bypassPaymentCheck?: boolean;
+    bypassResultCompletionCheck?: boolean;
+    disableCache?: boolean;
+    cultureOnly?: boolean;
+    correlationId?: string | null;
+    reportDesignOverride?: {
+        reportBranding?: ReportBrandingOverride;
+        reportStyle?: ReportStyleConfig | null;
+    };
+};
+type GenerateTestResultsPdfResult = {
+    pdf: Buffer;
+    performance: ResultsPdfPerformanceMetrics;
+};
 export declare class ReportsService implements OnModuleInit, OnModuleDestroy {
     private readonly orderRepo;
     private readonly orderTestRepo;
@@ -109,15 +138,8 @@ export declare class ReportsService implements OnModuleInit, OnModuleDestroy {
         reportStyle: ReportStyleConfig;
     }): Promise<Buffer>;
     generateOrderReceiptPDF(orderId: string, labId: string): Promise<Buffer>;
-    generateTestResultsPDF(orderId: string, labId: string, options?: {
-        bypassPaymentCheck?: boolean;
-        bypassResultCompletionCheck?: boolean;
-        disableCache?: boolean;
-        cultureOnly?: boolean;
-        reportDesignOverride?: {
-            reportBranding?: ReportBrandingOverride;
-            reportStyle?: ReportStyleConfig | null;
-        };
-    }): Promise<Buffer>;
+    generateTestResultsPDF(orderId: string, labId: string, options?: GenerateTestResultsPdfOptions): Promise<Buffer>;
+    generateTestResultsPDFWithProfile(orderId: string, labId: string, options?: GenerateTestResultsPdfOptions): Promise<GenerateTestResultsPdfResult>;
     private renderTestResultsFallbackPDF;
 }
+export {};

@@ -787,10 +787,11 @@ let ReportsService = ReportsService_1 = class ReportsService {
         }
     }
     logResultsPdfPerformance(input) {
-        if (input.totalMs < this.pdfPerfLogThresholdMs)
+        if (input.totalMs < this.pdfPerfLogThresholdMs && !input.correlationId)
             return;
         this.logger.log(JSON.stringify({
             event: 'reports.results_pdf.performance',
+            correlationId: input.correlationId ?? null,
             orderId: input.orderId,
             labId: input.labId,
             totalMs: input.totalMs,
@@ -1331,6 +1332,10 @@ let ReportsService = ReportsService_1 = class ReportsService {
         });
     }
     async generateTestResultsPDF(orderId, labId, options) {
+        const result = await this.generateTestResultsPDFWithProfile(orderId, labId, options);
+        return result.pdf;
+    }
+    async generateTestResultsPDFWithProfile(orderId, labId, options) {
         const startMs = Date.now();
         const snapshotStartMs = Date.now();
         const { order, reportableOrderTests, verifiedTests, latestVerifiedAt } = await this.loadOrderResultsSnapshot(orderId, labId);
@@ -1369,6 +1374,21 @@ let ReportsService = ReportsService_1 = class ReportsService {
         let htmlMs = 0;
         let renderMs = 0;
         let fallbackMs = 0;
+        const correlationId = options?.correlationId ?? null;
+        const buildPerformance = (cacheHit, inFlightJoin) => ({
+            orderId,
+            labId,
+            correlationId,
+            totalMs: Date.now() - startMs,
+            snapshotMs,
+            verifierLookupMs,
+            assetsMs,
+            htmlMs,
+            renderMs,
+            fallbackMs,
+            cacheHit,
+            inFlightJoin,
+        });
         const generatePdf = async () => {
             const verifierLookupStartMs = Date.now();
             const verifierIds = [
@@ -1452,65 +1472,43 @@ let ReportsService = ReportsService_1 = class ReportsService {
         };
         if (disableCache) {
             const pdf = await generatePdf();
-            this.logResultsPdfPerformance({
-                orderId,
-                labId,
-                totalMs: Date.now() - startMs,
-                snapshotMs,
-                verifierLookupMs,
-                assetsMs,
-                htmlMs,
-                renderMs,
-                fallbackMs,
-                cacheHit: false,
-                inFlightJoin: false,
-            });
-            return Buffer.from(pdf);
+            const performance = buildPerformance(false, false);
+            this.logResultsPdfPerformance(performance);
+            return {
+                pdf: Buffer.from(pdf),
+                performance,
+            };
         }
         const cachedPdf = this.getCachedPdf(cacheKey);
         if (cachedPdf) {
-            this.logResultsPdfPerformance({
-                orderId,
-                labId,
-                totalMs: Date.now() - startMs,
-                snapshotMs,
-                cacheHit: true,
-                inFlightJoin: false,
-            });
-            return cachedPdf;
+            const performance = buildPerformance(true, false);
+            this.logResultsPdfPerformance(performance);
+            return {
+                pdf: cachedPdf,
+                performance,
+            };
         }
         const existingInFlight = this.pdfInFlight.get(cacheKey);
         if (existingInFlight) {
             const pdf = await existingInFlight;
-            this.logResultsPdfPerformance({
-                orderId,
-                labId,
-                totalMs: Date.now() - startMs,
-                snapshotMs,
-                cacheHit: false,
-                inFlightJoin: true,
-            });
-            return Buffer.from(pdf);
+            const performance = buildPerformance(false, true);
+            this.logResultsPdfPerformance(performance);
+            return {
+                pdf: Buffer.from(pdf),
+                performance,
+            };
         }
         const generatePromise = generatePdf();
         this.pdfInFlight.set(cacheKey, generatePromise);
         try {
             const pdf = await generatePromise;
             this.setCachedPdf(cacheKey, pdf);
-            this.logResultsPdfPerformance({
-                orderId,
-                labId,
-                totalMs: Date.now() - startMs,
-                snapshotMs,
-                verifierLookupMs,
-                assetsMs,
-                htmlMs,
-                renderMs,
-                fallbackMs,
-                cacheHit: false,
-                inFlightJoin: false,
-            });
-            return Buffer.from(pdf);
+            const performance = buildPerformance(false, false);
+            this.logResultsPdfPerformance(performance);
+            return {
+                pdf: Buffer.from(pdf),
+                performance,
+            };
         }
         finally {
             this.pdfInFlight.delete(cacheKey);

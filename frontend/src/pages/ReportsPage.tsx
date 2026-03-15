@@ -46,6 +46,7 @@ import {
   searchOrdersHistory,
   updateOrderPayment,
   type AntibioticDto,
+  type DownloadTestResultsPdfProfilingHeaders,
   type ReportActionFlagsDto,
   type ReportActionKind,
   type OrderHistoryItemDto,
@@ -84,6 +85,7 @@ const REPORT_PDF_CACHE_MAX_ENTRIES = 40;
 const REPORT_DESIGN_FINGERPRINT_STALE_MS = 60 * 1000;
 const REPORT_BROWSER_PRINT_LOAD_TIMEOUT_MS = 15 * 1000;
 const REPORT_BROWSER_PRINT_FALLBACK_CLEANUP_MS = 5 * 60 * 1000;
+const REPORT_PRINT_PROFILE_MAX_ENTRIES = 100;
 
 type EditResultMode = 'SINGLE' | 'PANEL';
 type ReportStatusFilter = 'ALL' | 'PENDING' | 'COMPLETED' | 'VERIFIED' | 'REJECTED';
@@ -94,6 +96,77 @@ type ResultsPdfCacheEntry = {
   lastAccessedAt: number;
   reportDesignFingerprint: string;
 };
+
+type ResultsPdfFetchResult = {
+  blob: Blob;
+  source: 'frontend-cache' | 'network';
+  inFlightJoin: boolean;
+  fetchStartedAtMs: number | null;
+  fetchCompletedAtMs: number;
+  profilingHeaders: DownloadTestResultsPdfProfilingHeaders | null;
+};
+
+type BrowserPrintInstrumentation = {
+  onFrameLoaded?: () => void;
+  onPrintInvoked?: () => void;
+};
+
+type ParsedReportPdfProfiling = {
+  correlationId: string | null;
+  totalMs: number | null;
+  snapshotMs: number | null;
+  verifierLookupMs: number | null;
+  assetsMs: number | null;
+  htmlMs: number | null;
+  renderMs: number | null;
+  fallbackMs: number | null;
+  cacheHit: boolean | null;
+  inFlightJoin: boolean | null;
+};
+
+type ReportPrintProfileRecord = {
+  attemptId: string;
+  createdAt: string;
+  orderId: string;
+  orderNumber: string | null;
+  patientName: string | null;
+  attemptNumber: number;
+  configuredMode: 'browser' | 'direct_gateway';
+  resultPath: 'browser' | 'direct_gateway' | 'download_fallback' | 'failed';
+  success: boolean;
+  fetchSource: 'frontend-cache' | 'network';
+  frontendInFlightJoin: boolean;
+  backendCorrelationId: string | null;
+  backendCacheHit: boolean | null;
+  backendInFlightJoin: boolean | null;
+  backendFallbackUsed: boolean | null;
+  pdfSizeBytes: number | null;
+  clickToFetchStartMs: number | null;
+  fetchDurationMs: number | null;
+  settingsLoadMs: number | null;
+  clickToBlobReadyMs: number | null;
+  backendTotalMs: number | null;
+  backendSnapshotMs: number | null;
+  backendVerifierLookupMs: number | null;
+  backendAssetsMs: number | null;
+  backendHtmlMs: number | null;
+  backendRenderMs: number | null;
+  backendFallbackMs: number | null;
+  clickToPreviewReadyMs: number | null;
+  clickToPrintInvokeMs: number | null;
+  directPrintDurationMs: number | null;
+  clickToDirectPrintCompleteMs: number | null;
+  totalMs: number;
+  classification: string;
+  errorMessage: string | null;
+};
+
+declare global {
+  interface Window {
+    __lisReportPrintProfiles?: ReportPrintProfileRecord[];
+    __lisReportPrintProfilesTable?: () => Array<Record<string, unknown>>;
+  }
+}
 
 const REPORT_STATUS_TO_RESULT_STATUS: Record<Exclude<ReportStatusFilter, 'ALL'>, OrderResultStatus> = {
   PENDING: 'PENDING',
@@ -200,7 +273,129 @@ function cleanupResultsBrowserPrintFrame(iframe: HTMLIFrameElement, url: string)
   window.URL.revokeObjectURL(url);
 }
 
-function printResultsPdfInBrowser(blob: Blob): Promise<void> {
+function parseOptionalNumber(value: string | undefined): number | null {
+  if (!value?.trim()) return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function parseOptionalBoolean(value: string | undefined): boolean | null {
+  if (!value?.trim()) return null;
+  const normalized = value.trim().toLowerCase();
+  if (normalized === 'true') return true;
+  if (normalized === 'false') return false;
+  return null;
+}
+
+function parseReportPdfProfilingHeaders(
+  headers: DownloadTestResultsPdfProfilingHeaders | null | undefined,
+): ParsedReportPdfProfiling | null {
+  if (!headers) return null;
+
+  const parsed: ParsedReportPdfProfiling = {
+    correlationId: headers.correlationId?.trim() || null,
+    totalMs: parseOptionalNumber(headers.totalMs),
+    snapshotMs: parseOptionalNumber(headers.snapshotMs),
+    verifierLookupMs: parseOptionalNumber(headers.verifierLookupMs),
+    assetsMs: parseOptionalNumber(headers.assetsMs),
+    htmlMs: parseOptionalNumber(headers.htmlMs),
+    renderMs: parseOptionalNumber(headers.renderMs),
+    fallbackMs: parseOptionalNumber(headers.fallbackMs),
+    cacheHit: parseOptionalBoolean(headers.cacheHit),
+    inFlightJoin: parseOptionalBoolean(headers.inFlightJoin),
+  };
+
+  const hasData = Object.values(parsed).some((value) => value !== null);
+  return hasData ? parsed : null;
+}
+
+function createReportPrintAttemptId(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  return `print-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+function classifyReportPrintBottleneck(profile: Omit<ReportPrintProfileRecord, 'classification'>): string {
+  const backendMs = profile.backendTotalMs ?? 0;
+  const transportMs =
+    profile.fetchDurationMs != null && profile.backendTotalMs != null
+      ? Math.max(0, profile.fetchDurationMs - profile.backendTotalMs)
+      : 0;
+  const previewMs =
+    profile.clickToPrintInvokeMs != null && profile.clickToBlobReadyMs != null
+      ? Math.max(0, profile.clickToPrintInvokeMs - profile.clickToBlobReadyMs)
+      : 0;
+  const gatewayMs = profile.directPrintDurationMs ?? 0;
+  const dominant = Math.max(backendMs, transportMs, previewMs, gatewayMs);
+
+  if (profile.resultPath === 'direct_gateway' && gatewayMs >= Math.max(500, dominant * 0.7)) {
+    return 'gateway print bound';
+  }
+  if (profile.resultPath !== 'direct_gateway' && previewMs >= Math.max(500, dominant * 0.7)) {
+    return 'browser preview bound';
+  }
+  if (backendMs >= Math.max(500, dominant * 0.7)) {
+    return 'backend render bound';
+  }
+  if (transportMs >= Math.max(500, dominant * 0.7)) {
+    return 'network/transfer bound';
+  }
+
+  const significantPhases = [backendMs, transportMs, previewMs, gatewayMs].filter((value) => value >= 300);
+  if (significantPhases.length >= 2) {
+    return 'mixed';
+  }
+
+  return 'mixed';
+}
+
+function summarizeReportPrintProfile(profile: ReportPrintProfileRecord): Record<string, unknown> {
+  return {
+    attemptId: profile.attemptId,
+    orderNumber: profile.orderNumber,
+    attemptNumber: profile.attemptNumber,
+    configuredMode: profile.configuredMode,
+    resultPath: profile.resultPath,
+    fetchSource: profile.fetchSource,
+    frontendInFlightJoin: profile.frontendInFlightJoin,
+    backendCacheHit: profile.backendCacheHit,
+    backendInFlightJoin: profile.backendInFlightJoin,
+    pdfKB: profile.pdfSizeBytes != null ? Number((profile.pdfSizeBytes / 1024).toFixed(1)) : null,
+    clickToFetchStartMs: profile.clickToFetchStartMs,
+    fetchDurationMs: profile.fetchDurationMs,
+    settingsLoadMs: profile.settingsLoadMs,
+    backendTotalMs: profile.backendTotalMs,
+    clickToBlobReadyMs: profile.clickToBlobReadyMs,
+    clickToPreviewReadyMs: profile.clickToPreviewReadyMs,
+    clickToPrintInvokeMs: profile.clickToPrintInvokeMs,
+    directPrintDurationMs: profile.directPrintDurationMs,
+    clickToDirectPrintCompleteMs: profile.clickToDirectPrintCompleteMs,
+    totalMs: profile.totalMs,
+    classification: profile.classification,
+    success: profile.success,
+    errorMessage: profile.errorMessage,
+  };
+}
+
+function appendReportPrintProfile(profile: ReportPrintProfileRecord): void {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  const existing = window.__lisReportPrintProfiles ?? [];
+  const next = [...existing, profile].slice(-REPORT_PRINT_PROFILE_MAX_ENTRIES);
+  window.__lisReportPrintProfiles = next;
+  window.__lisReportPrintProfilesTable = () => next.map(summarizeReportPrintProfile);
+
+  console.info('[ReportsPage] Report print profiling', profile);
+  console.table([summarizeReportPrintProfile(profile)]);
+}
+
+function printResultsPdfInBrowser(
+  blob: Blob,
+  instrumentation?: BrowserPrintInstrumentation,
+): Promise<void> {
   return new Promise<void>((resolve, reject) => {
     const url = window.URL.createObjectURL(blob);
     const iframe = document.createElement('iframe');
@@ -252,6 +447,7 @@ function printResultsPdfInBrowser(blob: Blob): Promise<void> {
         settle(new Error('Browser print is unavailable in this browser.'));
         return;
       }
+      instrumentation?.onFrameLoaded?.();
 
       const handleAfterPrint = () => {
         scheduleCleanup(250);
@@ -262,6 +458,7 @@ function printResultsPdfInBrowser(blob: Blob): Promise<void> {
       window.setTimeout(() => {
         try {
           targetWindow.focus();
+          instrumentation?.onPrintInvoked?.();
           targetWindow.print();
           scheduleCleanup(REPORT_BROWSER_PRINT_FALLBACK_CLEANUP_MS);
           settle();
@@ -605,12 +802,13 @@ export function ReportsPage() {
   const [receiptPreviewOpen, setReceiptPreviewOpen] = useState(false);
   const [receiptPreviewOrder, setReceiptPreviewOrder] = useState<OrderDto | null>(null);
   const resultsPdfCacheRef = useRef<Record<string, ResultsPdfCacheEntry>>({});
-  const resultsPdfInFlightRef = useRef<Record<string, Promise<Blob>>>({});
+  const resultsPdfInFlightRef = useRef<Record<string, Promise<ResultsPdfFetchResult>>>({});
   const reportDesignFingerprintRef = useRef<{ value: string; fetchedAt: number }>({
     value: '0',
     fetchedAt: 0,
   });
   const reportDesignFingerprintInFlightRef = useRef<Promise<string> | null>(null);
+  const reportPrintAttemptCountsRef = useRef<Record<string, number>>({});
 
   const [editResultModalOpen, setEditResultModalOpen] = useState(false);
   const [editResultContext, setEditResultContext] = useState<EditResultContext | null>(null);
@@ -870,7 +1068,10 @@ export function ReportsPage() {
     return request;
   }, []);
 
-  const getResultsPdfBlob = useCallback(async (orderId: string): Promise<Blob> => {
+  const getResultsPdfBlobDetailed = useCallback(async (
+    orderId: string,
+    options?: { correlationId?: string },
+  ): Promise<ResultsPdfFetchResult> => {
     const reportDesignFingerprint = await getReportDesignFingerprint();
     const now = Date.now();
     const cached = resultsPdfCacheRef.current[orderId];
@@ -880,16 +1081,28 @@ export function ReportsPage() {
       now - cached.cachedAt <= REPORT_PDF_CACHE_TTL_MS
     ) {
       cached.lastAccessedAt = now;
-      return cached.blob;
+      return {
+        blob: cached.blob,
+        source: 'frontend-cache',
+        inFlightJoin: false,
+        fetchStartedAtMs: null,
+        fetchCompletedAtMs: now,
+        profilingHeaders: null,
+      };
     }
 
     const inFlight = resultsPdfInFlightRef.current[orderId];
     if (inFlight) {
-      return inFlight;
+      const result = await inFlight;
+      return {
+        ...result,
+        inFlightJoin: true,
+      };
     }
 
-    const fetchPromise = downloadTestResultsPDF(orderId)
-      .then((blob) => {
+    const fetchStartedAtMs = Date.now();
+    const fetchPromise = downloadTestResultsPDF(orderId, options)
+      .then(({ blob, profilingHeaders }) => {
         const cachedAt = Date.now();
         resultsPdfCacheRef.current[orderId] = {
           blob,
@@ -908,7 +1121,14 @@ export function ReportsPage() {
             });
         }
 
-        return blob;
+        return {
+          blob,
+          source: 'network' as const,
+          inFlightJoin: false,
+          fetchStartedAtMs,
+          fetchCompletedAtMs: cachedAt,
+          profilingHeaders,
+        };
       })
       .finally(() => {
         delete resultsPdfInFlightRef.current[orderId];
@@ -917,6 +1137,11 @@ export function ReportsPage() {
     resultsPdfInFlightRef.current[orderId] = fetchPromise;
     return fetchPromise;
   }, [getReportDesignFingerprint]);
+
+  const getResultsPdfBlob = useCallback(async (orderId: string): Promise<Blob> => {
+    const result = await getResultsPdfBlobDetailed(orderId);
+    return result.blob;
+  }, [getResultsPdfBlobDetailed]);
 
   const handleDownloadResults = async (
     orderId: string,
@@ -979,31 +1204,62 @@ export function ReportsPage() {
       return;
     }
 
+    const attemptStartedAtMs = Date.now();
+    const attemptId = createReportPrintAttemptId();
+    const attemptNumber = (reportPrintAttemptCountsRef.current[orderId] ?? 0) + 1;
+    reportPrintAttemptCountsRef.current[orderId] = attemptNumber;
+    let configuredMode: ReportPrintProfileRecord['configuredMode'] = 'browser';
+    let resultPath: ReportPrintProfileRecord['resultPath'] = 'failed';
+    let fetchResult: ResultsPdfFetchResult | null = null;
+    let backendProfile: ParsedReportPdfProfiling | null = null;
+    let settingsLoadMs: number | null = null;
+    let clickToBlobReadyMs: number | null = null;
+    let previewReadyAtMs: number | null = null;
+    let printInvokedAtMs: number | null = null;
+    let directPrintStartedAtMs: number | null = null;
+    let directPrintCompletedAtMs: number | null = null;
+    let failureMessage: string | null = null;
+
     setDownloading(`print-${orderId}`);
     try {
-      const [blob, settings] = await Promise.all([
-        getResultsPdfBlob(orderId),
-        getLabSettings().catch(() => null),
+      const settingsStartedAtMs = Date.now();
+      const settingsPromise = getLabSettings()
+        .catch(() => null)
+        .finally(() => {
+          settingsLoadMs = Date.now() - settingsStartedAtMs;
+        });
+
+      const [nextFetchResult, settings] = await Promise.all([
+        getResultsPdfBlobDetailed(orderId, { correlationId: attemptId }),
+        settingsPromise,
       ]);
+      fetchResult = nextFetchResult;
+      backendProfile = parseReportPdfProfilingHeaders(fetchResult.profilingHeaders);
+      clickToBlobReadyMs = fetchResult.fetchCompletedAtMs - attemptStartedAtMs;
       try {
         const printerName = settings?.printing?.reportPrinterName?.trim();
         const mode = settings?.printing?.mode;
         if (mode === 'direct_gateway' && printerName) {
+          configuredMode = 'direct_gateway';
           if (isVirtualSavePrinterName(printerName)) {
             message.info(
               `Report printer "${printerName}" is a virtual PDF/XPS printer. Using browser print dialog so the Save dialog can appear.`,
             );
           } else {
             try {
+              directPrintStartedAtMs = Date.now();
               await directPrintReportPdf({
                 orderId,
-                blob,
+                blob: fetchResult.blob,
                 printerName,
               });
+              directPrintCompletedAtMs = Date.now();
+              resultPath = 'direct_gateway';
               message.success(`Report sent to ${printerName}`);
               void trackReportAction(orderId, 'PRINT');
               return;
             } catch (error) {
+              directPrintCompletedAtMs = Date.now();
               message.warning(`${getDirectPrintErrorMessage(error)} Falling back to browser print.`);
             }
           }
@@ -1013,9 +1269,18 @@ export function ReportsPage() {
       }
 
       try {
-        await printResultsPdfInBrowser(blob);
+        await printResultsPdfInBrowser(fetchResult.blob, {
+          onFrameLoaded: () => {
+            previewReadyAtMs = Date.now();
+          },
+          onPrintInvoked: () => {
+            printInvokedAtMs = Date.now();
+          },
+        });
+        resultPath = 'browser';
       } catch {
-        triggerPdfDownload(blob, resultsFilename);
+        triggerPdfDownload(fetchResult.blob, resultsFilename);
+        resultPath = 'download_fallback';
         message.warning('Browser print could not be started, so the report was downloaded instead.');
       }
       void trackReportAction(orderId, 'PRINT');
@@ -1034,10 +1299,67 @@ export function ReportsPage() {
         );
         setPaymentModalOpen(true);
       } else {
-        message.error(backendMessage || 'Failed to load results for printing');
+        failureMessage = backendMessage || 'Failed to load results for printing';
+        message.error(failureMessage);
       }
     } finally {
+      const totalMs = Date.now() - attemptStartedAtMs;
       setDownloading(null);
+      if (fetchResult) {
+        const profileWithoutClassification = {
+          attemptId,
+          createdAt: new Date(attemptStartedAtMs).toISOString(),
+          orderId,
+          orderNumber: summaryOrder?.orderNumber ?? null,
+          patientName: summaryOrder?.patient?.fullName ?? null,
+          attemptNumber,
+          configuredMode,
+          resultPath,
+          success: resultPath !== 'failed',
+          fetchSource: fetchResult.source,
+          frontendInFlightJoin: fetchResult.inFlightJoin,
+          backendCorrelationId: backendProfile?.correlationId ?? null,
+          backendCacheHit: backendProfile?.cacheHit ?? null,
+          backendInFlightJoin: backendProfile?.inFlightJoin ?? null,
+          backendFallbackUsed:
+            backendProfile?.fallbackMs != null ? backendProfile.fallbackMs > 0 : null,
+          pdfSizeBytes: fetchResult.blob.size,
+          clickToFetchStartMs:
+            fetchResult.fetchStartedAtMs != null
+              ? fetchResult.fetchStartedAtMs - attemptStartedAtMs
+              : null,
+          fetchDurationMs:
+            fetchResult.fetchStartedAtMs != null
+              ? fetchResult.fetchCompletedAtMs - fetchResult.fetchStartedAtMs
+              : null,
+          settingsLoadMs,
+          clickToBlobReadyMs,
+          backendTotalMs: backendProfile?.totalMs ?? null,
+          backendSnapshotMs: backendProfile?.snapshotMs ?? null,
+          backendVerifierLookupMs: backendProfile?.verifierLookupMs ?? null,
+          backendAssetsMs: backendProfile?.assetsMs ?? null,
+          backendHtmlMs: backendProfile?.htmlMs ?? null,
+          backendRenderMs: backendProfile?.renderMs ?? null,
+          backendFallbackMs: backendProfile?.fallbackMs ?? null,
+          clickToPreviewReadyMs:
+            previewReadyAtMs != null ? previewReadyAtMs - attemptStartedAtMs : null,
+          clickToPrintInvokeMs:
+            printInvokedAtMs != null ? printInvokedAtMs - attemptStartedAtMs : null,
+          directPrintDurationMs:
+            directPrintStartedAtMs != null && directPrintCompletedAtMs != null
+              ? directPrintCompletedAtMs - directPrintStartedAtMs
+              : null,
+          clickToDirectPrintCompleteMs:
+            directPrintCompletedAtMs != null ? directPrintCompletedAtMs - attemptStartedAtMs : null,
+          totalMs,
+          errorMessage: failureMessage,
+        };
+
+        appendReportPrintProfile({
+          ...profileWithoutClassification,
+          classification: classifyReportPrintBottleneck(profileWithoutClassification),
+        });
+      }
     }
   };
 

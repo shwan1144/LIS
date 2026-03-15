@@ -1,4 +1,4 @@
-import { Response } from 'express';
+import { Request, Response } from 'express';
 import { ReportActionKind, ReportsService } from './reports.service';
 import { AuditService } from '../audit/audit.service';
 interface RequestWithUser {
@@ -15,6 +15,7 @@ export declare class ReportsController {
     private readonly reportsService;
     private readonly auditService;
     constructor(reportsService: ReportsService, auditService: AuditService);
+    private setResultsPdfProfilingHeaders;
     getOrderActionFlags(req: RequestWithUser, orderIdsRaw: string | undefined, res: Response): Promise<Response<any, Record<string, any>>>;
     logReportAction(req: RequestWithUser & {
         ip?: string;
@@ -23,7 +24,7 @@ export declare class ReportsController {
         action?: ReportActionKind;
     }, res: Response): Promise<Response<any, Record<string, any>>>;
     getOrderReceiptPDF(req: RequestWithUser, orderId: string, res: Response): Promise<Response<any, Record<string, any>> | undefined>;
-    getTestResultsPDF(req: RequestWithUser, orderId: string, res: Response): Promise<Response<any, Record<string, any>> | undefined>;
+    getTestResultsPDF(req: Request & RequestWithUser, orderId: string, res: Response): Promise<Response<any, Record<string, any>> | undefined>;
     logReportDelivery(req: RequestWithUser & {
         ip?: string;
         headers?: Record<string, string | string[] | undefined>;
