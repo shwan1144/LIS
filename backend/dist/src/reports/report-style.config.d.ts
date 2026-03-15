@@ -21,6 +21,19 @@ export interface ReportPatientInfoStyle {
     paddingYpx: number;
     paddingXpx: number;
 }
+export interface ReportColumnStyle {
+    textColor: string;
+    fontSizePx: number;
+    textAlign: ReportTextAlign;
+    bold: boolean;
+}
+export interface ReportTitleStyle {
+    text: string;
+    textColor: string;
+    fontSizePx: number;
+    textAlign: ReportTextAlign;
+    bold: boolean;
+}
 export interface ReportResultsTableStyle {
     headerBackgroundColor: string;
     headerTextColor: string;
@@ -53,6 +66,11 @@ export interface ReportResultsTableStyle {
     regularRowBreak: 'auto' | 'avoid';
     panelTableBreak: 'auto' | 'avoid';
     panelRowBreak: 'auto' | 'avoid';
+    testColumn: ReportColumnStyle;
+    resultColumn: ReportColumnStyle;
+    unitColumn: ReportColumnStyle;
+    statusColumn: ReportColumnStyle;
+    referenceColumn: ReportColumnStyle;
 }
 export interface ReportPageLayoutStyle {
     pageMarginTopMm: number;
@@ -94,6 +112,7 @@ export interface ReportCultureSectionStyle {
 export interface ReportStyleConfig {
     version: 1;
     patientInfo: ReportPatientInfoStyle;
+    reportTitle: ReportTitleStyle;
     resultsTable: ReportResultsTableStyle;
     pageLayout: ReportPageLayoutStyle;
     cultureSection: ReportCultureSectionStyle;

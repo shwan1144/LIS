@@ -213,24 +213,27 @@ function buildResultsReportHtml(input) {
     const dir = getDirection(order, orderTests, input.comments);
     const labAny = order.lab;
     const reportStyle = (0, report_style_config_1.resolveReportStyleConfig)(labAny?.reportStyle);
+    const reportTitleText = reportStyle.reportTitle.text.trim() || 'Laboratory Report';
     const showStatusColumn = reportStyle.resultsTable.showStatusColumn;
     const regularVisibleColumnCount = showStatusColumn ? 5 : 4;
     const parameterVisibleColumnCount = showStatusColumn ? 4 : 3;
     const regularTableWidths = {
-        test: '28%',
-        result: showStatusColumn ? '14%' : '18%',
-        unit: showStatusColumn ? '14%' : '18%',
-        status: '14%',
-        reference: showStatusColumn ? '30%' : '36%',
+        test: showStatusColumn ? '32%' : '34%',
+        result: showStatusColumn ? '12%' : '14%',
+        unit: showStatusColumn ? '10%' : '12%',
+        status: '10%',
+        reference: showStatusColumn ? '36%' : '40%',
     };
     const parameterTableWidths = {
-        test: '28%',
-        result: showStatusColumn ? '24%' : '36%',
-        status: '24%',
-        reference: showStatusColumn ? '24%' : '36%',
+        test: showStatusColumn ? '34%' : '38%',
+        result: showStatusColumn ? '20%' : '22%',
+        status: '10%',
+        reference: showStatusColumn ? '36%' : '40%',
     };
-    const regularHeaderCellsHtml = `<th style="width:${regularTableWidths.test};">Test</th><th style="width:${regularTableWidths.result};">Result</th><th style="width:${regularTableWidths.unit};">Unit</th>${showStatusColumn ? `<th style="width:${regularTableWidths.status};">Status</th>` : ''}<th style="width:${regularTableWidths.reference};">Reference Value</th>`;
-    const parameterHeaderCellsHtml = `<th style="width:${parameterTableWidths.test};">Test</th><th style="width:${parameterTableWidths.result};">Result</th>${showStatusColumn ? `<th style="width:${parameterTableWidths.status};">Status</th>` : ''}<th style="width:${parameterTableWidths.reference};">Reference Value</th>`;
+    const regularColGroupHtml = `<colgroup><col style="width:${regularTableWidths.test};" /><col style="width:${regularTableWidths.result};" /><col style="width:${regularTableWidths.unit};" />${showStatusColumn ? `<col style="width:${regularTableWidths.status};" />` : ''}<col style="width:${regularTableWidths.reference};" /></colgroup>`;
+    const parameterColGroupHtml = `<colgroup><col style="width:${parameterTableWidths.test};" /><col style="width:${parameterTableWidths.result};" />${showStatusColumn ? `<col style="width:${parameterTableWidths.status};" />` : ''}<col style="width:${parameterTableWidths.reference};" /></colgroup>`;
+    const regularHeaderCellsHtml = `<th class="col-test" style="width:${regularTableWidths.test};">Test</th><th class="col-result" style="width:${regularTableWidths.result};">Result</th><th class="col-unit" style="width:${regularTableWidths.unit};">Unit</th>${showStatusColumn ? `<th class="col-status" style="width:${regularTableWidths.status};">Status</th>` : ''}<th class="col-reference" style="width:${regularTableWidths.reference};">Reference Value</th>`;
+    const parameterHeaderCellsHtml = `<th class="col-test" style="width:${parameterTableWidths.test};">Test</th><th class="col-result" style="width:${parameterTableWidths.result};">Result</th>${showStatusColumn ? `<th class="col-status" style="width:${parameterTableWidths.status};">Status</th>` : ''}<th class="col-reference" style="width:${parameterTableWidths.reference};">Reference Value</th>`;
     const pageMarginTopMm = reportStyle.pageLayout.pageMarginTopMm;
     const pageMarginRightMm = reportStyle.pageLayout.pageMarginRightMm;
     const pageMarginBottomMm = reportStyle.pageLayout.pageMarginBottomMm;
@@ -250,6 +253,7 @@ function buildResultsReportHtml(input) {
     const ageSex = `${ageDisplay || '-'}/${sexLabel}`;
     const referredByDisplay = String(referredBy || '').trim() || 'Himself';
     const referredByIsRtl = containsArabicScript(referredByDisplay);
+    const patientInfoIsKurdish = patientNameIsRtl || referredByIsRtl;
     const bannerUrlAttr = bannerSrc ? `src="${escapeHtml(bannerSrc)}"` : '';
     const footerUrlAttr = footerSrc ? `src="${escapeHtml(footerSrc)}"` : '';
     const logoUrlAttr = logoSrc ? `src="${escapeHtml(logoSrc)}"` : '';
@@ -313,12 +317,13 @@ function buildResultsReportHtml(input) {
     const commentsText = input.comments.length ? input.comments.join(' أ¢â‚¬آ¢ ') : '';
     const verifierText = input.verifiers.join(', ') || (input.verifiedCount > 0 ? 'Verifier' : 'Pending');
     const pageHeaderHtml = `
+    <div class="report-header">
     ${hasHeaderBanner
         ? `<div class="banner-wrap"><img class="banner-image" ${bannerUrlAttr} alt="Report Banner" /></div>`
         : hasHeaderLogoOnly
             ? `<div class="logo-only-wrap"><img class="logo" ${logoUrlAttr} alt="Report Logo" /></div>`
             : `<div class="header-spacer" aria-hidden="true"></div>`}
-    <div class="patient-info${hasOrderQr ? ' has-order-qr' : ''}">
+    <div class="patient-info${hasOrderQr ? ' has-order-qr' : ''}${patientInfoIsKurdish ? ' patient-info--kurdish' : ''}">
       <div class="patient-info-col">
         <div class="info-item"><span class="label">Name :</span><span class="info-value name-value ${patientNameIsRtl ? 'rtl-text' : ''}">${escapeHtml(patientName)}</span></div>
         <div class="info-item"><span class="label">Age/Sex:</span><span class="info-value">${escapeHtml(ageSex)}</span></div>
@@ -333,7 +338,8 @@ function buildResultsReportHtml(input) {
         ? `<div class="patient-info-qr"><img class="patient-info-qr-image" ${orderQrUrlAttr} alt="Order QR Code" /><div class="patient-info-qr-caption">Order QR</div></div>`
         : ''}
     </div>
-    <div class="report-title">Laboratory Report</div>
+    <div class="report-title">${escapeHtml(reportTitleText)}</div>
+    </div>
   `;
     const pageFooterHtml = footerUrlAttr
         ? `<div class="report-footer"><img class="footer-image" ${footerUrlAttr} alt="Report Footer" /></div>`
@@ -360,9 +366,10 @@ function buildResultsReportHtml(input) {
         const kids = panelChildrenByParent.get(ot.id) || [];
         const params = Array.isArray(t?.parameterDefinitions) ? t.parameterDefinitions : [];
         const resultParams = ot.resultParameters && typeof ot.resultParameters === 'object' ? ot.resultParameters : {};
-        let contentHtml = '';
-        if (params.length > 0 || Object.keys(resultParams).length > 0) {
-            let paramRows = params
+        let contentRows = '';
+        let isParamTable = params.length > 0 || Object.keys(resultParams).length > 0;
+        if (isParamTable) {
+            contentRows = params
                 .map((p) => {
                 const val = p?.code ? resultParams[p.code] : '';
                 const valStr = val != null ? String(val).trim() : '';
@@ -383,37 +390,33 @@ function buildResultsReportHtml(input) {
                             statusClass = 'status-normal';
                         }
                     }
-                    else {
-                        statusText = '-';
-                    }
                 }
                 const rowClass = isAbnormalParam ? ' class="abnormal"' : '';
                 return `<tr${rowClass}>
-            <td style="width:${parameterTableWidths.test};font-weight:600;">${escapeHtml(p?.label || p?.code || '')}</td>
-            <td style="width:${parameterTableWidths.result};">${valueCell}</td>
-            ${showStatusColumn ? `<td style="width:${parameterTableWidths.status};" class="${statusClass}">${escapeHtml(statusText)}</td>` : ''}
-            <td style="width:${parameterTableWidths.reference};" class="reference-value">${escapeHtml(referenceValue)}</td>
+            <td class="col-test" style="width:${parameterTableWidths.test};">${escapeHtml(p?.label || p?.code || '')}</td>
+            <td class="col-result" style="width:${parameterTableWidths.result};">${valueCell}</td>
+            ${showStatusColumn ? `<td class="col-status ${statusClass}" style="width:${parameterTableWidths.status};">${escapeHtml(statusText)}</td>` : ''}
+            <td class="col-reference reference-value" style="width:${parameterTableWidths.reference};">${escapeHtml(referenceValue)}</td>
           </tr>`;
             })
                 .join('');
-            if (!paramRows && Object.keys(resultParams).length > 0) {
-                paramRows = Object.entries(resultParams)
+            if (!contentRows && Object.keys(resultParams).length > 0) {
+                contentRows = Object.entries(resultParams)
                     .filter(([, v]) => v != null && String(v).trim() !== '')
                     .map(([k, v]) => `<tr>
-            <td style="width:${parameterTableWidths.test};font-weight:600;">${escapeHtml(k)}</td>
-            <td style="width:${parameterTableWidths.result};">${escapeHtml(String(v))}</td>
-            ${showStatusColumn ? `<td style="width:${parameterTableWidths.status};">-</td>` : ''}
-            <td style="width:${parameterTableWidths.reference};" class="reference-value">-</td>
+            <td class="col-test" style="width:${parameterTableWidths.test};">${escapeHtml(k)}</td>
+            <td class="col-result" style="width:${parameterTableWidths.result};">${escapeHtml(String(v))}</td>
+            ${showStatusColumn ? `<td class="col-status" style="width:${parameterTableWidths.status};">-</td>` : ''}
+            <td class="col-reference reference-value" style="width:${parameterTableWidths.reference};">-</td>
           </tr>`)
                     .join('');
             }
-            contentHtml = `<table class="gue-gse-table">
-        <thead><tr>${parameterHeaderCellsHtml}</tr></thead>
-        <tbody>${paramRows || `<tr><td colspan="${parameterVisibleColumnCount}">No parameters</td></tr>`}</tbody>
-      </table>`;
+            if (!contentRows) {
+                contentRows = `<tr><td colspan="${parameterVisibleColumnCount}">No parameters</td></tr>`;
+            }
         }
         else if (kids.length > 0) {
-            const childRows = kids
+            contentRows = kids
                 .map((child) => {
                 const ct = child.test;
                 const flag = normalizeFlag(child.flag);
@@ -421,27 +424,31 @@ function buildResultsReportHtml(input) {
                 const abnormal = isAbnormalFlag(flag);
                 const statusClass = abnormal ? (flag.startsWith('H') ? 'status-high' : 'status-low') : 'status-normal';
                 return `<tr class="${abnormal ? 'abnormal' : ''}">
-            <td style="width:${regularTableWidths.test};">${escapeHtml(ct?.abbreviation || ct?.name || '-')}</td>
-            <td style="width:${regularTableWidths.result};" class="nowrap">${escapeHtml(formatResultValue(child))}</td>
-            <td style="width:${regularTableWidths.unit};" class="nowrap">${escapeHtml(ct?.unit || '-')}</td>
-            ${showStatusColumn ? `<td style="width:${regularTableWidths.status};" class="${statusClass}">${escapeHtml(statusText)}</td>` : ''}
-            <td style="width:${regularTableWidths.reference};" class="reference-value">${escapeHtml(formatRange(child, order.patient?.sex ?? null, ageForRanges))}</td>
+            <td class="col-test" style="width:${regularTableWidths.test};">${escapeHtml(ct?.abbreviation || ct?.name || '-')}</td>
+            <td class="col-result nowrap" style="width:${regularTableWidths.result};">${escapeHtml(formatResultValue(child))}</td>
+            <td class="col-unit nowrap" style="width:${regularTableWidths.unit};">${escapeHtml(ct?.unit || '-')}</td>
+            ${showStatusColumn ? `<td class="col-status ${statusClass}" style="width:${regularTableWidths.status};">${escapeHtml(statusText)}</td>` : ''}
+            <td class="col-reference reference-value" style="width:${regularTableWidths.reference};">${escapeHtml(formatRange(child, order.patient?.sex ?? null, ageForRanges))}</td>
           </tr>`;
             })
                 .join('');
-            contentHtml = `<table class="panel-results-table">
-        <thead><tr>${regularHeaderCellsHtml}</tr></thead>
-        <tbody>${childRows}</tbody>
-      </table>`;
         }
         else {
-            contentHtml = `<table class="gue-gse-table"><tbody><tr><td colspan="${parameterVisibleColumnCount}">No data</td></tr></tbody></table>`;
+            contentRows = `<tr><td colspan="${isParamTable ? parameterVisibleColumnCount : regularVisibleColumnCount}">No data</td></tr>`;
         }
         panelPageSections.push(`
-      <div class="panel-section">
-        <div class="panel-page-title">${escapeHtml(testName)}</div>
-        ${contentHtml}
-      </div>`);
+      <table class="page-table ${isParamTable ? 'gue-gse-table' : 'panel-results-table'}">
+        ${isParamTable ? parameterColGroupHtml : regularColGroupHtml}
+        <thead>
+          <tr><td class="page-header-cell" colspan="${isParamTable ? parameterVisibleColumnCount : regularVisibleColumnCount}"><div class="page-header-space"></div></td></tr>
+          <tr><td class="panel-title-cell" colspan="${isParamTable ? parameterVisibleColumnCount : regularVisibleColumnCount}"><div class="panel-page-title">${escapeHtml(testName)}</div></td></tr>
+          <tr>${isParamTable ? parameterHeaderCellsHtml : regularHeaderCellsHtml}</tr>
+        </thead>
+        <tbody>
+          ${contentRows}
+        </tbody>
+        <tfoot><tr><td class="page-footer-cell" colspan="${isParamTable ? parameterVisibleColumnCount : regularVisibleColumnCount}"><div class="page-footer-space"></div></td></tr></tfoot>
+      </table>`);
     }
     const panelPagesHtml = panelPageSections
         .map((panelSectionHtml, index) => {
@@ -449,12 +456,10 @@ function buildResultsReportHtml(input) {
         const showComments = Boolean(commentsText) && index === panelPageSections.length - 1;
         return `
     <div class="page panel-page" style="page-break-before: ${shouldBreakBefore ? 'always' : 'auto'};">
-      ${pageHeaderHtml}
       <div class="content">
         ${panelSectionHtml}
         ${showComments ? `<div class="comments" style="margin-top:8px;font-size:11px;font-weight:700;"><strong>Comments:</strong> ${escapeHtml(commentsText)}</div>` : ''}
       </div>
-      ${pageFooterHtml}
     </div>`;
     })
         .join('');
@@ -564,16 +569,24 @@ function buildResultsReportHtml(input) {
         .map((item, index) => {
         return `
       <div class="page culture-page" style="page-break-before: always; break-before: page;">
-        ${pageHeaderHtml}
-        <div class="content">
-          <div class="panel-page-title">${escapeHtml(item.testName)}</div>
-          ${item.bodyHtml}
-          ${item.notes ? `<div class="culture-notes"><strong>Notes:</strong> ${escapeHtml(item.notes)}</div>` : ''}
-          ${commentsText && index === culturePageItems.length - 1 && panelPageSections.length === 0
+        <table class="page-table">
+          <thead><tr><td class="page-header-cell"><div class="page-header-space"></div></td></tr></thead>
+          <tbody>
+            <tr>
+              <td>
+                <div class="content">
+                  <div class="panel-page-title">${escapeHtml(item.testName)}</div>
+                  ${item.bodyHtml}
+                  ${item.notes ? `<div class="culture-notes"><strong>Notes:</strong> ${escapeHtml(item.notes)}</div>` : ''}
+                  ${commentsText && index === culturePageItems.length - 1 && panelPageSections.length === 0
             ? `<div class="comments" style="margin-top:8px;font-size:11px;font-weight:700;"><strong>Comments:</strong> ${escapeHtml(commentsText)}</div>`
             : ''}
-        </div>
-        ${pageFooterHtml}
+                </div>
+              </td>
+            </tr>
+          </tbody>
+          <tfoot><tr><td class="page-footer-cell"><div class="page-footer-space"></div></td></tr></tfoot>
+        </table>
       </div>`;
     })
         .join('');
@@ -610,32 +623,35 @@ function buildResultsReportHtml(input) {
                         ? (flag.startsWith('H') ? 'status-high' : 'status-low')
                         : 'status-normal';
                     return `<tr class="${abnormal ? 'abnormal' : ''}">
-            <td style="width:${regularTableWidths.test};">${escapeHtml(t?.abbreviation || t?.name || '-')}</td>
-            <td style="width:${regularTableWidths.result};" class="nowrap">${escapeHtml(formatResultValue(ot))}</td>
-            <td style="width:${regularTableWidths.unit};" class="nowrap">${escapeHtml(t?.unit || '-')}</td>
-            ${showStatusColumn ? `<td style="width:${regularTableWidths.status};" class="${statusClass}">${escapeHtml(statusText)}</td>` : ''}
-            <td style="width:${regularTableWidths.reference};" class="reference-value">${escapeHtml(formatRange(ot, order.patient?.sex ?? null, ageForRanges))}</td>
+            <td class="col-test" style="width:${regularTableWidths.test};">${escapeHtml(t?.abbreviation || t?.name || '-')}</td>
+            <td class="col-result nowrap" style="width:${regularTableWidths.result};">${escapeHtml(formatResultValue(ot))}</td>
+            <td class="col-unit nowrap" style="width:${regularTableWidths.unit};">${escapeHtml(t?.unit || '-')}</td>
+            ${showStatusColumn ? `<td class="col-status ${statusClass}" style="width:${regularTableWidths.status};">${escapeHtml(statusText)}</td>` : ''}
+            <td class="col-reference reference-value" style="width:${regularTableWidths.reference};">${escapeHtml(formatRange(ot, order.patient?.sex ?? null, ageForRanges))}</td>
           </tr>`;
                 })
                     .join('');
             }
             deptBodiesHtml += `<tbody class="regular-dept-block">${deptRowsHtml}</tbody>`;
         }
-        regularContentHtml = `<table class="regular-results-table">
-      <thead><tr>${regularHeaderCellsHtml}</tr></thead>
+        regularContentHtml = `<table class="page-table regular-results-table">
+      ${regularColGroupHtml}
+      <thead>
+        <tr><td class="page-header-cell" colspan="${regularVisibleColumnCount}"><div class="page-header-space"></div></td></tr>
+        <tr>${regularHeaderCellsHtml}</tr>
+      </thead>
       ${deptBodiesHtml}
+      <tfoot><tr><td class="page-footer-cell" colspan="${regularVisibleColumnCount}"><div class="page-footer-space"></div></td></tr></tfoot>
     </table>`;
     }
     let pagesHtml = '';
     if (regularTests.length > 0) {
         pagesHtml += `
     <div class="page">
-      ${pageHeaderHtml}
       <div class="content">
         ${regularContentHtml}
         ${commentsText && panelParents.length === 0 && cultureRegularTests.length === 0 ? `<div class="comments" style="margin-top:8px;font-size:11px;font-weight:700;"><strong>Comments:</strong> ${escapeHtml(commentsText)}</div>` : ''}
       </div>
-      ${pageFooterHtml}
     </div>`;
     }
     if (culturePagesHtml) {
@@ -647,11 +663,9 @@ function buildResultsReportHtml(input) {
     if (regularTests.length === 0 && panelParents.length === 0 && cultureRegularTests.length === 0) {
         pagesHtml += `
     <div class="page">
-      ${pageHeaderHtml}
       <div class="content">
         <div class="regular-empty-state ltr">No tests</div>
       </div>
-      ${pageFooterHtml}
     </div>`;
     }
     return `
@@ -660,11 +674,12 @@ function buildResultsReportHtml(input) {
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Laboratory Report</title>
+  <title>${escapeHtml(reportTitleText)}</title>
   <style>
     ${kurdishFontFace}
     @page { size: A4; margin: ${pageMarginTopMm}mm ${pageMarginRightMm}mm ${pageMarginBottomMm}mm ${pageMarginLeftMm}mm; }
     body {
+      --header-reserved-height: 92mm;
       --page-margin-top: ${pageMarginTopMm}mm;
       --page-margin-bottom: ${pageMarginBottomMm}mm;
       --content-x: ${contentMarginXMm}mm;
@@ -684,6 +699,11 @@ function buildResultsReportHtml(input) {
       --patient-info-padding-x: ${reportStyle.patientInfo.paddingXpx}px;
       --patient-info-font-family: ${patientInfoFontFamily};
       --patient-info-rtl-font-family: ${patientInfoRtlFontFamily};
+      --report-title-color: ${reportStyle.reportTitle.textColor};
+      --report-title-font-size: ${reportStyle.reportTitle.fontSizePx}px;
+      --report-title-align: ${reportStyle.reportTitle.textAlign};
+      --report-title-weight: ${reportStyle.reportTitle.bold ? 700 : 400};
+      --report-title-font-family: ${resultsFontFamily};
       --results-header-bg: ${reportStyle.resultsTable.headerBackgroundColor};
       --results-header-text-color: ${reportStyle.resultsTable.headerTextColor};
       --results-header-font-size: ${reportStyle.resultsTable.headerFontSizePx}px;
@@ -695,6 +715,26 @@ function buildResultsReportHtml(input) {
       --results-border-color: ${reportStyle.resultsTable.borderColor};
       --results-abnormal-row-bg: ${reportStyle.resultsTable.abnormalRowBackgroundColor};
       --results-reference-color: ${reportStyle.resultsTable.referenceValueColor};
+      --results-test-color: ${reportStyle.resultsTable.testColumn.textColor};
+      --results-test-font-size: ${reportStyle.resultsTable.testColumn.fontSizePx}px;
+      --results-test-align: ${reportStyle.resultsTable.testColumn.textAlign};
+      --results-test-weight: ${reportStyle.resultsTable.testColumn.bold ? 700 : 400};
+      --results-result-color: ${reportStyle.resultsTable.resultColumn.textColor};
+      --results-result-font-size: ${reportStyle.resultsTable.resultColumn.fontSizePx}px;
+      --results-result-align: ${reportStyle.resultsTable.resultColumn.textAlign};
+      --results-result-weight: ${reportStyle.resultsTable.resultColumn.bold ? 700 : 400};
+      --results-unit-color: ${reportStyle.resultsTable.unitColumn.textColor};
+      --results-unit-font-size: ${reportStyle.resultsTable.unitColumn.fontSizePx}px;
+      --results-unit-align: ${reportStyle.resultsTable.unitColumn.textAlign};
+      --results-unit-weight: ${reportStyle.resultsTable.unitColumn.bold ? 700 : 400};
+      --results-status-column-color: ${reportStyle.resultsTable.statusColumn.textColor};
+      --results-status-font-size: ${reportStyle.resultsTable.statusColumn.fontSizePx}px;
+      --results-status-align: ${reportStyle.resultsTable.statusColumn.textAlign};
+      --results-status-weight: ${reportStyle.resultsTable.statusColumn.bold ? 700 : 400};
+      --results-reference-column-color: ${reportStyle.resultsTable.referenceColumn.textColor};
+      --results-reference-font-size: ${reportStyle.resultsTable.referenceColumn.fontSizePx}px;
+      --results-reference-align: ${reportStyle.resultsTable.referenceColumn.textAlign};
+      --results-reference-weight: ${reportStyle.resultsTable.referenceColumn.bold ? 700 : 400};
       --results-dept-bg: ${reportStyle.resultsTable.departmentRowBackgroundColor};
       --results-dept-text-color: ${reportStyle.resultsTable.departmentRowTextColor};
       --results-dept-font-size: ${reportStyle.resultsTable.departmentRowFontSizePx}px;
@@ -754,7 +794,64 @@ function buildResultsReportHtml(input) {
     .ltr { direction: ltr; unicode-bidi: isolate; }
     .nowrap { white-space: nowrap; }
     .watermark { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%) rotate(-30deg); opacity: 0.08; width: min(68vw, 170mm); z-index: 0; pointer-events: none; }
-    .page { position: relative; z-index: 1; padding: 0 0 calc(var(--footer-height) + 4mm) 0; page-break-inside: auto; break-inside: auto; min-height: calc(297mm - var(--page-margin-top) - var(--page-margin-bottom)); box-sizing: border-box; }
+    .page-table {
+      width: 100%;
+      border-collapse: collapse;
+      table-layout: fixed;
+    }
+    .page + .page {
+      page-break-before: always;
+      break-before: page;
+    }
+    .regular-results-page,
+    .regular-results-page .regular-results-table {
+      page-break-inside: avoid;
+      break-inside: avoid;
+    }
+    .page-header-space { height: var(--header-reserved-height); display: block; }
+    .page-footer-space { height: var(--footer-height); display: block; }
+    .page-header-cell,
+    .page-footer-cell {
+      padding: 0;
+      border: 0;
+    }
+    .panel-title-cell {
+      padding: 0;
+      border: 0;
+      background: transparent;
+    }
+    thead { display: table-header-group; }
+    tfoot { display: table-footer-group; }
+    tbody { display: table-row-group; }
+
+    .report-header {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: var(--header-reserved-height);
+      padding: 0 var(--content-x) 0 var(--content-x);
+      background: white;
+      z-index: 1000;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+    .report-footer {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      padding: 0 var(--content-x) 5mm var(--content-x);
+      height: var(--footer-height);
+      display: flex;
+      align-items: flex-end;
+      justify-content: center;
+      text-align: center;
+      overflow: hidden;
+      background: white;
+      z-index: 1000;
+    }
     .patient-info,
     .content { margin-left: var(--content-x); margin-right: var(--content-x); }
     .banner-wrap {
@@ -790,7 +887,15 @@ function buildResultsReportHtml(input) {
     }
     .logo-wrap { flex: 0 0 120px; text-align: center; }
     .logo { width: 90px; height: auto; object-fit: contain; }
-    .report-title { text-align: center; font-size: 20px; font-weight: 800; text-decoration: underline; margin: 12px 0 10px; }
+    .report-title {
+      text-align: var(--report-title-align);
+      color: var(--report-title-color);
+      font-size: var(--report-title-font-size);
+      font-weight: var(--report-title-weight);
+      font-family: var(--report-title-font-family);
+      text-decoration: underline;
+      margin: 8px 0 6px;
+    }
     .patient-info {
       margin-top: 8px;
       margin-bottom: 8px;
@@ -860,6 +965,10 @@ function buildResultsReportHtml(input) {
       font-weight: var(--patient-info-value-weight);
       text-align: var(--patient-info-value-align);
     }
+    .patient-info--kurdish .info-item .info-value,
+    .patient-info--kurdish .name-value {
+      font-family: var(--patient-info-rtl-font-family);
+    }
     .rtl-text {
       direction: rtl;
       unicode-bidi: isolate;
@@ -882,6 +991,41 @@ function buildResultsReportHtml(input) {
       color: var(--results-body-text-color);
       font-size: var(--results-body-font-size);
       text-align: var(--results-cell-align);
+    }
+    th.col-test,
+    td.col-test { text-align: var(--results-test-align); }
+    td.col-test {
+      color: var(--results-test-color);
+      font-size: var(--results-test-font-size);
+      font-weight: var(--results-test-weight);
+    }
+    th.col-result,
+    td.col-result { text-align: var(--results-result-align); }
+    td.col-result {
+      color: var(--results-result-color);
+      font-size: var(--results-result-font-size);
+      font-weight: var(--results-result-weight);
+    }
+    th.col-unit,
+    td.col-unit { text-align: var(--results-unit-align); }
+    td.col-unit {
+      color: var(--results-unit-color);
+      font-size: var(--results-unit-font-size);
+      font-weight: var(--results-unit-weight);
+    }
+    th.col-status,
+    td.col-status { text-align: var(--results-status-align); }
+    td.col-status {
+      color: var(--results-status-column-color);
+      font-size: var(--results-status-font-size);
+      font-weight: var(--results-status-weight);
+    }
+    th.col-reference,
+    td.col-reference { text-align: var(--results-reference-align); }
+    td.col-reference {
+      color: var(--results-reference-column-color);
+      font-size: var(--results-reference-font-size);
+      font-weight: var(--results-reference-weight);
     }
     .regular-results-table,
     .panel-results-table,
@@ -934,12 +1078,12 @@ function buildResultsReportHtml(input) {
     }
     .status-low { color: var(--results-status-low-color); font-weight: 700; }
     .status-high { color: var(--results-status-high-color); font-weight: 700; }
-    .status-normal { color: var(--results-status-normal-color); }
-    .reference-value { color: var(--results-reference-color); white-space: pre-wrap; word-break: break-word; }
+    .status-normal { color: var(--results-status-normal-color); font-weight: var(--results-status-weight); }
+    .reference-value { color: var(--results-reference-column-color); white-space: pre-wrap; word-break: break-word; }
     .param-abnormal { color: #c00; font-size: 11px; font-weight: 600; margin-left: 4px; }
     tr.abnormal td { background-color: var(--results-abnormal-row-bg); }
     .panel-section { margin-top: 20px; }
-    .panel-page-title { font-size: 18px; font-weight: 800; margin-bottom: 12px; border-bottom: 2px solid #222; padding-bottom: 6px; }
+    .panel-page-title { font-size: 18px; font-weight: 800; margin: 0 0 12px; border-bottom: 2px solid #222; padding-bottom: 6px; }
     .panel-page { page-break-inside: auto; break-inside: auto; }
     .panel-page .content { padding: 0; overflow: visible; }
     .panel-page .panel-section { page-break-inside: auto; break-inside: auto; }
@@ -1080,24 +1224,11 @@ function buildResultsReportHtml(input) {
       text-align: var(--culture-notes-align);
     }
     ${rowStripeCss}
-    .report-footer {
-      position: absolute;
-      left: 50%;
-      transform: translateX(-50%);
-      width: calc(100% - (var(--content-x) * 2));
-      bottom: 1mm;
-      height: var(--footer-height);
-      display: flex;
-      align-items: flex-end;
-      justify-content: center;
-      text-align: center;
-      overflow: hidden;
-    }
     .report-footer-placeholder { min-height: var(--footer-height); }
     .footer-image {
       width: 100%;
       height: 100%;
-      object-fit: cover;
+      object-fit: contain;
       object-position: center bottom;
       display: block;
     }
@@ -1106,7 +1237,9 @@ function buildResultsReportHtml(input) {
 </head>
 <body>
   ${watermarkUrlAttr ? `<img ${watermarkUrlAttr} class="watermark" alt="Watermark" />` : ''}
+  ${pageHeaderHtml}
   ${pagesHtml}
+  ${pageFooterHtml}
 </body>
 </html>
   `;

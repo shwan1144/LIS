@@ -60,6 +60,21 @@ export interface ReportPatientInfoStyle {
   paddingXpx: number;
 }
 
+export interface ReportColumnStyle {
+  textColor: string;
+  fontSizePx: number;
+  textAlign: ReportTextAlign;
+  bold: boolean;
+}
+
+export interface ReportTitleStyle {
+  text: string;
+  textColor: string;
+  fontSizePx: number;
+  textAlign: ReportTextAlign;
+  bold: boolean;
+}
+
 export interface ReportResultsTableStyle {
   headerBackgroundColor: string;
   headerTextColor: string;
@@ -92,6 +107,11 @@ export interface ReportResultsTableStyle {
   regularRowBreak: 'auto' | 'avoid';
   panelTableBreak: 'auto' | 'avoid';
   panelRowBreak: 'auto' | 'avoid';
+  testColumn: ReportColumnStyle;
+  resultColumn: ReportColumnStyle;
+  unitColumn: ReportColumnStyle;
+  statusColumn: ReportColumnStyle;
+  referenceColumn: ReportColumnStyle;
 }
 
 export interface ReportPageLayoutStyle {
@@ -136,6 +156,7 @@ export interface ReportCultureSectionStyle {
 export interface ReportStyleConfig {
   version: 1;
   patientInfo: ReportPatientInfoStyle;
+  reportTitle: ReportTitleStyle;
   resultsTable: ReportResultsTableStyle;
   pageLayout: ReportPageLayoutStyle;
   cultureSection: ReportCultureSectionStyle;
@@ -158,6 +179,13 @@ export const DEFAULT_REPORT_STYLE_V1: ReportStyleConfig = {
     borderRadiusPx: 6,
     paddingYpx: 10,
     paddingXpx: 12,
+  },
+  reportTitle: {
+    text: 'Laboratory Report',
+    textColor: '#111111',
+    fontSizePx: 20,
+    textAlign: 'center',
+    bold: true,
   },
   resultsTable: {
     headerBackgroundColor: '#F2F2F2',
@@ -191,6 +219,36 @@ export const DEFAULT_REPORT_STYLE_V1: ReportStyleConfig = {
     regularRowBreak: 'avoid',
     panelTableBreak: 'auto',
     panelRowBreak: 'avoid',
+    testColumn: {
+      textColor: '#333333',
+      fontSizePx: 12,
+      textAlign: 'left',
+      bold: false,
+    },
+    resultColumn: {
+      textColor: '#333333',
+      fontSizePx: 12,
+      textAlign: 'left',
+      bold: false,
+    },
+    unitColumn: {
+      textColor: '#333333',
+      fontSizePx: 12,
+      textAlign: 'left',
+      bold: false,
+    },
+    statusColumn: {
+      textColor: '#333333',
+      fontSizePx: 12,
+      textAlign: 'left',
+      bold: false,
+    },
+    referenceColumn: {
+      textColor: '#333333',
+      fontSizePx: 12,
+      textAlign: 'left',
+      bold: false,
+    },
   },
   pageLayout: {
     pageMarginTopMm: 3,
@@ -235,6 +293,26 @@ const HEX_COLOR_REGEX = /^#(?:[0-9A-Fa-f]{6}|[0-9A-Fa-f]{8})$/;
 const TEXT_ALIGN_SET = new Set<ReportTextAlign>(['left', 'center', 'right']);
 const BREAK_BEHAVIOR_SET = new Set<'auto' | 'avoid'>(['auto', 'avoid']);
 const REPORT_FONT_FAMILY_SET = new Set<ReportFontFamily>(REPORT_FONT_FAMILY_VALUES);
+const REPORT_COLUMN_KEYS: Array<keyof ReportColumnStyle> = [
+  'textColor',
+  'fontSizePx',
+  'textAlign',
+  'bold',
+];
+const REPORT_TITLE_KEYS: Array<keyof ReportTitleStyle> = [
+  'text',
+  'textColor',
+  'fontSizePx',
+  'textAlign',
+  'bold',
+];
+const RESULTS_TABLE_COLUMN_STYLE_KEYS = [
+  'testColumn',
+  'resultColumn',
+  'unitColumn',
+  'statusColumn',
+  'referenceColumn',
+] as const satisfies readonly (keyof ReportResultsTableStyle)[];
 const PATIENT_INFO_KEYS: Array<keyof ReportPatientInfoStyle> = [
   'backgroundColor',
   'borderColor',
@@ -283,6 +361,19 @@ const RESULTS_TABLE_KEYS: Array<keyof ReportResultsTableStyle> = [
   'regularRowBreak',
   'panelTableBreak',
   'panelRowBreak',
+  'testColumn',
+  'resultColumn',
+  'unitColumn',
+  'statusColumn',
+  'referenceColumn',
+];
+const REPORT_STYLE_KEYS: Array<keyof ReportStyleConfig> = [
+  'version',
+  'patientInfo',
+  'reportTitle',
+  'resultsTable',
+  'pageLayout',
+  'cultureSection',
 ];
 const PAGE_LAYOUT_KEYS: Array<keyof ReportPageLayoutStyle> = [
   'pageMarginTopMm',
@@ -361,6 +452,17 @@ function assertIntRange(value: unknown, min: number, max: number, fieldName: str
   return value;
 }
 
+function assertStringLength(value: unknown, min: number, max: number, fieldName: string): string {
+  if (typeof value !== 'string') {
+    throw new Error(`${fieldName} must be a string`);
+  }
+  const normalized = value.trim();
+  if (normalized.length < min || normalized.length > max) {
+    throw new Error(`${fieldName} must be between ${min} and ${max} characters`);
+  }
+  return normalized;
+}
+
 function assertFromSet<T extends string>(value: unknown, set: Set<T>, fieldName: string): T {
   if (typeof value !== 'string' || !set.has(value as T)) {
     throw new Error(`${fieldName} must be one of: ${Array.from(set).join(', ')}`);
@@ -375,16 +477,35 @@ function assertBoolean(value: unknown, fieldName: string): boolean {
   return value;
 }
 
+function validateColumnStyle(value: unknown, fieldName: string): ReportColumnStyle {
+  const columnObj = assertObject(value, fieldName);
+  assertExactKeys(columnObj, REPORT_COLUMN_KEYS, fieldName);
+  return {
+    textColor: assertColor(columnObj.textColor, `${fieldName}.textColor`),
+    fontSizePx: assertIntRange(columnObj.fontSizePx, 9, 16, `${fieldName}.fontSizePx`),
+    textAlign: assertFromSet(columnObj.textAlign, TEXT_ALIGN_SET, `${fieldName}.textAlign`),
+    bold: assertBoolean(columnObj.bold, `${fieldName}.bold`),
+  };
+}
+
+function validateReportTitleStyle(value: unknown, fieldName: string): ReportTitleStyle {
+  const titleObj = assertObject(value, fieldName);
+  assertExactKeys(titleObj, REPORT_TITLE_KEYS, fieldName);
+  return {
+    text: assertStringLength(titleObj.text, 0, 80, `${fieldName}.text`),
+    textColor: assertColor(titleObj.textColor, `${fieldName}.textColor`),
+    fontSizePx: assertIntRange(titleObj.fontSizePx, 14, 28, `${fieldName}.fontSizePx`),
+    textAlign: assertFromSet(titleObj.textAlign, TEXT_ALIGN_SET, `${fieldName}.textAlign`),
+    bold: assertBoolean(titleObj.bold, `${fieldName}.bold`),
+  };
+}
+
 export function validateAndNormalizeReportStyleConfig(
   value: unknown,
   fieldName = 'reportStyle',
 ): ReportStyleConfig {
   const styleObj = assertObject(value, fieldName);
-  assertExactKeys(
-    styleObj,
-    ['version', 'patientInfo', 'resultsTable', 'pageLayout', 'cultureSection'],
-    fieldName,
-  );
+  assertExactKeys(styleObj, REPORT_STYLE_KEYS, fieldName);
 
   const version = styleObj.version;
   if (version !== 1) {
@@ -446,6 +567,8 @@ export function validateAndNormalizeReportStyleConfig(
   if (![400, 500, 600, 700].includes(patientInfo.valueFontWeight)) {
     throw new Error(`${fieldName}.patientInfo.valueFontWeight must be one of: 400, 500, 600, 700`);
   }
+
+  const reportTitle = validateReportTitleStyle(styleObj.reportTitle, `${fieldName}.reportTitle`);
 
   const resultsObj = assertObject(styleObj.resultsTable, `${fieldName}.resultsTable`);
   assertExactKeys(resultsObj, RESULTS_TABLE_KEYS, `${fieldName}.resultsTable`);
@@ -561,6 +684,14 @@ export function validateAndNormalizeReportStyleConfig(
       resultsObj.panelRowBreak,
       BREAK_BEHAVIOR_SET,
       `${fieldName}.resultsTable.panelRowBreak`,
+    ),
+    testColumn: validateColumnStyle(resultsObj.testColumn, `${fieldName}.resultsTable.testColumn`),
+    resultColumn: validateColumnStyle(resultsObj.resultColumn, `${fieldName}.resultsTable.resultColumn`),
+    unitColumn: validateColumnStyle(resultsObj.unitColumn, `${fieldName}.resultsTable.unitColumn`),
+    statusColumn: validateColumnStyle(resultsObj.statusColumn, `${fieldName}.resultsTable.statusColumn`),
+    referenceColumn: validateColumnStyle(
+      resultsObj.referenceColumn,
+      `${fieldName}.resultsTable.referenceColumn`,
     ),
   };
 
@@ -732,6 +863,7 @@ export function validateAndNormalizeReportStyleConfig(
   return {
     version: 1,
     patientInfo,
+    reportTitle,
     resultsTable,
     pageLayout,
     cultureSection,
@@ -761,6 +893,10 @@ export function resolveReportStyleConfig(value: unknown): ReportStyleConfig {
       raw.patientInfo && typeof raw.patientInfo === 'object' && !Array.isArray(raw.patientInfo)
         ? (raw.patientInfo as Record<string, unknown>)
         : {};
+    const rawReportTitle =
+      raw.reportTitle && typeof raw.reportTitle === 'object' && !Array.isArray(raw.reportTitle)
+        ? (raw.reportTitle as Record<string, unknown>)
+        : {};
     const rawResultsTable =
       raw.resultsTable && typeof raw.resultsTable === 'object' && !Array.isArray(raw.resultsTable)
         ? (raw.resultsTable as Record<string, unknown>)
@@ -783,13 +919,77 @@ export function resolveReportStyleConfig(value: unknown): ReportStyleConfig {
       }
     }
 
+    const upgradedReportTitle: Record<string, unknown> = {
+      ...DEFAULT_REPORT_STYLE_V1.reportTitle,
+    };
+    for (const key of REPORT_TITLE_KEYS) {
+      if (key in rawReportTitle) {
+        upgradedReportTitle[key] = rawReportTitle[key];
+      }
+    }
+
     const upgradedResultsTable: Record<string, unknown> = {
       ...DEFAULT_REPORT_STYLE_V1.resultsTable,
     };
     for (const key of RESULTS_TABLE_KEYS) {
+      if ((RESULTS_TABLE_COLUMN_STYLE_KEYS as readonly string[]).includes(key)) {
+        continue;
+      }
       if (key in rawResultsTable) {
         upgradedResultsTable[key] = rawResultsTable[key];
       }
+    }
+
+    const derivedColumnDefaults: Record<
+      (typeof RESULTS_TABLE_COLUMN_STYLE_KEYS)[number],
+      ReportColumnStyle
+    > = {
+      testColumn: {
+        ...DEFAULT_REPORT_STYLE_V1.resultsTable.testColumn,
+        textColor: String(upgradedResultsTable.bodyTextColor),
+        fontSizePx: Number(upgradedResultsTable.bodyFontSizePx),
+        textAlign: upgradedResultsTable.cellTextAlign as ReportTextAlign,
+      },
+      resultColumn: {
+        ...DEFAULT_REPORT_STYLE_V1.resultsTable.resultColumn,
+        textColor: String(upgradedResultsTable.bodyTextColor),
+        fontSizePx: Number(upgradedResultsTable.bodyFontSizePx),
+        textAlign: upgradedResultsTable.cellTextAlign as ReportTextAlign,
+      },
+      unitColumn: {
+        ...DEFAULT_REPORT_STYLE_V1.resultsTable.unitColumn,
+        textColor: String(upgradedResultsTable.bodyTextColor),
+        fontSizePx: Number(upgradedResultsTable.bodyFontSizePx),
+        textAlign: upgradedResultsTable.cellTextAlign as ReportTextAlign,
+      },
+      statusColumn: {
+        ...DEFAULT_REPORT_STYLE_V1.resultsTable.statusColumn,
+        textColor: String(upgradedResultsTable.bodyTextColor),
+        fontSizePx: Number(upgradedResultsTable.bodyFontSizePx),
+        textAlign: upgradedResultsTable.cellTextAlign as ReportTextAlign,
+      },
+      referenceColumn: {
+        ...DEFAULT_REPORT_STYLE_V1.resultsTable.referenceColumn,
+        textColor: String(upgradedResultsTable.referenceValueColor),
+        fontSizePx: Number(upgradedResultsTable.bodyFontSizePx),
+        textAlign: upgradedResultsTable.cellTextAlign as ReportTextAlign,
+      },
+    };
+
+    for (const key of RESULTS_TABLE_COLUMN_STYLE_KEYS) {
+      const rawColumn =
+        rawResultsTable[key] && typeof rawResultsTable[key] === 'object' && !Array.isArray(rawResultsTable[key])
+          ? (rawResultsTable[key] as Record<string, unknown>)
+          : {};
+      const upgradedColumn: Record<string, unknown> = {
+        ...derivedColumnDefaults[key],
+      };
+      for (const columnKey of REPORT_COLUMN_KEYS) {
+        if (columnKey in rawColumn) {
+          upgradedColumn[columnKey] = rawColumn[columnKey];
+        }
+      }
+      upgradedResultsTable[key] = upgradedColumn;
     }
 
     const upgradedPageLayout: Record<string, unknown> = {
@@ -814,6 +1014,7 @@ export function resolveReportStyleConfig(value: unknown): ReportStyleConfig {
       return validateAndNormalizeReportStyleConfig({
         version: 1,
         patientInfo: upgradedPatientInfo,
+        reportTitle: upgradedReportTitle,
         resultsTable: upgradedResultsTable,
         pageLayout: upgradedPageLayout,
         cultureSection: upgradedCultureSection,

@@ -53,6 +53,13 @@ exports.DEFAULT_REPORT_STYLE_V1 = {
         paddingYpx: 10,
         paddingXpx: 12,
     },
+    reportTitle: {
+        text: 'Laboratory Report',
+        textColor: '#111111',
+        fontSizePx: 20,
+        textAlign: 'center',
+        bold: true,
+    },
     resultsTable: {
         headerBackgroundColor: '#F2F2F2',
         headerTextColor: '#333333',
@@ -85,6 +92,36 @@ exports.DEFAULT_REPORT_STYLE_V1 = {
         regularRowBreak: 'avoid',
         panelTableBreak: 'auto',
         panelRowBreak: 'avoid',
+        testColumn: {
+            textColor: '#333333',
+            fontSizePx: 12,
+            textAlign: 'left',
+            bold: false,
+        },
+        resultColumn: {
+            textColor: '#333333',
+            fontSizePx: 12,
+            textAlign: 'left',
+            bold: false,
+        },
+        unitColumn: {
+            textColor: '#333333',
+            fontSizePx: 12,
+            textAlign: 'left',
+            bold: false,
+        },
+        statusColumn: {
+            textColor: '#333333',
+            fontSizePx: 12,
+            textAlign: 'left',
+            bold: false,
+        },
+        referenceColumn: {
+            textColor: '#333333',
+            fontSizePx: 12,
+            textAlign: 'left',
+            bold: false,
+        },
     },
     pageLayout: {
         pageMarginTopMm: 3,
@@ -128,6 +165,26 @@ const HEX_COLOR_REGEX = /^#(?:[0-9A-Fa-f]{6}|[0-9A-Fa-f]{8})$/;
 const TEXT_ALIGN_SET = new Set(['left', 'center', 'right']);
 const BREAK_BEHAVIOR_SET = new Set(['auto', 'avoid']);
 const REPORT_FONT_FAMILY_SET = new Set(exports.REPORT_FONT_FAMILY_VALUES);
+const REPORT_COLUMN_KEYS = [
+    'textColor',
+    'fontSizePx',
+    'textAlign',
+    'bold',
+];
+const REPORT_TITLE_KEYS = [
+    'text',
+    'textColor',
+    'fontSizePx',
+    'textAlign',
+    'bold',
+];
+const RESULTS_TABLE_COLUMN_STYLE_KEYS = [
+    'testColumn',
+    'resultColumn',
+    'unitColumn',
+    'statusColumn',
+    'referenceColumn',
+];
 const PATIENT_INFO_KEYS = [
     'backgroundColor',
     'borderColor',
@@ -176,6 +233,19 @@ const RESULTS_TABLE_KEYS = [
     'regularRowBreak',
     'panelTableBreak',
     'panelRowBreak',
+    'testColumn',
+    'resultColumn',
+    'unitColumn',
+    'statusColumn',
+    'referenceColumn',
+];
+const REPORT_STYLE_KEYS = [
+    'version',
+    'patientInfo',
+    'reportTitle',
+    'resultsTable',
+    'pageLayout',
+    'cultureSection',
 ];
 const PAGE_LAYOUT_KEYS = [
     'pageMarginTopMm',
@@ -245,6 +315,16 @@ function assertIntRange(value, min, max, fieldName) {
     }
     return value;
 }
+function assertStringLength(value, min, max, fieldName) {
+    if (typeof value !== 'string') {
+        throw new Error(`${fieldName} must be a string`);
+    }
+    const normalized = value.trim();
+    if (normalized.length < min || normalized.length > max) {
+        throw new Error(`${fieldName} must be between ${min} and ${max} characters`);
+    }
+    return normalized;
+}
 function assertFromSet(value, set, fieldName) {
     if (typeof value !== 'string' || !set.has(value)) {
         throw new Error(`${fieldName} must be one of: ${Array.from(set).join(', ')}`);
@@ -257,9 +337,30 @@ function assertBoolean(value, fieldName) {
     }
     return value;
 }
+function validateColumnStyle(value, fieldName) {
+    const columnObj = assertObject(value, fieldName);
+    assertExactKeys(columnObj, REPORT_COLUMN_KEYS, fieldName);
+    return {
+        textColor: assertColor(columnObj.textColor, `${fieldName}.textColor`),
+        fontSizePx: assertIntRange(columnObj.fontSizePx, 9, 16, `${fieldName}.fontSizePx`),
+        textAlign: assertFromSet(columnObj.textAlign, TEXT_ALIGN_SET, `${fieldName}.textAlign`),
+        bold: assertBoolean(columnObj.bold, `${fieldName}.bold`),
+    };
+}
+function validateReportTitleStyle(value, fieldName) {
+    const titleObj = assertObject(value, fieldName);
+    assertExactKeys(titleObj, REPORT_TITLE_KEYS, fieldName);
+    return {
+        text: assertStringLength(titleObj.text, 0, 80, `${fieldName}.text`),
+        textColor: assertColor(titleObj.textColor, `${fieldName}.textColor`),
+        fontSizePx: assertIntRange(titleObj.fontSizePx, 14, 28, `${fieldName}.fontSizePx`),
+        textAlign: assertFromSet(titleObj.textAlign, TEXT_ALIGN_SET, `${fieldName}.textAlign`),
+        bold: assertBoolean(titleObj.bold, `${fieldName}.bold`),
+    };
+}
 function validateAndNormalizeReportStyleConfig(value, fieldName = 'reportStyle') {
     const styleObj = assertObject(value, fieldName);
-    assertExactKeys(styleObj, ['version', 'patientInfo', 'resultsTable', 'pageLayout', 'cultureSection'], fieldName);
+    assertExactKeys(styleObj, REPORT_STYLE_KEYS, fieldName);
     const version = styleObj.version;
     if (version !== 1) {
         throw new Error(`${fieldName}.version must be 1`);
@@ -288,6 +389,7 @@ function validateAndNormalizeReportStyleConfig(value, fieldName = 'reportStyle')
     if (![400, 500, 600, 700].includes(patientInfo.valueFontWeight)) {
         throw new Error(`${fieldName}.patientInfo.valueFontWeight must be one of: 400, 500, 600, 700`);
     }
+    const reportTitle = validateReportTitleStyle(styleObj.reportTitle, `${fieldName}.reportTitle`);
     const resultsObj = assertObject(styleObj.resultsTable, `${fieldName}.resultsTable`);
     assertExactKeys(resultsObj, RESULTS_TABLE_KEYS, `${fieldName}.resultsTable`);
     const resultsTable = {
@@ -322,6 +424,11 @@ function validateAndNormalizeReportStyleConfig(value, fieldName = 'reportStyle')
         regularRowBreak: assertFromSet(resultsObj.regularRowBreak, BREAK_BEHAVIOR_SET, `${fieldName}.resultsTable.regularRowBreak`),
         panelTableBreak: assertFromSet(resultsObj.panelTableBreak, BREAK_BEHAVIOR_SET, `${fieldName}.resultsTable.panelTableBreak`),
         panelRowBreak: assertFromSet(resultsObj.panelRowBreak, BREAK_BEHAVIOR_SET, `${fieldName}.resultsTable.panelRowBreak`),
+        testColumn: validateColumnStyle(resultsObj.testColumn, `${fieldName}.resultsTable.testColumn`),
+        resultColumn: validateColumnStyle(resultsObj.resultColumn, `${fieldName}.resultsTable.resultColumn`),
+        unitColumn: validateColumnStyle(resultsObj.unitColumn, `${fieldName}.resultsTable.unitColumn`),
+        statusColumn: validateColumnStyle(resultsObj.statusColumn, `${fieldName}.resultsTable.statusColumn`),
+        referenceColumn: validateColumnStyle(resultsObj.referenceColumn, `${fieldName}.resultsTable.referenceColumn`),
     };
     const pageLayoutObj = assertObject(styleObj.pageLayout, `${fieldName}.pageLayout`);
     assertExactKeys(pageLayoutObj, PAGE_LAYOUT_KEYS, `${fieldName}.pageLayout`);
@@ -367,6 +474,7 @@ function validateAndNormalizeReportStyleConfig(value, fieldName = 'reportStyle')
     return {
         version: 1,
         patientInfo,
+        reportTitle,
         resultsTable,
         pageLayout,
         cultureSection,
@@ -396,6 +504,9 @@ function resolveReportStyleConfig(value) {
         const rawPatientInfo = raw.patientInfo && typeof raw.patientInfo === 'object' && !Array.isArray(raw.patientInfo)
             ? raw.patientInfo
             : {};
+        const rawReportTitle = raw.reportTitle && typeof raw.reportTitle === 'object' && !Array.isArray(raw.reportTitle)
+            ? raw.reportTitle
+            : {};
         const rawResultsTable = raw.resultsTable && typeof raw.resultsTable === 'object' && !Array.isArray(raw.resultsTable)
             ? raw.resultsTable
             : {};
@@ -413,13 +524,70 @@ function resolveReportStyleConfig(value) {
                 upgradedPatientInfo[key] = rawPatientInfo[key];
             }
         }
+        const upgradedReportTitle = {
+            ...exports.DEFAULT_REPORT_STYLE_V1.reportTitle,
+        };
+        for (const key of REPORT_TITLE_KEYS) {
+            if (key in rawReportTitle) {
+                upgradedReportTitle[key] = rawReportTitle[key];
+            }
+        }
         const upgradedResultsTable = {
             ...exports.DEFAULT_REPORT_STYLE_V1.resultsTable,
         };
         for (const key of RESULTS_TABLE_KEYS) {
+            if (RESULTS_TABLE_COLUMN_STYLE_KEYS.includes(key)) {
+                continue;
+            }
             if (key in rawResultsTable) {
                 upgradedResultsTable[key] = rawResultsTable[key];
             }
+        }
+        const derivedColumnDefaults = {
+            testColumn: {
+                ...exports.DEFAULT_REPORT_STYLE_V1.resultsTable.testColumn,
+                textColor: String(upgradedResultsTable.bodyTextColor),
+                fontSizePx: Number(upgradedResultsTable.bodyFontSizePx),
+                textAlign: upgradedResultsTable.cellTextAlign,
+            },
+            resultColumn: {
+                ...exports.DEFAULT_REPORT_STYLE_V1.resultsTable.resultColumn,
+                textColor: String(upgradedResultsTable.bodyTextColor),
+                fontSizePx: Number(upgradedResultsTable.bodyFontSizePx),
+                textAlign: upgradedResultsTable.cellTextAlign,
+            },
+            unitColumn: {
+                ...exports.DEFAULT_REPORT_STYLE_V1.resultsTable.unitColumn,
+                textColor: String(upgradedResultsTable.bodyTextColor),
+                fontSizePx: Number(upgradedResultsTable.bodyFontSizePx),
+                textAlign: upgradedResultsTable.cellTextAlign,
+            },
+            statusColumn: {
+                ...exports.DEFAULT_REPORT_STYLE_V1.resultsTable.statusColumn,
+                textColor: String(upgradedResultsTable.bodyTextColor),
+                fontSizePx: Number(upgradedResultsTable.bodyFontSizePx),
+                textAlign: upgradedResultsTable.cellTextAlign,
+            },
+            referenceColumn: {
+                ...exports.DEFAULT_REPORT_STYLE_V1.resultsTable.referenceColumn,
+                textColor: String(upgradedResultsTable.referenceValueColor),
+                fontSizePx: Number(upgradedResultsTable.bodyFontSizePx),
+                textAlign: upgradedResultsTable.cellTextAlign,
+            },
+        };
+        for (const key of RESULTS_TABLE_COLUMN_STYLE_KEYS) {
+            const rawColumn = rawResultsTable[key] && typeof rawResultsTable[key] === 'object' && !Array.isArray(rawResultsTable[key])
+                ? rawResultsTable[key]
+                : {};
+            const upgradedColumn = {
+                ...derivedColumnDefaults[key],
+            };
+            for (const columnKey of REPORT_COLUMN_KEYS) {
+                if (columnKey in rawColumn) {
+                    upgradedColumn[columnKey] = rawColumn[columnKey];
+                }
+            }
+            upgradedResultsTable[key] = upgradedColumn;
         }
         const upgradedPageLayout = {
             ...exports.DEFAULT_REPORT_STYLE_V1.pageLayout,
@@ -441,6 +609,7 @@ function resolveReportStyleConfig(value) {
             return validateAndNormalizeReportStyleConfig({
                 version: 1,
                 patientInfo: upgradedPatientInfo,
+                reportTitle: upgradedReportTitle,
                 resultsTable: upgradedResultsTable,
                 pageLayout: upgradedPageLayout,
                 cultureSection: upgradedCultureSection,

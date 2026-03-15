@@ -134,6 +134,21 @@ export interface ReportPatientInfoStyleDto {
   paddingXpx: number;
 }
 
+export interface ReportColumnStyleDto {
+  textColor: string;
+  fontSizePx: number;
+  textAlign: ReportTextAlign;
+  bold: boolean;
+}
+
+export interface ReportTitleStyleDto {
+  text: string;
+  textColor: string;
+  fontSizePx: number;
+  textAlign: ReportTextAlign;
+  bold: boolean;
+}
+
 export interface ReportResultsTableStyleDto {
   headerBackgroundColor: string;
   headerTextColor: string;
@@ -166,6 +181,11 @@ export interface ReportResultsTableStyleDto {
   regularRowBreak: 'auto' | 'avoid';
   panelTableBreak: 'auto' | 'avoid';
   panelRowBreak: 'auto' | 'avoid';
+  testColumn: ReportColumnStyleDto;
+  resultColumn: ReportColumnStyleDto;
+  unitColumn: ReportColumnStyleDto;
+  statusColumn: ReportColumnStyleDto;
+  referenceColumn: ReportColumnStyleDto;
 }
 
 export interface ReportPageLayoutStyleDto {
@@ -210,6 +230,7 @@ export interface ReportCultureSectionStyleDto {
 export interface ReportStyleDto {
   version: 1;
   patientInfo: ReportPatientInfoStyleDto;
+  reportTitle: ReportTitleStyleDto;
   resultsTable: ReportResultsTableStyleDto;
   pageLayout: ReportPageLayoutStyleDto;
   cultureSection: ReportCultureSectionStyleDto;

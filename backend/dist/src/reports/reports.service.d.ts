@@ -62,6 +62,7 @@ export declare class ReportsService implements OnModuleInit, OnModuleDestroy {
     private readonly labRepo;
     private readonly userRepo;
     private readonly auditLogRepo;
+    private static readonly REPORT_PDF_LAYOUT_VERSION;
     private readonly logger;
     private browserPromise;
     private readonly pdfCache;

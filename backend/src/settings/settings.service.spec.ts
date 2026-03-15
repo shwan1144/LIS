@@ -226,12 +226,18 @@ describe('SettingsService referringDoctors', () => {
       showDepartmentRow: _showDepartmentRow,
       showCategoryRow: _showCategoryRow,
       fontFamily: _resultsFontFamily,
+      testColumn: _testColumn,
+      resultColumn: _resultColumn,
+      unitColumn: _unitColumn,
+      statusColumn: _statusColumn,
+      referenceColumn: _referenceColumn,
       ...legacyResultsTable
     } = DEFAULT_REPORT_STYLE_V1.resultsTable;
     const { fontFamily: _patientFontFamily, ...legacyPatientInfo } =
       DEFAULT_REPORT_STYLE_V1.patientInfo;
+    const { reportTitle: _reportTitle, ...legacyRootStyle } = DEFAULT_REPORT_STYLE_V1;
     const legacyStyle = {
-      ...DEFAULT_REPORT_STYLE_V1,
+      ...legacyRootStyle,
       patientInfo: legacyPatientInfo,
       resultsTable: legacyResultsTable,
     };
@@ -252,9 +258,13 @@ describe('SettingsService referringDoctors', () => {
     expect(result.reportStyle?.resultsTable.fontFamily).toBe(
       DEFAULT_REPORT_STYLE_V1.resultsTable.fontFamily,
     );
+    expect(result.reportStyle?.reportTitle).toEqual(DEFAULT_REPORT_STYLE_V1.reportTitle);
     expect(result.reportStyle?.resultsTable.showStatusColumn).toBe(true);
     expect(result.reportStyle?.resultsTable.showDepartmentRow).toBe(true);
     expect(result.reportStyle?.resultsTable.showCategoryRow).toBe(true);
+    expect(result.reportStyle?.resultsTable.testColumn).toEqual(
+      DEFAULT_REPORT_STYLE_V1.resultsTable.testColumn,
+    );
   });
 
   it('persists and reads back reportStyle when DB stores it as JSON string', async () => {

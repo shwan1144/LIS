@@ -300,9 +300,9 @@ describe('buildResultsReportHtml panel page isolation', () => {
     const html = buildRegularResultsHtml();
 
     const regularHeaderRow =
-      '<thead><tr><th style="width:28%;">Test</th><th style="width:14%;">Result</th><th style="width:14%;">Unit</th><th style="width:14%;">Status</th><th style="width:30%;">Reference Value</th></tr></thead>';
+      '<tr><th class="col-test" style="width:32%;">Test</th><th class="col-result" style="width:12%;">Result</th><th class="col-unit" style="width:10%;">Unit</th><th class="col-status" style="width:10%;">Status</th><th class="col-reference" style="width:36%;">Reference Value</th></tr>';
 
-    expect(countMatches(html, 'class="regular-results-table"')).toBe(1);
+    expect(countMatches(html, 'class="page-table regular-results-table"')).toBe(1);
     expect(countMatches(html, regularHeaderRow)).toBe(1);
     expect(countMatches(html, 'class="regular-dept-block"')).toBe(2);
     expect(html).toContain('class="dept-row"');
@@ -313,11 +313,11 @@ describe('buildResultsReportHtml panel page isolation', () => {
     const html = buildRegularResultsHtml({ showStatusColumn: false });
 
     const regularHeaderRow =
-      '<thead><tr><th style="width:28%;">Test</th><th style="width:18%;">Result</th><th style="width:18%;">Unit</th><th style="width:36%;">Reference Value</th></tr></thead>';
+      '<tr><th class="col-test" style="width:34%;">Test</th><th class="col-result" style="width:14%;">Result</th><th class="col-unit" style="width:12%;">Unit</th><th class="col-reference" style="width:40%;">Reference Value</th></tr>';
 
-    expect(countMatches(html, 'class="regular-results-table"')).toBe(1);
+    expect(countMatches(html, 'class="page-table regular-results-table"')).toBe(1);
     expect(countMatches(html, regularHeaderRow)).toBe(1);
-    expect(html).not.toContain('<th style="width:14%;">Status</th>');
+    expect(html).not.toContain('<th class="col-status" style="width:10%;">Status</th>');
     expect(html).toContain('<tr class="dept-row"><td colspan="4">Hormone</td></tr>');
     expect(html).toContain('<tr class="cat-row"><td colspan="4">Thyroid</td></tr>');
   });
@@ -375,7 +375,7 @@ describe('buildResultsReportHtml panel page isolation', () => {
     });
 
     const regularHeaderRow =
-      '<thead><tr><th style="width:28%;">Test</th><th style="width:14%;">Result</th><th style="width:14%;">Unit</th><th style="width:14%;">Status</th><th style="width:30%;">Reference Value</th></tr></thead>';
+      '<tr><th class="col-test" style="width:32%;">Test</th><th class="col-result" style="width:12%;">Result</th><th class="col-unit" style="width:10%;">Unit</th><th class="col-status" style="width:10%;">Status</th><th class="col-reference" style="width:36%;">Reference Value</th></tr>';
     const firstPanelStart = html.indexOf('<div class="page panel-page"');
     const regularChunk = firstPanelStart >= 0 ? html.slice(0, firstPanelStart) : html;
 
@@ -419,11 +419,11 @@ describe('buildResultsReportHtml panel page isolation', () => {
     });
 
     const panelHeaderRow =
-      '<thead><tr><th style="width:28%;">Test</th><th style="width:18%;">Result</th><th style="width:18%;">Unit</th><th style="width:36%;">Reference Value</th></tr></thead>';
+      '<tr><th class="col-test" style="width:34%;">Test</th><th class="col-result" style="width:14%;">Result</th><th class="col-unit" style="width:12%;">Unit</th><th class="col-reference" style="width:40%;">Reference Value</th></tr>';
 
-    expect(html).toContain('class="panel-results-table"');
+    expect(html).toContain('class="page-table panel-results-table"');
     expect(countMatches(html, panelHeaderRow)).toBe(1);
-    expect(html).not.toContain('<th style="width:14%;">Status</th>');
+    expect(html).not.toContain('<th class="col-status" style="width:10%;">Status</th>');
   });
 
   it('renders GUE/GSE parameter tables without a status column and keeps fallback colspans aligned', () => {
@@ -463,14 +463,14 @@ describe('buildResultsReportHtml panel page isolation', () => {
     });
 
     const parameterHeaderRow =
-      '<thead><tr><th style="width:28%;">Test</th><th style="width:36%;">Result</th><th style="width:36%;">Reference Value</th></tr></thead>';
+      '<tr><th class="col-test" style="width:38%;">Test</th><th class="col-result" style="width:22%;">Result</th><th class="col-reference" style="width:40%;">Reference Value</th></tr>';
 
     expect(countMatches(html, parameterHeaderRow)).toBe(2);
-    expect(html).not.toContain('<th style="width:24%;">Status</th>');
+    expect(html).not.toContain('<th class="col-status" style="width:10%;">Status</th>');
     expect(html).toContain('<tr><td colspan="3">No parameters</td></tr>');
-    expect(html).toContain('<td style="width:28%;font-weight:600;">color</td>');
-    expect(html).toContain('<td style="width:36%;">yellow</td>');
-    expect(html).toContain('<td style="width:36%;" class="reference-value">-</td>');
+    expect(html).toContain('<td class="col-test" style="width:38%;">color</td>');
+    expect(html).toContain('<td class="col-result" style="width:22%;">yellow</td>');
+    expect(html).toContain('<td class="col-reference reference-value" style="width:40%;">-</td>');
   });
 
   it('renders culture susceptibility isolates in four S/I/R/R columns with duplicate Resistance headers', () => {
@@ -711,6 +711,9 @@ describe('buildResultsReportHtml panel page isolation', () => {
     expect(html).toContain('display: table-header-group;');
     expect(html).toContain('.regular-results-table tbody.regular-dept-block {');
     expect(html).toContain('page-break-inside: var(--results-regular-dept-break);');
+    expect(html).toContain('.regular-results-page,');
+    expect(html).toContain('.regular-results-page .regular-results-table {');
+    expect(html).toContain('page-break-inside: avoid;');
   });
 
   it('keeps result tables at full width with fixed layout CSS', () => {
@@ -773,7 +776,7 @@ describe('buildResultsReportHtml panel page isolation', () => {
     expect(html).toContain('font-family: var(--patient-info-font-family);');
     expect(html).toContain('font-family: var(--results-font-family);');
     expect(html).toContain(
-      '.reference-value { color: var(--results-reference-color); white-space: pre-wrap; word-break: break-word; }',
+      '.reference-value { color: var(--results-reference-column-color); white-space: pre-wrap; word-break: break-word; }',
     );
   });
 
@@ -844,6 +847,11 @@ describe('buildResultsReportHtml panel page isolation', () => {
   it('uses lab reportStyle values when provided', () => {
     const customStyle: typeof DEFAULT_REPORT_STYLE_V1 = {
       ...DEFAULT_REPORT_STYLE_V1,
+      reportTitle: {
+        ...DEFAULT_REPORT_STYLE_V1.reportTitle,
+        text: 'Biochemistry Report',
+        textColor: '#123456',
+      },
       patientInfo: {
         ...DEFAULT_REPORT_STYLE_V1.patientInfo,
         backgroundColor: '#101010',
@@ -873,6 +881,8 @@ describe('buildResultsReportHtml panel page isolation', () => {
     });
 
     expect(html).toContain('--patient-info-bg: #101010;');
+    expect(html).toContain('--report-title-color: #123456;');
+    expect(html).toContain('<div class="report-title">Biochemistry Report</div>');
     expect(html).toContain('--results-status-high-color: #AA0000;');
     expect(html).toContain(
       `--patient-info-rtl-font-family: ${resolveReportRtlFontStack(customStyle.patientInfo.fontFamily)};`,

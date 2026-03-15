@@ -2587,15 +2587,15 @@ export function OrdersPage() {
                                   />
                                 </div>
 
-                                <div className="orders-edit-tests-toolbar">
-                                  <div className="orders-edit-tests-toolbar-copy">
-                                    <Text strong>Add another test</Text>
-                                    <Text type="secondary">Search by code, abbreviation, or test name.</Text>
+                                <div className="order-composer-field orders-edit-tests-toolbar-row">
+                                  <div className="order-composer-field-label">
+                                    <Text strong style={{ display: 'block' }}>Add test</Text>
+                                    <Text type="secondary" style={{ fontSize: 10, lineHeight: 1.1, display: 'block' }}>By code or name</Text>
                                   </div>
                                   <Select
                                     showSearch
-                                    className="orders-edit-tests-select"
-                                    placeholder="Add test by code or name"
+                                    className="order-composer-field-control"
+                                    placeholder="Search tests..."
                                     value={null}
                                     loading={loadingTests}
                                     onChange={handleAddEditingTest}
@@ -2664,10 +2664,12 @@ export function OrdersPage() {
                                   }`}
                               >
                                 <div className="order-draft-referred-row" style={{ marginBottom: 12 }}>
-                                  <Text strong style={{ display: 'block', marginBottom: 6 }}>
+                                  <Text strong className="order-composer-field-label">
                                     Referred by
                                   </Text>
-                                  <Text type="secondary">{lockedOrderReferredByValue || 'Himself'}</Text>
+                                  <Text type="secondary" className="order-composer-field-control" style={{ display: 'flex', alignItems: 'center', height: 44 }}>
+                                    {lockedOrderReferredByValue || 'Himself'}
+                                  </Text>
                                 </div>
                                 <div className="order-tests-readonly-grid-header">
                                   <span className="order-tests-readonly-label">Selected tests</span>

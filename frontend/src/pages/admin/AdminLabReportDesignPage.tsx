@@ -1,4 +1,4 @@
-import { type ChangeEvent, useEffect, useMemo, useRef, useState } from 'react';
+import { type CSSProperties, type ChangeEvent, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   Button,
@@ -25,6 +25,7 @@ import {
   previewAdminLabReportPdf,
   updateAdminLabSettings,
   type AdminOrderListItem,
+  type ReportColumnStyleDto,
   type ReportFontFamilyDto,
   type ReportStyleDto,
   type ReportBrandingDto,
@@ -134,6 +135,24 @@ const REPORT_FONT_STACKS: Record<ReportFontFamilyDto, string> = {
 
 const REPORT_ARABIC_FALLBACK_STACK = "'Noto Naskh Arabic', 'Noto Sans Arabic'";
 
+type ResultsColumnKey =
+  | 'testColumn'
+  | 'resultColumn'
+  | 'unitColumn'
+  | 'statusColumn'
+  | 'referenceColumn';
+
+const RESULTS_COLUMN_CONTROLS: Array<{
+  key: ResultsColumnKey;
+  label: string;
+}> = [
+  { key: 'testColumn', label: 'Test Column' },
+  { key: 'resultColumn', label: 'Result Column' },
+  { key: 'unitColumn', label: 'Unit Column' },
+  { key: 'statusColumn', label: 'Status Column' },
+  { key: 'referenceColumn', label: 'Reference Column' },
+];
+
 function resolvePreviewFontStack(fontFamily: ReportFontFamilyDto): string {
   return `${REPORT_FONT_STACKS[fontFamily]}, ${REPORT_ARABIC_FALLBACK_STACK}`;
 }
@@ -179,6 +198,13 @@ function defaultReportStyle(): ReportStyleDto {
       paddingYpx: 10,
       paddingXpx: 12,
     },
+    reportTitle: {
+      text: 'Laboratory Report',
+      textColor: '#111111',
+      fontSizePx: 20,
+      textAlign: 'center',
+      bold: true,
+    },
     resultsTable: {
       headerBackgroundColor: '#F2F2F2',
       headerTextColor: '#333333',
@@ -211,6 +237,36 @@ function defaultReportStyle(): ReportStyleDto {
       regularRowBreak: 'avoid',
       panelTableBreak: 'auto',
       panelRowBreak: 'avoid',
+      testColumn: {
+        textColor: '#333333',
+        fontSizePx: 12,
+        textAlign: 'left',
+        bold: false,
+      },
+      resultColumn: {
+        textColor: '#333333',
+        fontSizePx: 12,
+        textAlign: 'left',
+        bold: false,
+      },
+      unitColumn: {
+        textColor: '#333333',
+        fontSizePx: 12,
+        textAlign: 'left',
+        bold: false,
+      },
+      statusColumn: {
+        textColor: '#333333',
+        fontSizePx: 12,
+        textAlign: 'left',
+        bold: false,
+      },
+      referenceColumn: {
+        textColor: '#333333',
+        fontSizePx: 12,
+        textAlign: 'left',
+        bold: false,
+      },
     },
     pageLayout: {
       pageMarginTopMm: 3,
@@ -331,6 +387,54 @@ function StyleColorControl(props: {
         onChange={(color: any) => props.onChange(normalizeHexColor(color.toHexString()))}
       />
     </div>
+  );
+}
+
+function ColumnStyleControlCard(props: {
+  title: string;
+  style: ReportColumnStyleDto;
+  disabled: boolean;
+  onChange: <K extends keyof ReportColumnStyleDto>(key: K, value: ReportColumnStyleDto[K]) => void;
+}) {
+  return (
+    <Card size="small" title={props.title}>
+      <Space direction="vertical" style={{ width: '100%' }} size={12}>
+        <StyleColorControl
+          label="Text Color"
+          value={props.style.textColor}
+          disabled={props.disabled}
+          onChange={(value) => props.onChange('textColor', value)}
+        />
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <Text>Font Size</Text>
+          <InputNumber
+            min={9}
+            max={16}
+            value={props.style.fontSizePx}
+            onChange={(value) => props.onChange('fontSizePx', Number(value ?? 12))}
+            disabled={props.disabled}
+          />
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <Text>Alignment</Text>
+          <Select
+            style={{ width: 120 }}
+            value={props.style.textAlign}
+            options={ALIGN_OPTIONS as unknown as { label: string; value: string }[]}
+            onChange={(value) => props.onChange('textAlign', value)}
+            disabled={props.disabled}
+          />
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <Text>Bold</Text>
+          <Switch
+            checked={props.style.bold}
+            onChange={(value) => props.onChange('bold', value)}
+            disabled={props.disabled}
+          />
+        </div>
+      </Space>
+    </Card>
   );
 }
 
@@ -498,6 +602,19 @@ export function AdminLabReportDesignPage() {
     }));
   };
 
+  const updateReportTitleStyle = <K extends keyof ReportStyleDto['reportTitle']>(
+    key: K,
+    value: ReportStyleDto['reportTitle'][K],
+  ) => {
+    setReportStyle((prev) => ({
+      ...prev,
+      reportTitle: {
+        ...prev.reportTitle,
+        [key]: value,
+      },
+    }));
+  };
+
   const updateResultsStyle = <K extends keyof ReportStyleDto['resultsTable']>(
     key: K,
     value: ReportStyleDto['resultsTable'][K],
@@ -507,6 +624,23 @@ export function AdminLabReportDesignPage() {
       resultsTable: {
         ...prev.resultsTable,
         [key]: value,
+      },
+    }));
+  };
+
+  const updateResultsColumnStyle = <K extends keyof ReportColumnStyleDto>(
+    columnKey: ResultsColumnKey,
+    key: K,
+    value: ReportColumnStyleDto[K],
+  ) => {
+    setReportStyle((prev) => ({
+      ...prev,
+      resultsTable: {
+        ...prev.resultsTable,
+        [columnKey]: {
+          ...prev.resultsTable[columnKey],
+          [key]: value,
+        },
       },
     }));
   };
@@ -757,7 +891,7 @@ export function AdminLabReportDesignPage() {
     }
   };
 
-  const previewHeaderCellStyle = {
+  const previewHeaderCellStyle: CSSProperties = {
     border: `1px solid ${reportStyle.resultsTable.borderColor}`,
     padding: '6px 8px',
     background: reportStyle.resultsTable.headerBackgroundColor,
@@ -767,7 +901,7 @@ export function AdminLabReportDesignPage() {
     fontFamily: resolvePreviewFontStack(reportStyle.resultsTable.fontFamily),
     textAlign: reportStyle.resultsTable.headerTextAlign,
   };
-  const previewBodyCellStyle = {
+  const previewBodyCellStyle: CSSProperties = {
     border: `1px solid ${reportStyle.resultsTable.borderColor}`,
     padding: '6px 8px',
     color: reportStyle.resultsTable.bodyTextColor,
@@ -783,6 +917,15 @@ export function AdminLabReportDesignPage() {
   const showCategoryRow = reportStyle.resultsTable.showCategoryRow;
   const culturePreviewFontFamily = resolvePreviewFontStack(reportStyle.cultureSection.fontFamily);
   const culturePreviewGridMinHeight = Math.min(reportStyle.cultureSection.astMinHeightPx, 320);
+  const previewTitleStyle: CSSProperties = {
+    color: reportStyle.reportTitle.textColor,
+    fontSize: reportStyle.reportTitle.fontSizePx,
+    fontWeight: reportStyle.reportTitle.bold ? 700 : 400,
+    textAlign: reportStyle.reportTitle.textAlign,
+    textDecoration: 'underline',
+    fontFamily: resolvePreviewFontStack(reportStyle.resultsTable.fontFamily),
+    margin: '0 0 12px',
+  };
   const patientInfoPreviewRowStyle = {
     display: 'grid',
     gridTemplateColumns: 'minmax(92px, max-content) minmax(0, 1fr)',
@@ -829,6 +972,31 @@ export function AdminLabReportDesignPage() {
     status: '14%',
     reference: showStatusColumn ? '30%' : '36%',
   } as const;
+  const previewColumnStyles = {
+    test: reportStyle.resultsTable.testColumn,
+    result: reportStyle.resultsTable.resultColumn,
+    unit: reportStyle.resultsTable.unitColumn,
+    status: reportStyle.resultsTable.statusColumn,
+    reference: reportStyle.resultsTable.referenceColumn,
+  } as const;
+  const getPreviewHeaderStyle = (column: keyof typeof previewColumnStyles, width: string): CSSProperties => ({
+    ...previewHeaderCellStyle,
+    width,
+    textAlign: previewColumnStyles[column].textAlign,
+  });
+  const getPreviewBodyStyle = (
+    column: keyof typeof previewColumnStyles,
+    width: string,
+    extra?: CSSProperties,
+  ): CSSProperties => ({
+    ...previewBodyCellStyle,
+    width,
+    color: previewColumnStyles[column].textColor,
+    fontSize: previewColumnStyles[column].fontSizePx,
+    fontWeight: previewColumnStyles[column].bold ? 700 : 400,
+    textAlign: previewColumnStyles[column].textAlign,
+    ...extra,
+  });
   const scrollToPreview = () => {
     previewCardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
@@ -1102,6 +1270,57 @@ export function AdminLabReportDesignPage() {
                           </Col>
 
                           <Col xs={24}>
+                            <Card size="small" title="Report Title">
+                              <Space direction="vertical" style={{ width: '100%' }} size={12}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
+                                  <Text>Title Text</Text>
+                                  <Input
+                                    style={{ width: 240 }}
+                                    value={reportStyle.reportTitle.text}
+                                    onChange={(event) => updateReportTitleStyle('text', event.target.value)}
+                                    disabled={!canMutate}
+                                    maxLength={80}
+                                  />
+                                </div>
+                                <StyleColorControl
+                                  label="Title Color"
+                                  value={reportStyle.reportTitle.textColor}
+                                  disabled={!canMutate}
+                                  onChange={(value) => updateReportTitleStyle('textColor', value)}
+                                />
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                  <Text>Font Size</Text>
+                                  <InputNumber
+                                    min={14}
+                                    max={28}
+                                    value={reportStyle.reportTitle.fontSizePx}
+                                    onChange={(value) => updateReportTitleStyle('fontSizePx', Number(value ?? 20))}
+                                    disabled={!canMutate}
+                                  />
+                                </div>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                  <Text>Alignment</Text>
+                                  <Select
+                                    style={{ width: 120 }}
+                                    value={reportStyle.reportTitle.textAlign}
+                                    options={ALIGN_OPTIONS as unknown as { label: string; value: string }[]}
+                                    onChange={(value) => updateReportTitleStyle('textAlign', value)}
+                                    disabled={!canMutate}
+                                  />
+                                </div>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                  <Text>Bold</Text>
+                                  <Switch
+                                    checked={reportStyle.reportTitle.bold}
+                                    onChange={(value) => updateReportTitleStyle('bold', value)}
+                                    disabled={!canMutate}
+                                  />
+                                </div>
+                              </Space>
+                            </Card>
+                          </Col>
+
+                          <Col xs={24}>
                             <Card size="small" title="Page Layout (mm)">
                               <Space direction="vertical" style={{ width: '100%' }} size={12}>
                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -1206,12 +1425,6 @@ export function AdminLabReportDesignPage() {
                                   value={reportStyle.resultsTable.abnormalRowBackgroundColor}
                                   disabled={!canMutate}
                                   onChange={(value) => updateResultsStyle('abnormalRowBackgroundColor', value)}
-                                />
-                                <StyleColorControl
-                                  label="Reference Value"
-                                  value={reportStyle.resultsTable.referenceValueColor}
-                                  disabled={!canMutate}
-                                  onChange={(value) => updateResultsStyle('referenceValueColor', value)}
                                 />
                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                   <Text>Show Status Column</Text>
@@ -1416,6 +1629,26 @@ export function AdminLabReportDesignPage() {
                                     onChange={(value) => updateResultsStyle('panelRowBreak', value)}
                                     disabled={!canMutate}
                                   />
+                                </div>
+                                <div style={{ paddingTop: 8, borderTop: '1px solid #F0F0F0' }}>
+                                  <Text strong style={{ display: 'block', marginBottom: 4 }}>
+                                    Column Text Controls
+                                  </Text>
+                                  <Text type="secondary" style={{ display: 'block', marginBottom: 12 }}>
+                                    Set color, size, alignment, and bold for each report column separately.
+                                  </Text>
+                                  <Row gutter={[12, 12]}>
+                                    {RESULTS_COLUMN_CONTROLS.map((column) => (
+                                      <Col key={column.key} xs={24} md={12}>
+                                        <ColumnStyleControlCard
+                                          title={column.label}
+                                          style={reportStyle.resultsTable[column.key]}
+                                          disabled={!canMutate || (column.key === 'statusColumn' && !showStatusColumn)}
+                                          onChange={(key, value) => updateResultsColumnStyle(column.key, key, value)}
+                                        />
+                                      </Col>
+                                    ))}
+                                  </Row>
                                 </div>
                               </Space>
                             </Card>
@@ -1665,6 +1898,10 @@ export function AdminLabReportDesignPage() {
                               </div>
                             </div>
 
+                            <div style={previewTitleStyle}>
+                              {reportStyle.reportTitle.text.trim() || 'Laboratory Report'}
+                            </div>
+
                             <div style={{ overflowX: 'auto' }}>
                               <table
                                 style={{
@@ -1676,13 +1913,13 @@ export function AdminLabReportDesignPage() {
                               >
                                 <thead>
                                   <tr>
-                                    <th style={{ ...previewHeaderCellStyle, width: previewRegularWidths.test }}>Test</th>
-                                    <th style={{ ...previewHeaderCellStyle, width: previewRegularWidths.result }}>Result</th>
-                                    <th style={{ ...previewHeaderCellStyle, width: previewRegularWidths.unit }}>Unit</th>
+                                    <th style={getPreviewHeaderStyle('test', previewRegularWidths.test)}>Test</th>
+                                    <th style={getPreviewHeaderStyle('result', previewRegularWidths.result)}>Result</th>
+                                    <th style={getPreviewHeaderStyle('unit', previewRegularWidths.unit)}>Unit</th>
                                     {showStatusColumn ? (
-                                      <th style={{ ...previewHeaderCellStyle, width: previewRegularWidths.status }}>Status</th>
+                                      <th style={getPreviewHeaderStyle('status', previewRegularWidths.status)}>Status</th>
                                     ) : null}
-                                    <th style={{ ...previewHeaderCellStyle, width: previewRegularWidths.reference }}>Reference Value</th>
+                                    <th style={getPreviewHeaderStyle('reference', previewRegularWidths.reference)}>Reference Value</th>
                                   </tr>
                                 </thead>
                                 <tbody>
@@ -1721,102 +1958,64 @@ export function AdminLabReportDesignPage() {
                                     </tr>
                                   ) : null}
                                   <tr>
-                                    <td style={{ ...previewBodyCellStyle, width: previewRegularWidths.test, background: stripedRowBg }}>Glucose</td>
-                                    <td style={{ ...previewBodyCellStyle, width: previewRegularWidths.result, background: stripedRowBg }}>110</td>
-                                    <td style={{ ...previewBodyCellStyle, width: previewRegularWidths.unit, background: stripedRowBg }}>mg/dL</td>
+                                    <td style={getPreviewBodyStyle('test', previewRegularWidths.test, { background: stripedRowBg })}>Glucose</td>
+                                    <td style={getPreviewBodyStyle('result', previewRegularWidths.result, { background: stripedRowBg })}>110</td>
+                                    <td style={getPreviewBodyStyle('unit', previewRegularWidths.unit, { background: stripedRowBg })}>mg/dL</td>
                                     {showStatusColumn ? (
                                       <td
-                                        style={{
-                                          ...previewBodyCellStyle,
-                                          width: previewRegularWidths.status,
+                                        style={getPreviewBodyStyle('status', previewRegularWidths.status, {
                                           background: stripedRowBg,
                                           color: reportStyle.resultsTable.statusNormalColor,
                                           fontWeight: 700,
-                                        }}
+                                        })}
                                       >
                                         Normal
                                       </td>
                                     ) : null}
-                                    <td
-                                      style={{
-                                        ...previewBodyCellStyle,
-                                        width: previewRegularWidths.reference,
-                                        background: stripedRowBg,
-                                        color: reportStyle.resultsTable.referenceValueColor,
-                                      }}
-                                    >
+                                    <td style={getPreviewBodyStyle('reference', previewRegularWidths.reference, { background: stripedRowBg })}>
                                       70-110
                                     </td>
                                   </tr>
                                   <tr>
-                                    <td
-                                      style={{
-                                        ...previewBodyCellStyle,
-                                        width: previewRegularWidths.test,
-                                        background: reportStyle.resultsTable.abnormalRowBackgroundColor,
-                                      }}
-                                    >
+                                    <td style={getPreviewBodyStyle('test', previewRegularWidths.test, { background: reportStyle.resultsTable.abnormalRowBackgroundColor })}>
                                       ALT
                                     </td>
-                                    <td
-                                      style={{
-                                        ...previewBodyCellStyle,
-                                        width: previewRegularWidths.result,
-                                        background: reportStyle.resultsTable.abnormalRowBackgroundColor,
-                                      }}
-                                    >
+                                    <td style={getPreviewBodyStyle('result', previewRegularWidths.result, { background: reportStyle.resultsTable.abnormalRowBackgroundColor })}>
                                       82
                                     </td>
-                                    <td
-                                      style={{
-                                        ...previewBodyCellStyle,
-                                        width: previewRegularWidths.unit,
-                                        background: reportStyle.resultsTable.abnormalRowBackgroundColor,
-                                      }}
-                                    >
+                                    <td style={getPreviewBodyStyle('unit', previewRegularWidths.unit, { background: reportStyle.resultsTable.abnormalRowBackgroundColor })}>
                                       U/L
                                     </td>
                                     {showStatusColumn ? (
                                       <td
-                                        style={{
-                                          ...previewBodyCellStyle,
-                                          width: previewRegularWidths.status,
+                                        style={getPreviewBodyStyle('status', previewRegularWidths.status, {
                                           background: reportStyle.resultsTable.abnormalRowBackgroundColor,
                                           color: reportStyle.resultsTable.statusHighColor,
                                           fontWeight: 700,
-                                        }}
+                                        })}
                                       >
                                         High
                                       </td>
                                     ) : null}
-                                    <td
-                                      style={{
-                                        ...previewBodyCellStyle,
-                                        width: previewRegularWidths.reference,
-                                        background: reportStyle.resultsTable.abnormalRowBackgroundColor,
-                                        color: reportStyle.resultsTable.referenceValueColor,
-                                      }}
-                                    >
+                                    <td style={getPreviewBodyStyle('reference', previewRegularWidths.reference, { background: reportStyle.resultsTable.abnormalRowBackgroundColor })}>
                                       0-40
                                     </td>
                                   </tr>
                                   <tr>
-                                    <td style={{ ...previewBodyCellStyle, width: previewRegularWidths.test }}>HDL</td>
-                                    <td style={{ ...previewBodyCellStyle, width: previewRegularWidths.result }}>35</td>
-                                    <td style={{ ...previewBodyCellStyle, width: previewRegularWidths.unit }}>mg/dL</td>
+                                    <td style={getPreviewBodyStyle('test', previewRegularWidths.test)}>HDL</td>
+                                    <td style={getPreviewBodyStyle('result', previewRegularWidths.result)}>35</td>
+                                    <td style={getPreviewBodyStyle('unit', previewRegularWidths.unit)}>mg/dL</td>
                                     {showStatusColumn ? (
                                       <td
-                                        style={{
-                                          ...previewBodyCellStyle,
-                                          width: previewRegularWidths.status,
+                                        style={getPreviewBodyStyle('status', previewRegularWidths.status, {
                                           color: reportStyle.resultsTable.statusLowColor,
                                           fontWeight: 700,
-                                        }}
+                                        })}
                                       >
                                         Low
                                       </td>
                                     ) : null}
-                                    <td style={{ ...previewBodyCellStyle, width: previewRegularWidths.reference, color: reportStyle.resultsTable.referenceValueColor }}>
+                                    <td style={getPreviewBodyStyle('reference', previewRegularWidths.reference)}>
                                       &gt; 40
                                     </td>
                                   </tr>

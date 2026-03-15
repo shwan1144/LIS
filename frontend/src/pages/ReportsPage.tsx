@@ -1725,7 +1725,7 @@ export function ReportsPage() {
             className={actionButtonClassName(whatsappPreferred, !hasPhone || !reportReady)}
             disabled={!hasPhone || !reportReady}
             onClick={() => handleSendWhatsApp(record)}
-            style={{ color: hasPhone ? '#25D366' : undefined }}
+            style={{ color: hasPhone && reportReady ? '#25D366' : undefined }}
           >
             {withTick('WhatsApp', whatsappDone, '#25D366')}
           </Button>
@@ -1740,7 +1740,7 @@ export function ReportsPage() {
             className={actionButtonClassName(viberPreferred, !hasPhone || !reportReady)}
             disabled={!hasPhone || !reportReady}
             onClick={() => handleSendViber(record)}
-            style={{ color: hasPhone ? '#7360F2' : undefined }}
+            style={{ color: hasPhone && reportReady ? '#7360F2' : undefined }}
           >
             {withTick('Viber', viberDone, '#7360F2')}
           </Button>
