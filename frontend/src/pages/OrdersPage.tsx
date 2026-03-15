@@ -801,6 +801,9 @@ export function OrdersPage() {
         setLoadingTests(false);
       }
     }
+    void init();
+  }, []);
+
   useEffect(() => {
     if (historyShiftFilter === 'ALL') return;
     if (historyShiftOptions.some((shift) => shift.id === historyShiftFilter)) return;
@@ -2890,6 +2893,56 @@ export function OrdersPage() {
                             }))}
                           />
                         </div>
+                        <div className="order-composer-toolbar">
+                          <Text strong>Selected tests</Text>
+                          <Text type="secondary">{selectedTests.length} selected</Text>
+                        </div>
+                        <div className="order-selected-tests-panel">
+                          {selectedTests.length === 0 ? (
+                            <Empty
+                              image={Empty.PRESENTED_IMAGE_SIMPLE}
+                              description="No tests selected. Use search above or test groups."
+                              style={{ padding: 24 }}
+                            />
+                          ) : (
+                            <Table
+                              dataSource={selectedTests}
+                              rowKey="testId"
+                              pagination={false}
+                              size="small"
+                              tableLayout="fixed"
+                              scroll={{ y: 280 }}
+                              className="order-selected-tests-table"
+                              columns={[
+                                {
+                                  title: 'Test',
+                                  dataIndex: 'testCode',
+                                  key: 'testCode',
+                                  render: (_: unknown, record: SelectedTest) => (
+                                    <Text
+                                      className="order-selected-test-name"
+                                      title={record.testName}
+                                    >
+                                      {record.displayLabel || record.testName}
+                                    </Text>
+                                  ),
+                                },
+                                {
+                                  title: 'Sample',
+                                  dataIndex: 'tubeType',
+                                  key: 'tubeType',
+                                  render: (tubeType: string) => (
+                                    <span className="order-selected-test-tube">
+                                      {formatTokenLabel(tubeType)}
+                                    </span>
+                                  ),
+                                },
+                                {
+                                  title: '',
+                                  key: 'action',
+                                  width: 52,
+                                  className: 'order-selected-col-action',
+                                  render: (_: unknown, record: SelectedTest) => (
                                     <Button
                                       type="text"
                                       danger
