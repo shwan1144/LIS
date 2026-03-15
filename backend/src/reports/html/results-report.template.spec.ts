@@ -851,6 +851,7 @@ describe('buildResultsReportHtml panel page isolation', () => {
         ...DEFAULT_REPORT_STYLE_V1.reportTitle,
         text: 'Biochemistry Report',
         textColor: '#123456',
+        underline: false,
       },
       patientInfo: {
         ...DEFAULT_REPORT_STYLE_V1.patientInfo,
@@ -882,6 +883,7 @@ describe('buildResultsReportHtml panel page isolation', () => {
 
     expect(html).toContain('--patient-info-bg: #101010;');
     expect(html).toContain('--report-title-color: #123456;');
+    expect(html).toContain('--report-title-decoration: none;');
     expect(html).toContain('<div class="report-title">Biochemistry Report</div>');
     expect(html).toContain('--results-status-high-color: #AA0000;');
     expect(html).toContain(

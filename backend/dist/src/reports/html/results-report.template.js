@@ -703,6 +703,7 @@ function buildResultsReportHtml(input) {
       --report-title-font-size: ${reportStyle.reportTitle.fontSizePx}px;
       --report-title-align: ${reportStyle.reportTitle.textAlign};
       --report-title-weight: ${reportStyle.reportTitle.bold ? 700 : 400};
+      --report-title-decoration: ${reportStyle.reportTitle.underline ? 'underline' : 'none'};
       --report-title-font-family: ${resultsFontFamily};
       --results-header-bg: ${reportStyle.resultsTable.headerBackgroundColor};
       --results-header-text-color: ${reportStyle.resultsTable.headerTextColor};
@@ -893,7 +894,7 @@ function buildResultsReportHtml(input) {
       font-size: var(--report-title-font-size);
       font-weight: var(--report-title-weight);
       font-family: var(--report-title-font-family);
-      text-decoration: underline;
+      text-decoration: var(--report-title-decoration);
       margin: 8px 0 6px;
     }
     .patient-info {
