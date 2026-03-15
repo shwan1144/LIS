@@ -73,6 +73,7 @@ export interface ReportTitleStyle {
   fontSizePx: number;
   textAlign: ReportTextAlign;
   bold: boolean;
+  underline: boolean;
 }
 
 export interface ReportResultsTableStyle {
@@ -186,6 +187,7 @@ export const DEFAULT_REPORT_STYLE_V1: ReportStyleConfig = {
     fontSizePx: 20,
     textAlign: 'center',
     bold: true,
+    underline: true,
   },
   resultsTable: {
     headerBackgroundColor: '#F2F2F2',
@@ -305,6 +307,7 @@ const REPORT_TITLE_KEYS: Array<keyof ReportTitleStyle> = [
   'fontSizePx',
   'textAlign',
   'bold',
+  'underline',
 ];
 const RESULTS_TABLE_COLUMN_STYLE_KEYS = [
   'testColumn',
@@ -497,6 +500,7 @@ function validateReportTitleStyle(value: unknown, fieldName: string): ReportTitl
     fontSizePx: assertIntRange(titleObj.fontSizePx, 14, 28, `${fieldName}.fontSizePx`),
     textAlign: assertFromSet(titleObj.textAlign, TEXT_ALIGN_SET, `${fieldName}.textAlign`),
     bold: assertBoolean(titleObj.bold, `${fieldName}.bold`),
+    underline: assertBoolean(titleObj.underline, `${fieldName}.underline`),
   };
 }
 

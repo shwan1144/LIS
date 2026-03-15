@@ -33,6 +33,7 @@ export interface ReportTitleStyle {
     fontSizePx: number;
     textAlign: ReportTextAlign;
     bold: boolean;
+    underline: boolean;
 }
 export interface ReportResultsTableStyle {
     headerBackgroundColor: string;

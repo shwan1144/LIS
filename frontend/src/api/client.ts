@@ -147,6 +147,7 @@ export interface ReportTitleStyleDto {
   fontSizePx: number;
   textAlign: ReportTextAlign;
   bold: boolean;
+  underline: boolean;
 }
 
 export interface ReportResultsTableStyleDto {

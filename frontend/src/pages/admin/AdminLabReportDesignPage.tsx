@@ -204,6 +204,7 @@ function defaultReportStyle(): ReportStyleDto {
       fontSizePx: 20,
       textAlign: 'center',
       bold: true,
+      underline: true,
     },
     resultsTable: {
       headerBackgroundColor: '#F2F2F2',
@@ -922,7 +923,7 @@ export function AdminLabReportDesignPage() {
     fontSize: reportStyle.reportTitle.fontSizePx,
     fontWeight: reportStyle.reportTitle.bold ? 700 : 400,
     textAlign: reportStyle.reportTitle.textAlign,
-    textDecoration: 'underline',
+    textDecoration: reportStyle.reportTitle.underline ? 'underline' : 'none',
     fontFamily: resolvePreviewFontStack(reportStyle.resultsTable.fontFamily),
     margin: '0 0 12px',
   };
@@ -1313,6 +1314,14 @@ export function AdminLabReportDesignPage() {
                                   <Switch
                                     checked={reportStyle.reportTitle.bold}
                                     onChange={(value) => updateReportTitleStyle('bold', value)}
+                                    disabled={!canMutate}
+                                  />
+                                </div>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                  <Text>Underline</Text>
+                                  <Switch
+                                    checked={reportStyle.reportTitle.underline}
+                                    onChange={(value) => updateReportTitleStyle('underline', value)}
                                     disabled={!canMutate}
                                   />
                                 </div>
