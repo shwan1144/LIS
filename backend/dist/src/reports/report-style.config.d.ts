@@ -21,6 +21,8 @@ export interface ReportPatientInfoStyle {
     borderRadiusPx: number;
     paddingYpx: number;
     paddingXpx: number;
+    marginTopPx: number;
+    marginBottomPx: number;
     dividerWidthPx: number;
     labelCellStyle: ReportPatientInfoCellStyle;
     valueCellStyle: ReportPatientInfoCellStyle;

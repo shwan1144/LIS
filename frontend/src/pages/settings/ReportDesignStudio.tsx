@@ -229,6 +229,8 @@ function defaultReportStyle(): ReportStyleDto {
       borderRadiusPx: 6,
       paddingYpx: 10,
       paddingXpx: 12,
+      marginTopPx: 8,
+      marginBottomPx: 6,
       dividerWidthPx: 1,
       labelCellStyle: {
         backgroundColor: '#FAFAFA',
@@ -1047,6 +1049,7 @@ export function ReportDesignStudio() {
         `Label ${reportStyle.patientInfo.labelCellStyle.fontSizePx}px ${reportStyle.patientInfo.labelCellStyle.fontFamily}`,
         `Value ${reportStyle.patientInfo.valueCellStyle.fontSizePx}px ${reportStyle.patientInfo.valueCellStyle.fontFamily}`,
         `Radius ${reportStyle.patientInfo.borderRadiusPx}px`,
+        `Margins ${reportStyle.patientInfo.marginTopPx}/${reportStyle.patientInfo.marginBottomPx}px`,
         `Divider ${reportStyle.patientInfo.dividerWidthPx}px`,
       ],
       'report-title': [
@@ -1496,7 +1499,8 @@ export function ReportDesignStudio() {
     borderRadius: reportStyle.patientInfo.borderRadiusPx,
     background: reportStyle.patientInfo.backgroundColor,
     padding: `${reportStyle.patientInfo.paddingYpx}px ${reportStyle.patientInfo.paddingXpx}px`,
-    marginBottom: 6,
+    marginTop: reportStyle.patientInfo.marginTopPx,
+    marginBottom: reportStyle.patientInfo.marginBottomPx,
     display: 'grid',
     gridTemplateColumns: 'minmax(0, 1fr) 74px',
     columnGap: 10,
@@ -2448,6 +2452,26 @@ export function ReportDesignStudio() {
                                         max={24}
                                         value={reportStyle.patientInfo.paddingXpx}
                                         onChange={(value) => updatePatientStyle('paddingXpx', Number(value ?? 12))}
+                                        disabled={!canMutate}
+                                      />
+                                    </div>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                      <Text>Margin Top</Text>
+                                      <InputNumber
+                                        min={0}
+                                        max={24}
+                                        value={reportStyle.patientInfo.marginTopPx}
+                                        onChange={(value) => updatePatientStyle('marginTopPx', Number(value ?? 8))}
+                                        disabled={!canMutate}
+                                      />
+                                    </div>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                      <Text>Margin Bottom</Text>
+                                      <InputNumber
+                                        min={0}
+                                        max={24}
+                                        value={reportStyle.patientInfo.marginBottomPx}
+                                        onChange={(value) => updatePatientStyle('marginBottomPx', Number(value ?? 6))}
                                         disabled={!canMutate}
                                       />
                                     </div>

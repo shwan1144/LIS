@@ -895,6 +895,8 @@ export function buildResultsReportHtml(input: {
       --patient-info-radius: ${reportStyle.patientInfo.borderRadiusPx}px;
       --patient-info-padding-y: ${reportStyle.patientInfo.paddingYpx}px;
       --patient-info-padding-x: ${reportStyle.patientInfo.paddingXpx}px;
+      --patient-info-margin-top: ${reportStyle.patientInfo.marginTopPx}px;
+      --patient-info-margin-bottom: ${reportStyle.patientInfo.marginBottomPx}px;
       --patient-info-divider-width: ${reportStyle.patientInfo.dividerWidthPx}px;
       --patient-info-label-cell-bg: ${reportStyle.patientInfo.labelCellStyle.backgroundColor};
       --patient-info-label-cell-text: ${reportStyle.patientInfo.labelCellStyle.textColor};
@@ -1148,8 +1150,8 @@ export function buildResultsReportHtml(input: {
       margin: 0 0 6px;
     }
     .patient-info {
-      margin-top: 8px;
-      margin-bottom: 6px;
+      margin-top: var(--patient-info-margin-top);
+      margin-bottom: var(--patient-info-margin-bottom);
       border: 1px solid var(--patient-info-border-color);
       border-radius: var(--patient-info-radius);
       padding: var(--patient-info-padding-y) var(--patient-info-padding-x);

@@ -1488,7 +1488,12 @@ export function ReportsPage() {
     }
 
     const cleanedPhone = cleanPhoneNumber(phone);
-    const messageText = buildResultsMessage(order, lab?.name, lab?.subdomain ?? null);
+    const fullOrder = await ensureOrderDetails(order.id);
+    const messageText = buildResultsMessage(
+      order,
+      fullOrder?.lab?.name ?? lab?.name,
+      fullOrder?.lab?.subdomain ?? lab?.subdomain ?? null,
+    );
     void trackReportAction(order.id, 'WHATSAPP');
 
     const url = `https://wa.me/${cleanedPhone}?text=${encodeURIComponent(messageText)}`;
@@ -1515,7 +1520,12 @@ export function ReportsPage() {
     }
 
     const cleanedPhone = cleanPhoneNumber(phone);
-    const messageText = buildResultsMessage(order, lab?.name, lab?.subdomain ?? null);
+    const fullOrder = await ensureOrderDetails(order.id);
+    const messageText = buildResultsMessage(
+      order,
+      fullOrder?.lab?.name ?? lab?.name,
+      fullOrder?.lab?.subdomain ?? lab?.subdomain ?? null,
+    );
     void trackReportAction(order.id, 'VIBER');
 
     const url = `viber://chat?number=${encodeURIComponent(cleanedPhone)}&text=${encodeURIComponent(messageText)}`;

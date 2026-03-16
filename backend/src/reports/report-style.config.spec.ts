@@ -12,6 +12,8 @@ describe('report-style.config', () => {
       borderRadiusPx: 6,
       paddingYpx: 10,
       paddingXpx: 12,
+      marginTopPx: 8,
+      marginBottomPx: 6,
       dividerWidthPx: 1,
       labelCellStyle: {
         backgroundColor: '#FAFAFA',
@@ -124,6 +126,18 @@ describe('report-style.config', () => {
     ).toThrow('reportStyle.patientInfo.dividerWidthPx must be between 0 and 3');
   });
 
+  it('rejects invalid patient info margin values', () => {
+    expect(() =>
+      validateAndNormalizeReportStyleConfig({
+        ...DEFAULT_REPORT_STYLE_V1,
+        patientInfo: {
+          ...DEFAULT_REPORT_STYLE_V1.patientInfo,
+          marginTopPx: 25,
+        },
+      }),
+    ).toThrow('reportStyle.patientInfo.marginTopPx must be between 0 and 24');
+  });
+
   it('rejects invalid report title padding values', () => {
     expect(() =>
       validateAndNormalizeReportStyleConfig({
@@ -165,6 +179,8 @@ describe('report-style.config', () => {
       borderRadiusPx: 7,
       paddingYpx: 11,
       paddingXpx: 13,
+      marginTopPx: 8,
+      marginBottomPx: 6,
       dividerWidthPx: 1,
       labelCellStyle: {
         backgroundColor: '#EFEFEF',

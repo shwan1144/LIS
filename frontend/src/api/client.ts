@@ -134,6 +134,8 @@ export interface ReportPatientInfoStyleDto {
   borderRadiusPx: number;
   paddingYpx: number;
   paddingXpx: number;
+  marginTopPx: number;
+  marginBottomPx: number;
   dividerWidthPx: number;
   labelCellStyle: ReportPatientInfoCellStyleDto;
   valueCellStyle: ReportPatientInfoCellStyleDto;

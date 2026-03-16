@@ -798,6 +798,10 @@ describe('buildResultsReportHtml panel page isolation', () => {
     });
 
     expect(html).toContain(`--patient-info-bg: ${DEFAULT_REPORT_STYLE_V1.patientInfo.backgroundColor};`);
+    expect(html).toContain(`--patient-info-margin-top: ${DEFAULT_REPORT_STYLE_V1.patientInfo.marginTopPx}px;`);
+    expect(html).toContain(
+      `--patient-info-margin-bottom: ${DEFAULT_REPORT_STYLE_V1.patientInfo.marginBottomPx}px;`,
+    );
     expect(html).toContain(`--patient-info-divider-width: ${DEFAULT_REPORT_STYLE_V1.patientInfo.dividerWidthPx}px;`);
     expect(html).toContain(
       `--patient-info-label-cell-bg: ${DEFAULT_REPORT_STYLE_V1.patientInfo.labelCellStyle.backgroundColor};`,
@@ -836,6 +840,8 @@ describe('buildResultsReportHtml panel page isolation', () => {
     expect(html).toContain('font-family: var(--patient-info-label-font-family);');
     expect(html).toContain('font-family: var(--patient-info-value-font-family);');
     expect(html).toContain('class="patient-info-table"');
+    expect(html).toContain('margin-top: var(--patient-info-margin-top);');
+    expect(html).toContain('margin-bottom: var(--patient-info-margin-bottom);');
     expect(html).toContain('border-right: var(--patient-info-divider-width) solid var(--patient-info-border-color);');
     expect(html).toContain('font-family: var(--results-body-font-family);');
     expect(html).toContain('font-family: var(--results-header-font-family);');
@@ -1022,6 +1028,8 @@ describe('buildResultsReportHtml panel page isolation', () => {
       patientInfo: {
         ...DEFAULT_REPORT_STYLE_V1.patientInfo,
         backgroundColor: '#101010',
+        marginTopPx: 11,
+        marginBottomPx: 4,
         labelCellStyle: {
           ...DEFAULT_REPORT_STYLE_V1.patientInfo.labelCellStyle,
           fontFamily: 'georgia',
@@ -1062,6 +1070,8 @@ describe('buildResultsReportHtml panel page isolation', () => {
     });
 
     expect(html).toContain('--patient-info-bg: #101010;');
+    expect(html).toContain('--patient-info-margin-top: 11px;');
+    expect(html).toContain('--patient-info-margin-bottom: 4px;');
     expect(html).toContain('--report-title-color: #123456;');
     expect(html).toContain('--report-title-decoration: none;');
     expect(html).toContain('<div class="report-title">Biochemistry Report</div>');

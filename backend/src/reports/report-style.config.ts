@@ -60,6 +60,8 @@ export interface ReportPatientInfoStyle {
   borderRadiusPx: number;
   paddingYpx: number;
   paddingXpx: number;
+  marginTopPx: number;
+  marginBottomPx: number;
   dividerWidthPx: number;
   labelCellStyle: ReportPatientInfoCellStyle;
   valueCellStyle: ReportPatientInfoCellStyle;
@@ -192,6 +194,8 @@ export const DEFAULT_REPORT_STYLE_V1: ReportStyleConfig = {
     borderRadiusPx: 6,
     paddingYpx: 10,
     paddingXpx: 12,
+    marginTopPx: 8,
+    marginBottomPx: 6,
     dividerWidthPx: 1,
     labelCellStyle: {
       backgroundColor: '#FAFAFA',
@@ -444,6 +448,8 @@ const PATIENT_INFO_KEYS: Array<keyof ReportPatientInfoStyle> = [
   'borderRadiusPx',
   'paddingYpx',
   'paddingXpx',
+  'marginTopPx',
+  'marginBottomPx',
   'dividerWidthPx',
   'labelCellStyle',
   'valueCellStyle',
@@ -730,6 +736,13 @@ export function validateAndNormalizeReportStyleConfig(
     ),
     paddingYpx: assertIntRange(patientInfoObj.paddingYpx, 6, 18, `${fieldName}.patientInfo.paddingYpx`),
     paddingXpx: assertIntRange(patientInfoObj.paddingXpx, 8, 24, `${fieldName}.patientInfo.paddingXpx`),
+    marginTopPx: assertIntRange(patientInfoObj.marginTopPx, 0, 24, `${fieldName}.patientInfo.marginTopPx`),
+    marginBottomPx: assertIntRange(
+      patientInfoObj.marginBottomPx,
+      0,
+      24,
+      `${fieldName}.patientInfo.marginBottomPx`,
+    ),
     dividerWidthPx: assertIntRange(patientInfoObj.dividerWidthPx, 0, 3, `${fieldName}.patientInfo.dividerWidthPx`),
     labelCellStyle: validatePatientInfoCellStyle(
       patientInfoObj.labelCellStyle,
