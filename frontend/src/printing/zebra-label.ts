@@ -131,6 +131,11 @@ export function clearLabelGraphicCache(): void {
   compositeLayerGraphicInFlightCache.clear();
 }
 
+export function pruneLabelGraphicCache(maxEntries = 300): void {
+  pruneMapToSize(textGraphicCache, maxEntries);
+  pruneMapToSize(compositeLayerGraphicCache, maxEntries);
+}
+
 async function buildZplDocument(
   label: SampleLabelViewModel,
   geometry: ZebraLabelGeometry,
@@ -1557,6 +1562,16 @@ function collapseWhitespace(value: string): string {
 
 function containsArabic(value: string): boolean {
   return /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/.test(value);
+}
+
+function pruneMapToSize<T>(map: Map<string, T>, maxEntries: number): void {
+  while (map.size > maxEntries) {
+    const oldestKey = map.keys().next().value;
+    if (typeof oldestKey !== 'string') {
+      break;
+    }
+    map.delete(oldestKey);
+  }
 }
 
 function getCanvasFontFamily(value: string): string {

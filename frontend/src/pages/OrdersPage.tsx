@@ -81,6 +81,7 @@ import {
   directPrintLabels,
   directPrintReceipt,
   getDirectPrintErrorMessage,
+  warmGatewayPrinterConfig,
 } from '../printing/direct-print';
 import { formatDateKeyForTimeZone } from '../utils/lab-timezone';
 import { buildKeyboardSearchVariants } from '../utils/keyboard-map';
@@ -795,6 +796,9 @@ export function OrdersPage() {
         setReferringDoctorOptions(
           normalizeReferringDoctorList(settings.referringDoctors),
         );
+        if (settings.printing?.mode === 'direct_gateway') {
+          void warmGatewayPrinterConfig(settings.printing.labelsPrinterName);
+        }
       } catch {
         message.warning('Failed to load tests or departments');
       } finally {

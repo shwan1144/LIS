@@ -19,9 +19,12 @@ export type LabelPrintTelemetryEvent = {
     | 'supportsRawZpl'
   >;
   dispatchMs: number;
+  configFetchMs?: number | null;
+  configSource?: 'fallback-empty' | 'inflight' | 'memory-cache' | 'network' | null;
   generationMs: number;
   jobName: string;
   labelCount: number;
+  overheadMs?: number | null;
   payloadBytes: number;
   printerName: string;
   strategy: LabelPrintStrategy;
@@ -73,8 +76,12 @@ export function nowMs(): number {
 export function recordLabelPrintTelemetry(event: LabelPrintTelemetryEvent): void {
   const normalized: LabelPrintTelemetryEvent = {
     ...event,
+    configFetchMs:
+      event.configFetchMs == null ? null : roundTo(event.configFetchMs),
     dispatchMs: roundTo(event.dispatchMs),
     generationMs: roundTo(event.generationMs),
+    overheadMs:
+      event.overheadMs == null ? null : roundTo(event.overheadMs),
     totalMs: roundTo(event.totalMs),
   };
 

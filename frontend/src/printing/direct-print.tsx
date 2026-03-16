@@ -8,8 +8,8 @@ import axios from 'axios';
 import { jsPDF } from 'jspdf';
 import html2canvas from 'html2canvas';
 import {
-  clearLabelGraphicCache,
   generateZebraLabelZpl,
+  pruneLabelGraphicCache,
   resolveZebraLabelGeometry,
   type ZebraLabelPrinterConfig,
 } from './zebra-label';
@@ -25,6 +25,7 @@ const GATEWAY_URL = 'http://localhost:17881';
 const GATEWAY_HEALTH_TIMEOUT_MS = 3_000;
 const GATEWAY_PRINTER_TIMEOUT_MS = 5_000;
 const GATEWAY_PRINT_TIMEOUT_MS = 20_000;
+const GATEWAY_PRINTER_CONFIG_CACHE_TTL_MS = 5 * 60_000;
 const VIRTUAL_SAVE_PRINTER_KEYWORDS = [
   'print to pdf',
   'pdfcreator',
@@ -64,10 +65,24 @@ type GatewayPrinterConfigResponse = {
   resolutionYDpi?: number | null;
 };
 
+type GatewayPrinterConfigCacheSource =
+  | 'fallback-empty'
+  | 'inflight'
+  | 'memory-cache'
+  | 'network';
+
+type CachedGatewayPrinterConfigEntry = {
+  config: GatewayPrinterConfigResponse;
+  expiresAt: number;
+};
+
 export type DirectLabelPrintResult = {
   mode: 'pdf' | 'zpl';
   warning?: string;
 };
+
+const gatewayPrinterConfigCache = new Map<string, CachedGatewayPrinterConfigEntry>();
+const gatewayPrinterConfigInFlight = new Map<string, Promise<GatewayPrinterConfigResponse>>();
 
 export function isVirtualSavePrinterName(name: string): boolean {
   const value = name.trim().toLowerCase();
@@ -110,6 +125,60 @@ async function fetchGatewayPrinterConfig(printerName: string): Promise<GatewayPr
     timeout: GATEWAY_PRINTER_TIMEOUT_MS,
   });
   return response.data ?? {};
+}
+
+async function fetchGatewayPrinterConfigCached(
+  printerName: string,
+): Promise<{ config: GatewayPrinterConfigResponse; source: GatewayPrinterConfigCacheSource }> {
+  const normalizedPrinterName = printerName.trim();
+  const cacheKey = normalizedPrinterName.toLowerCase();
+  const now = nowMs();
+  const cached = gatewayPrinterConfigCache.get(cacheKey);
+  if (cached && cached.expiresAt > now) {
+    return {
+      config: cached.config,
+      source: 'memory-cache',
+    };
+  }
+
+  const inFlight = gatewayPrinterConfigInFlight.get(cacheKey);
+  if (inFlight) {
+    return {
+      config: await inFlight,
+      source: 'inflight',
+    };
+  }
+
+  const request = fetchGatewayPrinterConfig(normalizedPrinterName)
+    .then((config) => {
+      gatewayPrinterConfigCache.set(cacheKey, {
+        config,
+        expiresAt: nowMs() + GATEWAY_PRINTER_CONFIG_CACHE_TTL_MS,
+      });
+      return config;
+    })
+    .finally(() => {
+      gatewayPrinterConfigInFlight.delete(cacheKey);
+    });
+  gatewayPrinterConfigInFlight.set(cacheKey, request);
+
+  return {
+    config: await request,
+    source: 'network',
+  };
+}
+
+export async function warmGatewayPrinterConfig(printerName: string | null | undefined): Promise<void> {
+  const normalizedPrinterName = printerName?.trim();
+  if (!normalizedPrinterName) {
+    return;
+  }
+
+  try {
+    await fetchGatewayPrinterConfigCached(normalizedPrinterName);
+  } catch {
+    // Warming is best-effort; direct print will still fall back later if needed.
+  }
 }
 
 async function gatewayPrintPdf(
@@ -419,14 +488,22 @@ export async function directPrintLabels(params: {
   const jobName = `Labels-${params.order.orderNumber || params.order.id}`;
   let paperSize = 'Custom';
   let printerConfig: GatewayPrinterConfigResponse = {};
+  let configFetchMs: number | null = null;
+  let configSource: GatewayPrinterConfigCacheSource | null = null;
 
   try {
     try {
-      printerConfig = await fetchGatewayPrinterConfig(params.printerName);
+      const configResult = await measureAsync(() =>
+        fetchGatewayPrinterConfigCached(params.printerName),
+      );
+      configFetchMs = configResult.durationMs;
+      configSource = configResult.result.source;
+      printerConfig = configResult.result.config;
       if (typeof printerConfig.paperSize === 'string' && printerConfig.paperSize.trim()) {
         paperSize = printerConfig.paperSize.trim();
       }
     } catch {
+      configSource = 'fallback-empty';
       // fall back to default label size when printer details cannot be read
     }
 
@@ -457,10 +534,14 @@ export async function directPrintLabels(params: {
         );
         recordLabelPrintTelemetry({
           capabilityProfile,
+          configFetchMs,
+          configSource,
           dispatchMs: dispatchResult.durationMs,
           generationMs: zplResult.durationMs,
           jobName,
           labelCount,
+          overheadMs:
+            (nowMs() - printStart) - zplResult.durationMs - dispatchResult.durationMs,
           payloadBytes: utf8ByteLength(zplResult.result),
           printerName: params.printerName,
           strategy: 'zebra_raw_zpl',
@@ -489,10 +570,14 @@ export async function directPrintLabels(params: {
     );
     recordLabelPrintTelemetry({
       capabilityProfile,
+      configFetchMs,
+      configSource,
       dispatchMs: dispatchResult.durationMs,
       generationMs: pdfResult.durationMs,
       jobName,
       labelCount,
+      overheadMs:
+        (nowMs() - printStart) - pdfResult.durationMs - dispatchResult.durationMs,
       payloadBytes: pdfResult.result.size,
       printerName: params.printerName,
       strategy: 'gateway_pdf',
@@ -500,7 +585,7 @@ export async function directPrintLabels(params: {
     });
     return { mode: 'pdf' };
   } finally {
-    clearLabelGraphicCache();
+    pruneLabelGraphicCache();
   }
 }
 
