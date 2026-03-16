@@ -148,20 +148,12 @@ async function buildZplDocument(
   const patientIdMinFontSize = Math.max(9, Math.round(basePatientIdFontSize * 0.62));
   const baseSexFontSize = Math.max(18, Math.round(geometry.heightDots * 0.11));
   const sexMinFontSize = Math.max(9, Math.round(baseSexFontSize * 0.62));
-  const patientNameShouldRenderGraphic = needsRasterText(patientNameText);
-  const registeredAtShouldRenderGraphic = needsRasterText(registeredAtText);
-  const testCodesShouldRenderGraphic = Boolean(testCodesText) && needsRasterText(testCodesText);
-  const sequenceShouldRenderGraphic = needsRasterText(sequenceText);
-  const patientIdShouldRenderGraphic = needsRasterText(patientIdText);
-  const sexShouldRenderGraphic = needsRasterText(sexText);
-  const rasterFieldCount = [
-    patientNameShouldRenderGraphic,
-    registeredAtShouldRenderGraphic,
-    testCodesShouldRenderGraphic,
-    sequenceShouldRenderGraphic,
-    patientIdShouldRenderGraphic,
-    sexShouldRenderGraphic,
-  ].filter(Boolean).length;
+  const patientNameShouldRenderGraphic = true;
+  const registeredAtShouldRenderGraphic = true;
+  const testCodesShouldRenderGraphic = Boolean(testCodesText);
+  const sequenceShouldRenderGraphic = true;
+  const patientIdShouldRenderGraphic = true;
+  const sexShouldRenderGraphic = true;
   const useEnglishVerticalTweaks = !containsArabic(`${patientNameText} ${sexText}`);
   const englishDownShiftDots = useEnglishVerticalTweaks
     ? Math.max(1, mmToDots(0.3, geometry.dpiY))
@@ -170,7 +162,14 @@ async function buildZplDocument(
     ? Math.max(1, mmToDots(0.25, geometry.dpiY))
     : 0;
 
-  if (rasterFieldCount >= 4) {
+  if (requiresCompositeRasterLabelLayer([
+    patientNameText,
+    registeredAtText,
+    testCodesText,
+    sequenceText,
+    patientIdText,
+    sexText,
+  ])) {
     try {
       return await buildCompositeRasterLabelDocument({
         geometry,
@@ -296,15 +295,48 @@ async function buildZplDocument(
     '^LT0',
 
     // Left Strip (Sequence)
-    graphicToZpl(layout.sequenceX, layout.borderThickness, sequenceGraphic),
-    graphicToZpl(layout.sequenceMetaX, layout.borderThickness, registeredAtGraphic),
+    sequenceGraphic
+      ? graphicToZpl(layout.sequenceX, layout.borderThickness, sequenceGraphic)
+      : nativeTextField({
+        align: 'C',
+        fontHeight: Math.max(13, Math.round(geometry.heightDots * 0.076)),
+        fontWidth: Math.max(10, Math.round(geometry.heightDots * 0.06)),
+        orientation: 'B',
+        text: sequenceText,
+        width: geometry.heightDots - (layout.borderThickness * 2),
+        x: layout.sequenceX,
+        y: layout.borderThickness,
+      }),
+    registeredAtGraphic
+      ? graphicToZpl(layout.sequenceMetaX, layout.borderThickness, registeredAtGraphic)
+      : nativeTextField({
+        align: 'C',
+        fontHeight: Math.max(11, Math.round(geometry.heightDots * 0.062)),
+        fontWidth: Math.max(8, Math.round(geometry.heightDots * 0.05)),
+        orientation: 'B',
+        text: registeredAtText,
+        width: geometry.heightDots - (layout.borderThickness * 2),
+        x: layout.sequenceMetaX,
+        y: layout.borderThickness,
+      }),
 
     // Right Strip (Patient ID)
-    graphicToZpl(
-      layout.patientIdX,
-      Math.max(0, layout.borderThickness - englishUpShiftDots),
-      patientIdGraphic,
-    ),
+    patientIdGraphic
+      ? graphicToZpl(
+        layout.patientIdX,
+        Math.max(0, layout.borderThickness - englishUpShiftDots),
+        patientIdGraphic,
+      )
+      : nativeTextField({
+        align: 'C',
+        fontHeight: basePatientIdFontSize,
+        fontWidth: Math.max(9, Math.round(basePatientIdFontSize * 0.72)),
+        orientation: 'B',
+        text: patientIdText,
+        width: geometry.heightDots - (layout.borderThickness * 2),
+        x: layout.patientIdX,
+        y: Math.max(0, layout.borderThickness - englishUpShiftDots),
+      }),
 
     // Patient Name
     patientNameGraphic
@@ -324,11 +356,21 @@ async function buildZplDocument(
       }),
 
     // Sex
-    graphicToZpl(
-      layout.sexX,
-      Math.max(0, layout.paddingY + englishDownShiftDots),
-      sexGraphic,
-    ),
+    sexGraphic
+      ? graphicToZpl(
+        layout.sexX,
+        Math.max(0, layout.paddingY + englishDownShiftDots),
+        sexGraphic,
+      )
+      : nativeTextField({
+        align: 'C',
+        fontHeight: baseSexFontSize,
+        fontWidth: Math.max(10, Math.round(baseSexFontSize * 0.62)),
+        text: sexText,
+        width: layout.sexWidth,
+        x: layout.sexX,
+        y: Math.max(0, layout.paddingY + englishDownShiftDots),
+      }),
 
     // Barcode
     `^BY${moduleWidth},2,${layout.barcodeHeight}`,
@@ -919,10 +961,10 @@ async function renderTextGraphic(options: TextGraphicOptions): Promise<GfaGraphi
   if (requiresBrowserTextLayout(options.text)) {
     await ensureBrowserFontsReady(options.text);
     try {
-      await drawSvgTextToCanvas(sourceContext, textOptions);
+      await drawDomTextToCanvas(sourceContext, textOptions);
     } catch {
       try {
-        await drawDomTextToCanvas(sourceContext, textOptions);
+        await drawSvgTextToCanvas(sourceContext, textOptions);
       } catch {
         drawTextToFit(sourceContext, textOptions);
       }
