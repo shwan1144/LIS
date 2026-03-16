@@ -417,20 +417,17 @@ export async function directPrintLabels(params: {
   const printStart = nowMs();
   const labelCount = params.order.samples?.length ?? 0;
   const jobName = `Labels-${params.order.orderNumber || params.order.id}`;
-  const isZebraPrinter = isZebraPrinterName(params.printerName);
   let paperSize = 'Custom';
   let printerConfig: GatewayPrinterConfigResponse = {};
 
   try {
-    if (!isZebraPrinter) {
-      try {
-        printerConfig = await fetchGatewayPrinterConfig(params.printerName);
-        if (typeof printerConfig.paperSize === 'string' && printerConfig.paperSize.trim()) {
-          paperSize = printerConfig.paperSize.trim();
-        }
-      } catch {
-        // fall back to default label size when printer details cannot be read
+    try {
+      printerConfig = await fetchGatewayPrinterConfig(params.printerName);
+      if (typeof printerConfig.paperSize === 'string' && printerConfig.paperSize.trim()) {
+        paperSize = printerConfig.paperSize.trim();
       }
+    } catch {
+      // fall back to default label size when printer details cannot be read
     }
 
     const geometry = resolveZebraLabelGeometry(printerConfig as ZebraLabelPrinterConfig);
@@ -440,7 +437,7 @@ export async function directPrintLabels(params: {
     });
     const labelsElement = buildLabelsPrintElement(params);
 
-    if (isZebraPrinter) {
+    if (isZebraPrinterName(params.printerName)) {
       try {
         const zplResult = await measureAsync(() =>
           generateZebraLabelZpl({
