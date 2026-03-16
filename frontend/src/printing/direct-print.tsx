@@ -181,6 +181,34 @@ export async function warmGatewayPrinterConfig(printerName: string | null | unde
   }
 }
 
+export async function warmDirectLabelPrintAssets(params: {
+  order: OrderDto;
+  printerName: string | null | undefined;
+  labelSequenceBy?: 'tube_type' | 'department';
+  departments?: DepartmentDto[];
+}): Promise<void> {
+  const normalizedPrinterName = params.printerName?.trim();
+  if (!normalizedPrinterName) {
+    return;
+  }
+
+  try {
+    const configResult = await fetchGatewayPrinterConfigCached(normalizedPrinterName);
+    if (!isZebraPrinterName(normalizedPrinterName)) {
+      return;
+    }
+
+    await generateZebraLabelZpl({
+      departments: params.departments,
+      labelSequenceBy: params.labelSequenceBy,
+      order: params.order,
+      printerConfig: configResult.config as ZebraLabelPrinterConfig,
+    });
+  } catch {
+    // Warming is best-effort and must never block visible printing flows.
+  }
+}
+
 async function gatewayPrintPdf(
   blob: Blob,
   printerName: string,

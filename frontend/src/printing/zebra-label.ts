@@ -53,6 +53,8 @@ const textGraphicCache = new Map<string, GfaGraphic>();
 const textGraphicInFlightCache = new Map<string, Promise<GfaGraphic>>();
 const compositeLayerGraphicCache = new Map<string, GfaGraphic>();
 const compositeLayerGraphicInFlightCache = new Map<string, Promise<GfaGraphic>>();
+const zplDocumentCache = new Map<string, string>();
+const zplDocumentInFlightCache = new Map<string, Promise<string>>();
 
 type LayoutMetrics = {
   barcodeBoxWidth: number;
@@ -113,9 +115,35 @@ export async function generateZebraLabelZpl(params: {
     departments: params.departments,
     labelSequenceBy: params.labelSequenceBy,
   });
+  const cacheKey = buildZplDocumentCacheKey({
+    geometry,
+    labels,
+  });
+  const cached = zplDocumentCache.get(cacheKey);
+  if (cached) {
+    return cached;
+  }
 
-  const documents = await Promise.all(labels.map((label) => buildZplDocument(label, geometry)));
-  return documents.join('\n');
+  const inFlight = zplDocumentInFlightCache.get(cacheKey);
+  if (inFlight) {
+    return inFlight;
+  }
+
+  const promise = Promise.all(labels.map((label) => buildZplDocument(label, geometry)))
+    .then((documents) => {
+      const result = documents.join('\n');
+      zplDocumentCache.set(cacheKey, result);
+      return result;
+    })
+    .catch((error) => {
+      zplDocumentCache.delete(cacheKey);
+      throw error;
+    })
+    .finally(() => {
+      zplDocumentInFlightCache.delete(cacheKey);
+    });
+  zplDocumentInFlightCache.set(cacheKey, promise);
+  return promise;
 }
 
 export function resolveZebraLabelGeometry(
@@ -129,11 +157,14 @@ export function clearLabelGraphicCache(): void {
   textGraphicInFlightCache.clear();
   compositeLayerGraphicCache.clear();
   compositeLayerGraphicInFlightCache.clear();
+  zplDocumentCache.clear();
+  zplDocumentInFlightCache.clear();
 }
 
 export function pruneLabelGraphicCache(maxEntries = 300): void {
   pruneMapToSize(textGraphicCache, maxEntries);
   pruneMapToSize(compositeLayerGraphicCache, maxEntries);
+  pruneMapToSize(zplDocumentCache, maxEntries);
 }
 
 async function buildZplDocument(
@@ -903,6 +934,32 @@ function buildCompositeLayerCacheKey(params: CompositeRasterLabelLayerParams): s
       sexText: collapseWhitespace(params.sexText),
       testCodesText: collapseWhitespace(params.testCodesText),
     },
+  });
+}
+
+function buildZplDocumentCacheKey(params: {
+  geometry: ZebraLabelGeometry;
+  labels: SampleLabelViewModel[];
+}): string {
+  return JSON.stringify({
+    geometry: {
+      dpiX: params.geometry.dpiX,
+      dpiY: params.geometry.dpiY,
+      heightDots: params.geometry.heightDots,
+      widthDots: params.geometry.widthDots,
+    },
+    labels: params.labels.map((label) => ({
+      barcodeText: collapseWhitespace(label.barcodeText),
+      barcodeValue: collapseWhitespace(label.barcodeValue),
+      patientGlobalId: collapseWhitespace(label.patientGlobalId),
+      patientName: collapseWhitespace(label.patientName),
+      registeredAtLabel: collapseWhitespace(label.registeredAtLabel),
+      scopeLabel: collapseWhitespace(label.scopeLabel),
+      sequenceDisplay: collapseWhitespace(label.sequenceDisplay),
+      sequenceLabel: collapseWhitespace(label.sequenceLabel),
+      sexLabel: collapseWhitespace(label.sexLabel),
+      testCodes: collapseWhitespace(label.testCodes),
+    })),
   });
 }
 
