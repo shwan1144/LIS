@@ -260,7 +260,7 @@ export class PrintServer {
     }
 
     private async handleRequest(req: IncomingMessage, res: ServerResponse): Promise<void> {
-        this.applyCorsHeaders(res);
+        this.applyCorsHeaders(req, res);
 
         if (req.method === 'OPTIONS') {
             res.writeHead(204);
@@ -329,10 +329,23 @@ export class PrintServer {
         }
     }
 
-    private applyCorsHeaders(res: ServerResponse): void {
+    private applyCorsHeaders(req: IncomingMessage, res: ServerResponse): void {
+        const requestedHeaders = req.headers['access-control-request-headers'];
+        const requestedPrivateNetwork = req.headers['access-control-request-private-network'];
+
         res.setHeader('Access-Control-Allow-Origin', '*');
         res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-        res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+        res.setHeader(
+            'Access-Control-Allow-Headers',
+            typeof requestedHeaders === 'string' && requestedHeaders.trim().length > 0
+                ? requestedHeaders
+                : 'Content-Type',
+        );
+        res.setHeader('Vary', 'Access-Control-Request-Headers, Access-Control-Request-Private-Network');
+
+        if (requestedPrivateNetwork === 'true') {
+            res.setHeader('Access-Control-Allow-Private-Network', 'true');
+        }
     }
 
     private decodeBase64Pdf(value: unknown): Buffer {
