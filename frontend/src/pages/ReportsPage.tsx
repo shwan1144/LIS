@@ -231,6 +231,9 @@ const ORDER_TEST_STATUS_COLORS: Record<string, string> = {
   REJECTED: 'red',
 };
 
+const REPORT_PRINT_WARMUP_COUNT = 2;
+const REPORT_PRINT_WARMUP_DELAY_MS = 800;
+
 const RESULT_FLAG_META: Record<string, { color: string; label: string }> = {
   N: { color: 'green', label: 'Normal' },
   H: { color: 'orange', label: 'High' },
@@ -1142,6 +1145,55 @@ export function ReportsPage() {
     const result = await getResultsPdfBlobDetailed(orderId);
     return result.blob;
   }, [getResultsPdfBlobDetailed]);
+
+  useEffect(() => {
+    if (orders.length === 0) {
+      return;
+    }
+
+    let cancelled = false;
+    const timerId = window.setTimeout(() => {
+      void (async () => {
+        try {
+          const settings = await getLabSettings().catch(() => null);
+          if (cancelled) {
+            return;
+          }
+
+          const printerName = settings?.printing?.reportPrinterName?.trim();
+          const mode = settings?.printing?.mode;
+          if (mode !== 'direct_gateway' || !printerName || isVirtualSavePrinterName(printerName)) {
+            return;
+          }
+
+          const candidateOrders = orders
+            .filter((order) => {
+              const availability = getResultAvailability(order);
+              return availability.ready && order.paymentStatus === 'paid';
+            })
+            .slice(0, REPORT_PRINT_WARMUP_COUNT);
+
+          for (const order of candidateOrders) {
+            if (cancelled) {
+              return;
+            }
+            try {
+              await getResultsPdfBlobDetailed(order.id);
+            } catch {
+              // Warm-up is best-effort and should never interrupt normal report browsing.
+            }
+          }
+        } catch {
+          // Warm-up is best-effort and should never interrupt normal report browsing.
+        }
+      })();
+    }, REPORT_PRINT_WARMUP_DELAY_MS);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timerId);
+    };
+  }, [getResultsPdfBlobDetailed, orders]);
 
   const handleDownloadResults = async (
     orderId: string,

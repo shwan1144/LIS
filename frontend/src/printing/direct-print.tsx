@@ -26,6 +26,7 @@ const GATEWAY_HEALTH_TIMEOUT_MS = 3_000;
 const GATEWAY_PRINTER_TIMEOUT_MS = 5_000;
 const GATEWAY_PRINT_TIMEOUT_MS = 20_000;
 const GATEWAY_PRINTER_CONFIG_CACHE_TTL_MS = 5 * 60_000;
+const RECEIPT_PDF_CACHE_TTL_MS = 5 * 60_000;
 const VIRTUAL_SAVE_PRINTER_KEYWORDS = [
   'print to pdf',
   'pdfcreator',
@@ -76,6 +77,11 @@ type CachedGatewayPrinterConfigEntry = {
   expiresAt: number;
 };
 
+type CachedReceiptPdfEntry = {
+  blob: Blob;
+  expiresAt: number;
+};
+
 export type DirectLabelPrintResult = {
   mode: 'pdf' | 'zpl';
   warning?: string;
@@ -83,6 +89,8 @@ export type DirectLabelPrintResult = {
 
 const gatewayPrinterConfigCache = new Map<string, CachedGatewayPrinterConfigEntry>();
 const gatewayPrinterConfigInFlight = new Map<string, Promise<GatewayPrinterConfigResponse>>();
+const receiptPdfCache = new Map<string, CachedReceiptPdfEntry>();
+const receiptPdfInFlight = new Map<string, Promise<Blob>>();
 
 export function isVirtualSavePrinterName(name: string): boolean {
   const value = name.trim().toLowerCase();
@@ -496,13 +504,22 @@ export async function directPrintReceipt(params: {
   printerName: string;
 }): Promise<void> {
   const jobName = `Receipt-${params.order.orderNumber || params.order.id}`;
-  const blob = await renderAndConvertOffscreen(
-    <div className="print-container">
-      <style>{printCss}</style>
-      <OrderReceipt order={params.order} labName={params.labName} />
-    </div>,
-  );
+  const blob = await getCachedReceiptPdf({
+    labName: params.labName,
+    order: params.order,
+  });
   await gatewayPrintPdf(blob, params.printerName, jobName);
+}
+
+export async function warmDirectReceiptPrintAssets(params: {
+  order: OrderDto;
+  labName?: string;
+}): Promise<void> {
+  try {
+    await getCachedReceiptPdf(params);
+  } catch {
+    // Warming is best-effort and must never block visible printing flows.
+  }
 }
 
 export async function directPrintLabels(params: {
@@ -615,6 +632,90 @@ export async function directPrintLabels(params: {
   } finally {
     pruneLabelGraphicCache();
   }
+}
+
+function buildReceiptCacheKey(params: {
+  order: OrderDto;
+  labName?: string;
+}): string {
+  const rootTests = (params.order.samples ?? []).flatMap((sample) =>
+    (sample.orderTests ?? [])
+      .filter((orderTest) => !orderTest.parentOrderTestId)
+      .map((orderTest) => ({
+        code: orderTest.test?.code ?? '',
+        name: orderTest.test?.name ?? '',
+        price: orderTest.price ?? null,
+      })),
+  );
+
+  return JSON.stringify({
+    labName: params.labName ?? params.order.lab?.name ?? null,
+    order: {
+      discountPercent: params.order.discountPercent ?? null,
+      finalAmount: params.order.finalAmount ?? null,
+      id: params.order.id,
+      notes: params.order.notes ?? null,
+      orderNumber: params.order.orderNumber ?? null,
+      paidAmount: params.order.paidAmount ?? null,
+      paymentStatus: params.order.paymentStatus ?? null,
+      registeredAt: params.order.registeredAt ?? null,
+      shift: params.order.shift
+        ? {
+          code: params.order.shift.code ?? null,
+          name: params.order.shift.name ?? null,
+        }
+        : null,
+      totalAmount: params.order.totalAmount ?? null,
+    },
+    patient: {
+      dateOfBirth: params.order.patient?.dateOfBirth ?? null,
+      fullName: params.order.patient?.fullName ?? null,
+      phone: params.order.patient?.phone ?? null,
+      sex: params.order.patient?.sex ?? null,
+    },
+    rootTests,
+  });
+}
+
+async function getCachedReceiptPdf(params: {
+  order: OrderDto;
+  labName?: string;
+}): Promise<Blob> {
+  const cacheKey = buildReceiptCacheKey(params);
+  const now = nowMs();
+  const cached = receiptPdfCache.get(cacheKey);
+  if (cached && cached.expiresAt > now) {
+    return cached.blob;
+  }
+
+  const inFlight = receiptPdfInFlight.get(cacheKey);
+  if (inFlight) {
+    return inFlight;
+  }
+
+  const promise = renderAndConvertOffscreen(
+    <div className="print-container">
+      <style>{printCss}</style>
+      <OrderReceipt order={params.order} labName={params.labName} />
+    </div>,
+  )
+    .then((blob) => {
+      receiptPdfCache.set(cacheKey, {
+        blob,
+        expiresAt: nowMs() + RECEIPT_PDF_CACHE_TTL_MS,
+      });
+      return blob;
+    })
+    .catch((error) => {
+      receiptPdfCache.delete(cacheKey);
+      throw error;
+    })
+    .finally(() => {
+      receiptPdfInFlight.delete(cacheKey);
+    });
+
+  receiptPdfInFlight.set(cacheKey, promise);
+  return promise;
 }
 
 export async function directPrintReportPdf(params: {

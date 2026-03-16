@@ -81,6 +81,7 @@ import {
   directPrintLabels,
   directPrintReceipt,
   getDirectPrintErrorMessage,
+  warmDirectReceiptPrintAssets,
   warmDirectLabelPrintAssets,
   warmGatewayPrinterConfig,
 } from '../printing/direct-print';
@@ -413,6 +414,7 @@ export function OrdersPage() {
   const [uiTestGroups, setUiTestGroups] = useState<{ id: string; name: string; testIds: string[] }[]>([]);
   const [referringDoctorOptions, setReferringDoctorOptions] = useState<string[]>([]);
   const [directGatewayLabelPrinterName, setDirectGatewayLabelPrinterName] = useState<string | null>(null);
+  const [directGatewayReceiptPrinterName, setDirectGatewayReceiptPrinterName] = useState<string | null>(null);
   const [referredBy, setReferredBy] = useState('');
   const [selectedDeliveryMethods, setSelectedDeliveryMethods] = useState<DeliveryMethod[]>([]);
   const [savingDeliveryMethods, setSavingDeliveryMethods] = useState(false);
@@ -802,7 +804,12 @@ export function OrdersPage() {
           settings.printing?.mode === 'direct_gateway'
             ? settings.printing.labelsPrinterName?.trim() || null
             : null;
+        const warmedReceiptPrinterName =
+          settings.printing?.mode === 'direct_gateway'
+            ? settings.printing.receiptPrinterName?.trim() || null
+            : null;
         setDirectGatewayLabelPrinterName(warmedLabelPrinterName);
+        setDirectGatewayReceiptPrinterName(warmedReceiptPrinterName);
         if (warmedLabelPrinterName) {
           void warmGatewayPrinterConfig(warmedLabelPrinterName);
         }
@@ -1223,6 +1230,16 @@ export function OrdersPage() {
       printerName: directGatewayLabelPrinterName,
     });
   }, [departments, directGatewayLabelPrinterName, printLabelSequenceBy, selectedCreatedOrder]);
+
+  useEffect(() => {
+    if (!selectedCreatedOrder || !directGatewayReceiptPrinterName) {
+      return;
+    }
+    void warmDirectReceiptPrintAssets({
+      labName: lab?.name,
+      order: selectedCreatedOrder,
+    });
+  }, [directGatewayReceiptPrinterName, lab?.name, selectedCreatedOrder]);
 
   useEffect(() => {
     if (isSelectedLocked) {
@@ -1768,6 +1785,9 @@ export function OrdersPage() {
         const mode = printing?.mode;
         setDirectGatewayLabelPrinterName(
           mode === 'direct_gateway' ? printing?.labelsPrinterName?.trim() || null : null,
+        );
+        setDirectGatewayReceiptPrinterName(
+          mode === 'direct_gateway' ? printing?.receiptPrinterName?.trim() || null : null,
         );
         if (mode === 'direct_gateway' && printerName) {
           try {
