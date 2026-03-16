@@ -9,7 +9,6 @@ import {
   Form,
   Grid,
   Input,
-  InputNumber,
   Modal,
   Progress,
   Row,
@@ -547,12 +546,12 @@ function buildResultsMessage(
   });
 
   return [
-    `سڵاو بەێز ${patientName}`,
+    `سڵاو بەڕێز ${patientName}`,
     `بۆ بینینی ئەنجامی پشكنینەكانت كە ئەنجامت داوە لە بەرواری (${orderDateTime}) دەتوانی لەم لینكەی خوارەوە ببینی.`,
     '',
     resultUrl,
     '',
-    `سوپاس بۆ هەڵبژاردنی تاقیگەی ${displayLabName}`,
+    `سوپاس بۆ هەڵبژاردنی  ${displayLabName}`,
   ].join('\n');
 }
 
@@ -576,6 +575,14 @@ function formatOrderTestResultPreview(orderTest: OrderTestDto, allTests: OrderTe
   const parameters = orderTest.resultParameters;
   if (parameters && Object.keys(parameters).length > 0) {
     return Object.keys(parameters).join(', ');
+  }
+
+  if (
+    orderTest.test?.resultEntryType === 'NUMERIC' &&
+    orderTest.resultText?.trim()
+  ) {
+    const unit = orderTest.test?.unit ? ` ${orderTest.test.unit}` : '';
+    return `${orderTest.resultText.trim()}${unit}`;
   }
 
   if (orderTest.resultValue !== null && orderTest.resultValue !== undefined) {
@@ -1573,9 +1580,11 @@ export function ReportsPage() {
       const parameterDefinitions = target.test?.parameterDefinitions ?? [];
 
       const valueCandidate =
-        target.resultValue !== null && target.resultValue !== undefined
-          ? Number(target.resultValue)
-          : undefined;
+        target.test?.resultEntryType === 'NUMERIC' && target.resultText?.trim()
+          ? target.resultText.trim()
+          : target.resultValue !== null && target.resultValue !== undefined
+            ? String(target.resultValue)
+            : undefined;
 
       const defaultQualitativeOption =
         resultTextOptions.find((option) => option.isDefault)?.value ??
@@ -1661,7 +1670,9 @@ export function ReportsPage() {
     try {
       const savePromises = targets.map(async (target) => {
         const itemValues = allValues[target.id] || {};
-        let resultValue = itemValues.resultValue ?? null;
+        const rawResultValue =
+          itemValues.resultValue != null ? String(itemValues.resultValue).trim() : '';
+        let resultValue = rawResultValue === '' ? null : Number(rawResultValue);
         let resultText = itemValues.resultText?.trim() || null;
         const rawParams = itemValues.resultParameters ?? {};
         const rawCustomParams = itemValues.resultParametersCustom ?? {};
@@ -1690,6 +1701,8 @@ export function ReportsPage() {
             resultText = itemValues.customResultText?.trim() || null;
           }
           resultValue = null;
+        } else if (resultEntryType === 'NUMERIC') {
+          resultText = rawResultValue || null;
         } else if (resultEntryType === 'TEXT') {
           resultValue = null;
         } else if (resultEntryType === 'CULTURE_SENSITIVITY') {
@@ -1699,6 +1712,10 @@ export function ReportsPage() {
           );
           resultValue = null;
           resultText = null;
+        }
+
+        if (resultEntryType === 'NUMERIC' && resultValue !== null && !Number.isFinite(resultValue)) {
+          throw new Error('Invalid numeric result value');
         }
 
         await enterResult(target.id, {
@@ -2701,12 +2718,25 @@ export function ReportsPage() {
                                   >
                                     {target.test?.resultEntryType === 'NUMERIC' ? (
                                       <div style={{ display: 'flex', gap: 8, alignItems: 'center', justifyContent: isPanel ? 'center' : 'flex-start', width: isPanel ? '100%' : undefined }}>
-                                        <Form.Item name={[target.id, 'resultValue']} noStyle>
-                                          <InputNumber
+                                        <Form.Item
+                                          name={[target.id, 'resultValue']}
+                                          noStyle
+                                          rules={[
+                                            {
+                                              validator: async (_rule, value) => {
+                                                const raw = value != null ? String(value).trim() : '';
+                                                if (!raw) return;
+                                                if (/^[-+]?(?:\d+\.?\d*|\.\d+)$/.test(raw)) return;
+                                                throw new Error('Enter a valid numeric result');
+                                              },
+                                            },
+                                          ]}
+                                        >
+                                          <Input
                                             style={{ width: '100%', textAlign: 'center' }}
                                             placeholder="Value"
-                                            precision={2}
                                             size="small"
+                                            inputMode="decimal"
                                           />
                                         </Form.Item>
                                         {target.test?.resultEntryType === 'NUMERIC' && !isPanel && target.test?.unit && <Text type="secondary" style={{ whiteSpace: 'nowrap', flexShrink: 0 }}>{target.test.unit}</Text>}
