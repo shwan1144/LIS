@@ -89,14 +89,57 @@ function createOrderTest(
 function buildRegularResultsHtml(
   resultsTableOverrides: Partial<typeof DEFAULT_REPORT_STYLE_V1.resultsTable> = {},
 ): string {
+  const mergedResultsTable = {
+    ...DEFAULT_REPORT_STYLE_V1.resultsTable,
+    ...resultsTableOverrides,
+    headerStyle: {
+      ...DEFAULT_REPORT_STYLE_V1.resultsTable.headerStyle,
+      ...(resultsTableOverrides.headerStyle ?? {}),
+    },
+    bodyStyle: {
+      ...DEFAULT_REPORT_STYLE_V1.resultsTable.bodyStyle,
+      ...(resultsTableOverrides.bodyStyle ?? {}),
+    },
+    departmentRowStyle: {
+      ...DEFAULT_REPORT_STYLE_V1.resultsTable.departmentRowStyle,
+      ...(resultsTableOverrides.departmentRowStyle ?? {}),
+    },
+    categoryRowStyle: {
+      ...DEFAULT_REPORT_STYLE_V1.resultsTable.categoryRowStyle,
+      ...(resultsTableOverrides.categoryRowStyle ?? {}),
+    },
+    panelSectionStyle: {
+      ...DEFAULT_REPORT_STYLE_V1.resultsTable.panelSectionStyle,
+      ...(resultsTableOverrides.panelSectionStyle ?? {}),
+    },
+    testColumn: {
+      ...DEFAULT_REPORT_STYLE_V1.resultsTable.testColumn,
+      ...(resultsTableOverrides.testColumn ?? {}),
+    },
+    resultColumn: {
+      ...DEFAULT_REPORT_STYLE_V1.resultsTable.resultColumn,
+      ...(resultsTableOverrides.resultColumn ?? {}),
+    },
+    unitColumn: {
+      ...DEFAULT_REPORT_STYLE_V1.resultsTable.unitColumn,
+      ...(resultsTableOverrides.unitColumn ?? {}),
+    },
+    statusColumn: {
+      ...DEFAULT_REPORT_STYLE_V1.resultsTable.statusColumn,
+      ...(resultsTableOverrides.statusColumn ?? {}),
+    },
+    referenceColumn: {
+      ...DEFAULT_REPORT_STYLE_V1.resultsTable.referenceColumn,
+      ...(resultsTableOverrides.referenceColumn ?? {}),
+    },
+  };
   const order = createOrder({
     lab: {
       ...createOrder().lab,
       reportStyle: {
         ...DEFAULT_REPORT_STYLE_V1,
         resultsTable: {
-          ...DEFAULT_REPORT_STYLE_V1.resultsTable,
-          ...resultsTableOverrides,
+          ...mergedResultsTable,
         },
       },
     } as Order['lab'],
@@ -755,7 +798,7 @@ describe('buildResultsReportHtml panel page isolation', () => {
     });
 
     expect(html).toContain(`--patient-info-bg: ${DEFAULT_REPORT_STYLE_V1.patientInfo.backgroundColor};`);
-    expect(html).toContain(`--results-header-bg: ${DEFAULT_REPORT_STYLE_V1.resultsTable.headerBackgroundColor};`);
+    expect(html).toContain(`--results-header-bg: ${DEFAULT_REPORT_STYLE_V1.resultsTable.headerStyle.backgroundColor};`);
     expect(html).toContain(
       `--patient-info-label-align: ${DEFAULT_REPORT_STYLE_V1.patientInfo.labelTextAlign};`,
     );
@@ -768,16 +811,90 @@ describe('buildResultsReportHtml panel page isolation', () => {
       )};`,
     );
     expect(html).toContain(
-      `--results-font-family: ${resolveReportFontStackWithArabicFallback(
-        DEFAULT_REPORT_STYLE_V1.resultsTable.fontFamily,
+      `--results-body-font-family: ${resolveReportFontStackWithArabicFallback(
+        DEFAULT_REPORT_STYLE_V1.resultsTable.bodyStyle.fontFamily,
+      )};`,
+    );
+    expect(html).toContain(
+      `--results-header-font-family: ${resolveReportFontStackWithArabicFallback(
+        DEFAULT_REPORT_STYLE_V1.resultsTable.headerStyle.fontFamily,
       )};`,
     );
     expect(html).toContain('font-weight: var(--patient-info-value-weight);');
     expect(html).toContain('font-family: var(--patient-info-font-family);');
-    expect(html).toContain('font-family: var(--results-font-family);');
+    expect(html).toContain('font-family: var(--results-body-font-family);');
+    expect(html).toContain('font-family: var(--results-header-font-family);');
     expect(html).toContain(
       '.reference-value { color: var(--results-reference-column-color); white-space: pre-wrap; word-break: break-word; }',
     );
+  });
+
+  it('injects section-specific padding variables for results rows and culture blocks', () => {
+    const html = buildRegularResultsHtml({
+      headerStyle: {
+        ...DEFAULT_REPORT_STYLE_V1.resultsTable.headerStyle,
+        paddingYpx: 9,
+        paddingXpx: 13,
+      },
+      bodyStyle: {
+        ...DEFAULT_REPORT_STYLE_V1.resultsTable.bodyStyle,
+        paddingYpx: 7,
+        paddingXpx: 11,
+      },
+      departmentRowStyle: {
+        ...DEFAULT_REPORT_STYLE_V1.resultsTable.departmentRowStyle,
+        paddingYpx: 10,
+        paddingXpx: 15,
+      },
+      categoryRowStyle: {
+        ...DEFAULT_REPORT_STYLE_V1.resultsTable.categoryRowStyle,
+        paddingYpx: 8,
+        paddingXpx: 14,
+      },
+    });
+
+    expect(html).toContain('--results-header-padding-y: 9px;');
+    expect(html).toContain('--results-header-padding-x: 13px;');
+    expect(html).toContain('--results-body-padding-y: 7px;');
+    expect(html).toContain('--results-body-padding-x: 11px;');
+    expect(html).toContain('--results-dept-padding-y: 10px;');
+    expect(html).toContain('--results-dept-padding-x: 15px;');
+    expect(html).toContain('--results-cat-padding-y: 8px;');
+    expect(html).toContain('--results-cat-padding-x: 14px;');
+    expect(html).toContain('padding: var(--results-header-padding-y) var(--results-header-padding-x);');
+    expect(html).toContain('padding: var(--results-body-padding-y) var(--results-body-padding-x);');
+    expect(html).toContain('padding: var(--results-dept-padding-y) var(--results-dept-padding-x);');
+    expect(html).toContain('padding: var(--results-cat-padding-y) var(--results-cat-padding-x);');
+  });
+
+  it('injects report title padding variables and applies them to the title block', () => {
+    const order = createOrder({
+      lab: {
+        ...createOrder().lab,
+        reportStyle: {
+          ...DEFAULT_REPORT_STYLE_V1,
+          reportTitle: {
+            ...DEFAULT_REPORT_STYLE_V1.reportTitle,
+            paddingYpx: 5,
+            paddingXpx: 18,
+          },
+        },
+      } as Order['lab'],
+    });
+
+    const html = buildResultsReportHtml({
+      order,
+      orderTests: [],
+      reportableCount: 0,
+      verifiedCount: 0,
+      verifiers: [],
+      latestVerifiedAt: null,
+      comments: [],
+    });
+
+    expect(html).toContain('--report-title-padding-y: 5px;');
+    expect(html).toContain('--report-title-padding-x: 18px;');
+    expect(html).toContain('padding: var(--report-title-padding-y) var(--report-title-padding-x);');
   });
 
   it('injects culture section style variables and hooks CSS to them', () => {
@@ -788,9 +905,13 @@ describe('buildResultsReportHtml panel page isolation', () => {
         fontFamily: 'verdana',
         sectionTitleColor: '#102030',
         sectionTitleAlign: 'center',
+        noGrowthPaddingYpx: 10,
+        noGrowthPaddingXpx: 14,
         metaTextAlign: 'right',
         commentTextAlign: 'center',
         notesTextAlign: 'right',
+        notesPaddingYpx: 9,
+        notesPaddingXpx: 4,
         astResistanceBackgroundColor: '#FFECEC',
       },
     };
@@ -821,10 +942,16 @@ describe('buildResultsReportHtml panel page isolation', () => {
     expect(html).toContain('--culture-meta-align: right;');
     expect(html).toContain('--culture-comment-align: center;');
     expect(html).toContain('--culture-notes-align: right;');
+    expect(html).toContain('--culture-no-growth-padding-y: 10px;');
+    expect(html).toContain('--culture-no-growth-padding-x: 14px;');
+    expect(html).toContain('--culture-notes-padding-y: 9px;');
+    expect(html).toContain('--culture-notes-padding-x: 4px;');
     expect(html).toContain('--culture-ast-resistance-bg: #FFECEC;');
     expect(html).toContain('.culture-page .panel-page-title {');
     expect(html).toContain('font-family: var(--culture-font-family);');
     expect(html).toContain('background: var(--culture-ast-resistance-bg);');
+    expect(html).toContain('padding: var(--culture-no-growth-padding-y) var(--culture-no-growth-padding-x);');
+    expect(html).toContain('padding: var(--culture-notes-padding-y) var(--culture-notes-padding-x) 0;');
   });
 
   it('renders an order QR in patient info when orderQrDataUrl is provided', () => {
@@ -861,7 +988,14 @@ describe('buildResultsReportHtml panel page isolation', () => {
       resultsTable: {
         ...DEFAULT_REPORT_STYLE_V1.resultsTable,
         statusHighColor: '#AA0000',
-        fontFamily: 'courier-new',
+        headerStyle: {
+          ...DEFAULT_REPORT_STYLE_V1.resultsTable.headerStyle,
+          fontFamily: 'courier-new',
+        },
+        bodyStyle: {
+          ...DEFAULT_REPORT_STYLE_V1.resultsTable.bodyStyle,
+          fontFamily: 'courier-new',
+        },
       },
     };
     const order = createOrder({
@@ -891,10 +1025,39 @@ describe('buildResultsReportHtml panel page isolation', () => {
       `--patient-info-rtl-font-family: ${resolveReportRtlFontStack(customStyle.patientInfo.fontFamily)};`,
     );
     expect(html).toContain(
-      `--results-font-family: ${resolveReportFontStackWithArabicFallback(
-        customStyle.resultsTable.fontFamily,
+      `--results-body-font-family: ${resolveReportFontStackWithArabicFallback(
+        customStyle.resultsTable.bodyStyle.fontFamily,
       )};`,
     );
+    expect(html).toContain(
+      `--results-header-font-family: ${resolveReportFontStackWithArabicFallback(
+        customStyle.resultsTable.headerStyle.fontFamily,
+      )};`,
+    );
+  });
+
+  it('keeps header styling independent from per-column body styles', () => {
+    const html = buildRegularResultsHtml({
+      headerStyle: {
+        ...DEFAULT_REPORT_STYLE_V1.resultsTable.headerStyle,
+        textColor: '#112233',
+        fontSizePx: 15,
+        textAlign: 'center',
+      },
+      testColumn: {
+        ...DEFAULT_REPORT_STYLE_V1.resultsTable.testColumn,
+        textColor: '#FF0000',
+        fontSizePx: 9,
+        textAlign: 'right',
+      },
+    });
+
+    expect(html).toContain('--results-header-text-color: #112233;');
+    expect(html).toContain('--results-header-font-size: 15px;');
+    expect(html).toContain('--results-header-align: center;');
+    expect(html).toContain('--results-test-color: #FF0000;');
+    expect(html).not.toContain('th.col-test {');
+    expect(html).toContain('td.col-test {');
   });
 
   it('prefers order notes for Referred By over patient address fallback', () => {
@@ -941,5 +1104,128 @@ describe('buildResultsReportHtml panel page isolation', () => {
     });
 
     expect(html).toContain('<span class="label">Age/Sex:</span><span class="info-value">5 days/Male</span>');
+  });
+
+  it('renders panel section headers once per contiguous named group and keeps child order', () => {
+    const order = createOrder();
+    const panelParent = createOrderTest('panel-gue-parent', {
+      name: 'GUE Panel',
+      code: 'GUE',
+      type: TestType.PANEL,
+    });
+    const macroColor = createOrderTest('panel-gue-color', {
+      name: 'Color',
+      code: 'COLOR',
+      parentOrderTestId: panelParent.id,
+      resultText: 'Yellow',
+      sortOrder: 1,
+    });
+    const macroAppearance = createOrderTest('panel-gue-appearance', {
+      name: 'Appearance',
+      code: 'APPEAR',
+      parentOrderTestId: panelParent.id,
+      resultText: 'Clear',
+      sortOrder: 2,
+    });
+    const microRbc = createOrderTest('panel-gue-rbc', {
+      name: 'RBC / HPF',
+      code: 'RBC',
+      parentOrderTestId: panelParent.id,
+      resultText: '4-6',
+      sortOrder: 3,
+    });
+    (macroColor as OrderTest & { panelReportSection?: string }).panelReportSection = 'Macroscopic';
+    (macroAppearance as OrderTest & { panelReportSection?: string }).panelReportSection = 'Macroscopic';
+    (microRbc as OrderTest & { panelReportSection?: string }).panelReportSection = 'Microscopic';
+
+    const html = buildResultsReportHtml({
+      order,
+      orderTests: [panelParent, macroColor, macroAppearance, microRbc],
+      reportableCount: 4,
+      verifiedCount: 4,
+      verifiers: ['Verifier'],
+      latestVerifiedAt: new Date('2026-02-26T11:00:00.000Z'),
+      comments: [],
+    });
+
+    expect(countMatches(html, 'class="panel-section-label">Macroscopic')).toBe(1);
+    expect(countMatches(html, 'class="panel-section-label">Microscopic')).toBe(1);
+
+    const panelChunk = html.slice(html.indexOf('class="panel-page-title">GUE Panel'));
+    expect(panelChunk.indexOf('class="panel-section-label">Macroscopic')).toBeLessThan(
+      panelChunk.indexOf('>Color</td>'),
+    );
+    expect(panelChunk.indexOf('>Color</td>')).toBeLessThan(panelChunk.indexOf('>Appearance</td>'));
+    expect(panelChunk.indexOf('>Appearance</td>')).toBeLessThan(
+      panelChunk.indexOf('class="panel-section-label">Microscopic'),
+    );
+    expect(panelChunk.indexOf('class="panel-section-label">Microscopic')).toBeLessThan(
+      panelChunk.indexOf('>RBC / HPF</td>'),
+    );
+  });
+
+  it('skips panel section headers when panel children do not have named sections', () => {
+    const order = createOrder();
+    const panelParent = createOrderTest('panel-cbc-parent', {
+      name: 'CBC Panel',
+      code: 'CBC',
+      type: TestType.PANEL,
+    });
+    const child = createOrderTest('panel-cbc-child', {
+      name: 'Hemoglobin',
+      code: 'HGB',
+      parentOrderTestId: panelParent.id,
+      resultValue: 13.1,
+      unit: 'g/dL',
+    });
+
+    const html = buildResultsReportHtml({
+      order,
+      orderTests: [panelParent, child],
+      reportableCount: 2,
+      verifiedCount: 2,
+      verifiers: ['Verifier'],
+      latestVerifiedAt: new Date('2026-02-26T11:00:00.000Z'),
+      comments: [],
+    });
+
+    expect(countMatches(html, 'class="panel-section-label"')).toBe(0);
+    expect(html).toContain('Hemoglobin');
+  });
+
+  it('includes panel section styling css variables in the rendered report', () => {
+    const html = buildRegularResultsHtml({
+      panelSectionStyle: {
+        ...DEFAULT_REPORT_STYLE_V1.resultsTable.panelSectionStyle,
+        backgroundColor: '#EAF5FF',
+        textColor: '#102A43',
+        borderColor: '#7AB8FF',
+        fontFamily: 'verdana',
+        fontSizePx: 13,
+        textAlign: 'center',
+        bold: false,
+        borderWidthPx: 2,
+        borderRadiusPx: 12,
+        paddingYpx: 8,
+        paddingXpx: 14,
+        marginTopPx: 9,
+        marginBottomPx: 5,
+      },
+    });
+
+    expect(html).toContain('--results-panel-section-bg: #EAF5FF;');
+    expect(html).toContain('--results-panel-section-text-color: #102A43;');
+    expect(html).toContain('--results-panel-section-border-color: #7AB8FF;');
+    expect(html).toContain('--results-panel-section-font-size: 13px;');
+    expect(html).toContain('--results-panel-section-font-weight: 400;');
+    expect(html).toContain('--results-panel-section-border-width: 2px;');
+    expect(html).toContain('--results-panel-section-radius: 12px;');
+    expect(html).toContain('--results-panel-section-padding-y: 8px;');
+    expect(html).toContain('--results-panel-section-padding-x: 14px;');
+    expect(html).toContain('--results-panel-section-margin-top: 9px;');
+    expect(html).toContain('--results-panel-section-margin-bottom: 5px;');
+    expect(html).toContain(
+      `--results-panel-section-font-family: ${resolveReportFontStackWithArabicFallback('verdana')};`,
+    );
   });
 });

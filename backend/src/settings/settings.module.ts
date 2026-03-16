@@ -3,6 +3,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { SettingsService } from './settings.service';
 import { SettingsController } from './settings.controller';
 import { AuthModule } from '../auth/auth.module';
+import { ReportsModule } from '../reports/reports.module';
 import { User } from '../entities/user.entity';
 import { UserLabAssignment } from '../entities/user-lab-assignment.entity';
 import { UserShiftAssignment } from '../entities/user-shift-assignment.entity';
@@ -14,6 +15,7 @@ import { Shift } from '../entities/shift.entity';
 @Module({
   imports: [
     AuthModule,
+    ReportsModule,
     TypeOrmModule.forFeature([
       User,
       UserLabAssignment,

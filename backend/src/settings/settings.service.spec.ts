@@ -15,6 +15,7 @@ function createService(labRepo: MockRepo<Lab>): SettingsService {
     {} as never,
     labRepo as unknown as Repository<Lab>,
     {} as never,
+    {} as never,
   );
 }
 
@@ -221,18 +222,36 @@ describe('SettingsService referringDoctors', () => {
   });
 
   it('backfills report row toggles when persisted reportStyle is older JSON', async () => {
-    const {
-      showStatusColumn: _showStatusColumn,
-      showDepartmentRow: _showDepartmentRow,
-      showCategoryRow: _showCategoryRow,
-      fontFamily: _resultsFontFamily,
-      testColumn: _testColumn,
-      resultColumn: _resultColumn,
-      unitColumn: _unitColumn,
-      statusColumn: _statusColumn,
-      referenceColumn: _referenceColumn,
-      ...legacyResultsTable
-    } = DEFAULT_REPORT_STYLE_V1.resultsTable;
+    const legacyResultsTable = {
+      headerBackgroundColor: DEFAULT_REPORT_STYLE_V1.resultsTable.headerStyle.backgroundColor,
+      headerTextColor: DEFAULT_REPORT_STYLE_V1.resultsTable.headerStyle.textColor,
+      headerFontSizePx: DEFAULT_REPORT_STYLE_V1.resultsTable.headerStyle.fontSizePx,
+      headerTextAlign: DEFAULT_REPORT_STYLE_V1.resultsTable.headerStyle.textAlign,
+      bodyTextColor: DEFAULT_REPORT_STYLE_V1.resultsTable.bodyStyle.textColor,
+      bodyFontSizePx: DEFAULT_REPORT_STYLE_V1.resultsTable.bodyStyle.fontSizePx,
+      fontFamily: DEFAULT_REPORT_STYLE_V1.resultsTable.bodyStyle.fontFamily,
+      cellTextAlign: DEFAULT_REPORT_STYLE_V1.resultsTable.bodyStyle.textAlign,
+      borderColor: DEFAULT_REPORT_STYLE_V1.resultsTable.bodyStyle.borderColor,
+      rowStripeEnabled: DEFAULT_REPORT_STYLE_V1.resultsTable.rowStripeEnabled,
+      rowStripeColor: DEFAULT_REPORT_STYLE_V1.resultsTable.rowStripeColor,
+      abnormalRowBackgroundColor: DEFAULT_REPORT_STYLE_V1.resultsTable.abnormalRowBackgroundColor,
+      referenceValueColor: DEFAULT_REPORT_STYLE_V1.resultsTable.referenceValueColor,
+      departmentRowBackgroundColor: DEFAULT_REPORT_STYLE_V1.resultsTable.departmentRowStyle.backgroundColor,
+      departmentRowTextColor: DEFAULT_REPORT_STYLE_V1.resultsTable.departmentRowStyle.textColor,
+      departmentRowFontSizePx: DEFAULT_REPORT_STYLE_V1.resultsTable.departmentRowStyle.fontSizePx,
+      departmentRowTextAlign: DEFAULT_REPORT_STYLE_V1.resultsTable.departmentRowStyle.textAlign,
+      categoryRowBackgroundColor: DEFAULT_REPORT_STYLE_V1.resultsTable.categoryRowStyle.backgroundColor,
+      categoryRowTextColor: DEFAULT_REPORT_STYLE_V1.resultsTable.categoryRowStyle.textColor,
+      categoryRowFontSizePx: DEFAULT_REPORT_STYLE_V1.resultsTable.categoryRowStyle.fontSizePx,
+      categoryRowTextAlign: DEFAULT_REPORT_STYLE_V1.resultsTable.categoryRowStyle.textAlign,
+      statusNormalColor: DEFAULT_REPORT_STYLE_V1.resultsTable.statusNormalColor,
+      statusHighColor: DEFAULT_REPORT_STYLE_V1.resultsTable.statusHighColor,
+      statusLowColor: DEFAULT_REPORT_STYLE_V1.resultsTable.statusLowColor,
+      regularDepartmentBlockBreak: DEFAULT_REPORT_STYLE_V1.resultsTable.regularDepartmentBlockBreak,
+      regularRowBreak: DEFAULT_REPORT_STYLE_V1.resultsTable.regularRowBreak,
+      panelTableBreak: DEFAULT_REPORT_STYLE_V1.resultsTable.panelTableBreak,
+      panelRowBreak: DEFAULT_REPORT_STYLE_V1.resultsTable.panelRowBreak,
+    };
     const { fontFamily: _patientFontFamily, ...legacyPatientInfo } =
       DEFAULT_REPORT_STYLE_V1.patientInfo;
     const { reportTitle: _reportTitle, ...legacyRootStyle } = DEFAULT_REPORT_STYLE_V1;
@@ -255,8 +274,8 @@ describe('SettingsService referringDoctors', () => {
     expect(result.reportStyle?.patientInfo.fontFamily).toBe(
       DEFAULT_REPORT_STYLE_V1.patientInfo.fontFamily,
     );
-    expect(result.reportStyle?.resultsTable.fontFamily).toBe(
-      DEFAULT_REPORT_STYLE_V1.resultsTable.fontFamily,
+    expect(result.reportStyle?.resultsTable.bodyStyle.fontFamily).toBe(
+      DEFAULT_REPORT_STYLE_V1.resultsTable.bodyStyle.fontFamily,
     );
     expect(result.reportStyle?.reportTitle).toEqual(DEFAULT_REPORT_STYLE_V1.reportTitle);
     expect(result.reportStyle?.resultsTable.showStatusColumn).toBe(true);
@@ -264,6 +283,9 @@ describe('SettingsService referringDoctors', () => {
     expect(result.reportStyle?.resultsTable.showCategoryRow).toBe(true);
     expect(result.reportStyle?.resultsTable.testColumn).toEqual(
       DEFAULT_REPORT_STYLE_V1.resultsTable.testColumn,
+    );
+    expect(result.reportStyle?.resultsTable.headerStyle).toEqual(
+      DEFAULT_REPORT_STYLE_V1.resultsTable.headerStyle,
     );
   });
 
@@ -287,7 +309,10 @@ describe('SettingsService referringDoctors', () => {
       ...DEFAULT_REPORT_STYLE_V1,
       resultsTable: {
         ...DEFAULT_REPORT_STYLE_V1.resultsTable,
-        headerBackgroundColor: '#101010',
+        headerStyle: {
+          ...DEFAULT_REPORT_STYLE_V1.resultsTable.headerStyle,
+          backgroundColor: '#101010',
+        },
         showStatusColumn: false,
       },
     };
@@ -344,7 +369,10 @@ describe('SettingsService referringDoctors', () => {
         ...DEFAULT_REPORT_STYLE_V1,
         resultsTable: {
           ...DEFAULT_REPORT_STYLE_V1.resultsTable,
-          headerBackgroundColor: '#101010',
+          headerStyle: {
+            ...DEFAULT_REPORT_STYLE_V1.resultsTable.headerStyle,
+            backgroundColor: '#101010',
+          },
         },
       },
     });

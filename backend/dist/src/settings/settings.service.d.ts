@@ -7,6 +7,7 @@ import { Department } from '../entities/department.entity';
 import { Lab } from '../entities/lab.entity';
 import { Shift } from '../entities/shift.entity';
 import { type ReportStyleConfig } from '../reports/report-style.config';
+import { ReportsService } from '../reports/reports.service';
 type ReportBrandingUpdate = {
     bannerDataUrl?: string | null;
     footerDataUrl?: string | null;
@@ -32,7 +33,8 @@ export declare class SettingsService {
     private readonly departmentRepo;
     private readonly labRepo;
     private readonly shiftRepo;
-    constructor(userRepo: Repository<User>, labAssignmentRepo: Repository<UserLabAssignment>, shiftAssignmentRepo: Repository<UserShiftAssignment>, userDeptRepo: Repository<UserDepartmentAssignment>, departmentRepo: Repository<Department>, labRepo: Repository<Lab>, shiftRepo: Repository<Shift>);
+    private readonly reportsService;
+    constructor(userRepo: Repository<User>, labAssignmentRepo: Repository<UserLabAssignment>, shiftAssignmentRepo: Repository<UserShiftAssignment>, userDeptRepo: Repository<UserDepartmentAssignment>, departmentRepo: Repository<Department>, labRepo: Repository<Lab>, shiftRepo: Repository<Shift>, reportsService: ReportsService);
     getRoles(): string[];
     getLabSettings(labId: string): Promise<{
         id: string;
@@ -108,6 +110,12 @@ export declare class SettingsService {
         referringDoctors: string[];
         dashboardAnnouncementText: string | null;
     }>;
+    generateLabReportPreviewPdf(labId: string, payload: {
+        orderId: unknown;
+        previewMode?: unknown;
+        reportBranding: unknown;
+        reportStyle: unknown;
+    }): Promise<Buffer>;
     private normalizeReportImageDataUrl;
     private normalizeOnlineResultWatermarkText;
     private normalizePrintMethod;
@@ -115,6 +123,10 @@ export declare class SettingsService {
     private normalizeReferringDoctors;
     private normalizeReferringDoctorsForRead;
     private normalizeDashboardAnnouncementText;
+    private normalizeUuidV4;
+    private normalizePreviewReportBranding;
+    private normalizePreviewReportStyle;
+    private normalizePreviewMode;
     getUsersForLab(labId: string): Promise<User[]>;
     getShiftsForLab(labId: string): Promise<Shift[]>;
     getDepartmentsForLab(labId: string): Promise<Department[]>;

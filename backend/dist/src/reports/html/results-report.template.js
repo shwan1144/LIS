@@ -62,6 +62,14 @@ function formatResultValue(ot) {
         return String(ot.resultValue);
     return 'Pending';
 }
+function getPanelReportSection(ot) {
+    const raw = ot.panelReportSection;
+    if (typeof raw !== 'string') {
+        return null;
+    }
+    const normalized = raw.trim();
+    return normalized || null;
+}
 const CULTURE_PRIMARY_RESISTANCE_CAPACITY = 24;
 function isCultureSensitivityOrderTest(ot) {
     return (String(ot.test?.resultEntryType ?? '').toUpperCase() ===
@@ -241,7 +249,10 @@ function buildResultsReportHtml(input) {
     const contentMarginXMm = reportStyle.pageLayout.contentMarginXMm;
     const patientInfoFontFamily = (0, report_style_config_1.resolveReportFontStackWithArabicFallback)(reportStyle.patientInfo.fontFamily);
     const patientInfoRtlFontFamily = (0, report_style_config_1.resolveReportRtlFontStack)(reportStyle.patientInfo.fontFamily);
-    const resultsFontFamily = (0, report_style_config_1.resolveReportFontStackWithArabicFallback)(reportStyle.resultsTable.fontFamily);
+    const resultsHeaderFontFamily = (0, report_style_config_1.resolveReportFontStackWithArabicFallback)(reportStyle.resultsTable.headerStyle.fontFamily);
+    const resultsBodyFontFamily = (0, report_style_config_1.resolveReportFontStackWithArabicFallback)(reportStyle.resultsTable.bodyStyle.fontFamily);
+    const resultsDepartmentFontFamily = (0, report_style_config_1.resolveReportFontStackWithArabicFallback)(reportStyle.resultsTable.departmentRowStyle.fontFamily);
+    const resultsCategoryFontFamily = (0, report_style_config_1.resolveReportFontStackWithArabicFallback)(reportStyle.resultsTable.categoryRowStyle.fontFamily);
     const cultureSectionFontFamily = (0, report_style_config_1.resolveReportFontStackWithArabicFallback)(reportStyle.cultureSection.fontFamily);
     const bannerSrc = labAny?.reportBannerDataUrl || '';
     const footerSrc = labAny?.reportFooterDataUrl || '';
@@ -416,6 +427,7 @@ function buildResultsReportHtml(input) {
             }
         }
         else if (kids.length > 0) {
+            let currentSection = null;
             contentRows = kids
                 .map((child) => {
                 const ct = child.test;
@@ -423,7 +435,12 @@ function buildResultsReportHtml(input) {
                 const statusText = flagToStatus(flag);
                 const abnormal = isAbnormalFlag(flag);
                 const statusClass = abnormal ? (flag.startsWith('H') ? 'status-high' : 'status-low') : 'status-normal';
-                return `<tr class="${abnormal ? 'abnormal' : ''}">
+                const reportSection = getPanelReportSection(child);
+                const sectionHeaderHtml = reportSection && reportSection !== currentSection
+                    ? `<tr class="panel-section-row"><td class="panel-section-cell" colspan="${regularVisibleColumnCount}"><div class="panel-section-label">${escapeHtml(reportSection)}</div></td></tr>`
+                    : '';
+                currentSection = reportSection;
+                return `${sectionHeaderHtml}<tr class="${abnormal ? 'abnormal' : ''}">
             <td class="col-test" style="width:${regularTableWidths.test};">${escapeHtml(ct?.abbreviation || ct?.name || '-')}</td>
             <td class="col-result nowrap" style="width:${regularTableWidths.result};">${escapeHtml(formatResultValue(child))}</td>
             <td class="col-unit nowrap" style="width:${regularTableWidths.unit};">${escapeHtml(ct?.unit || '-')}</td>
@@ -704,16 +721,37 @@ function buildResultsReportHtml(input) {
       --report-title-align: ${reportStyle.reportTitle.textAlign};
       --report-title-weight: ${reportStyle.reportTitle.bold ? 700 : 400};
       --report-title-decoration: ${reportStyle.reportTitle.underline ? 'underline' : 'none'};
-      --report-title-font-family: ${resultsFontFamily};
-      --results-header-bg: ${reportStyle.resultsTable.headerBackgroundColor};
-      --results-header-text-color: ${reportStyle.resultsTable.headerTextColor};
-      --results-header-font-size: ${reportStyle.resultsTable.headerFontSizePx}px;
-      --results-header-align: ${reportStyle.resultsTable.headerTextAlign};
-      --results-body-text-color: ${reportStyle.resultsTable.bodyTextColor};
-      --results-body-font-size: ${reportStyle.resultsTable.bodyFontSizePx}px;
-      --results-font-family: ${resultsFontFamily};
-      --results-cell-align: ${reportStyle.resultsTable.cellTextAlign};
-      --results-border-color: ${reportStyle.resultsTable.borderColor};
+      --report-title-padding-y: ${reportStyle.reportTitle.paddingYpx}px;
+      --report-title-padding-x: ${reportStyle.reportTitle.paddingXpx}px;
+      --report-title-font-family: ${resultsHeaderFontFamily};
+      --results-header-bg: ${reportStyle.resultsTable.headerStyle.backgroundColor};
+      --results-header-text-color: ${reportStyle.resultsTable.headerStyle.textColor};
+      --results-header-border-color: ${reportStyle.resultsTable.headerStyle.borderColor};
+      --results-header-font-family: ${resultsHeaderFontFamily};
+      --results-header-font-size: ${reportStyle.resultsTable.headerStyle.fontSizePx}px;
+      --results-header-align: ${reportStyle.resultsTable.headerStyle.textAlign};
+      --results-header-padding-y: ${reportStyle.resultsTable.headerStyle.paddingYpx}px;
+      --results-header-padding-x: ${reportStyle.resultsTable.headerStyle.paddingXpx}px;
+      --results-body-text-color: ${reportStyle.resultsTable.bodyStyle.textColor};
+      --results-body-border-color: ${reportStyle.resultsTable.bodyStyle.borderColor};
+      --results-body-font-family: ${resultsBodyFontFamily};
+      --results-body-font-size: ${reportStyle.resultsTable.bodyStyle.fontSizePx}px;
+      --results-cell-align: ${reportStyle.resultsTable.bodyStyle.textAlign};
+      --results-body-padding-y: ${reportStyle.resultsTable.bodyStyle.paddingYpx}px;
+      --results-body-padding-x: ${reportStyle.resultsTable.bodyStyle.paddingXpx}px;
+      --results-panel-section-bg: ${reportStyle.resultsTable.panelSectionStyle.backgroundColor};
+      --results-panel-section-text-color: ${reportStyle.resultsTable.panelSectionStyle.textColor};
+      --results-panel-section-border-color: ${reportStyle.resultsTable.panelSectionStyle.borderColor};
+      --results-panel-section-font-family: ${(0, report_style_config_1.resolveReportFontStackWithArabicFallback)(reportStyle.resultsTable.panelSectionStyle.fontFamily)};
+      --results-panel-section-font-size: ${reportStyle.resultsTable.panelSectionStyle.fontSizePx}px;
+      --results-panel-section-text-align: ${reportStyle.resultsTable.panelSectionStyle.textAlign};
+      --results-panel-section-font-weight: ${reportStyle.resultsTable.panelSectionStyle.bold ? 700 : 400};
+      --results-panel-section-border-width: ${reportStyle.resultsTable.panelSectionStyle.borderWidthPx}px;
+      --results-panel-section-radius: ${reportStyle.resultsTable.panelSectionStyle.borderRadiusPx}px;
+      --results-panel-section-padding-y: ${reportStyle.resultsTable.panelSectionStyle.paddingYpx}px;
+      --results-panel-section-padding-x: ${reportStyle.resultsTable.panelSectionStyle.paddingXpx}px;
+      --results-panel-section-margin-top: ${reportStyle.resultsTable.panelSectionStyle.marginTopPx}px;
+      --results-panel-section-margin-bottom: ${reportStyle.resultsTable.panelSectionStyle.marginBottomPx}px;
       --results-abnormal-row-bg: ${reportStyle.resultsTable.abnormalRowBackgroundColor};
       --results-reference-color: ${reportStyle.resultsTable.referenceValueColor};
       --results-test-color: ${reportStyle.resultsTable.testColumn.textColor};
@@ -736,14 +774,22 @@ function buildResultsReportHtml(input) {
       --results-reference-font-size: ${reportStyle.resultsTable.referenceColumn.fontSizePx}px;
       --results-reference-align: ${reportStyle.resultsTable.referenceColumn.textAlign};
       --results-reference-weight: ${reportStyle.resultsTable.referenceColumn.bold ? 700 : 400};
-      --results-dept-bg: ${reportStyle.resultsTable.departmentRowBackgroundColor};
-      --results-dept-text-color: ${reportStyle.resultsTable.departmentRowTextColor};
-      --results-dept-font-size: ${reportStyle.resultsTable.departmentRowFontSizePx}px;
-      --results-dept-text-align: ${reportStyle.resultsTable.departmentRowTextAlign};
-      --results-cat-bg: ${reportStyle.resultsTable.categoryRowBackgroundColor};
-      --results-cat-text-color: ${reportStyle.resultsTable.categoryRowTextColor};
-      --results-cat-font-size: ${reportStyle.resultsTable.categoryRowFontSizePx}px;
-      --results-cat-text-align: ${reportStyle.resultsTable.categoryRowTextAlign};
+      --results-dept-bg: ${reportStyle.resultsTable.departmentRowStyle.backgroundColor};
+      --results-dept-text-color: ${reportStyle.resultsTable.departmentRowStyle.textColor};
+      --results-dept-border-color: ${reportStyle.resultsTable.departmentRowStyle.borderColor};
+      --results-dept-font-family: ${resultsDepartmentFontFamily};
+      --results-dept-font-size: ${reportStyle.resultsTable.departmentRowStyle.fontSizePx}px;
+      --results-dept-text-align: ${reportStyle.resultsTable.departmentRowStyle.textAlign};
+      --results-dept-padding-y: ${reportStyle.resultsTable.departmentRowStyle.paddingYpx}px;
+      --results-dept-padding-x: ${reportStyle.resultsTable.departmentRowStyle.paddingXpx}px;
+      --results-cat-bg: ${reportStyle.resultsTable.categoryRowStyle.backgroundColor};
+      --results-cat-text-color: ${reportStyle.resultsTable.categoryRowStyle.textColor};
+      --results-cat-border-color: ${reportStyle.resultsTable.categoryRowStyle.borderColor};
+      --results-cat-font-family: ${resultsCategoryFontFamily};
+      --results-cat-font-size: ${reportStyle.resultsTable.categoryRowStyle.fontSizePx}px;
+      --results-cat-text-align: ${reportStyle.resultsTable.categoryRowStyle.textAlign};
+      --results-cat-padding-y: ${reportStyle.resultsTable.categoryRowStyle.paddingYpx}px;
+      --results-cat-padding-x: ${reportStyle.resultsTable.categoryRowStyle.paddingXpx}px;
       --results-status-normal-color: ${reportStyle.resultsTable.statusNormalColor};
       --results-status-high-color: ${reportStyle.resultsTable.statusHighColor};
       --results-status-low-color: ${reportStyle.resultsTable.statusLowColor};
@@ -758,6 +804,8 @@ function buildResultsReportHtml(input) {
       --culture-no-growth-bg: ${reportStyle.cultureSection.noGrowthBackgroundColor};
       --culture-no-growth-border: ${reportStyle.cultureSection.noGrowthBorderColor};
       --culture-no-growth-text: ${reportStyle.cultureSection.noGrowthTextColor};
+      --culture-no-growth-padding-y: ${reportStyle.cultureSection.noGrowthPaddingYpx}px;
+      --culture-no-growth-padding-x: ${reportStyle.cultureSection.noGrowthPaddingXpx}px;
       --culture-meta-text: ${reportStyle.cultureSection.metaTextColor};
       --culture-meta-align: ${reportStyle.cultureSection.metaTextAlign};
       --culture-comment-text: ${reportStyle.cultureSection.commentTextColor};
@@ -765,6 +813,8 @@ function buildResultsReportHtml(input) {
       --culture-notes-text: ${reportStyle.cultureSection.notesTextColor};
       --culture-notes-border: ${reportStyle.cultureSection.notesBorderColor};
       --culture-notes-align: ${reportStyle.cultureSection.notesTextAlign};
+      --culture-notes-padding-y: ${reportStyle.cultureSection.notesPaddingYpx}px;
+      --culture-notes-padding-x: ${reportStyle.cultureSection.notesPaddingXpx}px;
       --culture-ast-gap: ${reportStyle.cultureSection.astGridGapPx}px;
       --culture-ast-min-height: ${reportStyle.cultureSection.astMinHeightPx}px;
       --culture-ast-column-radius: ${reportStyle.cultureSection.astColumnBorderRadiusPx}px;
@@ -895,11 +945,12 @@ function buildResultsReportHtml(input) {
       font-weight: var(--report-title-weight);
       font-family: var(--report-title-font-family);
       text-decoration: var(--report-title-decoration);
-      margin: 8px 0 6px;
+      padding: var(--report-title-padding-y) var(--report-title-padding-x);
+      margin: 0 0 6px;
     }
     .patient-info {
       margin-top: 8px;
-      margin-bottom: 8px;
+      margin-bottom: 6px;
       display: grid;
       grid-template-columns: 1fr 1fr;
       gap: 10px;
@@ -979,70 +1030,50 @@ function buildResultsReportHtml(input) {
       font-feature-settings: "liga" 1, "calt" 1, "kern" 1;
     }
     .content { padding: 0; }
-    table { width: 100%; border-collapse: collapse; margin-bottom: 8px; font-family: var(--results-font-family); }
-    th, td { border: 1px solid var(--results-border-color); padding: 6px 8px; font-family: var(--results-font-family); }
+    table { width: 100%; border-collapse: collapse; margin-bottom: 8px; font-family: var(--results-body-font-family); }
     th {
+      padding: var(--results-header-padding-y) var(--results-header-padding-x);
+      border: 1px solid var(--results-header-border-color);
       background: var(--results-header-bg);
       color: var(--results-header-text-color);
       font-weight: 700;
+      font-family: var(--results-header-font-family);
       font-size: var(--results-header-font-size);
       text-align: var(--results-header-align);
     }
     td {
+      padding: var(--results-body-padding-y) var(--results-body-padding-x);
+      border: 1px solid var(--results-body-border-color);
       color: var(--results-body-text-color);
+      font-family: var(--results-body-font-family);
       font-size: var(--results-body-font-size);
       text-align: var(--results-cell-align);
     }
-    th.col-test,
     td.col-test { text-align: var(--results-test-align); }
-    th.col-test {
-      color: var(--results-test-color);
-      font-size: var(--results-test-font-size);
-    }
     td.col-test {
       color: var(--results-test-color);
       font-size: var(--results-test-font-size);
       font-weight: var(--results-test-weight);
     }
-    th.col-result,
     td.col-result { text-align: var(--results-result-align); }
-    th.col-result {
-      color: var(--results-result-color);
-      font-size: var(--results-result-font-size);
-    }
     td.col-result {
       color: var(--results-result-color);
       font-size: var(--results-result-font-size);
       font-weight: var(--results-result-weight);
     }
-    th.col-unit,
     td.col-unit { text-align: var(--results-unit-align); }
-    th.col-unit {
-      color: var(--results-unit-color);
-      font-size: var(--results-unit-font-size);
-    }
     td.col-unit {
       color: var(--results-unit-color);
       font-size: var(--results-unit-font-size);
       font-weight: var(--results-unit-weight);
     }
-    th.col-status,
     td.col-status { text-align: var(--results-status-align); }
-    th.col-status {
-      color: var(--results-status-column-color);
-      font-size: var(--results-status-font-size);
-    }
     td.col-status {
       color: var(--results-status-column-color);
       font-size: var(--results-status-font-size);
       font-weight: var(--results-status-weight);
     }
-    th.col-reference,
     td.col-reference { text-align: var(--results-reference-align); }
-    th.col-reference {
-      color: var(--results-reference-column-color);
-      font-size: var(--results-reference-font-size);
-    }
     td.col-reference {
       color: var(--results-reference-column-color);
       font-size: var(--results-reference-font-size);
@@ -1075,18 +1106,20 @@ function buildResultsReportHtml(input) {
     .regular-results-table .dept-row td {
       background: var(--results-dept-bg);
       color: var(--results-dept-text-color);
-      border-color: var(--results-dept-bg);
-      padding: 8px 12px;
+      border-color: var(--results-dept-border-color);
+      padding: var(--results-dept-padding-y) var(--results-dept-padding-x);
       font-weight: 800;
+      font-family: var(--results-dept-font-family);
       font-size: var(--results-dept-font-size);
       text-align: var(--results-dept-text-align);
     }
     .regular-results-table .cat-row td {
       background: var(--results-cat-bg);
       color: var(--results-cat-text-color);
-      padding: 6px 12px;
+      padding: var(--results-cat-padding-y) var(--results-cat-padding-x);
       font-weight: 700;
-      border: 1px solid var(--results-border-color);
+      border: 1px solid var(--results-cat-border-color);
+      font-family: var(--results-cat-font-family);
       font-size: var(--results-cat-font-size);
       text-align: var(--results-cat-text-align);
     }
@@ -1111,6 +1144,31 @@ function buildResultsReportHtml(input) {
     .panel-page table { page-break-inside: var(--results-panel-table-break); break-inside: var(--results-panel-table-break); }
     .panel-page tr { page-break-inside: var(--results-panel-row-break); break-inside: var(--results-panel-row-break); }
     .gue-gse-table { margin-top: 8px; margin-bottom: 12px; }
+    .panel-section-row td {
+      padding: 0;
+      border: 0;
+      background: transparent;
+    }
+    .panel-section-cell {
+      padding: 0 !important;
+      border: 0 !important;
+      background: transparent !important;
+    }
+    .panel-section-label {
+      margin-top: var(--results-panel-section-margin-top);
+      margin-bottom: var(--results-panel-section-margin-bottom);
+      background: var(--results-panel-section-bg);
+      color: var(--results-panel-section-text-color);
+      border: var(--results-panel-section-border-width) solid var(--results-panel-section-border-color);
+      border-radius: var(--results-panel-section-radius);
+      padding: var(--results-panel-section-padding-y) var(--results-panel-section-padding-x);
+      font-family: var(--results-panel-section-font-family);
+      font-size: var(--results-panel-section-font-size);
+      font-weight: var(--results-panel-section-font-weight);
+      text-align: var(--results-panel-section-text-align);
+      page-break-inside: avoid;
+      break-inside: avoid;
+    }
     .culture-page .panel-page-title {
       color: var(--culture-section-title-color);
       border-bottom-color: var(--culture-section-title-border-color);
@@ -1128,7 +1186,7 @@ function buildResultsReportHtml(input) {
       border: 1px solid var(--culture-no-growth-border);
       color: var(--culture-no-growth-text);
       font-weight: 700;
-      padding: 8px 10px;
+      padding: var(--culture-no-growth-padding-y) var(--culture-no-growth-padding-x);
       border-radius: 6px;
       margin-bottom: 10px;
       font-family: var(--culture-font-family);
@@ -1240,7 +1298,7 @@ function buildResultsReportHtml(input) {
       font-size: 11px;
       border-top: 1px dashed var(--culture-notes-border);
       color: var(--culture-notes-text);
-      padding-top: 6px;
+      padding: var(--culture-notes-padding-y) var(--culture-notes-padding-x) 0;
       font-family: var(--culture-font-family);
       text-align: var(--culture-notes-align);
     }

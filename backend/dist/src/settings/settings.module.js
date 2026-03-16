@@ -12,6 +12,7 @@ const typeorm_1 = require("@nestjs/typeorm");
 const settings_service_1 = require("./settings.service");
 const settings_controller_1 = require("./settings.controller");
 const auth_module_1 = require("../auth/auth.module");
+const reports_module_1 = require("../reports/reports.module");
 const user_entity_1 = require("../entities/user.entity");
 const user_lab_assignment_entity_1 = require("../entities/user-lab-assignment.entity");
 const user_shift_assignment_entity_1 = require("../entities/user-shift-assignment.entity");
@@ -26,6 +27,7 @@ exports.SettingsModule = SettingsModule = __decorate([
     (0, common_1.Module)({
         imports: [
             auth_module_1.AuthModule,
+            reports_module_1.ReportsModule,
             typeorm_1.TypeOrmModule.forFeature([
                 user_entity_1.User,
                 user_lab_assignment_entity_1.UserLabAssignment,

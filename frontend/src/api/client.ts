@@ -141,6 +141,28 @@ export interface ReportColumnStyleDto {
   bold: boolean;
 }
 
+export interface ReportResultsTableSectionStyleDto {
+  textColor: string;
+  borderColor: string;
+  fontFamily: ReportFontFamilyDto;
+  fontSizePx: number;
+  textAlign: ReportTextAlign;
+  paddingYpx: number;
+  paddingXpx: number;
+}
+
+export interface ReportResultsTableFilledSectionStyleDto extends ReportResultsTableSectionStyleDto {
+  backgroundColor: string;
+}
+
+export interface ReportPanelSectionStyleDto extends ReportResultsTableFilledSectionStyleDto {
+  bold: boolean;
+  borderWidthPx: number;
+  borderRadiusPx: number;
+  marginTopPx: number;
+  marginBottomPx: number;
+}
+
 export interface ReportTitleStyleDto {
   text: string;
   textColor: string;
@@ -148,33 +170,23 @@ export interface ReportTitleStyleDto {
   textAlign: ReportTextAlign;
   bold: boolean;
   underline: boolean;
+  paddingYpx: number;
+  paddingXpx: number;
 }
 
 export interface ReportResultsTableStyleDto {
-  headerBackgroundColor: string;
-  headerTextColor: string;
-  headerFontSizePx: number;
-  headerTextAlign: ReportTextAlign;
-  bodyTextColor: string;
-  bodyFontSizePx: number;
-  fontFamily: ReportFontFamilyDto;
-  cellTextAlign: ReportTextAlign;
-  borderColor: string;
+  headerStyle: ReportResultsTableFilledSectionStyleDto;
+  bodyStyle: ReportResultsTableSectionStyleDto;
+  panelSectionStyle: ReportPanelSectionStyleDto;
   rowStripeEnabled: boolean;
   rowStripeColor: string;
   abnormalRowBackgroundColor: string;
   referenceValueColor: string;
   showStatusColumn: boolean;
   showDepartmentRow: boolean;
-  departmentRowBackgroundColor: string;
-  departmentRowTextColor: string;
-  departmentRowFontSizePx: number;
-  departmentRowTextAlign: ReportTextAlign;
+  departmentRowStyle: ReportResultsTableFilledSectionStyleDto;
   showCategoryRow: boolean;
-  categoryRowBackgroundColor: string;
-  categoryRowTextColor: string;
-  categoryRowFontSizePx: number;
-  categoryRowTextAlign: ReportTextAlign;
+  categoryRowStyle: ReportResultsTableFilledSectionStyleDto;
   statusNormalColor: string;
   statusHighColor: string;
   statusLowColor: string;
@@ -205,6 +217,8 @@ export interface ReportCultureSectionStyleDto {
   noGrowthBackgroundColor: string;
   noGrowthBorderColor: string;
   noGrowthTextColor: string;
+  noGrowthPaddingYpx: number;
+  noGrowthPaddingXpx: number;
   metaTextColor: string;
   metaTextAlign: ReportTextAlign;
   commentTextColor: string;
@@ -212,6 +226,8 @@ export interface ReportCultureSectionStyleDto {
   notesTextColor: string;
   notesBorderColor: string;
   notesTextAlign: ReportTextAlign;
+  notesPaddingYpx: number;
+  notesPaddingXpx: number;
   astGridGapPx: number;
   astMinHeightPx: number;
   astColumnBorderRadiusPx: number;
@@ -1572,6 +1588,14 @@ export async function updateOrderDiscount(
   data: { discountPercent: number },
 ): Promise<OrderDto> {
   const res = await api.patch<OrderDto>(`/orders/${orderId}/discount`, data);
+  return res.data;
+}
+
+export async function previewLabReportPdf(data: AdminReportPreviewRequest): Promise<Blob> {
+  const res = await api.post<Blob>('/settings/lab/report-preview', data, {
+    responseType: 'blob',
+    timeout: ADMIN_WRITE_TIMEOUT_MS,
+  });
   return res.data;
 }
 

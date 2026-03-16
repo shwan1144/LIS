@@ -27,6 +27,25 @@ export interface ReportColumnStyle {
     textAlign: ReportTextAlign;
     bold: boolean;
 }
+export interface ReportResultsTableSectionStyle {
+    textColor: string;
+    borderColor: string;
+    fontFamily: ReportFontFamily;
+    fontSizePx: number;
+    textAlign: ReportTextAlign;
+    paddingYpx: number;
+    paddingXpx: number;
+}
+export interface ReportResultsTableFilledSectionStyle extends ReportResultsTableSectionStyle {
+    backgroundColor: string;
+}
+export interface ReportPanelSectionStyle extends ReportResultsTableFilledSectionStyle {
+    bold: boolean;
+    borderWidthPx: number;
+    borderRadiusPx: number;
+    marginTopPx: number;
+    marginBottomPx: number;
+}
 export interface ReportTitleStyle {
     text: string;
     textColor: string;
@@ -34,32 +53,22 @@ export interface ReportTitleStyle {
     textAlign: ReportTextAlign;
     bold: boolean;
     underline: boolean;
+    paddingYpx: number;
+    paddingXpx: number;
 }
 export interface ReportResultsTableStyle {
-    headerBackgroundColor: string;
-    headerTextColor: string;
-    headerFontSizePx: number;
-    headerTextAlign: ReportTextAlign;
-    bodyTextColor: string;
-    bodyFontSizePx: number;
-    fontFamily: ReportFontFamily;
-    cellTextAlign: ReportTextAlign;
-    borderColor: string;
+    headerStyle: ReportResultsTableFilledSectionStyle;
+    bodyStyle: ReportResultsTableSectionStyle;
+    panelSectionStyle: ReportPanelSectionStyle;
     rowStripeEnabled: boolean;
     rowStripeColor: string;
     abnormalRowBackgroundColor: string;
     referenceValueColor: string;
     showStatusColumn: boolean;
     showDepartmentRow: boolean;
-    departmentRowBackgroundColor: string;
-    departmentRowTextColor: string;
-    departmentRowFontSizePx: number;
-    departmentRowTextAlign: ReportTextAlign;
+    departmentRowStyle: ReportResultsTableFilledSectionStyle;
     showCategoryRow: boolean;
-    categoryRowBackgroundColor: string;
-    categoryRowTextColor: string;
-    categoryRowFontSizePx: number;
-    categoryRowTextAlign: ReportTextAlign;
+    categoryRowStyle: ReportResultsTableFilledSectionStyle;
     statusNormalColor: string;
     statusHighColor: string;
     statusLowColor: string;
@@ -88,6 +97,8 @@ export interface ReportCultureSectionStyle {
     noGrowthBackgroundColor: string;
     noGrowthBorderColor: string;
     noGrowthTextColor: string;
+    noGrowthPaddingYpx: number;
+    noGrowthPaddingXpx: number;
     metaTextColor: string;
     metaTextAlign: ReportTextAlign;
     commentTextColor: string;
@@ -95,6 +106,8 @@ export interface ReportCultureSectionStyle {
     notesTextColor: string;
     notesBorderColor: string;
     notesTextAlign: ReportTextAlign;
+    notesPaddingYpx: number;
+    notesPaddingXpx: number;
     astGridGapPx: number;
     astMinHeightPx: number;
     astColumnBorderRadiusPx: number;

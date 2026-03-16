@@ -22,6 +22,7 @@ import { SettingsDepartmentsPage } from './pages/settings/SettingsDepartmentsPag
 import { SettingsInstrumentsPage } from './pages/settings/SettingsInstrumentsPage';
 import { SettingsLabelPage } from './pages/settings/SettingsLabelPage';
 import { SettingsPrintingPage } from './pages/settings/SettingsPrintingPage';
+import { SettingsReportDesignPage } from './pages/settings/SettingsReportDesignPage';
 import { SettingsTestGroupsPage } from './pages/settings/SettingsTestGroupsPage';
 import { SettingsReferringDoctorsPage } from './pages/settings/SettingsReferringDoctorsPage';
 import { AdminDashboardPage } from './pages/admin/AdminDashboardPage';
@@ -30,7 +31,6 @@ import { AdminOrdersPage } from './pages/admin/AdminOrdersPage';
 import { AdminAuditLogsPage } from './pages/admin/AdminAuditLogsPage';
 import { AdminLabUsersPage } from './pages/admin/AdminLabUsersPage';
 import { AdminLabOnlineResultsPage } from './pages/admin/AdminLabOnlineResultsPage';
-import { AdminLabReportDesignPage } from './pages/admin/AdminLabReportDesignPage';
 import { AdminSettingsPage } from './pages/admin/AdminSettingsPage';
 import { AdminLabDetailsPage } from './pages/admin/AdminLabDetailsPage';
 import { AdminAnnouncementsPage } from './pages/admin/AdminAnnouncementsPage';
@@ -133,7 +133,6 @@ function AppContent() {
                 <Route path="audit" element={<AdminAuditLogsPage />} />
                 <Route path="labs/users" element={<AdminLabUsersPage />} />
                 <Route path="labs/online-results" element={<AdminLabOnlineResultsPage />} />
-                <Route path="labs/report-design" element={<AdminLabReportDesignPage />} />
                 <Route path="announcements" element={<AdminAnnouncementsPage />} />
                 <Route path="settings" element={<AdminSettingsPage />} />
               </Route>
@@ -162,6 +161,7 @@ function AppContent() {
                   <Route path="departments" element={<SettingsDepartmentsPage />} />
                   <Route path="label" element={<SettingsLabelPage />} />
                   <Route path="printing" element={<SettingsPrintingPage />} />
+                  <Route path="report-design" element={<SettingsReportDesignPage />} />
                   <Route path="referring-doctors" element={<SettingsReferringDoctorsPage />} />
                   <Route path="instruments" element={<SettingsInstrumentsPage />} />
                   <Route path="test-groups" element={<SettingsTestGroupsPage />} />

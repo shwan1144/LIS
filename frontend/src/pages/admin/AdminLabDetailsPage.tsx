@@ -720,13 +720,6 @@ export function AdminLabDetailsPage() {
                       Configure Online Results
                     </Button>
                     <Button
-                      icon={<FileTextOutlined />}
-                      onClick={() => navigate('/labs/report-design')}
-                      disabled={!canMutate}
-                    >
-                      Configure Report Design
-                    </Button>
-                    <Button
                       type="primary"
                       onClick={openTransferModal}
                       disabled={!canMutate}

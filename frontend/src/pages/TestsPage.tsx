@@ -53,6 +53,7 @@ import {
   type TestCultureConfig,
   type TestType,
   type TestTubeType,
+  type TestPanelComponent,
   type TestParameterDefinition,
   type TestNumericAgeRange,
   type TestNumericAgeUnit,
@@ -122,6 +123,105 @@ function toNumberOrNull(value: unknown): number | null {
   return parseFiniteNumber(value);
 }
 
+type PanelSectionBlock = {
+  id: string;
+  name: string | null;
+  testIds: string[];
+};
+
+function normalizePanelSectionName(value: string | null | undefined): string | null {
+  const normalized = String(value ?? '').trim();
+  return normalized || null;
+}
+
+function createPanelSectionBlockId(seed: string): string {
+  return `panel-section-${seed}`;
+}
+
+function buildPanelSectionBlocks(value?: TestPanelComponent[] | null): PanelSectionBlock[] {
+  const ordered = [...(value ?? [])]
+    .filter((component) => Boolean(component?.childTestId))
+    .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
+  const blocks: PanelSectionBlock[] = [];
+
+  for (const component of ordered) {
+    const sectionName = normalizePanelSectionName(component.reportSection);
+    const current = blocks[blocks.length - 1];
+    if (current && normalizePanelSectionName(current.name) === sectionName) {
+      current.testIds.push(component.childTestId);
+      continue;
+    }
+    blocks.push({
+      id: createPanelSectionBlockId(`${blocks.length + 1}-${sectionName ?? 'ungrouped'}`),
+      name: sectionName,
+      testIds: [component.childTestId],
+    });
+  }
+
+  if (blocks.length === 0) {
+    return [
+      {
+        id: createPanelSectionBlockId('1-ungrouped'),
+        name: null,
+        testIds: [],
+      },
+    ];
+  }
+
+  return blocks;
+}
+
+function normalizePanelSectionBlocks(blocks: PanelSectionBlock[]): PanelSectionBlock[] {
+  const normalized: PanelSectionBlock[] = [];
+
+  for (const block of blocks) {
+    const sectionName = normalizePanelSectionName(block.name);
+    const dedupedIds = Array.from(new Set(block.testIds.filter(Boolean)));
+    const previous = normalized[normalized.length - 1];
+
+    if (
+      dedupedIds.length > 0 &&
+      previous &&
+      previous.testIds.length > 0 &&
+      normalizePanelSectionName(previous.name) === sectionName
+    ) {
+      previous.testIds.push(...dedupedIds.filter((id) => !previous.testIds.includes(id)));
+      continue;
+    }
+
+    normalized.push({
+      ...block,
+      name: sectionName,
+      testIds: dedupedIds,
+    });
+  }
+
+  return normalized;
+}
+
+function flattenPanelSectionBlocks(blocks: PanelSectionBlock[]): TestPanelComponent[] {
+  const normalizedBlocks = normalizePanelSectionBlocks(blocks);
+  let sortOrder = 1;
+
+  return normalizedBlocks.flatMap((block) => {
+    const sectionName = normalizePanelSectionName(block.name);
+    if (block.testIds.length === 0) {
+      return [];
+    }
+    return block.testIds.map((childTestId) => ({
+      childTestId,
+      required: true,
+      sortOrder: sortOrder++,
+      reportSection: sectionName,
+      reportGroup: null,
+    }));
+  });
+}
+
+function serializePanelComponents(value?: TestPanelComponent[] | null): string {
+  return JSON.stringify(flattenPanelSectionBlocks(buildPanelSectionBlocks(value)));
+}
+
 function normalizeAgeUnit(value: unknown): TestNumericAgeUnit {
   const normalized = String(value ?? '').trim().toUpperCase();
   if (normalized === 'DAY' || normalized === 'MONTH' || normalized === 'YEAR') {
@@ -187,86 +287,410 @@ function SortableSubtestList({
   options,
   excludeId,
 }: {
-  value?: string[];
-  onChange?: (v: string[]) => void;
+  value?: TestPanelComponent[];
+  onChange?: (v: TestPanelComponent[]) => void;
   options: { label: string; value: string }[];
   excludeId?: string | null;
 }) {
-  const ids = value ?? [];
-  const [addId, setAddId] = useState<string | null>(null);
+  const [blocks, setBlocks] = useState<PanelSectionBlock[]>(() => buildPanelSectionBlocks(value));
+  const [pendingAdds, setPendingAdds] = useState<Record<string, string | null>>({});
+  const blockCounterRef = useState(() => ({ current: blocks.length + 1 }))[0];
+  const lastCommittedValueRef = useState(() => ({ current: serializePanelComponents(value) }))[0];
 
-  const availableToAdd = options.filter(
-    (opt) => opt.value !== excludeId && !ids.includes(opt.value),
+  useEffect(() => {
+    const serialized = serializePanelComponents(value);
+    if (serialized === lastCommittedValueRef.current) {
+      return;
+    }
+    const nextBlocks = buildPanelSectionBlocks(value);
+    setBlocks(nextBlocks);
+    setPendingAdds({});
+    blockCounterRef.current = nextBlocks.length + 1;
+    lastCommittedValueRef.current = serialized;
+  }, [blockCounterRef, lastCommittedValueRef, value]);
+
+  const optionLabelById = useMemo(
+    () => new Map(options.map((option) => [option.value, option.label])),
+    [options],
   );
 
-  const move = (index: number, dir: -1 | 1) => {
-    const next = [...ids];
-    const target = index + dir;
-    if (target < 0 || target >= next.length) return;
-    [next[index], next[target]] = [next[target], next[index]];
-    onChange?.(next);
+  const usedIds = useMemo(
+    () => new Set(blocks.flatMap((block) => block.testIds)),
+    [blocks],
+  );
+
+  const nextBlockId = () => {
+    const nextValue = blockCounterRef.current;
+    blockCounterRef.current += 1;
+    return createPanelSectionBlockId(String(nextValue));
   };
 
-  const remove = (id: string) => onChange?.(ids.filter((i) => i !== id));
+  const commitBlocks = (nextBlocks: PanelSectionBlock[]) => {
+    const normalized = normalizePanelSectionBlocks(nextBlocks);
+    setBlocks(normalized);
+    const flattened = flattenPanelSectionBlocks(normalized);
+    lastCommittedValueRef.current = JSON.stringify(flattened);
+    onChange?.(flattened);
+  };
 
-  const add = () => {
-    if (!addId) return;
-    onChange?.([...ids, addId]);
-    setAddId(null);
+  const updateBlock = (blockId: string, updater: (block: PanelSectionBlock) => PanelSectionBlock) => {
+    commitBlocks(blocks.map((block) => (block.id === blockId ? updater(block) : block)));
+  };
+
+  const moveBlock = (blockIndex: number, dir: -1 | 1) => {
+    const targetIndex = blockIndex + dir;
+    if (targetIndex < 0 || targetIndex >= blocks.length) {
+      return;
+    }
+    const nextBlocks = [...blocks];
+    [nextBlocks[blockIndex], nextBlocks[targetIndex]] = [nextBlocks[targetIndex], nextBlocks[blockIndex]];
+    commitBlocks(nextBlocks);
+  };
+
+  const moveChildWithinBlock = (blockId: string, index: number, dir: -1 | 1) => {
+    updateBlock(blockId, (block) => {
+      const targetIndex = index + dir;
+      if (targetIndex < 0 || targetIndex >= block.testIds.length) {
+        return block;
+      }
+      const nextIds = [...block.testIds];
+      [nextIds[index], nextIds[targetIndex]] = [nextIds[targetIndex], nextIds[index]];
+      return {
+        ...block,
+        testIds: nextIds,
+      };
+    });
+  };
+
+  const moveChildToAdjacentBlock = (blockIndex: number, childIndex: number, dir: -1 | 1) => {
+    const targetBlockIndex = blockIndex + dir;
+    if (targetBlockIndex < 0 || targetBlockIndex >= blocks.length) {
+      return;
+    }
+    const nextBlocks = blocks.map((block) => ({
+      ...block,
+      testIds: [...block.testIds],
+    }));
+    const [movedChildId] = nextBlocks[blockIndex].testIds.splice(childIndex, 1);
+    if (!movedChildId) {
+      return;
+    }
+    nextBlocks[targetBlockIndex].testIds.push(movedChildId);
+    commitBlocks(nextBlocks);
+  };
+
+  const removeChildFromBlock = (blockId: string, childTestId: string) => {
+    updateBlock(blockId, (block) => ({
+      ...block,
+      testIds: block.testIds.filter((id) => id !== childTestId),
+    }));
+  };
+
+  const addChildToBlock = (blockId: string) => {
+    const childTestId = pendingAdds[blockId];
+    if (!childTestId) {
+      return;
+    }
+    updateBlock(blockId, (block) => ({
+      ...block,
+      testIds: [...block.testIds, childTestId],
+    }));
+    setPendingAdds((prev) => ({
+      ...prev,
+      [blockId]: null,
+    }));
+  };
+
+  const removeBlock = (blockId: string) => {
+    commitBlocks(blocks.filter((block) => block.id !== blockId));
+    setPendingAdds((prev) => {
+      const next = { ...prev };
+      delete next[blockId];
+      return next;
+    });
+  };
+
+  const addSection = () => {
+    setBlocks((prev) => [
+      ...prev,
+      {
+        id: nextBlockId(),
+        name: 'New Section',
+        testIds: [],
+      },
+    ]);
   };
 
   return (
     <>
-      <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
-        <Select
-          style={{ flex: 1 }}
-          placeholder="Search and add a subtest..."
-          showSearch
-          allowClear
-          optionFilterProp="label"
-          value={addId}
-          onChange={(v) => setAddId(v ?? null)}
-          options={availableToAdd}
-        />
-        <Button
-          type="dashed"
-          icon={<PlusOutlined />}
-          disabled={!addId}
-          onClick={add}
-        >
-          Add
+      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, marginBottom: 10 }}>
+        <Text type="secondary" style={{ fontSize: 12 }}>
+          Group panel child tests into printable sections like Macroscopic and Microscopic.
+        </Text>
+        <Button type="dashed" icon={<PlusOutlined />} onClick={addSection}>
+          Add section
         </Button>
       </div>
 
-      {ids.length === 0 ? (
-        <div style={{ color: '#aaa', fontSize: 12, padding: '6px 0' }}>No subtests added yet.</div>
+      {blocks.length === 0 ? (
+        <div style={{ color: '#aaa', fontSize: 12, padding: '8px 0' }}>
+          No sections yet. Add a section to start grouping child tests.
+        </div>
       ) : (
-        <div style={{ border: '1px solid var(--ant-color-border, #d9d9d9)', borderRadius: 6, overflow: 'hidden' }}>
-          {ids.map((id, idx) => {
-            const opt = options.find((o) => o.value === id);
+        <div style={{ display: 'grid', gap: 10 }}>
+          {blocks.map((block, blockIndex) => {
+            const isUngrouped = !normalizePanelSectionName(block.name);
+            const id = block.id;
+            const remove = removeBlock;
+            const availableToAdd = options.filter((option) => {
+              if (option.value === excludeId) {
+                return false;
+              }
+              return !usedIds.has(option.value) || block.testIds.includes(option.value);
+            });
             return (
-              <div
-                key={id}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 6,
-                  padding: '5px 10px',
-                  background: idx % 2 === 0 ? 'var(--ant-color-fill-quaternary, #fafafa)' : 'transparent',
-                  borderTop: idx > 0 ? '1px solid var(--ant-color-border-secondary, #f0f0f0)' : undefined,
-                }}
-              >
-                <span style={{ color: '#999', minWidth: 22, fontSize: 11, fontVariantNumeric: 'tabular-nums' }}>{idx + 1}.</span>
-                <span style={{ flex: 1, fontSize: 13 }}>{opt?.label ?? id}</span>
-                <Button size="small" type="text" icon={<ArrowUpOutlined />} disabled={idx === 0} onClick={() => move(idx, -1)} />
-                <Button size="small" type="text" icon={<ArrowDownOutlined />} disabled={idx === ids.length - 1} onClick={() => move(idx, 1)} />
+              <PanelSectionEditorBlock
+                key={block.id}
+                block={block}
+                blockIndex={blockIndex}
+                blockCount={blocks.length}
+                optionLabelById={optionLabelById}
+                availableToAdd={availableToAdd}
+                pendingAddValue={pendingAdds[block.id] ?? null}
+                onPendingAddChange={(nextValue) =>
+                  setPendingAdds((prev) => ({
+                    ...prev,
+                    [block.id]: nextValue,
+                  }))
+                }
+                onMoveBlock={moveBlock}
+                onUpdateName={(name) =>
+                  updateBlock(block.id, (current) => ({
+                    ...current,
+                    name,
+                  }))
+                }
+                onUngroup={() => updateBlock(block.id, (current) => ({ ...current, name: null }))}
+                onMoveChildWithinBlock={(childIndex, dir) => moveChildWithinBlock(block.id, childIndex, dir)}
+                onMoveChildToAdjacentBlock={(childIndex, dir) =>
+                  moveChildToAdjacentBlock(blockIndex, childIndex, dir)
+                }
+                onRemoveChild={(childTestId) => removeChildFromBlock(block.id, childTestId)}
+                onAddChild={() => addChildToBlock(block.id)}
+                onRemoveBlock={() => removeBlock(block.id)} legacyRemoveButton={
                 <Button size="small" type="text" danger onClick={() => remove(id)}>✕</Button>
-              </div>
+                }/>
             );
           })}
         </div>
       )}
     </>
+  );
+}
+
+type PanelSectionEditorBlockProps = {
+  block: PanelSectionBlock;
+  blockIndex: number;
+  blockCount: number;
+  optionLabelById: Map<string, string>;
+  availableToAdd: { label: string; value: string }[];
+  pendingAddValue: string | null;
+  onPendingAddChange: (nextValue: string | null) => void;
+  onMoveBlock: (blockIndex: number, dir: -1 | 1) => void;
+  onUpdateName: (name: string) => void;
+  onUngroup: () => void;
+  onRemoveBlock: () => void;
+  onMoveChildWithinBlock: (childIndex: number, dir: -1 | 1) => void;
+  onMoveChildToAdjacentBlock: (childIndex: number, dir: -1 | 1) => void;
+  onRemoveChild: (childTestId: string) => void;
+  onAddChild: () => void;
+  legacyRemoveButton?: unknown;
+};
+
+function PanelSectionEditorBlock({
+  block,
+  blockIndex,
+  blockCount,
+  optionLabelById,
+  availableToAdd,
+  pendingAddValue,
+  onPendingAddChange,
+  onMoveBlock,
+  onUpdateName,
+  onUngroup,
+  onRemoveBlock,
+  onMoveChildWithinBlock,
+  onMoveChildToAdjacentBlock,
+  onRemoveChild,
+  onAddChild,
+}: PanelSectionEditorBlockProps) {
+  const isUngrouped = !normalizePanelSectionName(block.name);
+
+  return (
+    <div
+      style={{
+        border: '1px solid var(--ant-color-border, #d9d9d9)',
+        borderRadius: 8,
+        overflow: 'hidden',
+        background: 'var(--ant-color-bg-container, #fff)',
+      }}
+    >
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8,
+          padding: '10px 12px',
+          background: 'var(--ant-color-fill-quaternary, #fafafa)',
+          borderBottom:
+            block.testIds.length > 0 ? '1px solid var(--ant-color-border-secondary, #f0f0f0)' : undefined,
+        }}
+      >
+        <Tag color={isUngrouped ? 'default' : 'blue'} style={{ marginInlineEnd: 0 }}>
+          {isUngrouped ? 'Ungrouped' : 'Section'}
+        </Tag>
+        {isUngrouped ? (
+          <Text strong style={{ flex: 1 }}>
+            Ungrouped child tests
+          </Text>
+        ) : (
+          <Input
+            value={block.name ?? ''}
+            onChange={(event) => onUpdateName(event.target.value)}
+            placeholder="Section title"
+            style={{ flex: 1 }}
+          />
+        )}
+        <Space size={4}>
+          <Button
+            size="small"
+            type="text"
+            icon={<ArrowUpOutlined />}
+            disabled={blockIndex === 0}
+            onClick={() => onMoveBlock(blockIndex, -1)}
+          />
+          <Button
+            size="small"
+            type="text"
+            icon={<ArrowDownOutlined />}
+            disabled={blockIndex === blockCount - 1}
+            onClick={() => onMoveBlock(blockIndex, 1)}
+          />
+          {!isUngrouped && (
+            <Button size="small" type="text" onClick={onUngroup}>
+              Ungroup
+            </Button>
+          )}
+          <Button
+            size="small"
+            type="text"
+            danger
+            disabled={block.testIds.length > 0}
+            onClick={onRemoveBlock}
+          >
+            Remove
+          </Button>
+        </Space>
+      </div>
+
+      {block.testIds.length === 0 ? (
+        <div style={{ color: '#888', fontSize: 12, padding: '10px 12px' }}>
+          No child tests in this section yet.
+        </div>
+      ) : (
+        block.testIds.map((childTestId, childIndex) => (
+          <div
+            key={`${block.id}-${childTestId}`}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              padding: '8px 12px',
+              borderTop:
+                childIndex > 0 ? '1px solid var(--ant-color-border-secondary, #f0f0f0)' : undefined,
+            }}
+          >
+            <span
+              style={{
+                color: '#999',
+                minWidth: 24,
+                fontSize: 11,
+                fontVariantNumeric: 'tabular-nums',
+              }}
+            >
+              {childIndex + 1}.
+            </span>
+            <span style={{ flex: 1, fontSize: 13 }}>
+              {optionLabelById.get(childTestId) ?? childTestId}
+            </span>
+            <Space size={4}>
+              <Button
+                size="small"
+                type="text"
+                icon={<ArrowUpOutlined />}
+                disabled={childIndex === 0}
+                onClick={() => onMoveChildWithinBlock(childIndex, -1)}
+              />
+              <Button
+                size="small"
+                type="text"
+                icon={<ArrowDownOutlined />}
+                disabled={childIndex === block.testIds.length - 1}
+                onClick={() => onMoveChildWithinBlock(childIndex, 1)}
+              />
+              <Button
+                size="small"
+                type="text"
+                disabled={blockIndex === 0}
+                onClick={() => onMoveChildToAdjacentBlock(childIndex, -1)}
+              >
+                Prev
+              </Button>
+              <Button
+                size="small"
+                type="text"
+                disabled={blockIndex === blockCount - 1}
+                onClick={() => onMoveChildToAdjacentBlock(childIndex, 1)}
+              >
+                Next
+              </Button>
+              <Button size="small" type="text" danger onClick={() => onRemoveChild(childTestId)}>
+                Remove
+              </Button>
+            </Space>
+          </div>
+        ))
+      )}
+
+      <div
+        style={{
+          display: 'flex',
+          gap: 8,
+          padding: '10px 12px',
+          borderTop: '1px solid var(--ant-color-border-secondary, #f0f0f0)',
+          background: 'var(--ant-color-fill-quaternary, #fafafa)',
+        }}
+      >
+        <Select
+          style={{ flex: 1 }}
+          placeholder="Search and add a child test..."
+          showSearch
+          allowClear
+          optionFilterProp="label"
+          value={pendingAddValue}
+          onChange={(nextValue) => onPendingAddChange(nextValue ?? null)}
+          options={availableToAdd}
+        />
+        <Button
+          type="dashed"
+          icon={<PlusOutlined />}
+          disabled={!pendingAddValue}
+          onClick={onAddChild}
+        >
+          Add child
+        </Button>
+      </div>
+    </div>
   );
 }
 
@@ -416,9 +840,7 @@ export function TestsPage() {
           normalOptions: p.normalOptions ?? [],
           defaultValue: p.defaultValue ?? undefined,
         })),
-        panelComponentTestIds: (fullTest.panelComponents ?? [])
-          .sort((a, b) => a.sortOrder - b.sortOrder)
-          .map((component) => component.childTestId),
+        panelComponents: [...(fullTest.panelComponents ?? [])].sort((a, b) => a.sortOrder - b.sortOrder),
         cultureAntibioticIds: fullTest.cultureAntibioticIds ?? [],
       });
       const pricing = await getTestPricing(fullTest.id).catch(() => []);
@@ -447,7 +869,7 @@ export function TestsPage() {
           micUnit: null,
         },
         cultureAntibioticIds: [],
-        panelComponentTestIds: [],
+        panelComponents: [],
       });
     }
     setPricesByShift(initialPrices);
@@ -579,7 +1001,7 @@ export function TestsPage() {
         isDefault?: boolean;
       }[];
       cultureAntibioticIds?: string[] | null;
-      panelComponentTestIds?: string[];
+      panelComponents?: TestPanelComponent[] | null;
       type?: TestType;
     },
   ) => {
@@ -635,7 +1057,7 @@ export function TestsPage() {
     const cultureAntibioticIds = Array.from(
       new Set((values.cultureAntibioticIds ?? []).filter(Boolean)),
     );
-    const panelComponentTestIds = (values.panelComponentTestIds ?? []).filter(Boolean);
+    const panelComponents = flattenPanelSectionBlocks(buildPanelSectionBlocks(values.panelComponents ?? []));
 
     if (
       normalizedResultTextOptions.filter((option) => option.isDefault).length > 1
@@ -694,7 +1116,8 @@ export function TestsPage() {
         : normalizedResultTextOptions.length
           ? normalizedResultTextOptions
           : null,
-      panelComponentTestIds: isPanel ? panelComponentTestIds : null,
+      panelComponents: isPanel ? panelComponents : null,
+      panelComponentTestIds: isPanel ? null : null,
     };
     try {
       let testId: string;
@@ -1651,8 +2074,8 @@ export function TestsPage() {
                   </div>
 
                   <Form.Item
-                    name="panelComponentTestIds"
-                    label="Panel subtests"
+                    name="panelComponents"
+                    label="Panel sections"
                     style={{ marginBottom: 12 }}
                     extra="Use ↑ ↓ to reorder. The order here is the order in the worklist and report."
                   >

@@ -11,6 +11,7 @@ import {
   UseGuards,
   Req,
   ParseUUIDPipe,
+  StreamableFile,
 } from '@nestjs/common';
 import { SettingsService } from './settings.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -76,20 +77,6 @@ export class SettingsController {
     const labId = req.user?.labId;
     if (!labId) throw new Error('Lab ID not found in token');
 
-    // Lab panel can update label/sequence and printing settings.
-    if (
-      body.enableOnlineResults !== undefined ||
-      body.onlineResultWatermarkDataUrl !== undefined ||
-      body.onlineResultWatermarkText !== undefined ||
-      body.reportBranding !== undefined ||
-      body.reportStyle !== undefined ||
-      body.dashboardAnnouncementText !== undefined
-    ) {
-      throw new ForbiddenException(
-        'Online result, report design, and dashboard announcement settings moved to admin panel.',
-      );
-    }
-
     if (Object.keys(body).length === 0) {
       throw new BadRequestException('No settings provided');
     }
@@ -97,10 +84,40 @@ export class SettingsController {
     return this.settingsService.updateLabSettings(labId, {
       labelSequenceBy: body.labelSequenceBy,
       sequenceResetBy: body.sequenceResetBy,
+      enableOnlineResults: body.enableOnlineResults,
+      onlineResultWatermarkDataUrl: body.onlineResultWatermarkDataUrl,
+      onlineResultWatermarkText: body.onlineResultWatermarkText,
       printing: body.printing,
+      reportBranding: body.reportBranding,
+      reportStyle: body.reportStyle,
       uiTestGroups: body.uiTestGroups,
       referringDoctors: body.referringDoctors,
+      dashboardAnnouncementText: body.dashboardAnnouncementText,
     });
+  }
+
+  @Post('lab/report-preview')
+  @Roles(...LAB_ROLE_GROUPS.ADMIN)
+  async previewLabReportPdf(
+    @Req() req: RequestWithUser,
+    @Body()
+    body: {
+      orderId: string;
+      previewMode?: 'full' | 'culture_only';
+      reportBranding: {
+        bannerDataUrl?: string | null;
+        footerDataUrl?: string | null;
+        logoDataUrl?: string | null;
+        watermarkDataUrl?: string | null;
+      };
+      reportStyle: ReportStyleConfig;
+    },
+  ) {
+    const labId = req.user?.labId;
+    if (!labId) throw new Error('Lab ID not found in token');
+
+    const pdfBuffer = await this.settingsService.generateLabReportPreviewPdf(labId, body);
+    return new StreamableFile(pdfBuffer, { type: 'application/pdf' });
   }
 
   @Get('users')

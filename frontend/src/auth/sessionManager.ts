@@ -78,17 +78,17 @@ function notifyState() {
 
 function readLegacySession(): AuthSession | null {
   if (typeof window === 'undefined') return null;
-  const accessToken = localStorage.getItem('accessToken');
-  const userStr = localStorage.getItem('user');
-  const labStr = localStorage.getItem('lab');
-  const scope = (localStorage.getItem('authScope') as AuthScope | null) ?? getCurrentAuthScope();
+  const accessToken = sessionStorage.getItem('accessToken') || localStorage.getItem('accessToken');
+  const userStr = sessionStorage.getItem('user') || localStorage.getItem('user');
+  const labStr = sessionStorage.getItem('lab') || localStorage.getItem('lab');
+  const scope = ((sessionStorage.getItem('authScope') || localStorage.getItem('authScope')) as AuthScope | null) ?? getCurrentAuthScope();
 
   if (!accessToken || !userStr) return null;
 
   try {
     return {
       accessToken,
-      refreshToken: localStorage.getItem('refreshToken'),
+      refreshToken: sessionStorage.getItem('refreshToken') || localStorage.getItem('refreshToken'),
       user: JSON.parse(userStr) as UserDto,
       lab: labStr ? (JSON.parse(labStr) as LabDto) : null,
       scope,
@@ -100,7 +100,7 @@ function readLegacySession(): AuthSession | null {
 
 function readStoredSession(): AuthSession | null {
   if (typeof window === 'undefined') return null;
-  const raw = localStorage.getItem(AUTH_SESSION_STORAGE_KEY);
+  const raw = sessionStorage.getItem(AUTH_SESSION_STORAGE_KEY);
   if (!raw) return readLegacySession();
 
   try {
@@ -122,24 +122,40 @@ function readStoredSession(): AuthSession | null {
 
 function writeStoredSession(session: AuthSession) {
   if (typeof window === 'undefined') return;
-  localStorage.setItem(AUTH_SESSION_STORAGE_KEY, JSON.stringify(session));
-  localStorage.setItem('accessToken', session.accessToken);
+  sessionStorage.setItem(AUTH_SESSION_STORAGE_KEY, JSON.stringify(session));
+  sessionStorage.setItem('accessToken', session.accessToken);
   if (session.refreshToken) {
-    localStorage.setItem('refreshToken', session.refreshToken);
+    sessionStorage.setItem('refreshToken', session.refreshToken);
   } else {
-    localStorage.removeItem('refreshToken');
+    sessionStorage.removeItem('refreshToken');
   }
-  localStorage.setItem('user', JSON.stringify(session.user));
-  localStorage.setItem('authScope', session.scope);
+  sessionStorage.setItem('user', JSON.stringify(session.user));
+  sessionStorage.setItem('authScope', session.scope);
   if (session.scope === 'LAB' && session.lab) {
-    localStorage.setItem('lab', JSON.stringify(session.lab));
+    sessionStorage.setItem('lab', JSON.stringify(session.lab));
   } else {
-    localStorage.removeItem('lab');
+    sessionStorage.removeItem('lab');
   }
+  
+  // Clear legacy localStorage data if it exists to ensure session-only behavior
+  localStorage.removeItem(AUTH_SESSION_STORAGE_KEY);
+  localStorage.removeItem('accessToken');
+  localStorage.removeItem('refreshToken');
+  localStorage.removeItem('user');
+  localStorage.removeItem('lab');
+  localStorage.removeItem('authScope');
 }
 
 function clearStoredSession() {
   if (typeof window === 'undefined') return;
+  sessionStorage.removeItem(AUTH_SESSION_STORAGE_KEY);
+  sessionStorage.removeItem('accessToken');
+  sessionStorage.removeItem('refreshToken');
+  sessionStorage.removeItem('user');
+  sessionStorage.removeItem('lab');
+  sessionStorage.removeItem('authScope');
+  
+  // Also clear legacy localStorage
   localStorage.removeItem(AUTH_SESSION_STORAGE_KEY);
   localStorage.removeItem('accessToken');
   localStorage.removeItem('refreshToken');
@@ -294,6 +310,9 @@ function broadcast(message: Omit<SyncMessage, 'sourceTabId' | 'timestamp'>) {
   if (broadcastChannel) {
     broadcastChannel.postMessage(payload);
   }
+  // Use sessionStorage for sync pulse if possible, but storage event needs localStorage.
+  // We'll use localStorage for the pulse but it won't matter for persistence since 
+  // readStoredSession checks sessionStorage.
   localStorage.setItem(AUTH_SYNC_STORAGE_KEY, JSON.stringify(payload));
 }
 

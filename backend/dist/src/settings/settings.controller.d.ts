@@ -1,3 +1,4 @@
+import { StreamableFile } from '@nestjs/common';
 import { SettingsService } from './settings.service';
 import type { ReportStyleConfig } from '../reports/report-style.config';
 interface RequestWithUser {
@@ -100,6 +101,17 @@ export declare class SettingsController {
         referringDoctors: string[];
         dashboardAnnouncementText: string | null;
     }>;
+    previewLabReportPdf(req: RequestWithUser, body: {
+        orderId: string;
+        previewMode?: 'full' | 'culture_only';
+        reportBranding: {
+            bannerDataUrl?: string | null;
+            footerDataUrl?: string | null;
+            logoDataUrl?: string | null;
+            watermarkDataUrl?: string | null;
+        };
+        reportStyle: ReportStyleConfig;
+    }): Promise<StreamableFile>;
     getUsers(req: RequestWithUser): Promise<void>;
     getUser(req: RequestWithUser, id: string): Promise<void>;
     createUser(req: RequestWithUser, body: {

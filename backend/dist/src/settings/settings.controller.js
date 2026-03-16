@@ -36,24 +36,29 @@ let SettingsController = class SettingsController {
         const labId = req.user?.labId;
         if (!labId)
             throw new Error('Lab ID not found in token');
-        if (body.enableOnlineResults !== undefined ||
-            body.onlineResultWatermarkDataUrl !== undefined ||
-            body.onlineResultWatermarkText !== undefined ||
-            body.reportBranding !== undefined ||
-            body.reportStyle !== undefined ||
-            body.dashboardAnnouncementText !== undefined) {
-            throw new common_1.ForbiddenException('Online result, report design, and dashboard announcement settings moved to admin panel.');
-        }
         if (Object.keys(body).length === 0) {
             throw new common_1.BadRequestException('No settings provided');
         }
         return this.settingsService.updateLabSettings(labId, {
             labelSequenceBy: body.labelSequenceBy,
             sequenceResetBy: body.sequenceResetBy,
+            enableOnlineResults: body.enableOnlineResults,
+            onlineResultWatermarkDataUrl: body.onlineResultWatermarkDataUrl,
+            onlineResultWatermarkText: body.onlineResultWatermarkText,
             printing: body.printing,
+            reportBranding: body.reportBranding,
+            reportStyle: body.reportStyle,
             uiTestGroups: body.uiTestGroups,
             referringDoctors: body.referringDoctors,
+            dashboardAnnouncementText: body.dashboardAnnouncementText,
         });
+    }
+    async previewLabReportPdf(req, body) {
+        const labId = req.user?.labId;
+        if (!labId)
+            throw new Error('Lab ID not found in token');
+        const pdfBuffer = await this.settingsService.generateLabReportPreviewPdf(labId, body);
+        return new common_1.StreamableFile(pdfBuffer, { type: 'application/pdf' });
     }
     async getUsers(req) {
         throw new common_1.ForbiddenException('Lab user management moved to admin panel. Use admin endpoints.');
@@ -96,6 +101,15 @@ __decorate([
     __metadata("design:paramtypes", [Object, Object]),
     __metadata("design:returntype", Promise)
 ], SettingsController.prototype, "updateLabSettings", null);
+__decorate([
+    (0, common_1.Post)('lab/report-preview'),
+    (0, roles_decorator_1.Roles)(...lab_role_matrix_1.LAB_ROLE_GROUPS.ADMIN),
+    __param(0, (0, common_1.Req)()),
+    __param(1, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, Object]),
+    __metadata("design:returntype", Promise)
+], SettingsController.prototype, "previewLabReportPdf", null);
 __decorate([
     (0, common_1.Get)('users'),
     (0, roles_decorator_1.Roles)(...lab_role_matrix_1.LAB_ROLE_GROUPS.ADMIN),

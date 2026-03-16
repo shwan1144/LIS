@@ -67,6 +67,28 @@ export interface ReportColumnStyle {
   bold: boolean;
 }
 
+export interface ReportResultsTableSectionStyle {
+  textColor: string;
+  borderColor: string;
+  fontFamily: ReportFontFamily;
+  fontSizePx: number;
+  textAlign: ReportTextAlign;
+  paddingYpx: number;
+  paddingXpx: number;
+}
+
+export interface ReportResultsTableFilledSectionStyle extends ReportResultsTableSectionStyle {
+  backgroundColor: string;
+}
+
+export interface ReportPanelSectionStyle extends ReportResultsTableFilledSectionStyle {
+  bold: boolean;
+  borderWidthPx: number;
+  borderRadiusPx: number;
+  marginTopPx: number;
+  marginBottomPx: number;
+}
+
 export interface ReportTitleStyle {
   text: string;
   textColor: string;
@@ -74,33 +96,23 @@ export interface ReportTitleStyle {
   textAlign: ReportTextAlign;
   bold: boolean;
   underline: boolean;
+  paddingYpx: number;
+  paddingXpx: number;
 }
 
 export interface ReportResultsTableStyle {
-  headerBackgroundColor: string;
-  headerTextColor: string;
-  headerFontSizePx: number;
-  headerTextAlign: ReportTextAlign;
-  bodyTextColor: string;
-  bodyFontSizePx: number;
-  fontFamily: ReportFontFamily;
-  cellTextAlign: ReportTextAlign;
-  borderColor: string;
+  headerStyle: ReportResultsTableFilledSectionStyle;
+  bodyStyle: ReportResultsTableSectionStyle;
+  panelSectionStyle: ReportPanelSectionStyle;
   rowStripeEnabled: boolean;
   rowStripeColor: string;
   abnormalRowBackgroundColor: string;
   referenceValueColor: string;
   showStatusColumn: boolean;
   showDepartmentRow: boolean;
-  departmentRowBackgroundColor: string;
-  departmentRowTextColor: string;
-  departmentRowFontSizePx: number;
-  departmentRowTextAlign: ReportTextAlign;
+  departmentRowStyle: ReportResultsTableFilledSectionStyle;
   showCategoryRow: boolean;
-  categoryRowBackgroundColor: string;
-  categoryRowTextColor: string;
-  categoryRowFontSizePx: number;
-  categoryRowTextAlign: ReportTextAlign;
+  categoryRowStyle: ReportResultsTableFilledSectionStyle;
   statusNormalColor: string;
   statusHighColor: string;
   statusLowColor: string;
@@ -131,6 +143,8 @@ export interface ReportCultureSectionStyle {
   noGrowthBackgroundColor: string;
   noGrowthBorderColor: string;
   noGrowthTextColor: string;
+  noGrowthPaddingYpx: number;
+  noGrowthPaddingXpx: number;
   metaTextColor: string;
   metaTextAlign: ReportTextAlign;
   commentTextColor: string;
@@ -138,6 +152,8 @@ export interface ReportCultureSectionStyle {
   notesTextColor: string;
   notesBorderColor: string;
   notesTextAlign: ReportTextAlign;
+  notesPaddingYpx: number;
+  notesPaddingXpx: number;
   astGridGapPx: number;
   astMinHeightPx: number;
   astColumnBorderRadiusPx: number;
@@ -188,32 +204,71 @@ export const DEFAULT_REPORT_STYLE_V1: ReportStyleConfig = {
     textAlign: 'center',
     bold: true,
     underline: true,
+    paddingYpx: 0,
+    paddingXpx: 0,
   },
   resultsTable: {
-    headerBackgroundColor: '#F2F2F2',
-    headerTextColor: '#333333',
-    headerFontSizePx: 12,
-    headerTextAlign: 'left',
-    bodyTextColor: '#333333',
-    bodyFontSizePx: 12,
-    fontFamily: DEFAULT_REPORT_FONT_FAMILY,
-    cellTextAlign: 'left',
-    borderColor: '#EEEEEE',
+    headerStyle: {
+      backgroundColor: '#F2F2F2',
+      textColor: '#333333',
+      borderColor: '#EEEEEE',
+      fontFamily: DEFAULT_REPORT_FONT_FAMILY,
+      fontSizePx: 12,
+      textAlign: 'left',
+      paddingYpx: 6,
+      paddingXpx: 8,
+    },
+    bodyStyle: {
+      textColor: '#333333',
+      borderColor: '#EEEEEE',
+      fontFamily: DEFAULT_REPORT_FONT_FAMILY,
+      fontSizePx: 12,
+      textAlign: 'left',
+      paddingYpx: 6,
+      paddingXpx: 8,
+    },
+    panelSectionStyle: {
+      backgroundColor: '#F3F6FB',
+      textColor: '#1F2937',
+      borderColor: '#D6DFEA',
+      fontFamily: DEFAULT_REPORT_FONT_FAMILY,
+      fontSizePx: 12,
+      textAlign: 'left',
+      bold: true,
+      borderWidthPx: 1,
+      borderRadiusPx: 6,
+      paddingYpx: 6,
+      paddingXpx: 10,
+      marginTopPx: 10,
+      marginBottomPx: 6,
+    },
     rowStripeEnabled: false,
     rowStripeColor: '#F9FBFF',
     abnormalRowBackgroundColor: '#FFF5F5',
     referenceValueColor: '#333333',
     showStatusColumn: true,
     showDepartmentRow: true,
-    departmentRowBackgroundColor: '#222222',
-    departmentRowTextColor: '#FFFFFF',
-    departmentRowFontSizePx: 12,
-    departmentRowTextAlign: 'left',
+    departmentRowStyle: {
+      backgroundColor: '#222222',
+      textColor: '#FFFFFF',
+      borderColor: '#222222',
+      fontFamily: DEFAULT_REPORT_FONT_FAMILY,
+      fontSizePx: 12,
+      textAlign: 'left',
+      paddingYpx: 8,
+      paddingXpx: 12,
+    },
     showCategoryRow: true,
-    categoryRowBackgroundColor: '#F2F2F2',
-    categoryRowTextColor: '#555555',
-    categoryRowFontSizePx: 12,
-    categoryRowTextAlign: 'left',
+    categoryRowStyle: {
+      backgroundColor: '#F2F2F2',
+      textColor: '#555555',
+      borderColor: '#EEEEEE',
+      fontFamily: DEFAULT_REPORT_FONT_FAMILY,
+      fontSizePx: 12,
+      textAlign: 'left',
+      paddingYpx: 6,
+      paddingXpx: 12,
+    },
     statusNormalColor: '#0F8A1F',
     statusHighColor: '#D00000',
     statusLowColor: '#0066CC',
@@ -267,6 +322,8 @@ export const DEFAULT_REPORT_STYLE_V1: ReportStyleConfig = {
     noGrowthBackgroundColor: '#F7FEF9',
     noGrowthBorderColor: '#BBF7D0',
     noGrowthTextColor: '#166534',
+    noGrowthPaddingYpx: 8,
+    noGrowthPaddingXpx: 10,
     metaTextColor: '#334155',
     metaTextAlign: 'left',
     commentTextColor: '#4B5563',
@@ -274,6 +331,8 @@ export const DEFAULT_REPORT_STYLE_V1: ReportStyleConfig = {
     notesTextColor: '#111827',
     notesBorderColor: '#D1D5DB',
     notesTextAlign: 'left',
+    notesPaddingYpx: 6,
+    notesPaddingXpx: 0,
     astGridGapPx: 6,
     astMinHeightPx: 430,
     astColumnBorderRadiusPx: 6,
@@ -301,6 +360,40 @@ const REPORT_COLUMN_KEYS: Array<keyof ReportColumnStyle> = [
   'textAlign',
   'bold',
 ];
+const REPORT_RESULTS_SECTION_STYLE_KEYS: Array<keyof ReportResultsTableSectionStyle> = [
+  'textColor',
+  'borderColor',
+  'fontFamily',
+  'fontSizePx',
+  'textAlign',
+  'paddingYpx',
+  'paddingXpx',
+];
+const REPORT_RESULTS_FILLED_SECTION_STYLE_KEYS: Array<keyof ReportResultsTableFilledSectionStyle> = [
+  'backgroundColor',
+  'textColor',
+  'borderColor',
+  'fontFamily',
+  'fontSizePx',
+  'textAlign',
+  'paddingYpx',
+  'paddingXpx',
+];
+const REPORT_PANEL_SECTION_STYLE_KEYS: Array<keyof ReportPanelSectionStyle> = [
+  'backgroundColor',
+  'textColor',
+  'borderColor',
+  'fontFamily',
+  'fontSizePx',
+  'textAlign',
+  'bold',
+  'borderWidthPx',
+  'borderRadiusPx',
+  'paddingYpx',
+  'paddingXpx',
+  'marginTopPx',
+  'marginBottomPx',
+];
 const REPORT_TITLE_KEYS: Array<keyof ReportTitleStyle> = [
   'text',
   'textColor',
@@ -308,6 +401,8 @@ const REPORT_TITLE_KEYS: Array<keyof ReportTitleStyle> = [
   'textAlign',
   'bold',
   'underline',
+  'paddingYpx',
+  'paddingXpx',
 ];
 const RESULTS_TABLE_COLUMN_STYLE_KEYS = [
   'testColumn',
@@ -333,30 +428,18 @@ const PATIENT_INFO_KEYS: Array<keyof ReportPatientInfoStyle> = [
   'paddingXpx',
 ];
 const RESULTS_TABLE_KEYS: Array<keyof ReportResultsTableStyle> = [
-  'headerBackgroundColor',
-  'headerTextColor',
-  'headerFontSizePx',
-  'headerTextAlign',
-  'bodyTextColor',
-  'bodyFontSizePx',
-  'fontFamily',
-  'cellTextAlign',
-  'borderColor',
+  'headerStyle',
+  'bodyStyle',
+  'panelSectionStyle',
   'rowStripeEnabled',
   'rowStripeColor',
   'abnormalRowBackgroundColor',
   'referenceValueColor',
   'showStatusColumn',
   'showDepartmentRow',
-  'departmentRowBackgroundColor',
-  'departmentRowTextColor',
-  'departmentRowFontSizePx',
-  'departmentRowTextAlign',
+  'departmentRowStyle',
   'showCategoryRow',
-  'categoryRowBackgroundColor',
-  'categoryRowTextColor',
-  'categoryRowFontSizePx',
-  'categoryRowTextAlign',
+  'categoryRowStyle',
   'statusNormalColor',
   'statusHighColor',
   'statusLowColor',
@@ -393,6 +476,8 @@ const CULTURE_SECTION_KEYS: Array<keyof ReportCultureSectionStyle> = [
   'noGrowthBackgroundColor',
   'noGrowthBorderColor',
   'noGrowthTextColor',
+  'noGrowthPaddingYpx',
+  'noGrowthPaddingXpx',
   'metaTextColor',
   'metaTextAlign',
   'commentTextColor',
@@ -400,6 +485,8 @@ const CULTURE_SECTION_KEYS: Array<keyof ReportCultureSectionStyle> = [
   'notesTextColor',
   'notesBorderColor',
   'notesTextAlign',
+  'notesPaddingYpx',
+  'notesPaddingXpx',
   'astGridGapPx',
   'astMinHeightPx',
   'astColumnBorderRadiusPx',
@@ -480,6 +567,16 @@ function assertBoolean(value: unknown, fieldName: string): boolean {
   return value;
 }
 
+function pickDefinedEntries<T extends Record<string, unknown>>(value: Partial<T>): Partial<T> {
+  const normalized: Partial<T> = {};
+  for (const [key, entryValue] of Object.entries(value)) {
+    if (entryValue !== undefined) {
+      (normalized as Record<string, unknown>)[key] = entryValue;
+    }
+  }
+  return normalized;
+}
+
 function validateColumnStyle(value: unknown, fieldName: string): ReportColumnStyle {
   const columnObj = assertObject(value, fieldName);
   assertExactKeys(columnObj, REPORT_COLUMN_KEYS, fieldName);
@@ -488,6 +585,64 @@ function validateColumnStyle(value: unknown, fieldName: string): ReportColumnSty
     fontSizePx: assertIntRange(columnObj.fontSizePx, 9, 16, `${fieldName}.fontSizePx`),
     textAlign: assertFromSet(columnObj.textAlign, TEXT_ALIGN_SET, `${fieldName}.textAlign`),
     bold: assertBoolean(columnObj.bold, `${fieldName}.bold`),
+  };
+}
+
+function validateResultsTableSectionStyle(
+  value: unknown,
+  fieldName: string,
+): ReportResultsTableSectionStyle {
+  const sectionObj = assertObject(value, fieldName);
+  assertExactKeys(sectionObj, REPORT_RESULTS_SECTION_STYLE_KEYS, fieldName);
+  return {
+    textColor: assertColor(sectionObj.textColor, `${fieldName}.textColor`),
+    borderColor: assertColor(sectionObj.borderColor, `${fieldName}.borderColor`),
+    fontFamily: assertFromSet(sectionObj.fontFamily, REPORT_FONT_FAMILY_SET, `${fieldName}.fontFamily`),
+    fontSizePx: assertIntRange(sectionObj.fontSizePx, 9, 16, `${fieldName}.fontSizePx`),
+    textAlign: assertFromSet(sectionObj.textAlign, TEXT_ALIGN_SET, `${fieldName}.textAlign`),
+    paddingYpx: assertIntRange(sectionObj.paddingYpx, 0, 20, `${fieldName}.paddingYpx`),
+    paddingXpx: assertIntRange(sectionObj.paddingXpx, 0, 24, `${fieldName}.paddingXpx`),
+  };
+}
+
+function validateResultsTableFilledSectionStyle(
+  value: unknown,
+  fieldName: string,
+): ReportResultsTableFilledSectionStyle {
+  const sectionObj = assertObject(value, fieldName);
+  assertExactKeys(sectionObj, REPORT_RESULTS_FILLED_SECTION_STYLE_KEYS, fieldName);
+  return {
+    backgroundColor: assertColor(sectionObj.backgroundColor, `${fieldName}.backgroundColor`),
+    textColor: assertColor(sectionObj.textColor, `${fieldName}.textColor`),
+    borderColor: assertColor(sectionObj.borderColor, `${fieldName}.borderColor`),
+    fontFamily: assertFromSet(sectionObj.fontFamily, REPORT_FONT_FAMILY_SET, `${fieldName}.fontFamily`),
+    fontSizePx: assertIntRange(sectionObj.fontSizePx, 9, 16, `${fieldName}.fontSizePx`),
+    textAlign: assertFromSet(sectionObj.textAlign, TEXT_ALIGN_SET, `${fieldName}.textAlign`),
+    paddingYpx: assertIntRange(sectionObj.paddingYpx, 0, 20, `${fieldName}.paddingYpx`),
+    paddingXpx: assertIntRange(sectionObj.paddingXpx, 0, 24, `${fieldName}.paddingXpx`),
+  };
+}
+
+function validatePanelSectionStyle(
+  value: unknown,
+  fieldName: string,
+): ReportPanelSectionStyle {
+  const sectionObj = assertObject(value, fieldName);
+  assertExactKeys(sectionObj, REPORT_PANEL_SECTION_STYLE_KEYS, fieldName);
+  return {
+    backgroundColor: assertColor(sectionObj.backgroundColor, `${fieldName}.backgroundColor`),
+    textColor: assertColor(sectionObj.textColor, `${fieldName}.textColor`),
+    borderColor: assertColor(sectionObj.borderColor, `${fieldName}.borderColor`),
+    fontFamily: assertFromSet(sectionObj.fontFamily, REPORT_FONT_FAMILY_SET, `${fieldName}.fontFamily`),
+    fontSizePx: assertIntRange(sectionObj.fontSizePx, 9, 18, `${fieldName}.fontSizePx`),
+    textAlign: assertFromSet(sectionObj.textAlign, TEXT_ALIGN_SET, `${fieldName}.textAlign`),
+    bold: assertBoolean(sectionObj.bold, `${fieldName}.bold`),
+    borderWidthPx: assertIntRange(sectionObj.borderWidthPx, 0, 4, `${fieldName}.borderWidthPx`),
+    borderRadiusPx: assertIntRange(sectionObj.borderRadiusPx, 0, 16, `${fieldName}.borderRadiusPx`),
+    paddingYpx: assertIntRange(sectionObj.paddingYpx, 0, 20, `${fieldName}.paddingYpx`),
+    paddingXpx: assertIntRange(sectionObj.paddingXpx, 0, 24, `${fieldName}.paddingXpx`),
+    marginTopPx: assertIntRange(sectionObj.marginTopPx, 0, 24, `${fieldName}.marginTopPx`),
+    marginBottomPx: assertIntRange(sectionObj.marginBottomPx, 0, 24, `${fieldName}.marginBottomPx`),
   };
 }
 
@@ -501,6 +656,8 @@ function validateReportTitleStyle(value: unknown, fieldName: string): ReportTitl
     textAlign: assertFromSet(titleObj.textAlign, TEXT_ALIGN_SET, `${fieldName}.textAlign`),
     bold: assertBoolean(titleObj.bold, `${fieldName}.bold`),
     underline: assertBoolean(titleObj.underline, `${fieldName}.underline`),
+    paddingYpx: assertIntRange(titleObj.paddingYpx, 0, 20, `${fieldName}.paddingYpx`),
+    paddingXpx: assertIntRange(titleObj.paddingXpx, 0, 24, `${fieldName}.paddingXpx`),
   };
 }
 
@@ -577,35 +734,18 @@ export function validateAndNormalizeReportStyleConfig(
   const resultsObj = assertObject(styleObj.resultsTable, `${fieldName}.resultsTable`);
   assertExactKeys(resultsObj, RESULTS_TABLE_KEYS, `${fieldName}.resultsTable`);
   const resultsTable: ReportResultsTableStyle = {
-    headerBackgroundColor: assertColor(
-      resultsObj.headerBackgroundColor,
-      `${fieldName}.resultsTable.headerBackgroundColor`,
+    headerStyle: validateResultsTableFilledSectionStyle(
+      resultsObj.headerStyle,
+      `${fieldName}.resultsTable.headerStyle`,
     ),
-    headerTextColor: assertColor(resultsObj.headerTextColor, `${fieldName}.resultsTable.headerTextColor`),
-    headerFontSizePx: assertIntRange(
-      resultsObj.headerFontSizePx,
-      10,
-      16,
-      `${fieldName}.resultsTable.headerFontSizePx`,
+    bodyStyle: validateResultsTableSectionStyle(
+      resultsObj.bodyStyle,
+      `${fieldName}.resultsTable.bodyStyle`,
     ),
-    headerTextAlign: assertFromSet(
-      resultsObj.headerTextAlign,
-      TEXT_ALIGN_SET,
-      `${fieldName}.resultsTable.headerTextAlign`,
+    panelSectionStyle: validatePanelSectionStyle(
+      resultsObj.panelSectionStyle,
+      `${fieldName}.resultsTable.panelSectionStyle`,
     ),
-    bodyTextColor: assertColor(resultsObj.bodyTextColor, `${fieldName}.resultsTable.bodyTextColor`),
-    bodyFontSizePx: assertIntRange(resultsObj.bodyFontSizePx, 9, 14, `${fieldName}.resultsTable.bodyFontSizePx`),
-    fontFamily: assertFromSet(
-      resultsObj.fontFamily,
-      REPORT_FONT_FAMILY_SET,
-      `${fieldName}.resultsTable.fontFamily`,
-    ),
-    cellTextAlign: assertFromSet(
-      resultsObj.cellTextAlign,
-      TEXT_ALIGN_SET,
-      `${fieldName}.resultsTable.cellTextAlign`,
-    ),
-    borderColor: assertColor(resultsObj.borderColor, `${fieldName}.resultsTable.borderColor`),
     rowStripeEnabled: assertBoolean(resultsObj.rowStripeEnabled, `${fieldName}.resultsTable.rowStripeEnabled`),
     rowStripeColor: assertColor(resultsObj.rowStripeColor, `${fieldName}.resultsTable.rowStripeColor`),
     abnormalRowBackgroundColor: assertColor(
@@ -624,47 +764,17 @@ export function validateAndNormalizeReportStyleConfig(
       resultsObj.showDepartmentRow,
       `${fieldName}.resultsTable.showDepartmentRow`,
     ),
-    departmentRowBackgroundColor: assertColor(
-      resultsObj.departmentRowBackgroundColor,
-      `${fieldName}.resultsTable.departmentRowBackgroundColor`,
-    ),
-    departmentRowTextColor: assertColor(
-      resultsObj.departmentRowTextColor,
-      `${fieldName}.resultsTable.departmentRowTextColor`,
-    ),
-    departmentRowFontSizePx: assertIntRange(
-      resultsObj.departmentRowFontSizePx,
-      10,
-      16,
-      `${fieldName}.resultsTable.departmentRowFontSizePx`,
-    ),
-    departmentRowTextAlign: assertFromSet(
-      resultsObj.departmentRowTextAlign,
-      TEXT_ALIGN_SET,
-      `${fieldName}.resultsTable.departmentRowTextAlign`,
+    departmentRowStyle: validateResultsTableFilledSectionStyle(
+      resultsObj.departmentRowStyle,
+      `${fieldName}.resultsTable.departmentRowStyle`,
     ),
     showCategoryRow: assertBoolean(
       resultsObj.showCategoryRow,
       `${fieldName}.resultsTable.showCategoryRow`,
     ),
-    categoryRowBackgroundColor: assertColor(
-      resultsObj.categoryRowBackgroundColor,
-      `${fieldName}.resultsTable.categoryRowBackgroundColor`,
-    ),
-    categoryRowTextColor: assertColor(
-      resultsObj.categoryRowTextColor,
-      `${fieldName}.resultsTable.categoryRowTextColor`,
-    ),
-    categoryRowFontSizePx: assertIntRange(
-      resultsObj.categoryRowFontSizePx,
-      10,
-      16,
-      `${fieldName}.resultsTable.categoryRowFontSizePx`,
-    ),
-    categoryRowTextAlign: assertFromSet(
-      resultsObj.categoryRowTextAlign,
-      TEXT_ALIGN_SET,
-      `${fieldName}.resultsTable.categoryRowTextAlign`,
+    categoryRowStyle: validateResultsTableFilledSectionStyle(
+      resultsObj.categoryRowStyle,
+      `${fieldName}.resultsTable.categoryRowStyle`,
     ),
     statusNormalColor: assertColor(resultsObj.statusNormalColor, `${fieldName}.resultsTable.statusNormalColor`),
     statusHighColor: assertColor(resultsObj.statusHighColor, `${fieldName}.resultsTable.statusHighColor`),
@@ -767,6 +877,18 @@ export function validateAndNormalizeReportStyleConfig(
       cultureSectionObj.noGrowthTextColor,
       `${fieldName}.cultureSection.noGrowthTextColor`,
     ),
+    noGrowthPaddingYpx: assertIntRange(
+      cultureSectionObj.noGrowthPaddingYpx,
+      0,
+      20,
+      `${fieldName}.cultureSection.noGrowthPaddingYpx`,
+    ),
+    noGrowthPaddingXpx: assertIntRange(
+      cultureSectionObj.noGrowthPaddingXpx,
+      0,
+      24,
+      `${fieldName}.cultureSection.noGrowthPaddingXpx`,
+    ),
     metaTextColor: assertColor(
       cultureSectionObj.metaTextColor,
       `${fieldName}.cultureSection.metaTextColor`,
@@ -797,6 +919,18 @@ export function validateAndNormalizeReportStyleConfig(
       cultureSectionObj.notesTextAlign,
       TEXT_ALIGN_SET,
       `${fieldName}.cultureSection.notesTextAlign`,
+    ),
+    notesPaddingYpx: assertIntRange(
+      cultureSectionObj.notesPaddingYpx,
+      0,
+      20,
+      `${fieldName}.cultureSection.notesPaddingYpx`,
+    ),
+    notesPaddingXpx: assertIntRange(
+      cultureSectionObj.notesPaddingXpx,
+      0,
+      24,
+      `${fieldName}.cultureSection.notesPaddingXpx`,
     ),
     astGridGapPx: assertIntRange(
       cultureSectionObj.astGridGapPx,
@@ -936,7 +1070,14 @@ export function resolveReportStyleConfig(value: unknown): ReportStyleConfig {
       ...DEFAULT_REPORT_STYLE_V1.resultsTable,
     };
     for (const key of RESULTS_TABLE_KEYS) {
-      if ((RESULTS_TABLE_COLUMN_STYLE_KEYS as readonly string[]).includes(key)) {
+      if (
+        (RESULTS_TABLE_COLUMN_STYLE_KEYS as readonly string[]).includes(key) ||
+        key === 'headerStyle' ||
+        key === 'bodyStyle' ||
+        key === 'panelSectionStyle' ||
+        key === 'departmentRowStyle' ||
+        key === 'categoryRowStyle'
+      ) {
         continue;
       }
       if (key in rawResultsTable) {
@@ -944,39 +1085,183 @@ export function resolveReportStyleConfig(value: unknown): ReportStyleConfig {
       }
     }
 
+    const legacyResultsTable = rawResultsTable as Record<string, unknown>;
+    const legacySharedFontFamily = legacyResultsTable.fontFamily ?? DEFAULT_REPORT_STYLE_V1.resultsTable.bodyStyle.fontFamily;
+    const legacySharedBorderColor = legacyResultsTable.borderColor ?? DEFAULT_REPORT_STYLE_V1.resultsTable.bodyStyle.borderColor;
+
+    const upgradeFilledSection = (
+      key: 'headerStyle' | 'departmentRowStyle' | 'categoryRowStyle',
+      defaults: ReportResultsTableFilledSectionStyle,
+      legacy: Partial<ReportResultsTableFilledSectionStyle>,
+    ) => {
+      const rawSection =
+        rawResultsTable[key] && typeof rawResultsTable[key] === 'object' && !Array.isArray(rawResultsTable[key])
+          ? (rawResultsTable[key] as Record<string, unknown>)
+          : null;
+      const upgradedSection: Record<string, unknown> = {
+        ...defaults,
+        fontFamily: legacySharedFontFamily,
+        borderColor: legacySharedBorderColor,
+        ...pickDefinedEntries(legacy),
+      };
+      if (rawSection) {
+        for (const sectionKey of REPORT_RESULTS_FILLED_SECTION_STYLE_KEYS) {
+          if (sectionKey in rawSection) {
+            upgradedSection[sectionKey] = rawSection[sectionKey];
+          }
+        }
+      }
+      upgradedResultsTable[key] = upgradedSection;
+    };
+
+    const upgradeSection = (
+      key: 'bodyStyle',
+      defaults: ReportResultsTableSectionStyle,
+      legacy: Partial<ReportResultsTableSectionStyle>,
+    ) => {
+      const rawSection =
+        rawResultsTable[key] && typeof rawResultsTable[key] === 'object' && !Array.isArray(rawResultsTable[key])
+          ? (rawResultsTable[key] as Record<string, unknown>)
+          : null;
+      const upgradedSection: Record<string, unknown> = {
+        ...defaults,
+        fontFamily: legacySharedFontFamily,
+        borderColor: legacySharedBorderColor,
+        ...pickDefinedEntries(legacy),
+      };
+      if (rawSection) {
+        for (const sectionKey of REPORT_RESULTS_SECTION_STYLE_KEYS) {
+          if (sectionKey in rawSection) {
+            upgradedSection[sectionKey] = rawSection[sectionKey];
+          }
+        }
+      }
+      upgradedResultsTable[key] = upgradedSection;
+    };
+
+    const upgradePanelSection = (
+      defaults: ReportPanelSectionStyle,
+      legacy: Partial<ReportPanelSectionStyle>,
+    ) => {
+      const rawSection =
+        rawResultsTable.panelSectionStyle &&
+        typeof rawResultsTable.panelSectionStyle === 'object' &&
+        !Array.isArray(rawResultsTable.panelSectionStyle)
+          ? (rawResultsTable.panelSectionStyle as Record<string, unknown>)
+          : null;
+      const upgradedSection: Record<string, unknown> = {
+        ...defaults,
+        fontFamily: legacySharedFontFamily,
+        borderColor: legacySharedBorderColor,
+        ...pickDefinedEntries(legacy),
+      };
+      if (rawSection) {
+        for (const sectionKey of REPORT_PANEL_SECTION_STYLE_KEYS) {
+          if (sectionKey in rawSection) {
+            upgradedSection[sectionKey] = rawSection[sectionKey];
+          }
+        }
+      }
+      upgradedResultsTable.panelSectionStyle = upgradedSection;
+    };
+
+    upgradeFilledSection('headerStyle', DEFAULT_REPORT_STYLE_V1.resultsTable.headerStyle, {
+      backgroundColor: legacyResultsTable.headerBackgroundColor as string | undefined,
+      textColor: legacyResultsTable.headerTextColor as string | undefined,
+      fontSizePx: legacyResultsTable.headerFontSizePx as number | undefined,
+      textAlign: legacyResultsTable.headerTextAlign as ReportTextAlign | undefined,
+    });
+    upgradeSection('bodyStyle', DEFAULT_REPORT_STYLE_V1.resultsTable.bodyStyle, {
+      textColor: legacyResultsTable.bodyTextColor as string | undefined,
+      fontSizePx: legacyResultsTable.bodyFontSizePx as number | undefined,
+      textAlign: legacyResultsTable.cellTextAlign as ReportTextAlign | undefined,
+    });
+    upgradePanelSection(DEFAULT_REPORT_STYLE_V1.resultsTable.panelSectionStyle, {
+      backgroundColor:
+        (legacyResultsTable.panelSectionBackgroundColor as string | undefined) ??
+        DEFAULT_REPORT_STYLE_V1.resultsTable.panelSectionStyle.backgroundColor,
+      textColor:
+        (legacyResultsTable.panelSectionTextColor as string | undefined) ??
+        DEFAULT_REPORT_STYLE_V1.resultsTable.panelSectionStyle.textColor,
+      borderColor:
+        (legacyResultsTable.panelSectionBorderColor as string | undefined) ??
+        (legacySharedBorderColor as string),
+      fontSizePx:
+        (legacyResultsTable.panelSectionFontSizePx as number | undefined) ??
+        DEFAULT_REPORT_STYLE_V1.resultsTable.panelSectionStyle.fontSizePx,
+      textAlign:
+        (legacyResultsTable.panelSectionTextAlign as ReportTextAlign | undefined) ??
+        DEFAULT_REPORT_STYLE_V1.resultsTable.panelSectionStyle.textAlign,
+      bold:
+        (legacyResultsTable.panelSectionBold as boolean | undefined) ??
+        DEFAULT_REPORT_STYLE_V1.resultsTable.panelSectionStyle.bold,
+      borderWidthPx:
+        (legacyResultsTable.panelSectionBorderWidthPx as number | undefined) ??
+        DEFAULT_REPORT_STYLE_V1.resultsTable.panelSectionStyle.borderWidthPx,
+      borderRadiusPx:
+        (legacyResultsTable.panelSectionBorderRadiusPx as number | undefined) ??
+        DEFAULT_REPORT_STYLE_V1.resultsTable.panelSectionStyle.borderRadiusPx,
+      paddingYpx:
+        (legacyResultsTable.panelSectionPaddingYpx as number | undefined) ??
+        DEFAULT_REPORT_STYLE_V1.resultsTable.panelSectionStyle.paddingYpx,
+      paddingXpx:
+        (legacyResultsTable.panelSectionPaddingXpx as number | undefined) ??
+        DEFAULT_REPORT_STYLE_V1.resultsTable.panelSectionStyle.paddingXpx,
+      marginTopPx:
+        (legacyResultsTable.panelSectionMarginTopPx as number | undefined) ??
+        DEFAULT_REPORT_STYLE_V1.resultsTable.panelSectionStyle.marginTopPx,
+      marginBottomPx:
+        (legacyResultsTable.panelSectionMarginBottomPx as number | undefined) ??
+        DEFAULT_REPORT_STYLE_V1.resultsTable.panelSectionStyle.marginBottomPx,
+    });
+    upgradeFilledSection('departmentRowStyle', DEFAULT_REPORT_STYLE_V1.resultsTable.departmentRowStyle, {
+      backgroundColor: legacyResultsTable.departmentRowBackgroundColor as string | undefined,
+      textColor: legacyResultsTable.departmentRowTextColor as string | undefined,
+      fontSizePx: legacyResultsTable.departmentRowFontSizePx as number | undefined,
+      textAlign: legacyResultsTable.departmentRowTextAlign as ReportTextAlign | undefined,
+      borderColor:
+        (legacyResultsTable.departmentRowBackgroundColor as string | undefined) ?? (legacySharedBorderColor as string),
+    });
+    upgradeFilledSection('categoryRowStyle', DEFAULT_REPORT_STYLE_V1.resultsTable.categoryRowStyle, {
+      backgroundColor: legacyResultsTable.categoryRowBackgroundColor as string | undefined,
+      textColor: legacyResultsTable.categoryRowTextColor as string | undefined,
+      fontSizePx: legacyResultsTable.categoryRowFontSizePx as number | undefined,
+      textAlign: legacyResultsTable.categoryRowTextAlign as ReportTextAlign | undefined,
+    });
+
     const derivedColumnDefaults: Record<
       (typeof RESULTS_TABLE_COLUMN_STYLE_KEYS)[number],
       ReportColumnStyle
     > = {
       testColumn: {
         ...DEFAULT_REPORT_STYLE_V1.resultsTable.testColumn,
-        textColor: String(upgradedResultsTable.bodyTextColor),
-        fontSizePx: Number(upgradedResultsTable.bodyFontSizePx),
-        textAlign: upgradedResultsTable.cellTextAlign as ReportTextAlign,
+        textColor: String((upgradedResultsTable.bodyStyle as ReportResultsTableSectionStyle).textColor),
+        fontSizePx: Number((upgradedResultsTable.bodyStyle as ReportResultsTableSectionStyle).fontSizePx),
+        textAlign: (upgradedResultsTable.bodyStyle as ReportResultsTableSectionStyle).textAlign,
       },
       resultColumn: {
         ...DEFAULT_REPORT_STYLE_V1.resultsTable.resultColumn,
-        textColor: String(upgradedResultsTable.bodyTextColor),
-        fontSizePx: Number(upgradedResultsTable.bodyFontSizePx),
-        textAlign: upgradedResultsTable.cellTextAlign as ReportTextAlign,
+        textColor: String((upgradedResultsTable.bodyStyle as ReportResultsTableSectionStyle).textColor),
+        fontSizePx: Number((upgradedResultsTable.bodyStyle as ReportResultsTableSectionStyle).fontSizePx),
+        textAlign: (upgradedResultsTable.bodyStyle as ReportResultsTableSectionStyle).textAlign,
       },
       unitColumn: {
         ...DEFAULT_REPORT_STYLE_V1.resultsTable.unitColumn,
-        textColor: String(upgradedResultsTable.bodyTextColor),
-        fontSizePx: Number(upgradedResultsTable.bodyFontSizePx),
-        textAlign: upgradedResultsTable.cellTextAlign as ReportTextAlign,
+        textColor: String((upgradedResultsTable.bodyStyle as ReportResultsTableSectionStyle).textColor),
+        fontSizePx: Number((upgradedResultsTable.bodyStyle as ReportResultsTableSectionStyle).fontSizePx),
+        textAlign: (upgradedResultsTable.bodyStyle as ReportResultsTableSectionStyle).textAlign,
       },
       statusColumn: {
         ...DEFAULT_REPORT_STYLE_V1.resultsTable.statusColumn,
-        textColor: String(upgradedResultsTable.bodyTextColor),
-        fontSizePx: Number(upgradedResultsTable.bodyFontSizePx),
-        textAlign: upgradedResultsTable.cellTextAlign as ReportTextAlign,
+        textColor: String((upgradedResultsTable.bodyStyle as ReportResultsTableSectionStyle).textColor),
+        fontSizePx: Number((upgradedResultsTable.bodyStyle as ReportResultsTableSectionStyle).fontSizePx),
+        textAlign: (upgradedResultsTable.bodyStyle as ReportResultsTableSectionStyle).textAlign,
       },
       referenceColumn: {
         ...DEFAULT_REPORT_STYLE_V1.resultsTable.referenceColumn,
         textColor: String(upgradedResultsTable.referenceValueColor),
-        fontSizePx: Number(upgradedResultsTable.bodyFontSizePx),
-        textAlign: upgradedResultsTable.cellTextAlign as ReportTextAlign,
+        fontSizePx: Number((upgradedResultsTable.bodyStyle as ReportResultsTableSectionStyle).fontSizePx),
+        textAlign: (upgradedResultsTable.bodyStyle as ReportResultsTableSectionStyle).textAlign,
       },
     };
 

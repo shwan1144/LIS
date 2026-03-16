@@ -6,6 +6,7 @@ import { Patient } from '../entities/patient.entity';
 import { Lab } from '../entities/lab.entity';
 import { User } from '../entities/user.entity';
 import { AuditLog } from '../entities/audit-log.entity';
+import { TestComponent } from '../entities/test-component.entity';
 import type { ReportStyleConfig } from './report-style.config';
 export interface PublicResultTestItem {
     orderTestId: string;
@@ -87,6 +88,7 @@ type GenerateTestResultsPdfResult = {
 export declare class ReportsService implements OnModuleInit, OnModuleDestroy {
     private readonly orderRepo;
     private readonly orderTestRepo;
+    private readonly testComponentRepo;
     private readonly patientRepo;
     private readonly labRepo;
     private readonly userRepo;
@@ -100,13 +102,15 @@ export declare class ReportsService implements OnModuleInit, OnModuleDestroy {
     private readonly pdfCacheMaxEntries;
     private readonly pdfPerfLogThresholdMs;
     private static cachedFont;
-    constructor(orderRepo: Repository<Order>, orderTestRepo: Repository<OrderTest>, patientRepo: Repository<Patient>, labRepo: Repository<Lab>, userRepo: Repository<User>, auditLogRepo: Repository<AuditLog>);
+    constructor(orderRepo: Repository<Order>, orderTestRepo: Repository<OrderTest>, testComponentRepo: Repository<TestComponent>, patientRepo: Repository<Patient>, labRepo: Repository<Lab>, userRepo: Repository<User>, auditLogRepo: Repository<AuditLog>);
     private parseEnvInt;
     onModuleInit(): void;
     private getBrowser;
     private renderPdfFromHtml;
     onModuleDestroy(): Promise<void>;
     private buildReportPdfCacheKey;
+    private loadPanelSectionLookup;
+    private attachPanelSectionMetadata;
     private normalizeAbsoluteUrlBase;
     private resolvePublicResultsBaseUrl;
     private isValidLabSubdomain;

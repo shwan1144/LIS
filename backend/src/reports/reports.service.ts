@@ -21,6 +21,7 @@ import { Lab } from '../entities/lab.entity';
 import { User } from '../entities/user.entity';
 import { AuditAction, AuditLog } from '../entities/audit-log.entity';
 import { TestType, type Test } from '../entities/test.entity';
+import { TestComponent } from '../entities/test-component.entity';
 import { buildResultsReportHtml } from './html/results-report.template';
 import { buildReportDesignFingerprint } from './report-design-fingerprint.util';
 import type { ReportStyleConfig } from './report-style.config';
@@ -116,6 +117,11 @@ type GenerateTestResultsPdfOptions = {
 type GenerateTestResultsPdfResult = {
   pdf: Buffer;
   performance: ResultsPdfPerformanceMetrics;
+};
+
+type PanelSectionLookup = {
+  byPanelAndChildTest: Map<string, string | null>;
+  fingerprint: string;
 };
 
 function formatDateTime(value: Date | string | null | undefined): string {
@@ -259,6 +265,10 @@ function formatResultParameters(params: Record<string, string> | null): string[]
     .map(([k, v]) => `${k}: ${String(v).trim()}`);
 }
 
+function buildPanelComponentLookupKey(panelTestId: string, childTestId: string): string {
+  return `${panelTestId}::${childTestId}`;
+}
+
 function drawHeaderBar(
   doc: PdfKitDocument,
   opts: { title: string; labName: string; subtitle?: string; logoImage?: Buffer | null },
@@ -382,7 +392,7 @@ function buildLabReportDesignFingerprint(lab: unknown): string {
 
 @Injectable()
 export class ReportsService implements OnModuleInit, OnModuleDestroy {
-  private static readonly REPORT_PDF_LAYOUT_VERSION = 'results-report-layout-2026-03-15c';
+  private static readonly REPORT_PDF_LAYOUT_VERSION = 'results-report-layout-2026-03-16-panel-sections';
   private readonly logger = new Logger(ReportsService.name);
   private browserPromise: Promise<Browser> | null = null;
   private readonly pdfCache = new Map<string, { buffer: Buffer; expiresAt: number; lastAccessedAt: number }>();
@@ -404,6 +414,8 @@ export class ReportsService implements OnModuleInit, OnModuleDestroy {
     private readonly orderRepo: Repository<Order>,
     @InjectRepository(OrderTest)
     private readonly orderTestRepo: Repository<OrderTest>,
+    @InjectRepository(TestComponent)
+    private readonly testComponentRepo: Repository<TestComponent>,
     @InjectRepository(Patient)
     private readonly patientRepo: Repository<Patient>,
     @InjectRepository(Lab)
@@ -819,6 +831,7 @@ export class ReportsService implements OnModuleInit, OnModuleDestroy {
     latestVerifiedAt: Date | null;
     bypassPaymentCheck: boolean;
     orderQrValue: string;
+    panelSectionFingerprint?: string;
     cultureOnly?: boolean;
   }): string {
     const reportableFingerprint = input.reportableOrderTests
@@ -844,11 +857,93 @@ export class ReportsService implements OnModuleInit, OnModuleDestroy {
       input.bypassPaymentCheck ? 'bypass' : 'strict',
       input.cultureOnly ? 'culture-only' : 'full',
       input.orderQrValue,
+      input.panelSectionFingerprint ?? '-',
       String(input.reportableOrderTests.length),
       reportableFingerprint,
     ].join('::');
 
     return createHash('sha1').update(rawKey).digest('hex');
+  }
+
+  private async loadPanelSectionLookup(orderTests: OrderTest[]): Promise<PanelSectionLookup> {
+    const panelTestIds = Array.from(
+      new Set(
+        orderTests
+          .filter((ot) => !ot.parentOrderTestId && ot.test?.type === TestType.PANEL)
+          .map((ot) => ot.testId)
+          .filter((testId): testId is string => Boolean(testId)),
+      ),
+    );
+
+    if (panelTestIds.length === 0) {
+      return {
+        byPanelAndChildTest: new Map<string, string | null>(),
+        fingerprint: '-',
+      };
+    }
+
+    const components = await this.testComponentRepo.find({
+      where: panelTestIds.map((panelTestId) => ({ panelTestId })),
+      select: ['panelTestId', 'childTestId', 'reportSection', 'updatedAt'],
+      order: {
+        panelTestId: 'ASC',
+        sortOrder: 'ASC',
+      },
+    });
+
+    const byPanelAndChildTest = new Map<string, string | null>();
+    const fingerprint = components
+      .map((component) => {
+        const reportSection = component.reportSection?.trim() || null;
+        byPanelAndChildTest.set(
+          buildPanelComponentLookupKey(component.panelTestId, component.childTestId),
+          reportSection,
+        );
+        return [
+          component.panelTestId,
+          component.childTestId,
+          reportSection ?? '-',
+          component.updatedAt ? new Date(component.updatedAt).getTime() : 0,
+        ].join(':');
+      })
+      .sort()
+      .join('|');
+
+    return {
+      byPanelAndChildTest,
+      fingerprint: fingerprint || '-',
+    };
+  }
+
+  private attachPanelSectionMetadata(
+    orderTests: OrderTest[],
+    lookup: Map<string, string | null>,
+  ): OrderTest[] {
+    if (!orderTests.length || lookup.size === 0) {
+      return orderTests;
+    }
+
+    const panelTestIdByRootOrderTestId = new Map<string, string>();
+    for (const orderTest of orderTests) {
+      if (!orderTest.parentOrderTestId && orderTest.test?.type === TestType.PANEL && orderTest.testId) {
+        panelTestIdByRootOrderTestId.set(orderTest.id, orderTest.testId);
+      }
+    }
+
+    return orderTests.map((orderTest) => {
+      if (!orderTest.parentOrderTestId) {
+        return orderTest;
+      }
+      const parentPanelTestId = panelTestIdByRootOrderTestId.get(orderTest.parentOrderTestId);
+      if (!parentPanelTestId) {
+        return orderTest;
+      }
+      const reportSection =
+        lookup.get(buildPanelComponentLookupKey(parentPanelTestId, orderTest.testId)) ?? null;
+      return Object.assign({}, orderTest, {
+        panelReportSection: reportSection,
+      }) as OrderTest;
+    });
   }
 
   private normalizeAbsoluteUrlBase(value: string | undefined): string | null {
@@ -1720,6 +1815,11 @@ export class ReportsService implements OnModuleInit, OnModuleDestroy {
           .toUpperCase() === 'CULTURE_SENSITIVITY',
       )
       : reportableOrderTests;
+    const panelSectionLookup = await this.loadPanelSectionLookup(renderedOrderTests);
+    const renderedOrderTestsWithSections = this.attachPanelSectionMetadata(
+      renderedOrderTests,
+      panelSectionLookup.byPanelAndChildTest,
+    );
     const renderedVerifiedTests = cultureOnly
       ? verifiedTests.filter((ot) => renderedOrderTests.some((candidate) => candidate.id === ot.id))
       : verifiedTests;
@@ -1739,10 +1839,11 @@ export class ReportsService implements OnModuleInit, OnModuleDestroy {
     const cacheKey = this.buildReportPdfCacheKey({
       labId,
       order: orderForRender,
-      reportableOrderTests: renderedOrderTests,
+      reportableOrderTests: renderedOrderTestsWithSections,
       latestVerifiedAt,
       bypassPaymentCheck,
       orderQrValue,
+      panelSectionFingerprint: panelSectionLookup.fingerprint,
       cultureOnly,
     });
 
@@ -1774,7 +1875,7 @@ export class ReportsService implements OnModuleInit, OnModuleDestroy {
       const verifierLookupStartMs = Date.now();
       const verifierIds = [
         ...new Set(
-          renderedOrderTests
+          renderedOrderTestsWithSections
             .map((ot) => ot.verifiedBy)
             .filter((id): id is string => Boolean(id)),
         ),
@@ -1799,7 +1900,7 @@ export class ReportsService implements OnModuleInit, OnModuleDestroy {
       ];
       const comments = [
         ...new Set(
-          renderedOrderTests
+          renderedOrderTestsWithSections
             .map((ot) => ot.comments?.trim())
             .filter((value): value is string => Boolean(value)),
         ),
@@ -1832,9 +1933,9 @@ export class ReportsService implements OnModuleInit, OnModuleDestroy {
       const htmlStartMs = Date.now();
       const html = buildResultsReportHtml({
         order: orderForRender,
-        orderTests: renderedOrderTests,
+        orderTests: renderedOrderTestsWithSections,
         verifiedCount: renderedVerifiedTests.length,
-        reportableCount: renderedOrderTests.length,
+        reportableCount: renderedOrderTestsWithSections.length,
         verifiers: verifierNames,
         latestVerifiedAt: latestVerifiedAt ?? null,
         comments,
@@ -1859,7 +1960,7 @@ export class ReportsService implements OnModuleInit, OnModuleDestroy {
         const fallbackStartMs = Date.now();
         const fallbackPdf = await this.renderTestResultsFallbackPDF({
           order: orderForRender,
-          orderTests: renderedOrderTests,
+          orderTests: renderedOrderTestsWithSections,
           verifiers: verifierNames,
           latestVerifiedAt: latestVerifiedAt ?? null,
           comments,

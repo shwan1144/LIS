@@ -21,6 +21,7 @@ import {
   validateAndNormalizeReportStyleConfig,
 } from '../reports/report-style.config';
 import { buildReportDesignFingerprint } from '../reports/report-design-fingerprint.util';
+import { ReportsService, type ReportBrandingOverride } from '../reports/reports.service';
 
 const ROLES = ['SUPER_ADMIN', 'LAB_ADMIN', 'RECEPTION', 'TECHNICIAN', 'VERIFIER', 'DOCTOR', 'INSTRUMENT_SERVICE'];
 const MAX_REPORT_IMAGE_DATA_URL_LENGTH = 4 * 1024 * 1024;
@@ -30,6 +31,8 @@ const MAX_PRINTER_NAME_LENGTH = 128;
 const MAX_REFERRING_DOCTOR_NAME_LENGTH = 80;
 const MAX_REFERRING_DOCTORS_COUNT = 500;
 const MAX_DASHBOARD_ANNOUNCEMENT_TEXT_LENGTH = 255;
+const UUID_V4_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 type ReportBrandingUpdate = {
   bannerDataUrl?: string | null;
@@ -64,6 +67,7 @@ export class SettingsService {
     private readonly labRepo: Repository<Lab>,
     @InjectRepository(Shift)
     private readonly shiftRepo: Repository<Shift>,
+    private readonly reportsService: ReportsService,
   ) { }
 
   getRoles(): string[] {
@@ -282,6 +286,29 @@ export class SettingsService {
     return settings;
   }
 
+  async generateLabReportPreviewPdf(
+    labId: string,
+    payload: {
+      orderId: unknown;
+      previewMode?: unknown;
+      reportBranding: unknown;
+      reportStyle: unknown;
+    },
+  ): Promise<Buffer> {
+    const orderId = this.normalizeUuidV4(payload.orderId, 'orderId');
+    const previewMode = this.normalizePreviewMode(payload.previewMode);
+    const reportBranding = this.normalizePreviewReportBranding(payload.reportBranding);
+    const reportStyle = this.normalizePreviewReportStyle(payload.reportStyle);
+
+    return this.reportsService.generateDraftTestResultsPreviewPDF({
+      orderId,
+      labId,
+      previewMode,
+      reportBranding,
+      reportStyle,
+    });
+  }
+
   private normalizeReportImageDataUrl(
     value: string | null | undefined,
     fieldName: string,
@@ -414,6 +441,73 @@ export class SettingsService {
       );
     }
     return trimmed;
+  }
+
+  private normalizeUuidV4(value: unknown, fieldName: string): string {
+    if (typeof value !== 'string' || !UUID_V4_PATTERN.test(value.trim())) {
+      throw new BadRequestException(`${fieldName} must be a valid UUID`);
+    }
+    return value.trim();
+  }
+
+  private normalizePreviewReportBranding(value: unknown): ReportBrandingOverride {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+      throw new BadRequestException('reportBranding must be an object');
+    }
+
+    const branding = value as Record<string, unknown>;
+    const allowedKeys = ['bannerDataUrl', 'footerDataUrl', 'logoDataUrl', 'watermarkDataUrl'];
+    const unknownKeys = Object.keys(branding).filter((key) => !allowedKeys.includes(key));
+    if (unknownKeys.length > 0) {
+      throw new BadRequestException(
+        `reportBranding contains unknown keys: ${unknownKeys.join(', ')}`,
+      );
+    }
+
+    return {
+      bannerDataUrl: this.normalizeReportImageDataUrl(
+        branding.bannerDataUrl as string | null | undefined,
+        'reportBranding.bannerDataUrl',
+      ),
+      footerDataUrl: this.normalizeReportImageDataUrl(
+        branding.footerDataUrl as string | null | undefined,
+        'reportBranding.footerDataUrl',
+      ),
+      logoDataUrl: this.normalizeReportImageDataUrl(
+        branding.logoDataUrl as string | null | undefined,
+        'reportBranding.logoDataUrl',
+      ),
+      watermarkDataUrl: this.normalizeReportImageDataUrl(
+        branding.watermarkDataUrl as string | null | undefined,
+        'reportBranding.watermarkDataUrl',
+      ),
+    };
+  }
+
+  private normalizePreviewReportStyle(value: unknown): ReportStyleConfig {
+    if (value === null || value === undefined) {
+      throw new BadRequestException('reportStyle is required');
+    }
+    try {
+      return validateAndNormalizeReportStyleConfig(value, 'reportStyle');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Invalid reportStyle';
+      throw new BadRequestException(message);
+    }
+  }
+
+  private normalizePreviewMode(value: unknown): 'full' | 'culture_only' {
+    if (value === null || value === undefined) {
+      return 'full';
+    }
+    if (typeof value !== 'string') {
+      throw new BadRequestException('previewMode must be a string');
+    }
+    const normalized = value.trim().toLowerCase();
+    if (normalized === 'full' || normalized === 'culture_only') {
+      return normalized;
+    }
+    throw new BadRequestException('previewMode must be full or culture_only');
   }
 
   async getUsersForLab(labId: string): Promise<User[]> {

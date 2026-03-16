@@ -1,28 +1,45 @@
-import { ForbiddenException } from '@nestjs/common';
 import { SettingsController } from './settings.controller';
 import { SettingsService } from './settings.service';
 
 describe('SettingsController', () => {
-  it('rejects dashboard announcement updates from the lab panel', async () => {
+  it('passes report design and dashboard settings through for the current lab', async () => {
     const settingsService = {
-      updateLabSettings: jest.fn(),
+      updateLabSettings: jest.fn().mockResolvedValue(undefined),
     } as unknown as SettingsService;
     const controller = new SettingsController(settingsService);
+    const req = {
+      user: {
+        userId: 'user-id',
+        username: 'lab-admin',
+        labId: 'lab-id',
+        role: 'LAB_ADMIN',
+      },
+    };
+    const body = {
+      dashboardAnnouncementText: 'System maintenance at 8 PM',
+      onlineResultWatermarkText: 'ONLINE',
+      reportStyle: {} as never,
+      reportBranding: {
+        logoDataUrl: 'data:image/png;base64,AAAA',
+      },
+    };
 
-    await expect(
-      controller.updateLabSettings(
-        {
-          user: {
-            userId: 'user-id',
-            username: 'lab-admin',
-            labId: 'lab-id',
-            role: 'LAB_ADMIN',
-          },
-        },
-        {
-          dashboardAnnouncementText: 'System maintenance at 8 PM',
-        },
-      ),
-    ).rejects.toBeInstanceOf(ForbiddenException);
+    await controller.updateLabSettings(req, body);
+
+    expect(settingsService.updateLabSettings).toHaveBeenCalledWith('lab-id', {
+      labelSequenceBy: undefined,
+      sequenceResetBy: undefined,
+      enableOnlineResults: undefined,
+      onlineResultWatermarkDataUrl: undefined,
+      onlineResultWatermarkText: 'ONLINE',
+      printing: undefined,
+      reportBranding: {
+        logoDataUrl: 'data:image/png;base64,AAAA',
+      },
+      reportStyle: body.reportStyle,
+      uiTestGroups: undefined,
+      referringDoctors: undefined,
+      dashboardAnnouncementText: 'System maintenance at 8 PM',
+    });
   });
 });

@@ -26,6 +26,7 @@ const shift_entity_1 = require("../entities/shift.entity");
 const password_util_1 = require("../auth/password.util");
 const report_style_config_1 = require("../reports/report-style.config");
 const report_design_fingerprint_util_1 = require("../reports/report-design-fingerprint.util");
+const reports_service_1 = require("../reports/reports.service");
 const ROLES = ['SUPER_ADMIN', 'LAB_ADMIN', 'RECEPTION', 'TECHNICIAN', 'VERIFIER', 'DOCTOR', 'INSTRUMENT_SERVICE'];
 const MAX_REPORT_IMAGE_DATA_URL_LENGTH = 4 * 1024 * 1024;
 const REPORT_IMAGE_DATA_URL_PATTERN = /^data:image\/(png|jpeg|jpg|webp);base64,[a-zA-Z0-9+/=]+$/;
@@ -34,8 +35,9 @@ const MAX_PRINTER_NAME_LENGTH = 128;
 const MAX_REFERRING_DOCTOR_NAME_LENGTH = 80;
 const MAX_REFERRING_DOCTORS_COUNT = 500;
 const MAX_DASHBOARD_ANNOUNCEMENT_TEXT_LENGTH = 255;
+const UUID_V4_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 let SettingsService = class SettingsService {
-    constructor(userRepo, labAssignmentRepo, shiftAssignmentRepo, userDeptRepo, departmentRepo, labRepo, shiftRepo) {
+    constructor(userRepo, labAssignmentRepo, shiftAssignmentRepo, userDeptRepo, departmentRepo, labRepo, shiftRepo, reportsService) {
         this.userRepo = userRepo;
         this.labAssignmentRepo = labAssignmentRepo;
         this.shiftAssignmentRepo = shiftAssignmentRepo;
@@ -43,6 +45,7 @@ let SettingsService = class SettingsService {
         this.departmentRepo = departmentRepo;
         this.labRepo = labRepo;
         this.shiftRepo = shiftRepo;
+        this.reportsService = reportsService;
     }
     getRoles() {
         return ROLES;
@@ -208,6 +211,19 @@ let SettingsService = class SettingsService {
         }
         return settings;
     }
+    async generateLabReportPreviewPdf(labId, payload) {
+        const orderId = this.normalizeUuidV4(payload.orderId, 'orderId');
+        const previewMode = this.normalizePreviewMode(payload.previewMode);
+        const reportBranding = this.normalizePreviewReportBranding(payload.reportBranding);
+        const reportStyle = this.normalizePreviewReportStyle(payload.reportStyle);
+        return this.reportsService.generateDraftTestResultsPreviewPDF({
+            orderId,
+            labId,
+            previewMode,
+            reportBranding,
+            reportStyle,
+        });
+    }
     normalizeReportImageDataUrl(value, fieldName) {
         if (value === null || value === undefined)
             return null;
@@ -329,6 +345,54 @@ let SettingsService = class SettingsService {
             throw new common_1.BadRequestException(`dashboardAnnouncementText must be at most ${MAX_DASHBOARD_ANNOUNCEMENT_TEXT_LENGTH} characters`);
         }
         return trimmed;
+    }
+    normalizeUuidV4(value, fieldName) {
+        if (typeof value !== 'string' || !UUID_V4_PATTERN.test(value.trim())) {
+            throw new common_1.BadRequestException(`${fieldName} must be a valid UUID`);
+        }
+        return value.trim();
+    }
+    normalizePreviewReportBranding(value) {
+        if (!value || typeof value !== 'object' || Array.isArray(value)) {
+            throw new common_1.BadRequestException('reportBranding must be an object');
+        }
+        const branding = value;
+        const allowedKeys = ['bannerDataUrl', 'footerDataUrl', 'logoDataUrl', 'watermarkDataUrl'];
+        const unknownKeys = Object.keys(branding).filter((key) => !allowedKeys.includes(key));
+        if (unknownKeys.length > 0) {
+            throw new common_1.BadRequestException(`reportBranding contains unknown keys: ${unknownKeys.join(', ')}`);
+        }
+        return {
+            bannerDataUrl: this.normalizeReportImageDataUrl(branding.bannerDataUrl, 'reportBranding.bannerDataUrl'),
+            footerDataUrl: this.normalizeReportImageDataUrl(branding.footerDataUrl, 'reportBranding.footerDataUrl'),
+            logoDataUrl: this.normalizeReportImageDataUrl(branding.logoDataUrl, 'reportBranding.logoDataUrl'),
+            watermarkDataUrl: this.normalizeReportImageDataUrl(branding.watermarkDataUrl, 'reportBranding.watermarkDataUrl'),
+        };
+    }
+    normalizePreviewReportStyle(value) {
+        if (value === null || value === undefined) {
+            throw new common_1.BadRequestException('reportStyle is required');
+        }
+        try {
+            return (0, report_style_config_1.validateAndNormalizeReportStyleConfig)(value, 'reportStyle');
+        }
+        catch (error) {
+            const message = error instanceof Error ? error.message : 'Invalid reportStyle';
+            throw new common_1.BadRequestException(message);
+        }
+    }
+    normalizePreviewMode(value) {
+        if (value === null || value === undefined) {
+            return 'full';
+        }
+        if (typeof value !== 'string') {
+            throw new common_1.BadRequestException('previewMode must be a string');
+        }
+        const normalized = value.trim().toLowerCase();
+        if (normalized === 'full' || normalized === 'culture_only') {
+            return normalized;
+        }
+        throw new common_1.BadRequestException('previewMode must be full or culture_only');
     }
     async getUsersForLab(labId) {
         const assignments = await this.labAssignmentRepo.find({
@@ -606,6 +670,7 @@ exports.SettingsService = SettingsService = __decorate([
         typeorm_2.Repository,
         typeorm_2.Repository,
         typeorm_2.Repository,
-        typeorm_2.Repository])
+        typeorm_2.Repository,
+        reports_service_1.ReportsService])
 ], SettingsService);
 //# sourceMappingURL=settings.service.js.map

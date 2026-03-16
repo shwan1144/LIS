@@ -29,6 +29,7 @@ const lab_entity_1 = require("../entities/lab.entity");
 const user_entity_1 = require("../entities/user.entity");
 const audit_log_entity_1 = require("../entities/audit-log.entity");
 const test_entity_1 = require("../entities/test.entity");
+const test_component_entity_1 = require("../entities/test-component.entity");
 const results_report_template_1 = require("./html/results-report.template");
 const report_design_fingerprint_util_1 = require("./report-design-fingerprint.util");
 const normal_range_util_1 = require("../tests/normal-range.util");
@@ -150,6 +151,9 @@ function formatResultParameters(params) {
         .sort(([a], [b]) => a.localeCompare(b))
         .map(([k, v]) => `${k}: ${String(v).trim()}`);
 }
+function buildPanelComponentLookupKey(panelTestId, childTestId) {
+    return `${panelTestId}::${childTestId}`;
+}
 function drawHeaderBar(doc, opts) {
     const pageWidth = doc.page.width;
     const margin = doc.page.margins.left;
@@ -243,9 +247,10 @@ function buildLabReportDesignFingerprint(lab) {
     });
 }
 let ReportsService = ReportsService_1 = class ReportsService {
-    constructor(orderRepo, orderTestRepo, patientRepo, labRepo, userRepo, auditLogRepo) {
+    constructor(orderRepo, orderTestRepo, testComponentRepo, patientRepo, labRepo, userRepo, auditLogRepo) {
         this.orderRepo = orderRepo;
         this.orderTestRepo = orderTestRepo;
+        this.testComponentRepo = testComponentRepo;
         this.patientRepo = patientRepo;
         this.labRepo = labRepo;
         this.userRepo = userRepo;
@@ -641,10 +646,73 @@ let ReportsService = ReportsService_1 = class ReportsService {
             input.bypassPaymentCheck ? 'bypass' : 'strict',
             input.cultureOnly ? 'culture-only' : 'full',
             input.orderQrValue,
+            input.panelSectionFingerprint ?? '-',
             String(input.reportableOrderTests.length),
             reportableFingerprint,
         ].join('::');
         return (0, crypto_1.createHash)('sha1').update(rawKey).digest('hex');
+    }
+    async loadPanelSectionLookup(orderTests) {
+        const panelTestIds = Array.from(new Set(orderTests
+            .filter((ot) => !ot.parentOrderTestId && ot.test?.type === test_entity_1.TestType.PANEL)
+            .map((ot) => ot.testId)
+            .filter((testId) => Boolean(testId))));
+        if (panelTestIds.length === 0) {
+            return {
+                byPanelAndChildTest: new Map(),
+                fingerprint: '-',
+            };
+        }
+        const components = await this.testComponentRepo.find({
+            where: panelTestIds.map((panelTestId) => ({ panelTestId })),
+            select: ['panelTestId', 'childTestId', 'reportSection', 'updatedAt'],
+            order: {
+                panelTestId: 'ASC',
+                sortOrder: 'ASC',
+            },
+        });
+        const byPanelAndChildTest = new Map();
+        const fingerprint = components
+            .map((component) => {
+            const reportSection = component.reportSection?.trim() || null;
+            byPanelAndChildTest.set(buildPanelComponentLookupKey(component.panelTestId, component.childTestId), reportSection);
+            return [
+                component.panelTestId,
+                component.childTestId,
+                reportSection ?? '-',
+                component.updatedAt ? new Date(component.updatedAt).getTime() : 0,
+            ].join(':');
+        })
+            .sort()
+            .join('|');
+        return {
+            byPanelAndChildTest,
+            fingerprint: fingerprint || '-',
+        };
+    }
+    attachPanelSectionMetadata(orderTests, lookup) {
+        if (!orderTests.length || lookup.size === 0) {
+            return orderTests;
+        }
+        const panelTestIdByRootOrderTestId = new Map();
+        for (const orderTest of orderTests) {
+            if (!orderTest.parentOrderTestId && orderTest.test?.type === test_entity_1.TestType.PANEL && orderTest.testId) {
+                panelTestIdByRootOrderTestId.set(orderTest.id, orderTest.testId);
+            }
+        }
+        return orderTests.map((orderTest) => {
+            if (!orderTest.parentOrderTestId) {
+                return orderTest;
+            }
+            const parentPanelTestId = panelTestIdByRootOrderTestId.get(orderTest.parentOrderTestId);
+            if (!parentPanelTestId) {
+                return orderTest;
+            }
+            const reportSection = lookup.get(buildPanelComponentLookupKey(parentPanelTestId, orderTest.testId)) ?? null;
+            return Object.assign({}, orderTest, {
+                panelReportSection: reportSection,
+            });
+        });
     }
     normalizeAbsoluteUrlBase(value) {
         const raw = String(value ?? '').trim();
@@ -1349,6 +1417,8 @@ let ReportsService = ReportsService_1 = class ReportsService {
             ? reportableOrderTests.filter((ot) => String(ot.test?.resultEntryType ?? '')
                 .toUpperCase() === 'CULTURE_SENSITIVITY')
             : reportableOrderTests;
+        const panelSectionLookup = await this.loadPanelSectionLookup(renderedOrderTests);
+        const renderedOrderTestsWithSections = this.attachPanelSectionMetadata(renderedOrderTests, panelSectionLookup.byPanelAndChildTest);
         const renderedVerifiedTests = cultureOnly
             ? verifiedTests.filter((ot) => renderedOrderTests.some((candidate) => candidate.id === ot.id))
             : verifiedTests;
@@ -1363,10 +1433,11 @@ let ReportsService = ReportsService_1 = class ReportsService {
         const cacheKey = this.buildReportPdfCacheKey({
             labId,
             order: orderForRender,
-            reportableOrderTests: renderedOrderTests,
+            reportableOrderTests: renderedOrderTestsWithSections,
             latestVerifiedAt,
             bypassPaymentCheck,
             orderQrValue,
+            panelSectionFingerprint: panelSectionLookup.fingerprint,
             cultureOnly,
         });
         let verifierLookupMs = 0;
@@ -1392,7 +1463,7 @@ let ReportsService = ReportsService_1 = class ReportsService {
         const generatePdf = async () => {
             const verifierLookupStartMs = Date.now();
             const verifierIds = [
-                ...new Set(renderedOrderTests
+                ...new Set(renderedOrderTestsWithSections
                     .map((ot) => ot.verifiedBy)
                     .filter((id) => Boolean(id))),
             ];
@@ -1409,7 +1480,7 @@ let ReportsService = ReportsService_1 = class ReportsService {
                     .filter((name) => Boolean(name))),
             ];
             const comments = [
-                ...new Set(renderedOrderTests
+                ...new Set(renderedOrderTestsWithSections
                     .map((ot) => ot.comments?.trim())
                     .filter((value) => Boolean(value))),
             ];
@@ -1436,9 +1507,9 @@ let ReportsService = ReportsService_1 = class ReportsService {
             const htmlStartMs = Date.now();
             const html = (0, results_report_template_1.buildResultsReportHtml)({
                 order: orderForRender,
-                orderTests: renderedOrderTests,
+                orderTests: renderedOrderTestsWithSections,
                 verifiedCount: renderedVerifiedTests.length,
-                reportableCount: renderedOrderTests.length,
+                reportableCount: renderedOrderTestsWithSections.length,
                 verifiers: verifierNames,
                 latestVerifiedAt: latestVerifiedAt ?? null,
                 comments,
@@ -1461,7 +1532,7 @@ let ReportsService = ReportsService_1 = class ReportsService {
                 const fallbackStartMs = Date.now();
                 const fallbackPdf = await this.renderTestResultsFallbackPDF({
                     order: orderForRender,
-                    orderTests: renderedOrderTests,
+                    orderTests: renderedOrderTestsWithSections,
                     verifiers: verifierNames,
                     latestVerifiedAt: latestVerifiedAt ?? null,
                     comments,
@@ -1965,17 +2036,19 @@ let ReportsService = ReportsService_1 = class ReportsService {
     }
 };
 exports.ReportsService = ReportsService;
-ReportsService.REPORT_PDF_LAYOUT_VERSION = 'results-report-layout-2026-03-15c';
+ReportsService.REPORT_PDF_LAYOUT_VERSION = 'results-report-layout-2026-03-16-panel-sections';
 ReportsService.cachedFont = null;
 exports.ReportsService = ReportsService = ReportsService_1 = __decorate([
     (0, common_1.Injectable)(),
     __param(0, (0, typeorm_1.InjectRepository)(order_entity_1.Order)),
     __param(1, (0, typeorm_1.InjectRepository)(order_test_entity_1.OrderTest)),
-    __param(2, (0, typeorm_1.InjectRepository)(patient_entity_1.Patient)),
-    __param(3, (0, typeorm_1.InjectRepository)(lab_entity_1.Lab)),
-    __param(4, (0, typeorm_1.InjectRepository)(user_entity_1.User)),
-    __param(5, (0, typeorm_1.InjectRepository)(audit_log_entity_1.AuditLog)),
+    __param(2, (0, typeorm_1.InjectRepository)(test_component_entity_1.TestComponent)),
+    __param(3, (0, typeorm_1.InjectRepository)(patient_entity_1.Patient)),
+    __param(4, (0, typeorm_1.InjectRepository)(lab_entity_1.Lab)),
+    __param(5, (0, typeorm_1.InjectRepository)(user_entity_1.User)),
+    __param(6, (0, typeorm_1.InjectRepository)(audit_log_entity_1.AuditLog)),
     __metadata("design:paramtypes", [typeorm_2.Repository,
+        typeorm_2.Repository,
         typeorm_2.Repository,
         typeorm_2.Repository,
         typeorm_2.Repository,

@@ -27,7 +27,8 @@ function getStoredShift(lab: LabDto | null): { shiftId: string | null; label: st
   }
 
   const shiftKey = `${SHIFT_STORAGE_PREFIX}${lab.id}`;
-  const shiftStr = localStorage.getItem(shiftKey);
+  // Try sessionStorage first, then fallback to legacy localStorage for transition
+  const shiftStr = sessionStorage.getItem(shiftKey) || localStorage.getItem(shiftKey);
   if (!shiftStr) {
     return { shiftId: null, label: null };
   }
@@ -124,10 +125,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (!s.lab) return s;
       const key = `${SHIFT_STORAGE_PREFIX}${s.lab.id}`;
       if (shiftId == null) {
+        sessionStorage.removeItem(key);
         localStorage.removeItem(key);
         return { ...s, currentShiftId: null, currentShiftLabel: null };
       }
-      localStorage.setItem(key, JSON.stringify({ shiftId, label: label ?? '' }));
+      sessionStorage.setItem(key, JSON.stringify({ shiftId, label: label ?? '' }));
+      localStorage.removeItem(key); // Ensure it's not in persistent storage
       return { ...s, currentShiftId: shiftId, currentShiftLabel: label };
     });
   }, []);
