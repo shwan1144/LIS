@@ -6,6 +6,34 @@ import {
 
 describe('report-style.config', () => {
   it('provides populated section styles for results table defaults', () => {
+    expect(DEFAULT_REPORT_STYLE_V1.patientInfo).toEqual({
+      backgroundColor: '#FAFAFA',
+      borderColor: '#CCCCCC',
+      borderRadiusPx: 6,
+      paddingYpx: 10,
+      paddingXpx: 12,
+      dividerWidthPx: 1,
+      labelCellStyle: {
+        backgroundColor: '#FAFAFA',
+        textColor: '#333333',
+        fontFamily: 'system-sans',
+        fontSizePx: 13,
+        fontWeight: 700,
+        textAlign: 'left',
+        paddingYpx: 4,
+        paddingXpx: 8,
+      },
+      valueCellStyle: {
+        backgroundColor: '#FAFAFA',
+        textColor: '#333333',
+        fontFamily: 'system-sans',
+        fontSizePx: 13,
+        fontWeight: 400,
+        textAlign: 'left',
+        paddingYpx: 4,
+        paddingXpx: 8,
+      },
+    });
     expect(DEFAULT_REPORT_STYLE_V1.reportTitle.paddingYpx).toBe(0);
     expect(DEFAULT_REPORT_STYLE_V1.reportTitle.paddingXpx).toBe(0);
     expect(DEFAULT_REPORT_STYLE_V1.resultsTable.headerStyle).toEqual({
@@ -84,6 +112,18 @@ describe('report-style.config', () => {
     ).toThrow('reportStyle.resultsTable.bodyStyle.paddingXpx must be between 0 and 24');
   });
 
+  it('rejects invalid patient info divider width values', () => {
+    expect(() =>
+      validateAndNormalizeReportStyleConfig({
+        ...DEFAULT_REPORT_STYLE_V1,
+        patientInfo: {
+          ...DEFAULT_REPORT_STYLE_V1.patientInfo,
+          dividerWidthPx: 4,
+        },
+      }),
+    ).toThrow('reportStyle.patientInfo.dividerWidthPx must be between 0 and 3');
+  });
+
   it('rejects invalid report title padding values', () => {
     expect(() =>
       validateAndNormalizeReportStyleConfig({
@@ -94,6 +134,59 @@ describe('report-style.config', () => {
         },
       }),
     ).toThrow('reportStyle.reportTitle.paddingYpx must be between 0 and 20');
+  });
+
+  it('upgrades legacy flat patientInfo styling into nested table cell styles', () => {
+    const legacyStyle = {
+      ...DEFAULT_REPORT_STYLE_V1,
+      patientInfo: {
+        backgroundColor: '#EFEFEF',
+        borderColor: '#AABBCC',
+        textColor: '#101010',
+        labelColor: '#202020',
+        fontSizePx: 14,
+        fontFamily: 'verdana',
+        labelFontWeight: 800,
+        valueFontWeight: 500,
+        textAlign: 'center',
+        labelTextAlign: 'left',
+        valueTextAlign: 'right',
+        borderRadiusPx: 7,
+        paddingYpx: 11,
+        paddingXpx: 13,
+      },
+    };
+
+    const normalized = resolveReportStyleConfig(legacyStyle);
+
+    expect(normalized.patientInfo).toEqual({
+      backgroundColor: '#EFEFEF',
+      borderColor: '#AABBCC',
+      borderRadiusPx: 7,
+      paddingYpx: 11,
+      paddingXpx: 13,
+      dividerWidthPx: 1,
+      labelCellStyle: {
+        backgroundColor: '#EFEFEF',
+        textColor: '#202020',
+        fontFamily: 'verdana',
+        fontSizePx: 14,
+        fontWeight: 800,
+        textAlign: 'left',
+        paddingYpx: 4,
+        paddingXpx: 8,
+      },
+      valueCellStyle: {
+        backgroundColor: '#EFEFEF',
+        textColor: '#101010',
+        fontFamily: 'verdana',
+        fontSizePx: 14,
+        fontWeight: 500,
+        textAlign: 'right',
+        paddingYpx: 4,
+        paddingXpx: 8,
+      },
+    });
   });
 
   it('upgrades legacy flat resultsTable styling into nested section styles', () => {

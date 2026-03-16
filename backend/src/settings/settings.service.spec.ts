@@ -252,8 +252,22 @@ describe('SettingsService referringDoctors', () => {
       panelTableBreak: DEFAULT_REPORT_STYLE_V1.resultsTable.panelTableBreak,
       panelRowBreak: DEFAULT_REPORT_STYLE_V1.resultsTable.panelRowBreak,
     };
-    const { fontFamily: _patientFontFamily, ...legacyPatientInfo } =
-      DEFAULT_REPORT_STYLE_V1.patientInfo;
+    const legacyPatientInfo = {
+      backgroundColor: DEFAULT_REPORT_STYLE_V1.patientInfo.backgroundColor,
+      borderColor: DEFAULT_REPORT_STYLE_V1.patientInfo.borderColor,
+      textColor: DEFAULT_REPORT_STYLE_V1.patientInfo.valueCellStyle.textColor,
+      labelColor: DEFAULT_REPORT_STYLE_V1.patientInfo.labelCellStyle.textColor,
+      fontSizePx: DEFAULT_REPORT_STYLE_V1.patientInfo.valueCellStyle.fontSizePx,
+      fontFamily: DEFAULT_REPORT_STYLE_V1.patientInfo.valueCellStyle.fontFamily,
+      labelFontWeight: DEFAULT_REPORT_STYLE_V1.patientInfo.labelCellStyle.fontWeight,
+      valueFontWeight: DEFAULT_REPORT_STYLE_V1.patientInfo.valueCellStyle.fontWeight,
+      textAlign: DEFAULT_REPORT_STYLE_V1.patientInfo.valueCellStyle.textAlign,
+      labelTextAlign: DEFAULT_REPORT_STYLE_V1.patientInfo.labelCellStyle.textAlign,
+      valueTextAlign: DEFAULT_REPORT_STYLE_V1.patientInfo.valueCellStyle.textAlign,
+      borderRadiusPx: DEFAULT_REPORT_STYLE_V1.patientInfo.borderRadiusPx,
+      paddingYpx: DEFAULT_REPORT_STYLE_V1.patientInfo.paddingYpx,
+      paddingXpx: DEFAULT_REPORT_STYLE_V1.patientInfo.paddingXpx,
+    };
     const { reportTitle: _reportTitle, ...legacyRootStyle } = DEFAULT_REPORT_STYLE_V1;
     const legacyStyle = {
       ...legacyRootStyle,
@@ -270,9 +284,21 @@ describe('SettingsService referringDoctors', () => {
 
     const result = await service.getLabSettings('lab-id');
 
-    expect(result.reportStyle).toEqual(DEFAULT_REPORT_STYLE_V1);
-    expect(result.reportStyle?.patientInfo.fontFamily).toBe(
-      DEFAULT_REPORT_STYLE_V1.patientInfo.fontFamily,
+    expect(result.reportStyle).toEqual({
+      ...DEFAULT_REPORT_STYLE_V1,
+      resultsTable: {
+        ...DEFAULT_REPORT_STYLE_V1.resultsTable,
+        panelSectionStyle: {
+          ...DEFAULT_REPORT_STYLE_V1.resultsTable.panelSectionStyle,
+          borderColor: DEFAULT_REPORT_STYLE_V1.resultsTable.bodyStyle.borderColor,
+        },
+      },
+    });
+    expect(result.reportStyle?.patientInfo.labelCellStyle.fontFamily).toBe(
+      DEFAULT_REPORT_STYLE_V1.patientInfo.labelCellStyle.fontFamily,
+    );
+    expect(result.reportStyle?.patientInfo.valueCellStyle.fontFamily).toBe(
+      DEFAULT_REPORT_STYLE_V1.patientInfo.valueCellStyle.fontFamily,
     );
     expect(result.reportStyle?.resultsTable.bodyStyle.fontFamily).toBe(
       DEFAULT_REPORT_STYLE_V1.resultsTable.bodyStyle.fontFamily,

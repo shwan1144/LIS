@@ -85,13 +85,17 @@ import {
   warmDirectLabelPrintAssets,
   warmGatewayPrinterConfig,
 } from '../printing/direct-print';
-import { formatDateKeyForTimeZone } from '../utils/lab-timezone';
+import {
+  formatDateKeyForTimeZone,
+  getMillisecondsUntilNextMidnightForTimeZone,
+} from '../utils/lab-timezone';
 import { buildKeyboardSearchVariants } from '../utils/keyboard-map';
 import { canAccessAction } from '../auth/lab-role-policy';
 import './OrdersPage.css';
 
 const { Title, Text } = Typography;
 const { RangePicker } = DatePicker;
+const ORDER_HISTORY_DEFAULT_TIME_ZONE = 'Asia/Baghdad';
 
 interface SelectedTest {
   testId: string;
@@ -115,11 +119,18 @@ function getPatientName(p: PatientDto) {
 }
 
 function getTodayHistoryDateRange(
-  timeZone: string | null | undefined,
+  timeZone: string | null | undefined = ORDER_HISTORY_DEFAULT_TIME_ZONE,
 ): [dayjs.Dayjs, dayjs.Dayjs] {
   const todayDateKey = formatDateKeyForTimeZone(new Date(), timeZone);
   const today = dayjs(`${todayDateKey}T00:00:00`);
   return [today, today];
+}
+
+function isSingleDateRange(
+  value: [dayjs.Dayjs, dayjs.Dayjs],
+  dateKey: string,
+): boolean {
+  return value[0].format('YYYY-MM-DD') === dateKey && value[1].format('YYYY-MM-DD') === dateKey;
 }
 
 interface OrderListRow {
@@ -383,7 +394,7 @@ export function OrdersPage() {
   const [listQuery, setListQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<OrderHistoryStatusFilter>('ACTIVE');
   const [historyDateRange, setHistoryDateRange] = useState<[dayjs.Dayjs, dayjs.Dayjs]>(() =>
-    getTodayHistoryDateRange(lab?.timezone),
+    getTodayHistoryDateRange(),
   );
   const [historyShiftFilter, setHistoryShiftFilter] = useState<string>('ALL');
   const [historyShiftOptions, setHistoryShiftOptions] = useState<ShiftDto[]>([]);
@@ -403,6 +414,7 @@ export function OrdersPage() {
   const focusDraftPatientIdRef = useRef<string | null>(null);
   const historyRequestSeqRef = useRef(0);
   const hasLoadedHistoryRef = useRef(false);
+  const historyDateRangeRef = useRef<[dayjs.Dayjs, dayjs.Dayjs]>(historyDateRange);
   const patientPickerSearchTimerRef = useRef<number | null>(null);
   const patientPickerSearchRequestSeqRef = useRef(0);
 
@@ -579,6 +591,7 @@ export function OrdersPage() {
           status: statusFilter === 'ACTIVE' ? undefined : statusFilter,
           startDate: historyDateRange[0].format('YYYY-MM-DD'),
           endDate: historyDateRange[1].format('YYYY-MM-DD'),
+          dateFilterTimeZone: ORDER_HISTORY_DEFAULT_TIME_ZONE,
           shiftId: historyShiftFilter === 'ALL' ? undefined : historyShiftFilter,
         });
         if (requestSeq !== historyRequestSeqRef.current) {
@@ -773,6 +786,27 @@ export function OrdersPage() {
     }, 400);
     return () => window.clearTimeout(timer);
   }, [listQueryInput]);
+
+  useEffect(() => {
+    historyDateRangeRef.current = historyDateRange;
+  }, [historyDateRange]);
+
+  useEffect(() => {
+    const followedDateKey = formatDateKeyForTimeZone(new Date(), ORDER_HISTORY_DEFAULT_TIME_ZONE);
+    if (!isSingleDateRange(historyDateRange, followedDateKey)) {
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      if (!isSingleDateRange(historyDateRangeRef.current, followedDateKey)) {
+        return;
+      }
+      setHistoryDateRange(getTodayHistoryDateRange());
+      setListPage(1);
+    }, getMillisecondsUntilNextMidnightForTimeZone(ORDER_HISTORY_DEFAULT_TIME_ZONE) + 250);
+
+    return () => window.clearTimeout(timer);
+  }, [historyDateRange]);
 
   useEffect(() => {
     void loadOrderHistory();

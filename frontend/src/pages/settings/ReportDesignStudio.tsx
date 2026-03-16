@@ -26,6 +26,7 @@ import {
   type OrderHistoryItemDto,
   type ReportColumnStyleDto,
   type ReportFontFamilyDto,
+  type ReportPatientInfoCellStyleDto,
   type ReportPanelSectionStyleDto,
   type ReportResultsTableFilledSectionStyleDto,
   type ReportResultsTableSectionStyleDto,
@@ -225,18 +226,30 @@ function defaultReportStyle(): ReportStyleDto {
     patientInfo: {
       backgroundColor: '#FAFAFA',
       borderColor: '#CCCCCC',
-      textColor: '#333333',
-      labelColor: '#333333',
-      fontSizePx: 13,
-      fontFamily: 'system-sans',
-      labelFontWeight: 700,
-      valueFontWeight: 400,
-      textAlign: 'left',
-      labelTextAlign: 'left',
-      valueTextAlign: 'left',
       borderRadiusPx: 6,
       paddingYpx: 10,
       paddingXpx: 12,
+      dividerWidthPx: 1,
+      labelCellStyle: {
+        backgroundColor: '#FAFAFA',
+        textColor: '#333333',
+        fontFamily: 'system-sans',
+        fontSizePx: 13,
+        fontWeight: 700,
+        textAlign: 'left',
+        paddingYpx: 4,
+        paddingXpx: 8,
+      },
+      valueCellStyle: {
+        backgroundColor: '#FAFAFA',
+        textColor: '#333333',
+        fontFamily: 'system-sans',
+        fontSizePx: 13,
+        fontWeight: 400,
+        textAlign: 'left',
+        paddingYpx: 4,
+        paddingXpx: 8,
+      },
     },
     reportTitle: {
       text: 'Laboratory Report',
@@ -471,6 +484,96 @@ function StyleColorControl(props: {
         onChange={(color: any) => props.onChange(normalizeHexColor(color.toHexString()))}
       />
     </div>
+  );
+}
+
+function PatientInfoCellStyleControlCard(props: {
+  title: string;
+  style: ReportPatientInfoCellStyleDto;
+  disabled: boolean;
+  weightOptions: ReadonlyArray<Readonly<{ label: string; value: number }>>;
+  onChange: <K extends keyof ReportPatientInfoCellStyleDto>(
+    key: K,
+    value: ReportPatientInfoCellStyleDto[K],
+  ) => void;
+}) {
+  return (
+    <Card size="small" title={props.title} className="admin-report-design-compact-card">
+      <Space direction="vertical" style={COMPACT_CONTROL_STACK_STYLE} size={12}>
+        <StyleColorControl
+          label="Background"
+          value={props.style.backgroundColor}
+          disabled={props.disabled}
+          onChange={(value) => props.onChange('backgroundColor', value)}
+        />
+        <StyleColorControl
+          label="Text Color"
+          value={props.style.textColor}
+          disabled={props.disabled}
+          onChange={(value) => props.onChange('textColor', value)}
+        />
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <Text>Font Family</Text>
+          <Select
+            style={{ width: 180 }}
+            value={props.style.fontFamily}
+            options={FONT_OPTIONS}
+            onChange={(value) => props.onChange('fontFamily', value)}
+            disabled={props.disabled}
+          />
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <Text>Font Size</Text>
+          <InputNumber
+            min={10}
+            max={18}
+            value={props.style.fontSizePx}
+            onChange={(value) => props.onChange('fontSizePx', Number(value ?? 13))}
+            disabled={props.disabled}
+          />
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <Text>Font Weight</Text>
+          <Select
+            style={{ width: 120 }}
+            value={props.style.fontWeight}
+            options={props.weightOptions as unknown as { label: string; value: number }[]}
+            onChange={(value) => props.onChange('fontWeight', value)}
+            disabled={props.disabled}
+          />
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <Text>Alignment</Text>
+          <Select
+            style={{ width: 120 }}
+            value={props.style.textAlign}
+            options={ALIGN_OPTIONS as unknown as { label: string; value: string }[]}
+            onChange={(value) => props.onChange('textAlign', value)}
+            disabled={props.disabled}
+          />
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <Text>Padding Y</Text>
+          <InputNumber
+            min={0}
+            max={20}
+            value={props.style.paddingYpx}
+            onChange={(value) => props.onChange('paddingYpx', Number(value ?? 0))}
+            disabled={props.disabled}
+          />
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <Text>Padding X</Text>
+          <InputNumber
+            min={0}
+            max={24}
+            value={props.style.paddingXpx}
+            onChange={(value) => props.onChange('paddingXpx', Number(value ?? 0))}
+            disabled={props.disabled}
+          />
+        </div>
+      </Space>
+    </Card>
   );
 }
 
@@ -941,9 +1044,10 @@ export function ReportDesignStudio() {
   const sectionSummaries = useMemo<Record<DesignerSectionId, string[]>>(
     () => ({
       'patient-information': [
-        `${reportStyle.patientInfo.fontSizePx}px ${reportStyle.patientInfo.fontFamily}`,
+        `Label ${reportStyle.patientInfo.labelCellStyle.fontSizePx}px ${reportStyle.patientInfo.labelCellStyle.fontFamily}`,
+        `Value ${reportStyle.patientInfo.valueCellStyle.fontSizePx}px ${reportStyle.patientInfo.valueCellStyle.fontFamily}`,
         `Radius ${reportStyle.patientInfo.borderRadiusPx}px`,
-        reportStyle.patientInfo.textAlign,
+        `Divider ${reportStyle.patientInfo.dividerWidthPx}px`,
       ],
       'report-title': [
         reportStyle.reportTitle.text.trim() || 'Laboratory Report',
@@ -983,6 +1087,26 @@ export function ReportDesignStudio() {
       patientInfo: {
         ...prev.patientInfo,
         [key]: value,
+      },
+    }));
+  };
+
+  const updatePatientCellStyle = <
+    CellKey extends 'labelCellStyle' | 'valueCellStyle',
+    Key extends keyof ReportStyleDto['patientInfo'][CellKey],
+  >(
+    cellKey: CellKey,
+    key: Key,
+    value: ReportStyleDto['patientInfo'][CellKey][Key],
+  ) => {
+    setReportStyle((prev) => ({
+      ...prev,
+      patientInfo: {
+        ...prev.patientInfo,
+        [cellKey]: {
+          ...prev.patientInfo[cellKey],
+          [key]: value,
+        },
       },
     }));
   };
@@ -1353,23 +1477,78 @@ export function ReportDesignStudio() {
     padding: `${reportStyle.reportTitle.paddingYpx}px ${reportStyle.reportTitle.paddingXpx}px`,
     margin: '0 0 12px',
   };
-  const patientInfoPreviewRowStyle = {
+  const patientInfoPreviewRows = [
+    [
+      { label: 'Name:', value: 'Sample Patient', isRtl: false },
+      { label: 'Visit Date:', value: '16 Mar 2026', isRtl: false },
+    ],
+    [
+      { label: 'Age/Sex:', value: '36 Years/Male', isRtl: false },
+      { label: 'Order No:', value: '260304011', isRtl: false },
+    ],
+    [
+      { label: 'Referred By:', value: 'Dr Ahmed Ali', isRtl: false },
+      { label: 'Patient ID:', value: 'P-100234', isRtl: false },
+    ],
+  ] as const;
+  const patientInfoPreviewShellStyle: CSSProperties = {
+    border: `1px solid ${reportStyle.patientInfo.borderColor}`,
+    borderRadius: reportStyle.patientInfo.borderRadiusPx,
+    background: reportStyle.patientInfo.backgroundColor,
+    padding: `${reportStyle.patientInfo.paddingYpx}px ${reportStyle.patientInfo.paddingXpx}px`,
+    marginBottom: 6,
     display: 'grid',
-    gridTemplateColumns: 'minmax(92px, max-content) minmax(0, 1fr)',
-    columnGap: 4,
-    alignItems: 'baseline',
-  } as const;
-  const patientInfoPreviewLabelStyle = {
-    color: reportStyle.patientInfo.labelColor,
-    fontWeight: reportStyle.patientInfo.labelFontWeight,
-    textAlign: reportStyle.patientInfo.labelTextAlign,
-  } as const;
-  const patientInfoPreviewValueStyle = {
-    display: 'block',
+    gridTemplateColumns: 'minmax(0, 1fr) 74px',
+    columnGap: 10,
+    alignItems: 'start',
+  };
+  const patientInfoPreviewTableStyle: CSSProperties = {
     width: '100%',
-    fontWeight: reportStyle.patientInfo.valueFontWeight,
-    textAlign: reportStyle.patientInfo.valueTextAlign,
-  } as const;
+    borderCollapse: 'separate',
+    borderSpacing: 0,
+    tableLayout: 'fixed',
+  };
+  const patientInfoLabelCellPreviewStyle: CSSProperties = {
+    background: reportStyle.patientInfo.labelCellStyle.backgroundColor,
+    color: reportStyle.patientInfo.labelCellStyle.textColor,
+    fontSize: reportStyle.patientInfo.labelCellStyle.fontSizePx,
+    fontWeight: reportStyle.patientInfo.labelCellStyle.fontWeight,
+    fontFamily: resolvePreviewFontStack(reportStyle.patientInfo.labelCellStyle.fontFamily),
+    textAlign: reportStyle.patientInfo.labelCellStyle.textAlign,
+    padding: `${reportStyle.patientInfo.labelCellStyle.paddingYpx}px ${reportStyle.patientInfo.labelCellStyle.paddingXpx}px`,
+    verticalAlign: 'middle',
+  };
+  const patientInfoValueCellPreviewStyle: CSSProperties = {
+    background: reportStyle.patientInfo.valueCellStyle.backgroundColor,
+    color: reportStyle.patientInfo.valueCellStyle.textColor,
+    fontSize: reportStyle.patientInfo.valueCellStyle.fontSizePx,
+    fontWeight: reportStyle.patientInfo.valueCellStyle.fontWeight,
+    fontFamily: resolvePreviewFontStack(reportStyle.patientInfo.valueCellStyle.fontFamily),
+    textAlign: reportStyle.patientInfo.valueCellStyle.textAlign,
+    padding: `${reportStyle.patientInfo.valueCellStyle.paddingYpx}px ${reportStyle.patientInfo.valueCellStyle.paddingXpx}px`,
+    verticalAlign: 'middle',
+  };
+  const patientInfoPreviewQrStyle: CSSProperties = {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    gap: 4,
+    paddingTop: 2,
+  };
+  const patientInfoPreviewQrBoxStyle: CSSProperties = {
+    width: 58,
+    height: 58,
+    border: `1px solid ${reportStyle.patientInfo.borderColor}`,
+    borderRadius: 4,
+    background:
+      'linear-gradient(135deg, rgba(15,23,42,0.08) 25%, transparent 25%, transparent 50%, rgba(15,23,42,0.08) 50%, rgba(15,23,42,0.08) 75%, transparent 75%, transparent)',
+    backgroundSize: '10px 10px',
+    display: 'grid',
+    placeItems: 'center',
+    fontSize: 11,
+    fontWeight: 700,
+    color: '#334155',
+  };
   const cultureMetaPreviewStyle = {
     fontFamily: culturePreviewFontFamily,
     color: reportStyle.cultureSection.metaTextColor,
@@ -1517,29 +1696,79 @@ export function ReportDesignStudio() {
             {livePreviewMode !== 'culture' ? (
               <>
                 <div
-                  style={{
-                    border: `1px solid ${reportStyle.patientInfo.borderColor}`,
-                    borderRadius: reportStyle.patientInfo.borderRadiusPx,
-                    background: reportStyle.patientInfo.backgroundColor,
-                    color: reportStyle.patientInfo.textColor,
-                    fontSize: reportStyle.patientInfo.fontSizePx,
-                    fontFamily: resolvePreviewFontStack(reportStyle.patientInfo.fontFamily),
-                    textAlign: reportStyle.patientInfo.textAlign,
-                    padding: `${reportStyle.patientInfo.paddingYpx}px ${reportStyle.patientInfo.paddingXpx}px`,
-                    marginBottom: 6,
-                  }}
+                  style={patientInfoPreviewShellStyle}
                 >
-                  <div style={{ ...patientInfoPreviewRowStyle, marginBottom: 6 }}>
-                    <span style={patientInfoPreviewLabelStyle}>Name:</span>
-                    <span style={patientInfoPreviewValueStyle}>Sample Patient</span>
+                  <div style={{ minWidth: 0 }}>
+                    <table style={patientInfoPreviewTableStyle}>
+                      <colgroup>
+                        <col style={{ width: '18%' }} />
+                        <col style={{ width: '32%' }} />
+                        <col style={{ width: '18%' }} />
+                        <col style={{ width: '32%' }} />
+                      </colgroup>
+                      <tbody>
+                        {patientInfoPreviewRows.map((row, rowIndex) => (
+                          <tr key={rowIndex}>
+                            {row.flatMap((cell, cellGroupIndex) => {
+                              const labelColumnIndex = cellGroupIndex * 2;
+                              const valueColumnIndex = labelColumnIndex + 1;
+                              const hasBottomBorder = rowIndex < patientInfoPreviewRows.length - 1;
+                              const dividerWidth = reportStyle.patientInfo.dividerWidthPx;
+                              const dividerColor = reportStyle.patientInfo.borderColor;
+                              const labelBorderStyle: CSSProperties = {
+                                borderRight:
+                                  dividerWidth > 0
+                                    ? `${dividerWidth}px solid ${dividerColor}`
+                                    : undefined,
+                                borderBottom:
+                                  hasBottomBorder && dividerWidth > 0
+                                    ? `${dividerWidth}px solid ${dividerColor}`
+                                    : undefined,
+                              };
+                              const valueBorderStyle: CSSProperties = {
+                                borderRight:
+                                  valueColumnIndex < 3 && dividerWidth > 0
+                                    ? `${dividerWidth}px solid ${dividerColor}`
+                                    : undefined,
+                                borderBottom:
+                                  hasBottomBorder && dividerWidth > 0
+                                    ? `${dividerWidth}px solid ${dividerColor}`
+                                    : undefined,
+                              };
+                              return [
+                                <td
+                                  key={`${rowIndex}-${cellGroupIndex}-label`}
+                                  style={{ ...patientInfoLabelCellPreviewStyle, ...labelBorderStyle }}
+                                >
+                                  {cell.label}
+                                </td>,
+                                <td
+                                  key={`${rowIndex}-${cellGroupIndex}-value`}
+                                  style={{ ...patientInfoValueCellPreviewStyle, ...valueBorderStyle }}
+                                >
+                                  <span
+                                    style={{
+                                      display: 'block',
+                                      width: '100%',
+                                      direction: cell.isRtl ? 'rtl' : undefined,
+                                      unicodeBidi: cell.isRtl ? 'isolate' : undefined,
+                                    }}
+                                  >
+                                    {cell.value}
+                                  </span>
+                                </td>,
+                              ];
+                            })}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
                   </div>
-                  <div style={{ ...patientInfoPreviewRowStyle, marginBottom: 6 }}>
-                    <span style={patientInfoPreviewLabelStyle}>Age/Sex:</span>
-                    <span style={patientInfoPreviewValueStyle}>36 Years/Male</span>
-                  </div>
-                  <div style={patientInfoPreviewRowStyle}>
-                    <span style={patientInfoPreviewLabelStyle}>Order No:</span>
-                    <span style={patientInfoPreviewValueStyle}>260304011</span>
+                  <div style={patientInfoPreviewQrStyle}>
+                    <div style={patientInfoPreviewQrBoxStyle}>QR</div>
+                    <Text type="secondary" style={{ fontSize: 10 }}>
+                      Order QR
+                    </Text>
                   </div>
                 </div>
 
@@ -2177,134 +2406,78 @@ export function ReportDesignStudio() {
                               className="admin-report-design-section-block admin-report-design-section-block--compact"
                             >
                               <SectionSummaryBar items={sectionSummaries['patient-information']} />
-                            <Card size="small" title="Patient Information" className="admin-report-design-compact-card">
-                              <Space direction="vertical" style={COMPACT_CONTROL_STACK_STYLE} size={12}>
-                                <StyleColorControl
-                                  label="Background"
-                                  value={reportStyle.patientInfo.backgroundColor}
+                              <Space direction="vertical" style={{ width: '100%' }} size={12}>
+                                <Card size="small" title="Table Container" className="admin-report-design-compact-card">
+                                  <Space direction="vertical" style={COMPACT_CONTROL_STACK_STYLE} size={12}>
+                                    <StyleColorControl
+                                      label="Background"
+                                      value={reportStyle.patientInfo.backgroundColor}
+                                      disabled={!canMutate}
+                                      onChange={(value) => updatePatientStyle('backgroundColor', value)}
+                                    />
+                                    <StyleColorControl
+                                      label="Border"
+                                      value={reportStyle.patientInfo.borderColor}
+                                      disabled={!canMutate}
+                                      onChange={(value) => updatePatientStyle('borderColor', value)}
+                                    />
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                      <Text>Border Radius</Text>
+                                      <InputNumber
+                                        min={0}
+                                        max={12}
+                                        value={reportStyle.patientInfo.borderRadiusPx}
+                                        onChange={(value) => updatePatientStyle('borderRadiusPx', Number(value ?? 6))}
+                                        disabled={!canMutate}
+                                      />
+                                    </div>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                      <Text>Padding Y</Text>
+                                      <InputNumber
+                                        min={6}
+                                        max={18}
+                                        value={reportStyle.patientInfo.paddingYpx}
+                                        onChange={(value) => updatePatientStyle('paddingYpx', Number(value ?? 10))}
+                                        disabled={!canMutate}
+                                      />
+                                    </div>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                      <Text>Padding X</Text>
+                                      <InputNumber
+                                        min={8}
+                                        max={24}
+                                        value={reportStyle.patientInfo.paddingXpx}
+                                        onChange={(value) => updatePatientStyle('paddingXpx', Number(value ?? 12))}
+                                        disabled={!canMutate}
+                                      />
+                                    </div>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                      <Text>Divider Width</Text>
+                                      <InputNumber
+                                        min={0}
+                                        max={3}
+                                        value={reportStyle.patientInfo.dividerWidthPx}
+                                        onChange={(value) => updatePatientStyle('dividerWidthPx', Number(value ?? 1))}
+                                        disabled={!canMutate}
+                                      />
+                                    </div>
+                                  </Space>
+                                </Card>
+                                <PatientInfoCellStyleControlCard
+                                  title="Label Cells"
+                                  style={reportStyle.patientInfo.labelCellStyle}
                                   disabled={!canMutate}
-                                  onChange={(value) => updatePatientStyle('backgroundColor', value)}
+                                  weightOptions={LABEL_WEIGHT_OPTIONS}
+                                  onChange={(key, value) => updatePatientCellStyle('labelCellStyle', key, value)}
                                 />
-                                <StyleColorControl
-                                  label="Border"
-                                  value={reportStyle.patientInfo.borderColor}
+                                <PatientInfoCellStyleControlCard
+                                  title="Value Cells"
+                                  style={reportStyle.patientInfo.valueCellStyle}
                                   disabled={!canMutate}
-                                  onChange={(value) => updatePatientStyle('borderColor', value)}
+                                  weightOptions={VALUE_WEIGHT_OPTIONS}
+                                  onChange={(key, value) => updatePatientCellStyle('valueCellStyle', key, value)}
                                 />
-                                <StyleColorControl
-                                  label="Text"
-                                  value={reportStyle.patientInfo.textColor}
-                                  disabled={!canMutate}
-                                  onChange={(value) => updatePatientStyle('textColor', value)}
-                                />
-                                <StyleColorControl
-                                  label="Label Text"
-                                  value={reportStyle.patientInfo.labelColor}
-                                  disabled={!canMutate}
-                                  onChange={(value) => updatePatientStyle('labelColor', value)}
-                                />
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                  <Text>Font Size</Text>
-                                  <InputNumber
-                                    min={10}
-                                    max={18}
-                                    value={reportStyle.patientInfo.fontSizePx}
-                                    onChange={(value) => updatePatientStyle('fontSizePx', Number(value ?? 13))}
-                                    disabled={!canMutate}
-                                  />
-                                </div>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                  <Text>Font Family</Text>
-                                  <Select
-                                    style={{ width: 180 }}
-                                    value={reportStyle.patientInfo.fontFamily}
-                                    options={FONT_OPTIONS}
-                                    onChange={(value) => updatePatientStyle('fontFamily', value)}
-                                    disabled={!canMutate}
-                                  />
-                                </div>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                  <Text>Label Weight</Text>
-                                  <Select
-                                    style={{ width: 120 }}
-                                    value={reportStyle.patientInfo.labelFontWeight}
-                                    options={LABEL_WEIGHT_OPTIONS}
-                                    onChange={(value) => updatePatientStyle('labelFontWeight', value)}
-                                    disabled={!canMutate}
-                                  />
-                                </div>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                  <Text>Value Weight</Text>
-                                  <Select
-                                    style={{ width: 120 }}
-                                    value={reportStyle.patientInfo.valueFontWeight}
-                                    options={VALUE_WEIGHT_OPTIONS}
-                                    onChange={(value) => updatePatientStyle('valueFontWeight', value)}
-                                    disabled={!canMutate}
-                                  />
-                                </div>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                  <Text>Alignment</Text>
-                                  <Select
-                                    style={{ width: 120 }}
-                                    value={reportStyle.patientInfo.textAlign}
-                                    options={ALIGN_OPTIONS as unknown as { label: string; value: string }[]}
-                                    onChange={(value) => updatePatientStyle('textAlign', value)}
-                                    disabled={!canMutate}
-                                  />
-                                </div>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                  <Text>Label Alignment</Text>
-                                  <Select
-                                    style={{ width: 120 }}
-                                    value={reportStyle.patientInfo.labelTextAlign}
-                                    options={ALIGN_OPTIONS as unknown as { label: string; value: string }[]}
-                                    onChange={(value) => updatePatientStyle('labelTextAlign', value)}
-                                    disabled={!canMutate}
-                                  />
-                                </div>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                  <Text>Value Alignment</Text>
-                                  <Select
-                                    style={{ width: 120 }}
-                                    value={reportStyle.patientInfo.valueTextAlign}
-                                    options={ALIGN_OPTIONS as unknown as { label: string; value: string }[]}
-                                    onChange={(value) => updatePatientStyle('valueTextAlign', value)}
-                                    disabled={!canMutate}
-                                  />
-                                </div>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                  <Text>Border Radius</Text>
-                                  <InputNumber
-                                    min={0}
-                                    max={12}
-                                    value={reportStyle.patientInfo.borderRadiusPx}
-                                    onChange={(value) => updatePatientStyle('borderRadiusPx', Number(value ?? 6))}
-                                    disabled={!canMutate}
-                                  />
-                                </div>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                  <Text>Padding Y</Text>
-                                  <InputNumber
-                                    min={6}
-                                    max={18}
-                                    value={reportStyle.patientInfo.paddingYpx}
-                                    onChange={(value) => updatePatientStyle('paddingYpx', Number(value ?? 10))}
-                                    disabled={!canMutate}
-                                  />
-                                </div>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                  <Text>Padding X</Text>
-                                  <InputNumber
-                                    min={8}
-                                    max={24}
-                                    value={reportStyle.patientInfo.paddingXpx}
-                                    onChange={(value) => updatePatientStyle('paddingXpx', Number(value ?? 12))}
-                                    disabled={!canMutate}
-                                  />
-                                </div>
                               </Space>
-                            </Card>
                             </div>
                           </Col>
 

@@ -94,6 +94,7 @@ export class OrdersController {
     @Query('shiftId') shiftId?: string,
     @Query('startDate') startDate?: string,
     @Query('endDate') endDate?: string,
+    @Query('dateFilterTimeZone') dateFilterTimeZone?: string,
   ) {
     const labId = req.user?.labId;
     if (!labId) {
@@ -108,6 +109,7 @@ export class OrdersController {
       shiftId,
       startDate,
       endDate,
+      dateFilterTimeZone,
     });
   }
 
@@ -184,6 +186,7 @@ export class OrdersController {
     @Query('shiftId') shiftId?: string,
     @Query('startDate') startDate?: string,
     @Query('endDate') endDate?: string,
+    @Query('dateFilterTimeZone') dateFilterTimeZone?: string,
     @Query('resultStatus', new ParseEnumPipe(OrderResultStatus, { optional: true }))
     resultStatus?: OrderResultStatus,
   ) {
@@ -200,6 +203,7 @@ export class OrdersController {
       shiftId,
       startDate,
       endDate,
+      dateFilterTimeZone,
       resultStatus,
     });
   }

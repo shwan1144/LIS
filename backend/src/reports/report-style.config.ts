@@ -43,21 +43,26 @@ export function resolveReportRtlFontStack(fontFamily: ReportFontFamily): string 
   return `${REPORT_ARABIC_FONT_STACK}, ${resolveReportFontStack(fontFamily)}`;
 }
 
+export interface ReportPatientInfoCellStyle {
+  backgroundColor: string;
+  textColor: string;
+  fontFamily: ReportFontFamily;
+  fontSizePx: number;
+  fontWeight: 400 | 500 | 600 | 700 | 800;
+  textAlign: ReportTextAlign;
+  paddingYpx: number;
+  paddingXpx: number;
+}
+
 export interface ReportPatientInfoStyle {
   backgroundColor: string;
   borderColor: string;
-  textColor: string;
-  labelColor: string;
-  fontSizePx: number;
-  fontFamily: ReportFontFamily;
-  labelFontWeight: 600 | 700 | 800;
-  valueFontWeight: 400 | 500 | 600 | 700;
-  textAlign: ReportTextAlign;
-  labelTextAlign: ReportTextAlign;
-  valueTextAlign: ReportTextAlign;
   borderRadiusPx: number;
   paddingYpx: number;
   paddingXpx: number;
+  dividerWidthPx: number;
+  labelCellStyle: ReportPatientInfoCellStyle;
+  valueCellStyle: ReportPatientInfoCellStyle;
 }
 
 export interface ReportColumnStyle {
@@ -184,18 +189,30 @@ export const DEFAULT_REPORT_STYLE_V1: ReportStyleConfig = {
   patientInfo: {
     backgroundColor: '#FAFAFA',
     borderColor: '#CCCCCC',
-    textColor: '#333333',
-    labelColor: '#333333',
-    fontSizePx: 13,
-    fontFamily: DEFAULT_REPORT_FONT_FAMILY,
-    labelFontWeight: 700,
-    valueFontWeight: 400,
-    textAlign: 'left',
-    labelTextAlign: 'left',
-    valueTextAlign: 'left',
     borderRadiusPx: 6,
     paddingYpx: 10,
     paddingXpx: 12,
+    dividerWidthPx: 1,
+    labelCellStyle: {
+      backgroundColor: '#FAFAFA',
+      textColor: '#333333',
+      fontFamily: DEFAULT_REPORT_FONT_FAMILY,
+      fontSizePx: 13,
+      fontWeight: 700,
+      textAlign: 'left',
+      paddingYpx: 4,
+      paddingXpx: 8,
+    },
+    valueCellStyle: {
+      backgroundColor: '#FAFAFA',
+      textColor: '#333333',
+      fontFamily: DEFAULT_REPORT_FONT_FAMILY,
+      fontSizePx: 13,
+      fontWeight: 400,
+      textAlign: 'left',
+      paddingYpx: 4,
+      paddingXpx: 8,
+    },
   },
   reportTitle: {
     text: 'Laboratory Report',
@@ -404,6 +421,16 @@ const REPORT_TITLE_KEYS: Array<keyof ReportTitleStyle> = [
   'paddingYpx',
   'paddingXpx',
 ];
+const PATIENT_INFO_CELL_STYLE_KEYS: Array<keyof ReportPatientInfoCellStyle> = [
+  'backgroundColor',
+  'textColor',
+  'fontFamily',
+  'fontSizePx',
+  'fontWeight',
+  'textAlign',
+  'paddingYpx',
+  'paddingXpx',
+];
 const RESULTS_TABLE_COLUMN_STYLE_KEYS = [
   'testColumn',
   'resultColumn',
@@ -414,18 +441,12 @@ const RESULTS_TABLE_COLUMN_STYLE_KEYS = [
 const PATIENT_INFO_KEYS: Array<keyof ReportPatientInfoStyle> = [
   'backgroundColor',
   'borderColor',
-  'textColor',
-  'labelColor',
-  'fontSizePx',
-  'fontFamily',
-  'labelFontWeight',
-  'valueFontWeight',
-  'textAlign',
-  'labelTextAlign',
-  'valueTextAlign',
   'borderRadiusPx',
   'paddingYpx',
   'paddingXpx',
+  'dividerWidthPx',
+  'labelCellStyle',
+  'valueCellStyle',
 ];
 const RESULTS_TABLE_KEYS: Array<keyof ReportResultsTableStyle> = [
   'headerStyle',
@@ -661,6 +682,29 @@ function validateReportTitleStyle(value: unknown, fieldName: string): ReportTitl
   };
 }
 
+function validatePatientInfoCellStyle(
+  value: unknown,
+  fieldName: string,
+  allowedWeights: readonly number[],
+): ReportPatientInfoCellStyle {
+  const cellObj = assertObject(value, fieldName);
+  assertExactKeys(cellObj, PATIENT_INFO_CELL_STYLE_KEYS, fieldName);
+  const fontWeight = assertIntRange(cellObj.fontWeight, 400, 800, `${fieldName}.fontWeight`);
+  if (!allowedWeights.includes(fontWeight)) {
+    throw new Error(`${fieldName}.fontWeight must be one of: ${allowedWeights.join(', ')}`);
+  }
+  return {
+    backgroundColor: assertColor(cellObj.backgroundColor, `${fieldName}.backgroundColor`),
+    textColor: assertColor(cellObj.textColor, `${fieldName}.textColor`),
+    fontFamily: assertFromSet(cellObj.fontFamily, REPORT_FONT_FAMILY_SET, `${fieldName}.fontFamily`),
+    fontSizePx: assertIntRange(cellObj.fontSizePx, 10, 18, `${fieldName}.fontSizePx`),
+    fontWeight: fontWeight as ReportPatientInfoCellStyle['fontWeight'],
+    textAlign: assertFromSet(cellObj.textAlign, TEXT_ALIGN_SET, `${fieldName}.textAlign`),
+    paddingYpx: assertIntRange(cellObj.paddingYpx, 0, 20, `${fieldName}.paddingYpx`),
+    paddingXpx: assertIntRange(cellObj.paddingXpx, 0, 24, `${fieldName}.paddingXpx`),
+  };
+}
+
 export function validateAndNormalizeReportStyleConfig(
   value: unknown,
   fieldName = 'reportStyle',
@@ -678,41 +722,6 @@ export function validateAndNormalizeReportStyleConfig(
   const patientInfo: ReportPatientInfoStyle = {
     backgroundColor: assertColor(patientInfoObj.backgroundColor, `${fieldName}.patientInfo.backgroundColor`),
     borderColor: assertColor(patientInfoObj.borderColor, `${fieldName}.patientInfo.borderColor`),
-    textColor: assertColor(patientInfoObj.textColor, `${fieldName}.patientInfo.textColor`),
-    labelColor: assertColor(patientInfoObj.labelColor, `${fieldName}.patientInfo.labelColor`),
-    fontSizePx: assertIntRange(patientInfoObj.fontSizePx, 10, 18, `${fieldName}.patientInfo.fontSizePx`),
-    fontFamily: assertFromSet(
-      patientInfoObj.fontFamily,
-      REPORT_FONT_FAMILY_SET,
-      `${fieldName}.patientInfo.fontFamily`,
-    ),
-    labelFontWeight: assertIntRange(
-      patientInfoObj.labelFontWeight,
-      600,
-      800,
-      `${fieldName}.patientInfo.labelFontWeight`,
-    ) as 600 | 700 | 800,
-    valueFontWeight: assertIntRange(
-      patientInfoObj.valueFontWeight,
-      400,
-      700,
-      `${fieldName}.patientInfo.valueFontWeight`,
-    ) as 400 | 500 | 600 | 700,
-    textAlign: assertFromSet(
-      patientInfoObj.textAlign,
-      TEXT_ALIGN_SET,
-      `${fieldName}.patientInfo.textAlign`,
-    ),
-    labelTextAlign: assertFromSet(
-      patientInfoObj.labelTextAlign,
-      TEXT_ALIGN_SET,
-      `${fieldName}.patientInfo.labelTextAlign`,
-    ),
-    valueTextAlign: assertFromSet(
-      patientInfoObj.valueTextAlign,
-      TEXT_ALIGN_SET,
-      `${fieldName}.patientInfo.valueTextAlign`,
-    ),
     borderRadiusPx: assertIntRange(
       patientInfoObj.borderRadiusPx,
       0,
@@ -721,13 +730,18 @@ export function validateAndNormalizeReportStyleConfig(
     ),
     paddingYpx: assertIntRange(patientInfoObj.paddingYpx, 6, 18, `${fieldName}.patientInfo.paddingYpx`),
     paddingXpx: assertIntRange(patientInfoObj.paddingXpx, 8, 24, `${fieldName}.patientInfo.paddingXpx`),
+    dividerWidthPx: assertIntRange(patientInfoObj.dividerWidthPx, 0, 3, `${fieldName}.patientInfo.dividerWidthPx`),
+    labelCellStyle: validatePatientInfoCellStyle(
+      patientInfoObj.labelCellStyle,
+      `${fieldName}.patientInfo.labelCellStyle`,
+      [600, 700, 800],
+    ),
+    valueCellStyle: validatePatientInfoCellStyle(
+      patientInfoObj.valueCellStyle,
+      `${fieldName}.patientInfo.valueCellStyle`,
+      [400, 500, 600, 700],
+    ),
   };
-  if (![600, 700, 800].includes(patientInfo.labelFontWeight)) {
-    throw new Error(`${fieldName}.patientInfo.labelFontWeight must be one of: 600, 700, 800`);
-  }
-  if (![400, 500, 600, 700].includes(patientInfo.valueFontWeight)) {
-    throw new Error(`${fieldName}.patientInfo.valueFontWeight must be one of: 400, 500, 600, 700`);
-  }
 
   const reportTitle = validateReportTitleStyle(styleObj.reportTitle, `${fieldName}.reportTitle`);
 
@@ -1052,10 +1066,58 @@ export function resolveReportStyleConfig(value: unknown): ReportStyleConfig {
       ...DEFAULT_REPORT_STYLE_V1.patientInfo,
     };
     for (const key of PATIENT_INFO_KEYS) {
+      if (key === 'labelCellStyle' || key === 'valueCellStyle') {
+        continue;
+      }
       if (key in rawPatientInfo) {
         upgradedPatientInfo[key] = rawPatientInfo[key];
       }
     }
+
+    const legacyPatientInfo = rawPatientInfo as Record<string, unknown>;
+    const upgradePatientCellStyle = (
+      key: 'labelCellStyle' | 'valueCellStyle',
+      defaults: ReportPatientInfoCellStyle,
+      legacy: Partial<ReportPatientInfoCellStyle>,
+    ) => {
+      const rawCell =
+        rawPatientInfo[key] && typeof rawPatientInfo[key] === 'object' && !Array.isArray(rawPatientInfo[key])
+          ? (rawPatientInfo[key] as Record<string, unknown>)
+          : null;
+      const upgradedCell: Record<string, unknown> = {
+        ...defaults,
+        ...pickDefinedEntries(legacy),
+      };
+      if (rawCell) {
+        for (const cellKey of PATIENT_INFO_CELL_STYLE_KEYS) {
+          if (cellKey in rawCell) {
+            upgradedCell[cellKey] = rawCell[cellKey];
+          }
+        }
+      }
+      upgradedPatientInfo[key] = upgradedCell;
+    };
+
+    upgradePatientCellStyle('labelCellStyle', DEFAULT_REPORT_STYLE_V1.patientInfo.labelCellStyle, {
+      backgroundColor: legacyPatientInfo.backgroundColor as string | undefined,
+      textColor: legacyPatientInfo.labelColor as string | undefined,
+      fontFamily: legacyPatientInfo.fontFamily as ReportFontFamily | undefined,
+      fontSizePx: legacyPatientInfo.fontSizePx as number | undefined,
+      fontWeight: legacyPatientInfo.labelFontWeight as ReportPatientInfoCellStyle['fontWeight'] | undefined,
+      textAlign:
+        (legacyPatientInfo.labelTextAlign as ReportTextAlign | undefined) ??
+        (legacyPatientInfo.textAlign as ReportTextAlign | undefined),
+    });
+    upgradePatientCellStyle('valueCellStyle', DEFAULT_REPORT_STYLE_V1.patientInfo.valueCellStyle, {
+      backgroundColor: legacyPatientInfo.backgroundColor as string | undefined,
+      textColor: legacyPatientInfo.textColor as string | undefined,
+      fontFamily: legacyPatientInfo.fontFamily as ReportFontFamily | undefined,
+      fontSizePx: legacyPatientInfo.fontSizePx as number | undefined,
+      fontWeight: legacyPatientInfo.valueFontWeight as ReportPatientInfoCellStyle['fontWeight'] | undefined,
+      textAlign:
+        (legacyPatientInfo.valueTextAlign as ReportTextAlign | undefined) ??
+        (legacyPatientInfo.textAlign as ReportTextAlign | undefined),
+    });
 
     const upgradedReportTitle: Record<string, unknown> = {
       ...DEFAULT_REPORT_STYLE_V1.reportTitle,

@@ -117,21 +117,26 @@ export type ReportFontFamilyDto =
   | 'times-new-roman'
   | 'courier-new';
 
+export interface ReportPatientInfoCellStyleDto {
+  backgroundColor: string;
+  textColor: string;
+  fontFamily: ReportFontFamilyDto;
+  fontSizePx: number;
+  fontWeight: 400 | 500 | 600 | 700 | 800;
+  textAlign: ReportTextAlign;
+  paddingYpx: number;
+  paddingXpx: number;
+}
+
 export interface ReportPatientInfoStyleDto {
   backgroundColor: string;
   borderColor: string;
-  textColor: string;
-  labelColor: string;
-  fontSizePx: number;
-  fontFamily: ReportFontFamilyDto;
-  labelFontWeight: 600 | 700 | 800;
-  valueFontWeight: 400 | 500 | 600 | 700;
-  textAlign: ReportTextAlign;
-  labelTextAlign: ReportTextAlign;
-  valueTextAlign: ReportTextAlign;
   borderRadiusPx: number;
   paddingYpx: number;
   paddingXpx: number;
+  dividerWidthPx: number;
+  labelCellStyle: ReportPatientInfoCellStyleDto;
+  valueCellStyle: ReportPatientInfoCellStyleDto;
 }
 
 export interface ReportColumnStyleDto {
@@ -1387,6 +1392,7 @@ export interface OrderSearchParams {
   shiftId?: string;
   startDate?: string;
   endDate?: string;
+  dateFilterTimeZone?: string;
 }
 
 export interface OrderSearchResult {

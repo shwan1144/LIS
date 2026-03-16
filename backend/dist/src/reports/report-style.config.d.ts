@@ -5,21 +5,25 @@ export declare const REPORT_FONT_FAMILY_VALUES: readonly ReportFontFamily[];
 export declare function resolveReportFontStack(fontFamily: ReportFontFamily): string;
 export declare function resolveReportFontStackWithArabicFallback(fontFamily: ReportFontFamily): string;
 export declare function resolveReportRtlFontStack(fontFamily: ReportFontFamily): string;
+export interface ReportPatientInfoCellStyle {
+    backgroundColor: string;
+    textColor: string;
+    fontFamily: ReportFontFamily;
+    fontSizePx: number;
+    fontWeight: 400 | 500 | 600 | 700 | 800;
+    textAlign: ReportTextAlign;
+    paddingYpx: number;
+    paddingXpx: number;
+}
 export interface ReportPatientInfoStyle {
     backgroundColor: string;
     borderColor: string;
-    textColor: string;
-    labelColor: string;
-    fontSizePx: number;
-    fontFamily: ReportFontFamily;
-    labelFontWeight: 600 | 700 | 800;
-    valueFontWeight: 400 | 500 | 600 | 700;
-    textAlign: ReportTextAlign;
-    labelTextAlign: ReportTextAlign;
-    valueTextAlign: ReportTextAlign;
     borderRadiusPx: number;
     paddingYpx: number;
     paddingXpx: number;
+    dividerWidthPx: number;
+    labelCellStyle: ReportPatientInfoCellStyle;
+    valueCellStyle: ReportPatientInfoCellStyle;
 }
 export interface ReportColumnStyle {
     textColor: string;

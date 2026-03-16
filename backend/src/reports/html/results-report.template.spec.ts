@@ -798,16 +798,28 @@ describe('buildResultsReportHtml panel page isolation', () => {
     });
 
     expect(html).toContain(`--patient-info-bg: ${DEFAULT_REPORT_STYLE_V1.patientInfo.backgroundColor};`);
+    expect(html).toContain(`--patient-info-divider-width: ${DEFAULT_REPORT_STYLE_V1.patientInfo.dividerWidthPx}px;`);
+    expect(html).toContain(
+      `--patient-info-label-cell-bg: ${DEFAULT_REPORT_STYLE_V1.patientInfo.labelCellStyle.backgroundColor};`,
+    );
+    expect(html).toContain(
+      `--patient-info-value-cell-bg: ${DEFAULT_REPORT_STYLE_V1.patientInfo.valueCellStyle.backgroundColor};`,
+    );
     expect(html).toContain(`--results-header-bg: ${DEFAULT_REPORT_STYLE_V1.resultsTable.headerStyle.backgroundColor};`);
     expect(html).toContain(
-      `--patient-info-label-align: ${DEFAULT_REPORT_STYLE_V1.patientInfo.labelTextAlign};`,
+      `--patient-info-label-align: ${DEFAULT_REPORT_STYLE_V1.patientInfo.labelCellStyle.textAlign};`,
     );
     expect(html).toContain(
-      `--patient-info-value-align: ${DEFAULT_REPORT_STYLE_V1.patientInfo.valueTextAlign};`,
+      `--patient-info-value-align: ${DEFAULT_REPORT_STYLE_V1.patientInfo.valueCellStyle.textAlign};`,
     );
     expect(html).toContain(
-      `--patient-info-font-family: ${resolveReportFontStackWithArabicFallback(
-        DEFAULT_REPORT_STYLE_V1.patientInfo.fontFamily,
+      `--patient-info-label-font-family: ${resolveReportFontStackWithArabicFallback(
+        DEFAULT_REPORT_STYLE_V1.patientInfo.labelCellStyle.fontFamily,
+      )};`,
+    );
+    expect(html).toContain(
+      `--patient-info-value-font-family: ${resolveReportFontStackWithArabicFallback(
+        DEFAULT_REPORT_STYLE_V1.patientInfo.valueCellStyle.fontFamily,
       )};`,
     );
     expect(html).toContain(
@@ -820,8 +832,11 @@ describe('buildResultsReportHtml panel page isolation', () => {
         DEFAULT_REPORT_STYLE_V1.resultsTable.headerStyle.fontFamily,
       )};`,
     );
-    expect(html).toContain('font-weight: var(--patient-info-value-weight);');
-    expect(html).toContain('font-family: var(--patient-info-font-family);');
+    expect(html).toContain('font-weight: var(--patient-info-value-font-weight);');
+    expect(html).toContain('font-family: var(--patient-info-label-font-family);');
+    expect(html).toContain('font-family: var(--patient-info-value-font-family);');
+    expect(html).toContain('class="patient-info-table"');
+    expect(html).toContain('border-right: var(--patient-info-divider-width) solid var(--patient-info-border-color);');
     expect(html).toContain('font-family: var(--results-body-font-family);');
     expect(html).toContain('font-family: var(--results-header-font-family);');
     expect(html).toContain(
@@ -971,6 +986,30 @@ describe('buildResultsReportHtml panel page isolation', () => {
     expect(html).toContain('class="patient-info-qr-caption">Order QR</div>');
   });
 
+  it('renders patient info as a fixed 3-row table layout', () => {
+    const html = buildResultsReportHtml({
+      order: createOrder(),
+      orderTests: [],
+      reportableCount: 0,
+      verifiedCount: 0,
+      verifiers: [],
+      latestVerifiedAt: null,
+      comments: [],
+    });
+
+    const patientInfoChunk = html.slice(
+      html.indexOf('class="patient-info-table"'),
+      html.indexOf('<div class="report-title">'),
+    );
+
+    expect(patientInfoChunk).toContain('<td class="patient-info-label-cell">Name:</td>');
+    expect(patientInfoChunk).toContain('<td class="patient-info-label-cell">Visit Date:</td>');
+    expect(patientInfoChunk).toContain('<td class="patient-info-label-cell">Age/Sex:</td>');
+    expect(patientInfoChunk).toContain('<td class="patient-info-label-cell">Order No:</td>');
+    expect(patientInfoChunk).toContain('<td class="patient-info-label-cell">Referred By:</td>');
+    expect(patientInfoChunk).toContain('<td class="patient-info-label-cell">Patient ID:</td>');
+  });
+
   it('uses lab reportStyle values when provided', () => {
     const customStyle: typeof DEFAULT_REPORT_STYLE_V1 = {
       ...DEFAULT_REPORT_STYLE_V1,
@@ -983,7 +1022,14 @@ describe('buildResultsReportHtml panel page isolation', () => {
       patientInfo: {
         ...DEFAULT_REPORT_STYLE_V1.patientInfo,
         backgroundColor: '#101010',
-        fontFamily: 'georgia',
+        labelCellStyle: {
+          ...DEFAULT_REPORT_STYLE_V1.patientInfo.labelCellStyle,
+          fontFamily: 'georgia',
+        },
+        valueCellStyle: {
+          ...DEFAULT_REPORT_STYLE_V1.patientInfo.valueCellStyle,
+          fontFamily: 'georgia',
+        },
       },
       resultsTable: {
         ...DEFAULT_REPORT_STYLE_V1.resultsTable,
@@ -1022,7 +1068,9 @@ describe('buildResultsReportHtml panel page isolation', () => {
     expect(html).toContain('--results-status-high-color: #AA0000;');
     expect(html).toContain('td.col-status.status-high { color: var(--results-status-high-color); font-weight: 700; }');
     expect(html).toContain(
-      `--patient-info-rtl-font-family: ${resolveReportRtlFontStack(customStyle.patientInfo.fontFamily)};`,
+      `--patient-info-value-rtl-font-family: ${resolveReportRtlFontStack(
+        customStyle.patientInfo.valueCellStyle.fontFamily,
+      )};`,
     );
     expect(html).toContain(
       `--results-body-font-family: ${resolveReportFontStackWithArabicFallback(
@@ -1075,12 +1123,9 @@ describe('buildResultsReportHtml panel page isolation', () => {
       comments: [],
     });
 
-    expect(html).toContain(
-      '<span class="label">Referred By:</span><span class="info-value name-value ">Dr Ahmed Ali</span>',
-    );
-    expect(html).not.toContain(
-      '<span class="label">Referred By:</span><span class="info-value name-value ">Patient Address</span>',
-    );
+    expect(html).toContain('<td class="patient-info-label-cell">Referred By:</td>');
+    expect(html).toContain('>Dr Ahmed Ali</span></td>');
+    expect(html).not.toContain('>Patient Address</span></td>');
   });
 
   it('renders infant age display against the order registration date', () => {
@@ -1103,7 +1148,8 @@ describe('buildResultsReportHtml panel page isolation', () => {
       comments: [],
     });
 
-    expect(html).toContain('<span class="label">Age/Sex:</span><span class="info-value">5 days/Male</span>');
+    expect(html).toContain('<td class="patient-info-label-cell">Age/Sex:</td>');
+    expect(html).toContain('>5 days/Male</span></td>');
   });
 
   it('renders panel section headers once per contiguous named group and keeps child order', () => {

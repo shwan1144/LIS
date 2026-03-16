@@ -1295,7 +1295,11 @@ let OrdersService = OrdersService_1 = class OrdersService {
             const exactSearch = params.search.trim();
             qb.andWhere('(order.orderNumber ILIKE :term OR patient.fullName ILIKE :term OR patient.patientNumber = :exactSearch OR patient.phone ILIKE :term)', { term, exactSearch });
         }
-        const labTimeZone = params.startDate || params.endDate ? await this.getLabTimeZone(labId) : null;
+        const labTimeZone = params.startDate || params.endDate
+            ? params.dateFilterTimeZone
+                ? (0, lab_timezone_util_1.normalizeLabTimeZone)(params.dateFilterTimeZone)
+                : await this.getLabTimeZone(labId)
+            : null;
         if (params.startDate && params.endDate && labTimeZone) {
             const { startDate } = this.getDateRangeOrThrow(params.startDate, labTimeZone, 'startDate');
             const { endDate } = this.getDateRangeOrThrow(params.endDate, labTimeZone, 'endDate');

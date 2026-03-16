@@ -54,7 +54,7 @@ let OrdersController = OrdersController_1 = class OrdersController {
             }));
         }
     }
-    async findAll(req, page, size, search, status, patientId, shiftId, startDate, endDate) {
+    async findAll(req, page, size, search, status, patientId, shiftId, startDate, endDate, dateFilterTimeZone) {
         const labId = req.user?.labId;
         if (!labId) {
             throw new Error('Lab ID not found in token');
@@ -68,6 +68,7 @@ let OrdersController = OrdersController_1 = class OrdersController {
             shiftId,
             startDate,
             endDate,
+            dateFilterTimeZone,
         });
     }
     async estimatePrice(req, testIds, shiftId) {
@@ -109,7 +110,7 @@ let OrdersController = OrdersController_1 = class OrdersController {
         await this.ordersService.saveWorklist(labId, body.shiftId ?? null, items);
         return { ok: true };
     }
-    async findHistory(req, page, size, search, status, patientId, shiftId, startDate, endDate, resultStatus) {
+    async findHistory(req, page, size, search, status, patientId, shiftId, startDate, endDate, dateFilterTimeZone, resultStatus) {
         const labId = req.user?.labId;
         if (!labId) {
             throw new Error('Lab ID not found in token');
@@ -123,6 +124,7 @@ let OrdersController = OrdersController_1 = class OrdersController {
             shiftId,
             startDate,
             endDate,
+            dateFilterTimeZone,
             resultStatus,
         });
     }
@@ -209,8 +211,9 @@ __decorate([
     __param(6, (0, common_1.Query)('shiftId')),
     __param(7, (0, common_1.Query)('startDate')),
     __param(8, (0, common_1.Query)('endDate')),
+    __param(9, (0, common_1.Query)('dateFilterTimeZone')),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [Object, String, String, String, String, String, String, String, String]),
+    __metadata("design:paramtypes", [Object, String, String, String, String, String, String, String, String, String]),
     __metadata("design:returntype", Promise)
 ], OrdersController.prototype, "findAll", null);
 __decorate([
@@ -270,9 +273,10 @@ __decorate([
     __param(6, (0, common_1.Query)('shiftId')),
     __param(7, (0, common_1.Query)('startDate')),
     __param(8, (0, common_1.Query)('endDate')),
-    __param(9, (0, common_1.Query)('resultStatus', new common_1.ParseEnumPipe(create_order_response_dto_1.OrderResultStatus, { optional: true }))),
+    __param(9, (0, common_1.Query)('dateFilterTimeZone')),
+    __param(10, (0, common_1.Query)('resultStatus', new common_1.ParseEnumPipe(create_order_response_dto_1.OrderResultStatus, { optional: true }))),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [Object, String, String, String, String, String, String, String, String, String]),
+    __metadata("design:paramtypes", [Object, String, String, String, String, String, String, String, String, String, String]),
     __metadata("design:returntype", Promise)
 ], OrdersController.prototype, "findHistory", null);
 __decorate([

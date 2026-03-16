@@ -62,6 +62,7 @@ export interface OrderListQueryParams {
   shiftId?: string;
   startDate?: string;
   endDate?: string;
+  dateFilterTimeZone?: string;
   resultStatus?: OrderResultStatus;
 }
 
@@ -1820,7 +1821,11 @@ export class OrdersService {
     }
 
     const labTimeZone =
-      params.startDate || params.endDate ? await this.getLabTimeZone(labId) : null;
+      params.startDate || params.endDate
+        ? params.dateFilterTimeZone
+          ? normalizeLabTimeZone(params.dateFilterTimeZone)
+          : await this.getLabTimeZone(labId)
+        : null;
     if (params.startDate && params.endDate && labTimeZone) {
       const { startDate } = this.getDateRangeOrThrow(params.startDate, labTimeZone, 'startDate');
       const { endDate } = this.getDateRangeOrThrow(params.endDate, labTimeZone, 'endDate');

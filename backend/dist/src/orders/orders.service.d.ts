@@ -30,6 +30,7 @@ export interface OrderListQueryParams {
     shiftId?: string;
     startDate?: string;
     endDate?: string;
+    dateFilterTimeZone?: string;
     resultStatus?: OrderResultStatus;
 }
 export interface OrderHistoryItem {

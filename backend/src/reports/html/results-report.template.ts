@@ -322,10 +322,15 @@ export function buildResultsReportHtml(input: {
   const pageMarginBottomMm = reportStyle.pageLayout.pageMarginBottomMm;
   const pageMarginLeftMm = reportStyle.pageLayout.pageMarginLeftMm;
   const contentMarginXMm = reportStyle.pageLayout.contentMarginXMm;
-  const patientInfoFontFamily = resolveReportFontStackWithArabicFallback(
-    reportStyle.patientInfo.fontFamily,
+  const patientInfoLabelFontFamily = resolveReportFontStackWithArabicFallback(
+    reportStyle.patientInfo.labelCellStyle.fontFamily,
   );
-  const patientInfoRtlFontFamily = resolveReportRtlFontStack(reportStyle.patientInfo.fontFamily);
+  const patientInfoValueFontFamily = resolveReportFontStackWithArabicFallback(
+    reportStyle.patientInfo.valueCellStyle.fontFamily,
+  );
+  const patientInfoValueRtlFontFamily = resolveReportRtlFontStack(
+    reportStyle.patientInfo.valueCellStyle.fontFamily,
+  );
   const resultsHeaderFontFamily = resolveReportFontStackWithArabicFallback(
     reportStyle.resultsTable.headerStyle.fontFamily,
   );
@@ -431,15 +436,35 @@ export function buildResultsReportHtml(input: {
         : `<div class="header-spacer" aria-hidden="true"></div>`
     }
     <div class="patient-info${hasOrderQr ? ' has-order-qr' : ''}${patientInfoIsKurdish ? ' patient-info--kurdish' : ''}">
-      <div class="patient-info-col">
-        <div class="info-item"><span class="label">Name :</span><span class="info-value name-value ${patientNameIsRtl ? 'rtl-text' : ''}">${escapeHtml(patientName)}</span></div>
-        <div class="info-item"><span class="label">Age/Sex:</span><span class="info-value">${escapeHtml(ageSex)}</span></div>
-        <div class="info-item"><span class="label">Referred By:</span><span class="info-value name-value ${referredByIsRtl ? 'rtl-text' : ''}">${escapeHtml(referredByDisplay)}</span></div>
-      </div>
-      <div class="patient-info-col">
-        <div class="info-item"><span class="label">Visit Date:</span><span class="info-value">${escapeHtml(visitDate)}</span></div>
-        <div class="info-item"><span class="label">Order No:</span><span class="info-value">${escapeHtml(orderNumber)}</span></div>
-        <div class="info-item"><span class="label">Patient ID:</span><span class="info-value">${escapeHtml(patientId)}</span></div>
+      <div class="patient-info-table-wrap">
+        <table class="patient-info-table">
+          <colgroup>
+            <col style="width: 18%;" />
+            <col style="width: 32%;" />
+            <col style="width: 18%;" />
+            <col style="width: 32%;" />
+          </colgroup>
+          <tbody>
+            <tr>
+              <td class="patient-info-label-cell">Name:</td>
+              <td class="patient-info-value-cell"><span class="patient-info-value-text name-value ${patientNameIsRtl ? 'rtl-text' : ''}">${escapeHtml(patientName)}</span></td>
+              <td class="patient-info-label-cell">Visit Date:</td>
+              <td class="patient-info-value-cell"><span class="patient-info-value-text">${escapeHtml(visitDate)}</span></td>
+            </tr>
+            <tr>
+              <td class="patient-info-label-cell">Age/Sex:</td>
+              <td class="patient-info-value-cell"><span class="patient-info-value-text">${escapeHtml(ageSex)}</span></td>
+              <td class="patient-info-label-cell">Order No:</td>
+              <td class="patient-info-value-cell"><span class="patient-info-value-text">${escapeHtml(orderNumber)}</span></td>
+            </tr>
+            <tr>
+              <td class="patient-info-label-cell">Referred By:</td>
+              <td class="patient-info-value-cell"><span class="patient-info-value-text name-value ${referredByIsRtl ? 'rtl-text' : ''}">${escapeHtml(referredByDisplay)}</span></td>
+              <td class="patient-info-label-cell">Patient ID:</td>
+              <td class="patient-info-value-cell"><span class="patient-info-value-text">${escapeHtml(patientId)}</span></td>
+            </tr>
+          </tbody>
+        </table>
       </div>
       ${hasOrderQr
       ? `<div class="patient-info-qr"><img class="patient-info-qr-image" ${orderQrUrlAttr} alt="Order QR Code" /><div class="patient-info-qr-caption">Order QR</div></div>`
@@ -867,19 +892,27 @@ export function buildResultsReportHtml(input: {
       --footer-height: 18mm;
       --patient-info-bg: ${reportStyle.patientInfo.backgroundColor};
       --patient-info-border-color: ${reportStyle.patientInfo.borderColor};
-      --patient-info-text-color: ${reportStyle.patientInfo.textColor};
-      --patient-info-label-color: ${reportStyle.patientInfo.labelColor};
-      --patient-info-font-size: ${reportStyle.patientInfo.fontSizePx}px;
-      --patient-info-label-weight: ${reportStyle.patientInfo.labelFontWeight};
-      --patient-info-value-weight: ${reportStyle.patientInfo.valueFontWeight};
-      --patient-info-align: ${reportStyle.patientInfo.textAlign};
-      --patient-info-label-align: ${reportStyle.patientInfo.labelTextAlign};
-      --patient-info-value-align: ${reportStyle.patientInfo.valueTextAlign};
       --patient-info-radius: ${reportStyle.patientInfo.borderRadiusPx}px;
       --patient-info-padding-y: ${reportStyle.patientInfo.paddingYpx}px;
       --patient-info-padding-x: ${reportStyle.patientInfo.paddingXpx}px;
-      --patient-info-font-family: ${patientInfoFontFamily};
-      --patient-info-rtl-font-family: ${patientInfoRtlFontFamily};
+      --patient-info-divider-width: ${reportStyle.patientInfo.dividerWidthPx}px;
+      --patient-info-label-cell-bg: ${reportStyle.patientInfo.labelCellStyle.backgroundColor};
+      --patient-info-label-cell-text: ${reportStyle.patientInfo.labelCellStyle.textColor};
+      --patient-info-label-font-family: ${patientInfoLabelFontFamily};
+      --patient-info-label-font-size: ${reportStyle.patientInfo.labelCellStyle.fontSizePx}px;
+      --patient-info-label-font-weight: ${reportStyle.patientInfo.labelCellStyle.fontWeight};
+      --patient-info-label-align: ${reportStyle.patientInfo.labelCellStyle.textAlign};
+      --patient-info-label-padding-y: ${reportStyle.patientInfo.labelCellStyle.paddingYpx}px;
+      --patient-info-label-padding-x: ${reportStyle.patientInfo.labelCellStyle.paddingXpx}px;
+      --patient-info-value-cell-bg: ${reportStyle.patientInfo.valueCellStyle.backgroundColor};
+      --patient-info-value-cell-text: ${reportStyle.patientInfo.valueCellStyle.textColor};
+      --patient-info-value-font-family: ${patientInfoValueFontFamily};
+      --patient-info-value-font-size: ${reportStyle.patientInfo.valueCellStyle.fontSizePx}px;
+      --patient-info-value-font-weight: ${reportStyle.patientInfo.valueCellStyle.fontWeight};
+      --patient-info-value-align: ${reportStyle.patientInfo.valueCellStyle.textAlign};
+      --patient-info-value-padding-y: ${reportStyle.patientInfo.valueCellStyle.paddingYpx}px;
+      --patient-info-value-padding-x: ${reportStyle.patientInfo.valueCellStyle.paddingXpx}px;
+      --patient-info-value-rtl-font-family: ${patientInfoValueRtlFontFamily};
       --report-title-color: ${reportStyle.reportTitle.textColor};
       --report-title-font-size: ${reportStyle.reportTitle.fontSizePx}px;
       --report-title-align: ${reportStyle.reportTitle.textAlign};
@@ -1117,23 +1150,69 @@ export function buildResultsReportHtml(input: {
     .patient-info {
       margin-top: 8px;
       margin-bottom: 6px;
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 10px;
       border: 1px solid var(--patient-info-border-color);
       border-radius: var(--patient-info-radius);
       padding: var(--patient-info-padding-y) var(--patient-info-padding-x);
       background: var(--patient-info-bg);
-      color: var(--patient-info-text-color);
-      text-align: var(--patient-info-align);
-      font-family: var(--patient-info-font-family);
+      display: grid;
+      grid-template-columns: minmax(0, 1fr);
+      gap: 10px;
     }
     .patient-info.has-order-qr {
-      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 66px;
+      grid-template-columns: minmax(0, 1fr) 66px;
       column-gap: 10px;
       align-items: start;
     }
-    .patient-info-col { display: flex; flex-direction: column; gap: 6px; }
+    .patient-info-table-wrap { min-width: 0; }
+    .patient-info-table {
+      width: 100%;
+      border-collapse: separate;
+      border-spacing: 0;
+      table-layout: fixed;
+      margin: 0;
+    }
+    .patient-info-label-cell,
+    .patient-info-value-cell {
+      vertical-align: middle;
+      word-break: break-word;
+      overflow-wrap: anywhere;
+    }
+    .patient-info-label-cell {
+      background: var(--patient-info-label-cell-bg);
+      color: var(--patient-info-label-cell-text);
+      font-family: var(--patient-info-label-font-family);
+      font-size: var(--patient-info-label-font-size);
+      font-weight: var(--patient-info-label-font-weight);
+      text-align: var(--patient-info-label-align);
+      padding: var(--patient-info-label-padding-y) var(--patient-info-label-padding-x);
+      border-right: var(--patient-info-divider-width) solid var(--patient-info-border-color);
+      border-bottom: var(--patient-info-divider-width) solid var(--patient-info-border-color);
+    }
+    .patient-info-value-cell {
+      background: var(--patient-info-value-cell-bg);
+      color: var(--patient-info-value-cell-text);
+      font-family: var(--patient-info-value-font-family);
+      font-size: var(--patient-info-value-font-size);
+      font-weight: var(--patient-info-value-font-weight);
+      text-align: var(--patient-info-value-align);
+      padding: var(--patient-info-value-padding-y) var(--patient-info-value-padding-x);
+      border-right: var(--patient-info-divider-width) solid var(--patient-info-border-color);
+      border-bottom: var(--patient-info-divider-width) solid var(--patient-info-border-color);
+    }
+    .patient-info-table tr:last-child .patient-info-label-cell,
+    .patient-info-table tr:last-child .patient-info-value-cell {
+      border-bottom: 0;
+    }
+    .patient-info-table td:last-child {
+      border-right: 0;
+    }
+    .patient-info-value-text,
+    .name-value {
+      display: block;
+      width: 100%;
+      text-align: inherit;
+      font-weight: inherit;
+    }
     .patient-info-qr {
       width: 66px;
       justify-self: end;
@@ -1158,39 +1237,13 @@ export function buildResultsReportHtml(input: {
     .patient-info-qr-caption {
       font-size: 9px;
       line-height: 1.05;
-      color: var(--patient-info-label-color);
+      color: var(--patient-info-label-cell-text);
       font-weight: 600;
-    }
-    .info-item {
-      display: grid;
-      grid-template-columns: minmax(92px, max-content) minmax(0, 1fr);
-      column-gap: 4px;
-      align-items: baseline;
-      font-size: var(--patient-info-font-size);
-      color: var(--patient-info-text-color);
-      font-weight: var(--patient-info-value-weight);
-    }
-    .info-item .label {
-      display: block;
-      font-weight: var(--patient-info-label-weight);
-      color: var(--patient-info-label-color);
-      text-align: var(--patient-info-label-align);
-    }
-    .info-item .info-value,
-    .name-value {
-      display: block;
-      width: 100%;
-      font-weight: var(--patient-info-value-weight);
-      text-align: var(--patient-info-value-align);
-    }
-    .patient-info--kurdish .info-item .info-value,
-    .patient-info--kurdish .name-value {
-      font-family: var(--patient-info-rtl-font-family);
     }
     .rtl-text {
       direction: rtl;
       unicode-bidi: isolate;
-      font-family: var(--patient-info-rtl-font-family);
+      font-family: var(--patient-info-value-rtl-font-family);
       letter-spacing: 0;
       word-spacing: 0;
       font-feature-settings: "liga" 1, "calt" 1, "kern" 1;
