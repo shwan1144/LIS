@@ -2974,12 +2974,22 @@ export function OrdersPage() {
                                   ),
                                 },
                                 {
-                                  title: 'Sample',
+                                  title: 'Tube Type',
                                   dataIndex: 'tubeType',
                                   key: 'tubeType',
                                   render: (tubeType: string) => (
                                     <span className="order-selected-test-tube">
                                       {formatTokenLabel(tubeType)}
+                                    </span>
+                                  ),
+                                },
+                                {
+                                  title: 'Price',
+                                  dataIndex: 'price',
+                                  key: 'price',
+                                  render: (price: number | null) => (
+                                    <span className="order-selected-test-price">
+                                      {price != null ? `${price.toLocaleString()} IQD` : 'Current pricing'}
                                     </span>
                                   ),
                                 },

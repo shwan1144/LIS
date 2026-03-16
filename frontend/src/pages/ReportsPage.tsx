@@ -184,6 +184,7 @@ const ACTION_FLAG_FIELD_MAP: Record<ReportActionKind, ReportActionFlagField> = {
 
 type EditResultContext = {
   editMode: EditResultMode;
+  orderId: string;
   orderTestId: string;
   orderNumber: string;
   patientName: string;
@@ -1544,6 +1545,7 @@ export function ReportsPage() {
 
     setEditResultContext({
       editMode: isPanel ? 'PANEL' : 'SINGLE',
+      orderId: order.id,
       orderTestId: orderTest.id,
       orderNumber: order.orderNumber || order.id.substring(0, 8),
       patientName: order.patient?.fullName || '-',
@@ -1724,7 +1726,7 @@ export function ReportsPage() {
       setEditResultModalOpen(false);
       setEditResultContext(null);
       editResultForm.resetFields();
-      await loadOrders();
+      await ensureOrderDetails(editResultContext.orderId, 'retry');
     } catch (error) {
       console.error('Failed to update results', error);
       message.error('Failed to update result(s)');
@@ -1851,28 +1853,6 @@ export function ReportsPage() {
             ) : (
               <Text style={{ fontSize: 12 }}>{value}</Text>
             )}
-            {row.raw.test?.type !== 'PANEL' &&
-              (() => {
-                const resolvedNormalText = resolveSexSpecificNormalText(
-                  row.raw.test,
-                  order.patient?.sex ?? null,
-                );
-                return (row.raw.test?.normalMin !== null ||
-                  row.raw.test?.normalMax !== null ||
-                  resolvedNormalText);
-              })() && (
-                <div style={{ fontSize: 10, color: 'rgba(128,128,128,0.7)', marginTop: 2 }}>
-                  Range:{' '}
-                  <span style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
-                    {formatReferenceRange(
-                      resolveSexSpecificNormalText(row.raw.test, order.patient?.sex ?? null),
-                      row.raw.test?.normalMin,
-                      row.raw.test?.normalMax,
-                      row.raw.test?.unit,
-                    )}
-                  </span>
-                </div>
-              )}
           </div>
         ),
         onCell: () => ({ style: compactCellStyle }),
@@ -2131,7 +2111,7 @@ export function ReportsPage() {
       render: (_: unknown, record: OrderHistoryItemDto) => (
         <Space size={8} style={{ minWidth: 0 }}>
           <UserOutlined style={{ fontSize: 14, color: '#1677ff' }} />
-          <Text strong ellipsis style={{ fontSize: 16 }}>
+          <Text strong ellipsis style={{ fontSize: 16, fontFamily: "'Noto Sans Arabic', sans-serif" }}>
             {record.patient?.fullName?.trim() || '-'}
           </Text>
         </Space>

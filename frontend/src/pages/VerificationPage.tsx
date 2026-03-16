@@ -605,7 +605,7 @@ export function VerificationPage() {
       width: 280,
       render: (_: unknown, record) => (
         <div>
-          <Text strong style={{ display: 'block', fontSize: 16, lineHeight: '20px' }}>
+          <Text strong style={{ display: 'block', fontSize: 16, lineHeight: '20px', fontFamily: "'Noto Sans Arabic', sans-serif" }}>
             {record.patientName}
           </Text>
           <Text type="secondary" style={{ fontSize: 11, lineHeight: '14px' }}>
