@@ -1,4 +1,4 @@
-export declare const LAB_ROLES: readonly ["SUPER_ADMIN", "LAB_ADMIN", "RECEPTION", "TECHNICIAN", "VERIFIER", "DOCTOR", "INSTRUMENT_SERVICE"];
+export declare const LAB_ROLES: readonly ["SUPER_ADMIN", "LAB_ADMIN", "RECEPTION", "TECHNICIAN", "VERIFIER", "DOCTOR", "INSTRUMENT_SERVICE", "SUB_LAB"];
 export type LabRole = (typeof LAB_ROLES)[number];
 export declare const LAB_ROLE_GROUPS: {
     readonly ADMIN: readonly ["LAB_ADMIN", "SUPER_ADMIN"];
@@ -16,6 +16,7 @@ export declare const LAB_ROLE_GROUPS: {
     readonly SHIFTS_READ: readonly ["RECEPTION", "LAB_ADMIN", "SUPER_ADMIN"];
     readonly ANTIBIOTICS_READ: readonly ["TECHNICIAN", "VERIFIER", "LAB_ADMIN", "SUPER_ADMIN"];
     readonly SETTINGS_LAB_READ: readonly ["RECEPTION", "DOCTOR", "LAB_ADMIN", "SUPER_ADMIN"];
+    readonly SUB_LAB_PORTAL: readonly ["SUB_LAB"];
 };
 export type WorklistLane = 'entry' | 'verify';
 export declare function hasLabRole(role: string | null | undefined, allowedRoles: readonly string[]): boolean;

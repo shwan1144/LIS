@@ -88,6 +88,7 @@ const RESULT_ENTRY_TYPES: { label: string; value: TestResultEntryType }[] = [
   { label: 'Qualitative (dropdown)', value: 'QUALITATIVE' },
   { label: 'Text', value: 'TEXT' },
   { label: 'Culture & Sensitivity', value: 'CULTURE_SENSITIVITY' },
+  { label: 'PDF Upload', value: 'PDF_UPLOAD' },
 ];
 
 const RESULT_FLAG_OPTIONS: { label: string; value: NonNullable<TestResultTextOption['flag']> }[] = [
@@ -1040,6 +1041,7 @@ export function TestsPage() {
         }))
         .filter((option) => option.value.length > 0);
     const resultEntryType = values.resultEntryType ?? 'NUMERIC';
+    const isPdfUpload = resultEntryType === 'PDF_UPLOAD';
     const normalizedCultureConfig =
       resultEntryType === 'CULTURE_SENSITIVITY'
         ? {
@@ -1102,10 +1104,11 @@ export function TestsPage() {
         ? normalizedNumericAgeRanges
         : null,
       resultEntryType: isPanel ? 'NUMERIC' : resultEntryType,
-      allowCustomResultText: isPanel ? false : Boolean(values.allowCustomResultText),
+      allowCustomResultText:
+        isPanel || isPdfUpload ? false : Boolean(values.allowCustomResultText),
       allowPanelSaveWithChildDefaults:
         isPanel ? Boolean(values.allowPanelSaveWithChildDefaults) : false,
-      cultureConfig: isPanel ? null : normalizedCultureConfig,
+      cultureConfig: isPanel || isPdfUpload ? null : normalizedCultureConfig,
       cultureAntibioticIds: isPanel
         ? null
         : resultEntryType === 'CULTURE_SENSITIVITY'
@@ -1113,7 +1116,7 @@ export function TestsPage() {
           : null,
       resultTextOptions: isPanel
         ? null
-        : normalizedResultTextOptions.length
+        : !isPdfUpload && normalizedResultTextOptions.length
           ? normalizedResultTextOptions
           : null,
       panelComponents: isPanel ? panelComponents : null,
@@ -1646,6 +1649,7 @@ export function TestsPage() {
               const showTextOptions =
                 resultEntryType === 'QUALITATIVE' || resultEntryType === 'TEXT';
               const showCultureConfig = resultEntryType === 'CULTURE_SENSITIVITY';
+              const showPdfHint = resultEntryType === 'PDF_UPLOAD';
               const antibioticOptions = antibiotics
                 .filter((item) => item.isActive)
                 .sort((a, b) =>
@@ -1675,11 +1679,18 @@ export function TestsPage() {
                       <Switch
                         disabled={
                           resultEntryType === 'NUMERIC' ||
-                          resultEntryType === 'CULTURE_SENSITIVITY'
+                          resultEntryType === 'CULTURE_SENSITIVITY' ||
+                          resultEntryType === 'PDF_UPLOAD'
                         }
                       />
                     </Form.Item>
                   </div>
+
+                  {showPdfHint && (
+                    <Text type="secondary" style={{ display: 'block', marginBottom: 10 }}>
+                      PDF Upload tests are completed by uploading a patient-result PDF in Worklist or Reports.
+                    </Text>
+                  )}
 
                   {showTextOptions && (
                     <Form.List name="resultTextOptions">

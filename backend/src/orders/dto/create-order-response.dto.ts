@@ -31,6 +31,7 @@ export interface CreateOrderSummaryDto {
   finalAmount: number;
   patient: Patient;
   shift: { id: string; code: string; name: string | null } | null;
+  sourceSubLab: { id: string; name: string } | null;
   testsCount: number;
   readyTestsCount: number;
   reportReady: boolean;

@@ -33,8 +33,10 @@ const admin_auth_module_1 = require("./admin-auth/admin-auth.module");
 const platform_admin_module_1 = require("./platform-admin/platform-admin.module");
 const lab_api_module_1 = require("./lab-api/lab-api.module");
 const gateway_module_1 = require("./gateway/gateway.module");
+const sub_labs_module_1 = require("./sub-labs/sub-labs.module");
 const entities_1 = require("./database/entities");
 const database_support_module_1 = require("./database/database-support.module");
+const storage_module_1 = require("./storage/storage.module");
 const useDatabaseUrl = Boolean(process.env.DATABASE_URL);
 const isProduction = (process.env.NODE_ENV || '').toLowerCase() === 'production';
 const shouldSynchronize = !isProduction && process.env.DB_SYNC === 'true';
@@ -92,6 +94,8 @@ exports.AppModule = AppModule = __decorate([
             platform_admin_module_1.PlatformAdminModule,
             lab_api_module_1.LabApiModule,
             gateway_module_1.GatewayModule,
+            sub_labs_module_1.SubLabsModule,
+            storage_module_1.StorageModule,
         ],
         controllers: [app_controller_1.AppController],
         providers: [

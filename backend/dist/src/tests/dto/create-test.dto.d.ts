@@ -1,5 +1,5 @@
 import { TestType, TubeType } from '../../entities/test.entity';
-export declare const TEST_RESULT_ENTRY_TYPES: readonly ["NUMERIC", "QUALITATIVE", "TEXT", "CULTURE_SENSITIVITY"];
+export declare const TEST_RESULT_ENTRY_TYPES: readonly ["NUMERIC", "QUALITATIVE", "TEXT", "CULTURE_SENSITIVITY", "PDF_UPLOAD"];
 export declare const TEST_RESULT_FLAGS: readonly ["N", "H", "L", "POS", "NEG", "ABN"];
 export declare const TEST_NUMERIC_AGE_UNITS: readonly ["DAY", "MONTH", "YEAR"];
 export declare class TestParameterDefinitionDto {

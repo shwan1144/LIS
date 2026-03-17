@@ -8,6 +8,7 @@ import { AuditLog } from '../entities/audit-log.entity';
 import { Lab } from '../entities/lab.entity';
 import { PlatformUser } from '../entities/platform-user.entity';
 import { AdminLabPortalToken } from '../entities/admin-lab-portal-token.entity';
+import { SubLab } from '../entities/sub-lab.entity';
 import { AuthService } from './auth.service';
 import { AuthController } from './auth.controller';
 import { JwtStrategy } from './jwt.strategy';
@@ -33,6 +34,7 @@ const jwtSecret = requireSecret(
       Lab,
       PlatformUser,
       AdminLabPortalToken,
+      SubLab,
     ]),
     PassportModule.register({ defaultStrategy: 'lab-jwt' }),
     JwtModule.register({

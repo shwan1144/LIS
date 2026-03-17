@@ -21,6 +21,7 @@ export const TEST_RESULT_ENTRY_TYPES = [
   'QUALITATIVE',
   'TEXT',
   'CULTURE_SENSITIVITY',
+  'PDF_UPLOAD',
 ] as const;
 export const TEST_RESULT_FLAGS = ['N', 'H', 'L', 'POS', 'NEG', 'ABN'] as const;
 export const TEST_NUMERIC_AGE_UNITS = ['DAY', 'MONTH', 'YEAR'] as const;

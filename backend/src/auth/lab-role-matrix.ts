@@ -8,6 +8,7 @@ export const LAB_ROLES = [
   'VERIFIER',
   'DOCTOR',
   'INSTRUMENT_SERVICE',
+  'SUB_LAB',
 ] as const;
 
 export type LabRole = (typeof LAB_ROLES)[number];
@@ -27,6 +28,7 @@ const DEPARTMENTS_READ = ['RECEPTION', 'TECHNICIAN', 'VERIFIER', ...ADMIN] as co
 const SHIFTS_READ = ['RECEPTION', ...ADMIN] as const;
 const ANTIBIOTICS_READ = ['TECHNICIAN', 'VERIFIER', ...ADMIN] as const;
 const SETTINGS_LAB_READ = ['RECEPTION', 'DOCTOR', ...ADMIN] as const;
+const SUB_LAB_PORTAL = ['SUB_LAB'] as const;
 
 export const LAB_ROLE_GROUPS = {
   ADMIN,
@@ -44,6 +46,7 @@ export const LAB_ROLE_GROUPS = {
   SHIFTS_READ,
   ANTIBIOTICS_READ,
   SETTINGS_LAB_READ,
+  SUB_LAB_PORTAL,
 } as const;
 
 export type WorklistLane = 'entry' | 'verify';

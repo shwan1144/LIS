@@ -56,6 +56,14 @@ export interface CultureResultPayload {
   isolates: CultureResultIsolate[];
 }
 
+export interface OrderTestResultDocumentSummary {
+  fileName: string;
+  mimeType: string;
+  sizeBytes: number;
+  uploadedAt: string | null;
+  uploadedBy: string | null;
+}
+
 @Entity('order_tests')
 export class OrderTest {
   @PrimaryGeneratedColumn('uuid')
@@ -123,6 +131,24 @@ export class OrderTest {
 
   @Column({ type: 'text', nullable: true })
   comments: string | null;
+
+  @Column({ type: 'text', nullable: true })
+  resultDocumentStorageKey: string | null;
+
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  resultDocumentFileName: string | null;
+
+  @Column({ type: 'varchar', length: 100, nullable: true })
+  resultDocumentMimeType: string | null;
+
+  @Column({ type: 'int', nullable: true })
+  resultDocumentSizeBytes: number | null;
+
+  @Column({ type: 'timestamp', nullable: true })
+  resultDocumentUploadedAt: Date | null;
+
+  @Column({ type: 'uuid', nullable: true })
+  resultDocumentUploadedBy: string | null;
 
   /** For panel child tests: position index in the panel. Null for non-panel or parent rows. */
   @Column({ type: 'int', nullable: true })

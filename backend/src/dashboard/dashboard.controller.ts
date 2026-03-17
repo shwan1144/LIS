@@ -13,6 +13,7 @@ import {
   OrdersTrendPoint,
   StatisticsDto,
   DashboardAnnouncementDto,
+  type StatisticsSourceType,
 } from './dashboard.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
@@ -101,6 +102,7 @@ export class DashboardController {
     return this.dashboardService.getStatistics(labId, startDate, endDate, {
       shiftId: query.shiftId ?? null,
       departmentId: query.departmentId ?? null,
+      sourceType: (query.sourceType as StatisticsSourceType | undefined) ?? 'ALL',
     });
   }
 
@@ -123,13 +125,15 @@ export class DashboardController {
     );
     const shiftToken = query.shiftId ? this.toSafeFileToken(query.shiftId) : 'all';
     const departmentToken = query.departmentId ? this.toSafeFileToken(query.departmentId) : 'all';
-    const fileName = `statistics-${startDateLabel}-to-${endDateLabel}-${shiftToken}-${departmentToken}.pdf`;
+    const sourceToken = this.toSafeFileToken(query.sourceType ?? 'all');
+    const fileName = `statistics-${startDateLabel}-to-${endDateLabel}-${shiftToken}-${departmentToken}-${sourceToken}.pdf`;
     const actor = buildLabActorContext(req.user);
 
     try {
       const pdfBuffer = await this.dashboardService.generateStatisticsPdf(labId, startDate, endDate, {
         shiftId: query.shiftId ?? null,
         departmentId: query.departmentId ?? null,
+        sourceType: (query.sourceType as StatisticsSourceType | undefined) ?? 'ALL',
       });
 
       const impersonationAudit =
@@ -156,6 +160,7 @@ export class DashboardController {
           endDate: endDateLabel,
           shiftId: query.shiftId ?? null,
           departmentId: query.departmentId ?? null,
+          sourceType: (query.sourceType as StatisticsSourceType | undefined) ?? 'ALL',
           ...impersonationAudit,
         },
         ipAddress: req.ip ?? null,
@@ -188,6 +193,21 @@ export class DashboardController {
         targetMinutes: 60,
       },
       quality: { abnormalCount: 0, totalVerified: 0 },
+      subLabBilling: {
+        activeSourceType: 'ALL',
+        billableRootTests: 0,
+        billableAmount: 0,
+        completedRootTests: 0,
+        verifiedRootTests: 0,
+        inHouse: {
+          billableRootTests: 0,
+          billableAmount: 0,
+          completedRootTests: 0,
+          verifiedRootTests: 0,
+        },
+        bySubLab: [],
+        byTest: [],
+      },
       unmatched: { pending: 0, resolved: 0, discarded: 0, byReason: {} },
       instrumentWorkload: [],
     };

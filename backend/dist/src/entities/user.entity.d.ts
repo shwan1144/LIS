@@ -2,6 +2,7 @@ import { UserLabAssignment } from './user-lab-assignment.entity';
 import { UserShiftAssignment } from './user-shift-assignment.entity';
 import { UserDepartmentAssignment } from './user-department-assignment.entity';
 import { Lab } from './lab.entity';
+import { SubLab } from './sub-lab.entity';
 export declare class User {
     id: string;
     username: string;
@@ -11,6 +12,7 @@ export declare class User {
     email: string | null;
     role: string;
     defaultLabId: string | null;
+    subLabId: string | null;
     isActive: boolean;
     createdAt: Date;
     updatedAt: Date;
@@ -19,4 +21,5 @@ export declare class User {
     departmentAssignments: UserDepartmentAssignment[];
     defaultLab: Lab | null;
     lab: Lab | null;
+    subLab: SubLab | null;
 }

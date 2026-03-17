@@ -1,0 +1,56 @@
+.settings-sub-labs-page .ant-card-body {
+  padding: 16px;
+}
+
+.settings-sub-labs-modal .ant-modal-body {
+  padding-top: 12px;
+}
+
+.settings-sub-labs-card.ant-card-small > .ant-card-head {
+  min-height: 40px;
+  padding-inline: 14px;
+}
+
+.settings-sub-labs-card.ant-card-small > .ant-card-body {
+  padding: 14px;
+}
+
+.settings-sub-labs-modal .ant-form-item {
+  margin-bottom: 14px;
+}
+
+.settings-sub-labs-modal .ant-form-item:last-child {
+  margin-bottom: 0;
+}
+
+.settings-sub-labs-pricing-card .ant-card-extra {
+  padding-block: 8px;
+}
+
+.settings-sub-labs-pricing-list {
+  max-height: 360px;
+  overflow: auto;
+  padding-right: 4px;
+}
+
+.settings-sub-labs-pricing-card .ant-list-item {
+  padding-block: 10px;
+}
+
+.settings-sub-labs-pricing-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+}
+
+.settings-sub-labs-pricing-meta {
+  min-width: 0;
+}
+
+.settings-sub-labs-pricing-meta .ant-typography {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

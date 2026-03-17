@@ -15,6 +15,7 @@ interface RequestWithUser {
         username: string;
         labId: string;
         role?: string;
+        subLabId?: string | null;
     };
 }
 export declare class OrdersController {
@@ -22,14 +23,14 @@ export declare class OrdersController {
     private readonly logger;
     constructor(ordersService: OrdersService);
     create(req: RequestWithUser, dto: CreateOrderDto, view?: CreateOrderView): Promise<import("../entities/order.entity").Order | import("./dto/create-order-response.dto").CreateOrderSummaryDto>;
-    findAll(req: RequestWithUser, page?: string, size?: string, search?: string, status?: string, patientId?: string, shiftId?: string, startDate?: string, endDate?: string, dateFilterTimeZone?: string): Promise<{
+    findAll(req: RequestWithUser, page?: string, size?: string, search?: string, status?: string, patientId?: string, shiftId?: string, sourceSubLabId?: string, startDate?: string, endDate?: string, dateFilterTimeZone?: string): Promise<{
         items: import("../entities/order.entity").Order[];
         total: number;
         page: number;
         size: number;
         totalPages: number;
     }>;
-    estimatePrice(req: RequestWithUser, testIds?: string, shiftId?: string): Promise<{
+    estimatePrice(req: RequestWithUser, testIds?: string, shiftId?: string, sourceSubLabId?: string): Promise<{
         subtotal: number;
     }>;
     getTodayPatients(req: RequestWithUser): Promise<{
@@ -51,7 +52,7 @@ export declare class OrdersController {
     }): Promise<{
         ok: boolean;
     }>;
-    findHistory(req: RequestWithUser, page?: string, size?: string, search?: string, status?: string, patientId?: string, shiftId?: string, startDate?: string, endDate?: string, dateFilterTimeZone?: string, resultStatus?: OrderResultStatus): Promise<{
+    findHistory(req: RequestWithUser, page?: string, size?: string, search?: string, status?: string, patientId?: string, shiftId?: string, sourceSubLabId?: string, startDate?: string, endDate?: string, dateFilterTimeZone?: string, resultStatus?: OrderResultStatus): Promise<{
         items: import("./orders.service").OrderHistoryItem[];
         total: number;
         page: number;

@@ -34,6 +34,7 @@ import {
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import {
+  downloadResultDocument,
   downloadTestResultsPDF,
   enterResult,
   getAntibiotics,
@@ -42,7 +43,9 @@ import {
   getOrder,
   getWorklistStats,
   logReportAction,
+  removeResultDocument,
   searchOrdersHistory,
+  uploadResultDocument,
   updateOrderPayment,
   type AntibioticDto,
   type DownloadTestResultsPdfProfilingHeaders,
@@ -194,7 +197,7 @@ type EditResultContext = {
   normalMin: number | null;
   normalMax: number | null;
   normalText: string | null;
-  resultEntryType: 'NUMERIC' | 'QUALITATIVE' | 'TEXT' | 'CULTURE_SENSITIVITY';
+  resultEntryType: 'NUMERIC' | 'QUALITATIVE' | 'TEXT' | 'CULTURE_SENSITIVITY' | 'PDF_UPLOAD';
   resultTextOptions: { value: string; flag?: string | null; isDefault?: boolean }[] | null;
   allowCustomResultText: boolean;
   parameterDefinitions: TestParameterDefinition[];
@@ -555,6 +558,29 @@ function buildResultsMessage(
   ].join('\n');
 }
 
+function openBlobInNewTab(blob: Blob): void {
+  const objectUrl = URL.createObjectURL(blob);
+  const popup = window.open(objectUrl, '_blank', 'noopener');
+  if (!popup) {
+    URL.revokeObjectURL(objectUrl);
+    throw new Error('Popup blocked');
+  }
+  const revoke = () => URL.revokeObjectURL(objectUrl);
+  popup.addEventListener('beforeunload', revoke, { once: true });
+  window.setTimeout(revoke, 60_000);
+}
+
+function downloadBlob(blob: Blob, fileName: string): void {
+  const objectUrl = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = objectUrl;
+  link.download = fileName;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.setTimeout(() => URL.revokeObjectURL(objectUrl), 0);
+}
+
 function formatOrderTestResultPreview(orderTest: OrderTestDto, allTests: OrderTestDto[] = []): string {
   if (orderTest.test?.type === 'PANEL') {
     const children = allTests.filter((t) => t.parentOrderTestId === orderTest.id);
@@ -570,6 +596,10 @@ function formatOrderTestResultPreview(orderTest: OrderTestDto, allTests: OrderTe
   const cultureSummary = formatCultureResultSummary(orderTest.cultureResult);
   if (cultureSummary) {
     return cultureSummary;
+  }
+
+  if (orderTest.resultDocument?.fileName) {
+    return 'PDF attached';
   }
 
   const parameters = orderTest.resultParameters;
@@ -824,8 +854,10 @@ export function ReportsPage() {
   const [editResultModalOpen, setEditResultModalOpen] = useState(false);
   const [editResultContext, setEditResultContext] = useState<EditResultContext | null>(null);
   const [savingResult, setSavingResult] = useState(false);
+  const [resultDocumentBusyTargetId, setResultDocumentBusyTargetId] = useState<string | null>(null);
   const [nowMs, setNowMs] = useState(() => Date.now());
   const [editResultForm] = Form.useForm<any>();
+  const editPdfInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
   const antibioticById = useMemo(
     () => new Map(antibiotics.map((antibiotic) => [antibiotic.id, antibiotic])),
     [antibiotics],
@@ -1656,7 +1688,8 @@ export function ReportsPage() {
         resultValue:
           resultEntryType === 'QUALITATIVE' ||
             resultEntryType === 'TEXT' ||
-            resultEntryType === 'CULTURE_SENSITIVITY'
+            resultEntryType === 'CULTURE_SENSITIVITY' ||
+            resultEntryType === 'PDF_UPLOAD'
             ? undefined
             : valueCandidate,
         resultText: initialResultText,
@@ -1678,7 +1711,11 @@ export function ReportsPage() {
     setSavingResult(true);
 
     try {
-      const savePromises = targets.map(async (target) => {
+      const savePromises = targets.flatMap((target) => {
+        if ((target.test?.resultEntryType ?? 'NUMERIC') === 'PDF_UPLOAD') {
+          return [];
+        }
+        return [(async () => {
         const itemValues = allValues[target.id] || {};
         const rawResultValue =
           itemValues.resultValue != null ? String(itemValues.resultValue).trim() : '';
@@ -1740,7 +1777,13 @@ export function ReportsPage() {
           cultureResult,
           forceEditVerified: editResultContext.wasVerified,
         });
+        })()];
       });
+
+      if (savePromises.length === 0) {
+        message.info('Use the PDF upload controls for this test.');
+        return;
+      }
 
       await Promise.all(savePromises);
 
@@ -1761,6 +1804,94 @@ export function ReportsPage() {
       setSavingResult(false);
     }
   };
+
+  const handlePreviewResultDocument = useCallback(async (target: OrderTestDto) => {
+    if (!target.resultDocument) return;
+    setResultDocumentBusyTargetId(target.id);
+    try {
+      const blob = await downloadResultDocument(target.id);
+      openBlobInNewTab(blob);
+    } catch {
+      message.error('Failed to open result PDF');
+    } finally {
+      setResultDocumentBusyTargetId(null);
+    }
+  }, []);
+
+  const handleDownloadResultDocument = useCallback(async (target: OrderTestDto) => {
+    if (!target.resultDocument) return;
+    setResultDocumentBusyTargetId(target.id);
+    try {
+      const blob = await downloadResultDocument(target.id, { download: true });
+      downloadBlob(blob, target.resultDocument.fileName || 'result.pdf');
+    } catch {
+      message.error('Failed to download result PDF');
+    } finally {
+      setResultDocumentBusyTargetId(null);
+    }
+  }, []);
+
+  const handleUploadResultDocument = useCallback(async (target: OrderTestDto, file: File) => {
+    if (!editResultContext) return;
+    setResultDocumentBusyTargetId(target.id);
+    try {
+      await uploadResultDocument(target.id, file, {
+        forceEditVerified: editResultContext.wasVerified,
+      });
+      message.success('Result PDF uploaded');
+      const refreshedOrder = await ensureOrderDetails(editResultContext.orderId, 'retry');
+      if (refreshedOrder) {
+        const refreshedTests = new Map(
+          (refreshedOrder.samples ?? [])
+            .flatMap((sample) => sample.orderTests ?? [])
+            .map((item) => [item.id, item] as const),
+        );
+        setEditResultContext((previous) =>
+          previous
+            ? {
+                ...previous,
+                targetItems: previous.targetItems.map((item) => refreshedTests.get(item.id) ?? item),
+              }
+            : previous,
+        );
+      }
+    } catch {
+      message.error('Failed to upload result PDF');
+    } finally {
+      setResultDocumentBusyTargetId(null);
+    }
+  }, [editResultContext, ensureOrderDetails]);
+
+  const handleRemoveResultDocument = useCallback(async (target: OrderTestDto) => {
+    if (!editResultContext) return;
+    setResultDocumentBusyTargetId(target.id);
+    try {
+      await removeResultDocument(target.id, {
+        forceEditVerified: editResultContext.wasVerified,
+      });
+      message.success('Result PDF removed');
+      const refreshedOrder = await ensureOrderDetails(editResultContext.orderId, 'retry');
+      if (refreshedOrder) {
+        const refreshedTests = new Map(
+          (refreshedOrder.samples ?? [])
+            .flatMap((sample) => sample.orderTests ?? [])
+            .map((item) => [item.id, item] as const),
+        );
+        setEditResultContext((previous) =>
+          previous
+            ? {
+                ...previous,
+                targetItems: previous.targetItems.map((item) => refreshedTests.get(item.id) ?? item),
+              }
+            : previous,
+        );
+      }
+    } catch {
+      message.error('Failed to remove result PDF');
+    } finally {
+      setResultDocumentBusyTargetId(null);
+    }
+  }, [editResultContext, ensureOrderDetails]);
 
   const renderExpandedOrder = (orderSummary: OrderHistoryItemDto) => {
     const order = orderDetailsCache[orderSummary.id];
@@ -2720,6 +2851,85 @@ export function ReportsPage() {
                                     }
                                     micUnit={target.test?.cultureConfig?.micUnit ?? null}
                                   />
+                                ) : target.test?.resultEntryType === 'PDF_UPLOAD' ? (
+                                  <div
+                                    style={{
+                                      display: 'flex',
+                                      flexDirection: 'column',
+                                      gap: 8,
+                                      alignItems: isPanel ? 'center' : 'flex-start',
+                                    }}
+                                  >
+                                    <input
+                                      ref={(node) => {
+                                        editPdfInputRefs.current[target.id] = node;
+                                      }}
+                                      type="file"
+                                      accept="application/pdf"
+                                      style={{ display: 'none' }}
+                                      onChange={(event) => {
+                                        const file = event.target.files?.[0];
+                                        event.currentTarget.value = '';
+                                        if (!file) return;
+                                        void handleUploadResultDocument(target, file);
+                                      }}
+                                    />
+                                    {target.resultDocument ? (
+                                      <div>
+                                        <Text strong style={{ display: 'block' }}>
+                                          {target.resultDocument.fileName}
+                                        </Text>
+                                        <Text type="secondary" style={{ fontSize: 12 }}>
+                                          {(target.resultDocument.sizeBytes / 1024 / 1024).toFixed(2)} MB
+                                        </Text>
+                                      </div>
+                                    ) : (
+                                      <Text type="secondary" italic style={{ fontSize: 12 }}>
+                                        No PDF uploaded yet
+                                      </Text>
+                                    )}
+                                    <Space wrap>
+                                      <Button
+                                        size="small"
+                                        loading={resultDocumentBusyTargetId === target.id}
+                                        onClick={() => editPdfInputRefs.current[target.id]?.click()}
+                                      >
+                                        {target.resultDocument ? 'Replace PDF' : 'Upload PDF'}
+                                      </Button>
+                                      {target.resultDocument ? (
+                                        <>
+                                          <Button
+                                            size="small"
+                                            disabled={resultDocumentBusyTargetId === target.id}
+                                            onClick={() => {
+                                              void handlePreviewResultDocument(target);
+                                            }}
+                                          >
+                                            View PDF
+                                          </Button>
+                                          <Button
+                                            size="small"
+                                            disabled={resultDocumentBusyTargetId === target.id}
+                                            onClick={() => {
+                                              void handleDownloadResultDocument(target);
+                                            }}
+                                          >
+                                            Download
+                                          </Button>
+                                          <Button
+                                            size="small"
+                                            danger
+                                            disabled={resultDocumentBusyTargetId === target.id}
+                                            onClick={() => {
+                                              void handleRemoveResultDocument(target);
+                                            }}
+                                          >
+                                            Remove
+                                          </Button>
+                                        </>
+                                      ) : null}
+                                    </Space>
+                                  </div>
                                 ) : (
                                   <Form.Item
                                     name={[target.id, 'resultText']}

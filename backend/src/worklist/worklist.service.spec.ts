@@ -123,6 +123,9 @@ function createService(
   const auditService = {
     log: jest.fn().mockResolvedValue(undefined),
   };
+  const reportsService = {
+    syncReportToS3: jest.fn().mockResolvedValue(undefined),
+  };
 
   const service = new WorklistService(
     orderTestRepo as unknown as Repository<OrderTest>,
@@ -135,6 +138,8 @@ function createService(
     {} as Repository<Department>,
     panelStatusService as never,
     auditService as never,
+    {} as never,
+    reportsService as never,
   );
 
   (service as any).syncOrderStatus = jest.fn().mockResolvedValue(undefined);
@@ -143,6 +148,7 @@ function createService(
     service,
     panelStatusService,
     auditService,
+    reportsService,
   };
 }
 
@@ -221,7 +227,7 @@ describe('WorklistService result guards', () => {
       find: jest.fn().mockResolvedValue([blank, valid]),
       save: jest.fn().mockResolvedValue([valid]),
     };
-    const { service, auditService } = createService(orderTestRepo);
+    const { service, auditService, reportsService } = createService(orderTestRepo);
 
     const result = await service.verifyMultiple(
       ['blank-test', 'valid-test'],
@@ -235,6 +241,7 @@ describe('WorklistService result guards', () => {
     expect(valid.status).toBe(OrderTestStatus.VERIFIED);
     expect(blank.status).toBe(OrderTestStatus.COMPLETED);
     expect(auditService.log).toHaveBeenCalledTimes(1);
+    expect(reportsService.syncReportToS3).toHaveBeenCalledWith('order-1', 'lab-1');
   });
 
   it('stores culture entry values in shared lab history after save', async () => {

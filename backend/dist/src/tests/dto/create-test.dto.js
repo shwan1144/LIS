@@ -18,6 +18,7 @@ exports.TEST_RESULT_ENTRY_TYPES = [
     'QUALITATIVE',
     'TEXT',
     'CULTURE_SENSITIVITY',
+    'PDF_UPLOAD',
 ];
 exports.TEST_RESULT_FLAGS = ['N', 'H', 'L', 'POS', 'NEG', 'ABN'];
 exports.TEST_NUMERIC_AGE_UNITS = ['DAY', 'MONTH', 'YEAR'];

@@ -22,6 +22,7 @@ import {
 import type { ColumnsType } from 'antd/es/table';
 import dayjs from 'dayjs';
 import {
+  downloadResultDocument,
   getAntibiotics,
   getDepartments,
   getWorklistOrderTests,
@@ -73,6 +74,9 @@ interface GroupedOrderCache {
 }
 
 function formatResult(item: WorklistItem): string {
+  if (item.resultDocument?.fileName) {
+    return 'External PDF attached';
+  }
   const cultureSummary = formatCultureResultSummary(item.cultureResult);
   if (cultureSummary) {
     return cultureSummary;
@@ -89,6 +93,29 @@ function formatResult(item: WorklistItem): string {
       .join(', ');
   }
   return '-';
+}
+
+function openBlobInNewTab(blob: Blob): void {
+  const objectUrl = URL.createObjectURL(blob);
+  const popup = window.open(objectUrl, '_blank', 'noopener');
+  if (!popup) {
+    URL.revokeObjectURL(objectUrl);
+    throw new Error('Popup blocked');
+  }
+  const revoke = () => URL.revokeObjectURL(objectUrl);
+  popup.addEventListener('beforeunload', revoke, { once: true });
+  window.setTimeout(revoke, 60_000);
+}
+
+function downloadBlob(blob: Blob, fileName: string): void {
+  const objectUrl = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = objectUrl;
+  anchor.download = fileName;
+  document.body.appendChild(anchor);
+  anchor.click();
+  document.body.removeChild(anchor);
+  window.setTimeout(() => URL.revokeObjectURL(objectUrl), 0);
 }
 
 function formatReferenceRange(item: WorklistItem): string {
@@ -250,6 +277,9 @@ export function VerificationPage() {
     string | null
   >(null);
   const [working, setWorking] = useState(false);
+  const [resultDocumentBusyTargetId, setResultDocumentBusyTargetId] = useState<string | null>(
+    null,
+  );
 
   const [rejectReason, setRejectReason] = useState('');
   const [rejectContext, setRejectContext] = useState<{
@@ -804,6 +834,32 @@ export function VerificationPage() {
     );
   };
 
+  const handlePreviewResultDocument = useCallback(async (item: WorklistItem) => {
+    if (!item.resultDocument) return;
+    setResultDocumentBusyTargetId(item.id);
+    try {
+      const blob = await downloadResultDocument(item.id);
+      openBlobInNewTab(blob);
+    } catch {
+      message.error('Failed to open result PDF');
+    } finally {
+      setResultDocumentBusyTargetId((current) => (current === item.id ? null : current));
+    }
+  }, []);
+
+  const handleDownloadResultDocument = useCallback(async (item: WorklistItem) => {
+    if (!item.resultDocument) return;
+    setResultDocumentBusyTargetId(item.id);
+    try {
+      const blob = await downloadResultDocument(item.id, { download: true });
+      downloadBlob(blob, item.resultDocument.fileName || 'result.pdf');
+    } catch {
+      message.error('Failed to download result PDF');
+    } finally {
+      setResultDocumentBusyTargetId((current) => (current === item.id ? null : current));
+    }
+  }, []);
+
   return (
     <div>
       <style>{`
@@ -1195,6 +1251,7 @@ export function VerificationPage() {
                 const isCultureEntry =
                   item.testType !== 'PANEL' &&
                   item.resultEntryType === 'CULTURE_SENSITIVITY';
+                const hasPdfDocument = Boolean(item.resultDocument?.fileName);
                 const perRowActionEnabled =
                   reviewGroup.groupKind === 'single' &&
                   item.testType !== 'PANEL' &&
@@ -1267,13 +1324,39 @@ export function VerificationPage() {
                       </div>
 
                       <div style={{ flex: '1 1 15%', paddingRight: 8, textAlign: 'center' }}>
-                        <Text style={{ fontSize: 12 }}>
-                          {isPanelRoot
-                            ? 'Panel group'
-                            : isCultureEntry
-                              ? 'Culture details'
-                              : formatResult(item)}
-                        </Text>
+                        <Space direction="vertical" size={4} style={{ width: '100%' }}>
+                          <Text style={{ fontSize: 12 }}>
+                            {isPanelRoot
+                              ? 'Panel group'
+                              : isCultureEntry
+                                ? 'Culture details'
+                                : formatResult(item)}
+                          </Text>
+                          {hasPdfDocument ? (
+                            <Space size={4} wrap style={{ justifyContent: 'center' }}>
+                              <Button
+                                size="small"
+                                type="link"
+                                disabled={resultDocumentBusyTargetId === item.id}
+                                onClick={() => {
+                                  void handlePreviewResultDocument(item);
+                                }}
+                              >
+                                View PDF
+                              </Button>
+                              <Button
+                                size="small"
+                                type="link"
+                                disabled={resultDocumentBusyTargetId === item.id}
+                                onClick={() => {
+                                  void handleDownloadResultDocument(item);
+                                }}
+                              >
+                                Download
+                              </Button>
+                            </Space>
+                          ) : null}
+                        </Space>
                       </div>
 
                       <div style={{ flex: '1 1 7%', textAlign: 'center', fontSize: 12 }}>

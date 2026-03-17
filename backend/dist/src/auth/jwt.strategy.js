@@ -20,10 +20,11 @@ const typeorm_1 = require("@nestjs/typeorm");
 const typeorm_2 = require("typeorm");
 const user_entity_1 = require("../entities/user.entity");
 const platform_user_entity_1 = require("../entities/platform-user.entity");
+const sub_lab_entity_1 = require("../entities/sub-lab.entity");
 const security_env_1 = require("../config/security-env");
 const jwtSecret = (0, security_env_1.requireSecret)('JWT_SECRET', 'lis-dev-secret-change-in-production', 'JwtStrategy');
 let JwtStrategy = class JwtStrategy extends (0, passport_1.PassportStrategy)(passport_jwt_1.Strategy, 'lab-jwt') {
-    constructor(userRepository, platformUserRepository) {
+    constructor(userRepository, platformUserRepository, subLabRepository) {
         super({
             jwtFromRequest: passport_jwt_1.ExtractJwt.fromAuthHeaderAsBearerToken(),
             ignoreExpiration: false,
@@ -32,6 +33,7 @@ let JwtStrategy = class JwtStrategy extends (0, passport_1.PassportStrategy)(pas
         });
         this.userRepository = userRepository;
         this.platformUserRepository = platformUserRepository;
+        this.subLabRepository = subLabRepository;
     }
     async validate(req, payload) {
         if (payload.tokenType === 'lab_impersonation_access') {
@@ -50,6 +52,7 @@ let JwtStrategy = class JwtStrategy extends (0, passport_1.PassportStrategy)(pas
                 username: platformUser.email,
                 labId: payload.labId,
                 role: 'SUPER_ADMIN',
+                subLabId: null,
                 isImpersonation: true,
                 platformUserId: platformUser.id,
             };
@@ -59,6 +62,18 @@ let JwtStrategy = class JwtStrategy extends (0, passport_1.PassportStrategy)(pas
         });
         if (!user) {
             throw new common_1.UnauthorizedException();
+        }
+        if (user.role === 'SUB_LAB') {
+            const subLabId = user.subLabId?.trim() || null;
+            if (!subLabId) {
+                throw new common_1.UnauthorizedException('Sub-lab user is missing sub-lab assignment');
+            }
+            const subLab = await this.subLabRepository.findOne({
+                where: { id: subLabId, labId: payload.labId, isActive: true },
+            });
+            if (!subLab) {
+                throw new common_1.UnauthorizedException('Sub-lab account is inactive');
+            }
         }
         if (user.labId && payload.labId !== user.labId) {
             throw new common_1.UnauthorizedException('Token lab mismatch');
@@ -71,6 +86,7 @@ let JwtStrategy = class JwtStrategy extends (0, passport_1.PassportStrategy)(pas
             username: payload.username,
             labId: payload.labId,
             role: user.role,
+            subLabId: user.subLabId ?? null,
         };
     }
 };
@@ -79,7 +95,9 @@ exports.JwtStrategy = JwtStrategy = __decorate([
     (0, common_1.Injectable)(),
     __param(0, (0, typeorm_1.InjectRepository)(user_entity_1.User)),
     __param(1, (0, typeorm_1.InjectRepository)(platform_user_entity_1.PlatformUser)),
+    __param(2, (0, typeorm_1.InjectRepository)(sub_lab_entity_1.SubLab)),
     __metadata("design:paramtypes", [typeorm_2.Repository,
+        typeorm_2.Repository,
         typeorm_2.Repository])
 ], JwtStrategy);
 //# sourceMappingURL=jwt.strategy.js.map

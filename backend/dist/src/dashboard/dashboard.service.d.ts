@@ -6,6 +6,7 @@ import { Lab } from '../entities/lab.entity';
 import { PlatformSetting } from '../entities/platform-setting.entity';
 import { Shift } from '../entities/shift.entity';
 import { Department } from '../entities/department.entity';
+import { SubLab } from '../entities/sub-lab.entity';
 import { OrdersService } from '../orders/orders.service';
 import { UnmatchedResultsService } from '../unmatched/unmatched-results.service';
 export interface DashboardKpis {
@@ -65,6 +66,29 @@ export interface StatisticsDto {
         abnormalCount: number;
         totalVerified: number;
     };
+    subLabBilling: {
+        activeSourceType: StatisticsSourceType;
+        billableRootTests: number;
+        billableAmount: number;
+        completedRootTests: number;
+        verifiedRootTests: number;
+        inHouse: StatisticsBillingSummary;
+        bySubLab: {
+            subLabId: string;
+            subLabName: string;
+            billableRootTests: number;
+            billableAmount: number;
+            completedRootTests: number;
+            verifiedRootTests: number;
+        }[];
+        byTest: {
+            testId: string;
+            testCode: string;
+            testName: string;
+            count: number;
+            amount: number;
+        }[];
+    };
     unmatched: {
         pending: number;
         resolved: number;
@@ -77,9 +101,18 @@ export interface StatisticsDto {
         count: number;
     }[];
 }
+export type StatisticsSourceType = 'ALL' | 'IN_HOUSE' | 'SUB_LAB';
+export interface StatisticsBillingSummary {
+    billableRootTests: number;
+    billableAmount: number;
+    completedRootTests: number;
+    verifiedRootTests: number;
+}
 export interface StatisticsFilterOptions {
     shiftId?: string | null;
     departmentId?: string | null;
+    sourceType?: StatisticsSourceType | null;
+    subLabId?: string | null;
 }
 export declare class DashboardService {
     private readonly patientRepo;
@@ -89,9 +122,10 @@ export declare class DashboardService {
     private readonly platformSettingRepo;
     private readonly shiftRepo;
     private readonly departmentRepo;
+    private readonly subLabRepo;
     private readonly ordersService;
     private readonly unmatchedService;
-    constructor(patientRepo: Repository<Patient>, orderTestRepo: Repository<OrderTest>, orderRepo: Repository<Order>, labRepo: Repository<Lab>, platformSettingRepo: Repository<PlatformSetting>, shiftRepo: Repository<Shift>, departmentRepo: Repository<Department>, ordersService: OrdersService, unmatchedService: UnmatchedResultsService);
+    constructor(patientRepo: Repository<Patient>, orderTestRepo: Repository<OrderTest>, orderRepo: Repository<Order>, labRepo: Repository<Lab>, platformSettingRepo: Repository<PlatformSetting>, shiftRepo: Repository<Shift>, departmentRepo: Repository<Department>, subLabRepo: Repository<SubLab>, ordersService: OrdersService, unmatchedService: UnmatchedResultsService);
     getKpis(labId: string): Promise<DashboardKpis>;
     private getTotalPatientsCount;
     getLabTimeZone(labId: string): Promise<string>;
@@ -112,4 +146,11 @@ export declare class DashboardService {
     private getRecentAverageTatHours;
     private getQualityForPeriod;
     private normalizeAnnouncementText;
+    private getSubLabBillingForPeriod;
+    private buildFilteredBillableRootTestsQuery;
+    private getBillingSummaryForQuery;
+    private getBillingStatusCountMap;
+    private applySourceTypeFilter;
+    private applySpecificSubLabFilter;
+    private getSourceTypeLabel;
 }

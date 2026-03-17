@@ -6,6 +6,7 @@ export type LabUserRole =
   | 'VERIFIER'
   | 'DOCTOR'
   | 'INSTRUMENT_SERVICE'
+  | 'SUB_LAB'
   | string;
 
 const ADMIN_ROLES = new Set(['LAB_ADMIN', 'SUPER_ADMIN']);
@@ -16,6 +17,7 @@ const PATH_PREFIXES_BY_ROLE: Record<string, readonly string[]> = {
   VERIFIER: ['/verification'],
   DOCTOR: ['/reports'],
   INSTRUMENT_SERVICE: ['/settings/instruments'],
+  SUB_LAB: ['/sub-lab'],
 };
 
 type LabAction =
@@ -45,6 +47,7 @@ export function getDefaultRouteForRole(role: LabUserRole | null | undefined): st
   if (role === 'VERIFIER') return '/verification';
   if (role === 'DOCTOR') return '/reports';
   if (role === 'INSTRUMENT_SERVICE') return '/settings/instruments';
+  if (role === 'SUB_LAB') return '/sub-lab/orders';
   return '/orders';
 }
 

@@ -1,5 +1,6 @@
 import {
   Controller,
+  Delete,
   Get,
   ForbiddenException,
   Patch,
@@ -11,7 +12,11 @@ import {
   Req,
   ParseUUIDPipe,
   ParseEnumPipe,
+  Res,
+  UploadedFile,
+  UseInterceptors,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import {
   WorklistEntryStatus,
   WorklistOrderMode,
@@ -29,6 +34,7 @@ import {
   assertWorklistViewAllowed,
   LAB_ROLE_GROUPS,
 } from '../auth/lab-role-matrix';
+import type { Response } from 'express';
 
 interface RequestWithUser {
   user: {
@@ -40,6 +46,12 @@ interface RequestWithUser {
     role?: string;
   };
 }
+
+type UploadedResultDocumentFile = {
+  originalname: string;
+  mimetype?: string;
+  buffer: Buffer;
+};
 
 @Controller('worklist')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -250,6 +262,68 @@ export class WorklistController {
       throw new Error('Lab ID not found in token');
     }
     return this.worklistService.batchEnterResults(labId, actor, req.user?.role, body.updates);
+  }
+
+  @Post('order-tests/:id/result-document')
+  @Roles(...LAB_ROLE_GROUPS.WORKLIST_ENTRY)
+  @UseInterceptors(FileInterceptor('file'))
+  async uploadResultDocument(
+    @Req() req: RequestWithUser,
+    @Param('id', ParseUUIDPipe) id: string,
+    @UploadedFile() file: UploadedResultDocumentFile | undefined,
+    @Body('forceEditVerified') forceEditVerified?: string | boolean,
+  ) {
+    const labId = req.user?.labId;
+    const actor = buildLabActorContext(req.user);
+    if (!labId) {
+      throw new Error('Lab ID not found in token');
+    }
+    return this.worklistService.uploadResultDocument(
+      id,
+      labId,
+      actor,
+      req.user?.role,
+      file,
+      { forceEditVerified: forceEditVerified === true || forceEditVerified === 'true' },
+    );
+  }
+
+  @Delete('order-tests/:id/result-document')
+  @Roles(...LAB_ROLE_GROUPS.WORKLIST_ENTRY)
+  async removeResultDocument(
+    @Req() req: RequestWithUser,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Query('forceEditVerified') forceEditVerified?: string,
+  ) {
+    const labId = req.user?.labId;
+    const actor = buildLabActorContext(req.user);
+    if (!labId) {
+      throw new Error('Lab ID not found in token');
+    }
+    return this.worklistService.removeResultDocument(id, labId, actor, req.user?.role, {
+      forceEditVerified: forceEditVerified === 'true',
+    });
+  }
+
+  @Get('order-tests/:id/result-document')
+  @Roles(...LAB_ROLE_GROUPS.WORKLIST_LANE_READ)
+  async downloadResultDocument(
+    @Req() req: RequestWithUser,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Query('download') download?: string,
+    @Res() res?: Response,
+  ) {
+    const labId = req.user?.labId;
+    if (!labId || !res) {
+      throw new Error('Lab ID not found in token');
+    }
+    const result = await this.worklistService.getResultDocumentForLab(id, labId);
+    res.setHeader('Content-Type', result.mimeType);
+    res.setHeader(
+      'Content-Disposition',
+      `${download === 'true' ? 'attachment' : 'inline'}; filename="${encodeURIComponent(result.fileName)}"`,
+    );
+    return res.send(result.buffer);
   }
 
   @Patch(':id/verify')

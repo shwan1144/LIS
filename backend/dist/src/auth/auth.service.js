@@ -22,6 +22,7 @@ const user_entity_1 = require("../entities/user.entity");
 const lab_entity_1 = require("../entities/lab.entity");
 const platform_user_entity_1 = require("../entities/platform-user.entity");
 const admin_lab_portal_token_entity_1 = require("../entities/admin-lab-portal-token.entity");
+const sub_lab_entity_1 = require("../entities/sub-lab.entity");
 const audit_service_1 = require("../audit/audit.service");
 const audit_log_entity_1 = require("../entities/audit-log.entity");
 const refresh_token_entity_1 = require("../entities/refresh-token.entity");
@@ -29,11 +30,12 @@ const refresh_token_service_1 = require("./refresh-token.service");
 const password_util_1 = require("./password.util");
 const auth_rate_limit_service_1 = require("./auth-rate-limit.service");
 let AuthService = class AuthService {
-    constructor(userRepository, labRepository, platformUserRepository, adminLabPortalTokenRepository, jwtService, auditService, refreshTokenService, authRateLimitService) {
+    constructor(userRepository, labRepository, platformUserRepository, adminLabPortalTokenRepository, subLabRepository, jwtService, auditService, refreshTokenService, authRateLimitService) {
         this.userRepository = userRepository;
         this.labRepository = labRepository;
         this.platformUserRepository = platformUserRepository;
         this.adminLabPortalTokenRepository = adminLabPortalTokenRepository;
+        this.subLabRepository = subLabRepository;
         this.jwtService = jwtService;
         this.auditService = auditService;
         this.refreshTokenService = refreshTokenService;
@@ -67,11 +69,13 @@ let AuthService = class AuthService {
         if (!lab) {
             throw new common_1.UnauthorizedException('User has no lab assigned');
         }
+        const subLab = await this.resolveActiveSubLabForUser(user);
         const payload = {
             sub: user.id,
             username: user.username,
             labId: lab.id,
             role: user.role,
+            subLabId: subLab?.id ?? null,
             tokenType: 'lab_access',
         };
         const accessToken = this.jwtService.sign(payload);
@@ -112,7 +116,7 @@ let AuthService = class AuthService {
         }
         const user = await this.userRepository.findOne({
             where: { id: rotated.actorId, isActive: true },
-            relations: ['defaultLab', 'labAssignments', 'labAssignments.lab', 'lab'],
+            relations: ['defaultLab', 'labAssignments', 'labAssignments.lab', 'lab', 'subLab'],
         });
         if (!user) {
             throw new common_1.UnauthorizedException('User not found');
@@ -125,11 +129,13 @@ let AuthService = class AuthService {
         if (!lab) {
             throw new common_1.UnauthorizedException('Lab not found for refresh token');
         }
+        const subLab = await this.resolveActiveSubLabForUser(user);
         const payload = {
             sub: user.id,
             username: user.username,
             labId: lab.id,
             role: user.role,
+            subLabId: subLab?.id ?? null,
             tokenType: 'lab_access',
         };
         return {
@@ -345,13 +351,33 @@ let AuthService = class AuthService {
         if (resolvedLabId) {
             return this.userRepository.findOne({
                 where: { username, labId: resolvedLabId, isActive: true },
-                relations: ['defaultLab', 'labAssignments', 'labAssignments.lab', 'lab'],
+                relations: ['defaultLab', 'labAssignments', 'labAssignments.lab', 'lab', 'subLab'],
             });
         }
         return this.userRepository.findOne({
             where: { username, isActive: true },
-            relations: ['defaultLab', 'labAssignments', 'labAssignments.lab', 'lab'],
+            relations: ['defaultLab', 'labAssignments', 'labAssignments.lab', 'lab', 'subLab'],
         });
+    }
+    async resolveActiveSubLabForUser(user) {
+        if (!user.subLabId) {
+            return null;
+        }
+        const subLab = user.subLab && user.subLab.id === user.subLabId
+            ? user.subLab
+            : await this.subLabRepository.findOne({
+                where: { id: user.subLabId },
+            });
+        if (!subLab || !subLab.isActive) {
+            throw new common_1.UnauthorizedException('Sub-lab account is inactive');
+        }
+        if (user.role !== 'SUB_LAB') {
+            return null;
+        }
+        if (subLab.labId !== (user.labId ?? user.defaultLabId ?? null)) {
+            throw new common_1.UnauthorizedException('Sub-lab lab assignment mismatch');
+        }
+        return subLab;
     }
     resolveLabForUser(user, resolvedLabId) {
         if (resolvedLabId) {
@@ -452,6 +478,8 @@ let AuthService = class AuthService {
             username: user.username,
             fullName: user.fullName,
             role: user.role,
+            subLabId: user.subLabId ?? null,
+            subLabName: user.subLab?.name ?? null,
             isImpersonation: false,
         };
     }
@@ -473,7 +501,9 @@ exports.AuthService = AuthService = __decorate([
     __param(1, (0, typeorm_1.InjectRepository)(lab_entity_1.Lab)),
     __param(2, (0, typeorm_1.InjectRepository)(platform_user_entity_1.PlatformUser)),
     __param(3, (0, typeorm_1.InjectRepository)(admin_lab_portal_token_entity_1.AdminLabPortalToken)),
+    __param(4, (0, typeorm_1.InjectRepository)(sub_lab_entity_1.SubLab)),
     __metadata("design:paramtypes", [typeorm_2.Repository,
+        typeorm_2.Repository,
         typeorm_2.Repository,
         typeorm_2.Repository,
         typeorm_2.Repository,

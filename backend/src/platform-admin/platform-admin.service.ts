@@ -2469,7 +2469,8 @@ export class PlatformAdminService {
     if (
       normalized === 'QUALITATIVE' ||
       normalized === 'TEXT' ||
-      normalized === 'CULTURE_SENSITIVITY'
+      normalized === 'CULTURE_SENSITIVITY' ||
+      normalized === 'PDF_UPLOAD'
     ) {
       return normalized;
     }

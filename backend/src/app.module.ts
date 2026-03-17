@@ -24,8 +24,10 @@ import { AdminAuthModule } from './admin-auth/admin-auth.module';
 import { PlatformAdminModule } from './platform-admin/platform-admin.module';
 import { LabApiModule } from './lab-api/lab-api.module';
 import { GatewayModule } from './gateway/gateway.module';
+import { SubLabsModule } from './sub-labs/sub-labs.module';
 import { DATABASE_ENTITIES } from './database/entities';
 import { DatabaseSupportModule } from './database/database-support.module';
+import { StorageModule } from './storage/storage.module';
 
 const useDatabaseUrl = Boolean(process.env.DATABASE_URL);
 const isProduction = (process.env.NODE_ENV || '').toLowerCase() === 'production';
@@ -82,6 +84,8 @@ const typeOrmConfig = useDatabaseUrl
     PlatformAdminModule,
     LabApiModule,
     GatewayModule,
+    SubLabsModule,
+    StorageModule,
   ],
   controllers: [AppController],
   providers: [

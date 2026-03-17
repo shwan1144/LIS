@@ -19,6 +19,8 @@ const test_entity_1 = require("../entities/test.entity");
 const pricing_entity_1 = require("../entities/pricing.entity");
 const test_component_entity_1 = require("../entities/test-component.entity");
 const lab_orders_worklist_entity_1 = require("../entities/lab-orders-worklist.entity");
+const sub_lab_entity_1 = require("../entities/sub-lab.entity");
+const sub_lab_test_price_entity_1 = require("../entities/sub-lab-test-price.entity");
 const orders_service_1 = require("./orders.service");
 const orders_controller_1 = require("./orders.controller");
 let OrdersModule = class OrdersModule {
@@ -38,6 +40,8 @@ exports.OrdersModule = OrdersModule = __decorate([
                 pricing_entity_1.Pricing,
                 test_component_entity_1.TestComponent,
                 lab_orders_worklist_entity_1.LabOrdersWorklist,
+                sub_lab_entity_1.SubLab,
+                sub_lab_test_price_entity_1.SubLabTestPrice,
             ]),
         ],
         controllers: [orders_controller_1.OrdersController],

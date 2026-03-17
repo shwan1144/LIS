@@ -15,7 +15,7 @@ const QRCode = require('qrcode') as {
   ): Promise<string>;
 };
 import { Order } from '../entities/order.entity';
-import { OrderTest } from '../entities/order-test.entity';
+import { OrderTest, type OrderTestResultDocumentSummary } from '../entities/order-test.entity';
 import { Patient } from '../entities/patient.entity';
 import { Lab } from '../entities/lab.entity';
 import { User } from '../entities/user.entity';
@@ -29,6 +29,8 @@ import type { Browser } from 'playwright';
 import { resolveNormalText, resolveNumericRange } from '../tests/normal-range.util';
 import { formatPatientAgeDisplay, getPatientAgeSnapshot } from '../patients/patient-age.util';
 import { hasMeaningfulOrderTestResult } from '../order-tests/order-test-result.util';
+import { ResultDocumentsService } from '../result-documents/result-documents.service';
+import { FileStorageService } from '../storage/file-storage.service';
 
 type PdfKitDocument = InstanceType<typeof PDFDocument>;
 const REPORT_BANNER_WIDTH = 2480;
@@ -46,6 +48,8 @@ export interface PublicResultTestItem {
   resultValue: string | null;
   unit: string | null;
   verifiedAt: string | null;
+  resultEntryType: string;
+  resultDocument: OrderTestResultDocumentSummary | null;
 }
 
 export interface PublicResultStatus {
@@ -150,6 +154,16 @@ function getNormalRange(
 }
 
 function formatResultValue(ot: OrderTest): string {
+  const resultEntryType = String(
+    (ot.test as { resultEntryType?: unknown } | undefined)?.resultEntryType ?? '',
+  ).toUpperCase();
+  if (
+    resultEntryType === 'PDF_UPLOAD' &&
+    String((ot as { resultDocumentStorageKey?: unknown }).resultDocumentStorageKey ?? '').trim()
+  ) {
+    return 'Attached PDF';
+  }
+
   const cultureResult = (ot as { cultureResult?: unknown }).cultureResult as
     | {
       noGrowth?: unknown;
@@ -397,6 +411,7 @@ export class ReportsService implements OnModuleInit, OnModuleDestroy {
   private browserPromise: Promise<Browser> | null = null;
   private readonly pdfCache = new Map<string, { buffer: Buffer; expiresAt: number; lastAccessedAt: number }>();
   private readonly pdfInFlight = new Map<string, Promise<Buffer>>();
+  private readonly reportStorageSyncInFlight = new Map<string, Promise<string | null>>();
   private readonly pdfCacheTtlMs = this.parseEnvInt('REPORTS_PDF_CACHE_TTL_MS', 120_000, 0, 900_000);
   private readonly pdfCacheMaxEntries = this.parseEnvInt('REPORTS_PDF_CACHE_MAX_ENTRIES', 30, 1, 1000);
   private readonly pdfPerfLogThresholdMs = this.parseEnvInt(
@@ -424,6 +439,8 @@ export class ReportsService implements OnModuleInit, OnModuleDestroy {
     private readonly userRepo: Repository<User>,
     @InjectRepository(AuditLog)
     private readonly auditLogRepo: Repository<AuditLog>,
+    private readonly resultDocumentsService: ResultDocumentsService,
+    private readonly fileStorageService: FileStorageService,
   ) { }
 
   private parseEnvInt(name: string, fallback: number, min: number, max: number): number {
@@ -434,6 +451,26 @@ export class ReportsService implements OnModuleInit, OnModuleDestroy {
     if (parsed < min) return min;
     if (parsed > max) return max;
     return parsed;
+  }
+
+  private mapResultDocumentSummary(
+    orderTest: OrderTest,
+  ): OrderTestResultDocumentSummary | null {
+    const fileName = String(orderTest.resultDocumentFileName ?? '').trim();
+    const storageKey = String(orderTest.resultDocumentStorageKey ?? '').trim();
+    if (!fileName || !storageKey) {
+      return null;
+    }
+
+    return {
+      fileName,
+      mimeType: orderTest.resultDocumentMimeType ?? 'application/pdf',
+      sizeBytes: Number(orderTest.resultDocumentSizeBytes ?? 0) || 0,
+      uploadedAt: orderTest.resultDocumentUploadedAt
+        ? orderTest.resultDocumentUploadedAt.toISOString()
+        : null,
+      uploadedBy: orderTest.resultDocumentUploadedBy ?? null,
+    };
   }
 
   onModuleInit(): void {
@@ -815,6 +852,7 @@ export class ReportsService implements OnModuleInit, OnModuleDestroy {
     this.browserPromise = null;
     this.pdfCache.clear();
     this.pdfInFlight.clear();
+    this.reportStorageSyncInFlight.clear();
     if (!browserPromise) return;
     try {
       const browser = await browserPromise;
@@ -863,6 +901,68 @@ export class ReportsService implements OnModuleInit, OnModuleDestroy {
     ].join('::');
 
     return createHash('sha1').update(rawKey).digest('hex');
+  }
+
+  private buildStoredReportPdfObjectKey(input: {
+    labId: string;
+    order: Order;
+    reportableOrderTests: OrderTest[];
+    latestVerifiedAt: Date | null;
+    orderQrValue: string;
+    panelSectionFingerprint?: string;
+  }): string {
+    const patient = input.order.patient;
+    const reportableFingerprint = input.reportableOrderTests
+      .map((ot) => {
+        const updatedAtMs = ot.updatedAt ? new Date(ot.updatedAt).getTime() : 0;
+        const resultValue = ot.resultValue == null ? '' : String(ot.resultValue);
+        const resultText = ot.resultText?.trim() ?? '';
+        return `${ot.id}:${updatedAtMs}:${ot.status}:${ot.flag ?? ''}:${resultValue}:${resultText}`;
+      })
+      .sort()
+      .join('|');
+    const reportDesignFingerprint = buildLabReportDesignFingerprint(input.order.lab);
+    const rawKey = [
+      ReportsService.REPORT_PDF_LAYOUT_VERSION,
+      input.labId,
+      input.order.id,
+      input.order.orderNumber ?? '-',
+      input.order.registeredAt ? new Date(input.order.registeredAt).toISOString() : '-',
+      patient?.id ?? '-',
+      patient?.updatedAt ? new Date(patient.updatedAt).toISOString() : '-',
+      patient?.fullName ?? '-',
+      patient?.sex ?? '-',
+      patient?.dateOfBirth ? new Date(patient.dateOfBirth).toISOString() : '-',
+      input.order.lab?.updatedAt ? new Date(input.order.lab.updatedAt).toISOString() : '-',
+      reportDesignFingerprint,
+      input.latestVerifiedAt ? new Date(input.latestVerifiedAt).toISOString() : '-',
+      input.orderQrValue,
+      input.panelSectionFingerprint ?? '-',
+      String(input.reportableOrderTests.length),
+      reportableFingerprint,
+    ].join('::');
+    const fingerprint = createHash('sha1').update(rawKey).digest('hex');
+    return `reports/${input.labId}/${input.order.id}/${fingerprint}.pdf`;
+  }
+
+  private isReportReadyForStorage(
+    reportableOrderTests: OrderTest[],
+    verifiedTests: OrderTest[],
+  ): boolean {
+    return reportableOrderTests.length > 0 && verifiedTests.length === reportableOrderTests.length;
+  }
+
+  private async clearStoredReportArtifact(
+    orderId: string,
+    existingKey: string | null | undefined,
+  ): Promise<void> {
+    if (existingKey) {
+      await this.fileStorageService.deleteFile(existingKey);
+    }
+    await this.orderRepo.update(orderId, {
+      reportS3Key: null,
+      reportGeneratedAt: null,
+    });
   }
 
   private async loadPanelSectionLookup(orderTests: OrderTest[]): Promise<PanelSectionLookup> {
@@ -1575,6 +1675,8 @@ export class ReportsService implements OnModuleInit, OnModuleDestroy {
           resultValue,
           unit: test?.unit || null,
           verifiedAt: ot.verifiedAt ? ot.verifiedAt.toISOString() : null,
+          resultEntryType: String(test?.resultEntryType ?? 'NUMERIC'),
+          resultDocument: this.mapResultDocumentSummary(ot),
         };
       })
       .sort((a, b) => {
@@ -1616,6 +1718,35 @@ export class ReportsService implements OnModuleInit, OnModuleDestroy {
       throw new ForbiddenException('Results are not completed yet. Please check again later.');
     }
     return this.generateTestResultsPDF(orderId, order.labId);
+  }
+
+  async getPublicResultDocument(
+    orderId: string,
+    orderTestId: string,
+  ): Promise<{ buffer: Buffer; fileName: string; mimeType: string }> {
+    const { order, reportableOrderTests, verifiedTests } = await this.loadOrderResultsSnapshot(orderId);
+    if (order.lab?.enableOnlineResults === false) {
+      throw new ForbiddenException('Online results are disabled by laboratory settings.');
+    }
+
+    const ready =
+      order.paymentStatus === 'paid' &&
+      reportableOrderTests.length > 0 &&
+      verifiedTests.length === reportableOrderTests.length;
+    if (!ready) {
+      throw new ForbiddenException('Results are not completed yet. Please check again later.');
+    }
+
+    const target = reportableOrderTests.find((item) => item.id === orderTestId);
+    if (!target || target.status !== 'VERIFIED') {
+      throw new NotFoundException('Result document not found');
+    }
+
+    return {
+      buffer: await this.resultDocumentsService.readDocument(target.resultDocumentStorageKey),
+      fileName: target.resultDocumentFileName ?? 'result.pdf',
+      mimeType: target.resultDocumentMimeType ?? 'application/pdf',
+    };
   }
 
   async generateDraftTestResultsPreviewPDF(input: {
@@ -1794,6 +1925,79 @@ export class ReportsService implements OnModuleInit, OnModuleDestroy {
     return result.pdf;
   }
 
+  /**
+   * Generates the report PDF in the background and uploads it to Cloudflare R2 (S3).
+   * Updates the Order record with the S3 key and timestamp.
+   */
+  async syncReportToS3(orderId: string, labId: string): Promise<string | null> {
+    const syncKey = `${labId}:${orderId}`;
+    const existingSync = this.reportStorageSyncInFlight.get(syncKey);
+    if (existingSync) {
+      return existingSync;
+    }
+
+    const syncPromise = (async () => {
+      try {
+        const { order, reportableOrderTests, verifiedTests, latestVerifiedAt } =
+          await this.loadOrderResultsSnapshot(orderId, labId);
+
+        if (!this.isReportReadyForStorage(reportableOrderTests, verifiedTests)) {
+          await this.clearStoredReportArtifact(orderId, order.reportS3Key);
+          return null;
+        }
+
+        const panelSectionLookup = await this.loadPanelSectionLookup(reportableOrderTests);
+        const reportableOrderTestsWithSections = this.attachPanelSectionMetadata(
+          reportableOrderTests,
+          panelSectionLookup.byPanelAndChildTest,
+        );
+        const orderQrValue = this.resolveOrderQrValue(order);
+        const expectedKey = this.buildStoredReportPdfObjectKey({
+          labId,
+          order,
+          reportableOrderTests: reportableOrderTestsWithSections,
+          latestVerifiedAt,
+          orderQrValue,
+          panelSectionFingerprint: panelSectionLookup.fingerprint,
+        });
+
+        if (order.reportS3Key === expectedKey && order.reportGeneratedAt) {
+          return expectedKey;
+        }
+
+        const result = await this.generateTestResultsPDFWithProfile(orderId, labId, {
+          bypassPaymentCheck: true,
+          disableCache: true,
+        });
+
+        await this.fileStorageService.uploadFile(expectedKey, result.pdf, 'application/pdf');
+        await this.orderRepo.update(orderId, {
+          reportS3Key: expectedKey,
+          reportGeneratedAt: new Date(),
+        });
+
+        if (order.reportS3Key && order.reportS3Key !== expectedKey) {
+          await this.fileStorageService.deleteFile(order.reportS3Key);
+        }
+
+        this.logger.log(`Successfully synced report to S3: ${expectedKey}`);
+        return expectedKey;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        const stack = error instanceof Error ? error.stack : undefined;
+        this.logger.error(`Failed to sync report to S3 for order ${orderId}: ${message}`, stack);
+        return null;
+      }
+    })();
+
+    this.reportStorageSyncInFlight.set(syncKey, syncPromise);
+    try {
+      return await syncPromise;
+    } finally {
+      this.reportStorageSyncInFlight.delete(syncKey);
+    }
+  }
+
   async generateTestResultsPDFWithProfile(
     orderId: string,
     labId: string,
@@ -1836,6 +2040,41 @@ export class ReportsService implements OnModuleInit, OnModuleDestroy {
     }
 
     const orderQrValue = this.resolveOrderQrValue(orderForRender);
+    const storedReportKey =
+      !disableCache && !cultureOnly && !options?.reportDesignOverride
+        ? this.buildStoredReportPdfObjectKey({
+          labId,
+          order: orderForRender,
+          reportableOrderTests: renderedOrderTestsWithSections,
+          latestVerifiedAt,
+          orderQrValue,
+          panelSectionFingerprint: panelSectionLookup.fingerprint,
+        })
+        : null;
+
+    if (storedReportKey && order.reportS3Key === storedReportKey) {
+      try {
+        const cachedPdf = await this.fileStorageService.getFile(storedReportKey);
+        return {
+          pdf: cachedPdf,
+          performance: {
+            orderId,
+            labId,
+            correlationId: options?.correlationId ?? null,
+            totalMs: Date.now() - startMs,
+            snapshotMs,
+            cacheHit: true,
+            inFlightJoin: false,
+          },
+        };
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        this.logger.warn(
+          `Stored report fetch failed for order ${orderId} (${storedReportKey}): ${message}`,
+        );
+      }
+    }
+
     const cacheKey = this.buildReportPdfCacheKey({
       labId,
       order: orderForRender,

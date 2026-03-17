@@ -1,4 +1,4 @@
-import { Controller, Get, HttpException, Param, ParseUUIDPipe, Res } from '@nestjs/common';
+import { Controller, Get, HttpException, Param, ParseUUIDPipe, Query, Res } from '@nestjs/common';
 import type { Response } from 'express';
 import {
   ReportsService,
@@ -301,6 +301,27 @@ function renderPendingPage(status: PublicResultStatus): string {
       font-weight: 600;
     }
 
+    .test-actions {
+      margin-top: 8px;
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .test-action-link {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 6px 10px;
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      background: #f8fafc;
+      color: #1d4ed8;
+      text-decoration: none;
+      font-size: 0.8rem;
+      font-weight: 600;
+    }
+
     .footer {
       border-top: 1px solid var(--line);
       padding: 10px 20px 14px;
@@ -524,6 +545,15 @@ function renderPendingPage(status: PublicResultStatus): string {
           var badge = getStatusBadge(status);
           var progress = resolveTestProgress(current, test, nowMs);
           var meta = progress.meta ? '<div class="test-meta">' + escapeHtml(progress.meta) + '</div>' : '<div class="test-meta"></div>';
+          var documentActions = '';
+          if (test.resultDocument && test.resultDocument.fileName) {
+            var documentPath = '/public/results/' + encodeURIComponent(current.orderId || '') + '/tests/' + encodeURIComponent(test.orderTestId || '') + '/document';
+            documentActions =
+              '<div class="test-actions">' +
+                '<a class="test-action-link" href="' + documentPath + '" target="_blank" rel="noopener">View PDF</a>' +
+                '<a class="test-action-link" href="' + documentPath + '?download=true" rel="noopener">Download PDF</a>' +
+              '</div>';
+          }
 
           rows.push(
             '<div class="test-row">' +
@@ -534,6 +564,7 @@ function renderPendingPage(status: PublicResultStatus): string {
               '<div class="test-dept">' + escapeHtml(test.departmentName || '-') + '</div>' +
               '<div class="bar-track"><div class="bar-fill ' + progress.barClass + '" style="width:' + progress.percent + '%"></div></div>' +
               meta +
+              documentActions +
             '</div>'
           );
         }
@@ -627,6 +658,28 @@ export class PublicReportsController {
     this.applyNoStoreHeaders(res);
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
     res.setHeader('Content-Security-Policy', PUBLIC_RESULTS_HTML_CSP);
+  }
+
+  @Get(':id/tests/:orderTestId/document')
+  async getResultDocument(
+    @Param('id', ParseUUIDPipe) orderId: string,
+    @Param('orderTestId', ParseUUIDPipe) orderTestId: string,
+    @Query('download') download: string | undefined,
+    @Res() res: Response,
+  ) {
+    try {
+      const result = await this.reportsService.getPublicResultDocument(orderId, orderTestId);
+      this.applyNoStoreHeaders(res);
+      res.setHeader('Content-Type', result.mimeType);
+      res.setHeader(
+        'Content-Disposition',
+        `${download === 'true' ? 'attachment' : 'inline'}; filename="${encodeURIComponent(result.fileName)}"`,
+      );
+      return res.status(200).send(result.buffer);
+    } catch (error) {
+      const message = extractErrorMessage(error, 'Result document unavailable');
+      return res.status(error instanceof HttpException ? error.getStatus() : 500).send(message);
+    }
   }
 
   @Get(':id/status')

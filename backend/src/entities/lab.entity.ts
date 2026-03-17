@@ -10,6 +10,7 @@ import { UserLabAssignment } from './user-lab-assignment.entity';
 import { Shift } from './shift.entity';
 import { Department } from './department.entity';
 import { Test } from './test.entity';
+import { SubLab } from './sub-lab.entity';
 
 export interface LabCultureEntryHistory {
   microorganisms: string[];
@@ -126,4 +127,7 @@ export class Lab {
 
   @OneToMany(() => Test, (test) => test.lab)
   tests: Test[];
+
+  @OneToMany(() => SubLab, (subLab) => subLab.lab)
+  subLabs: SubLab[];
 }

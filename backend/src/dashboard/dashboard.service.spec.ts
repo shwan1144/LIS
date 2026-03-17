@@ -45,6 +45,7 @@ function createServiceHarness(options?: {
     {} as never,
     {} as never,
     {} as never,
+    {} as never,
     ordersService as never,
     {} as never,
   );

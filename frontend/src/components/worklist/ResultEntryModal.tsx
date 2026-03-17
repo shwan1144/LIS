@@ -1,4 +1,4 @@
-import { useCallback, useEffect, type KeyboardEvent as ReactKeyboardEvent } from 'react';
+import { useCallback, useEffect, useRef, type KeyboardEvent as ReactKeyboardEvent } from 'react';
 import { Button, Form, Input, Modal, Select, Space, Tag, Typography } from 'antd';
 import type { FormInstance } from 'antd/es/form';
 import { CultureSensitivityEditor, type CultureAntibioticOption } from '../CultureSensitivityEditor';
@@ -155,6 +155,11 @@ interface ResultEntryModalProps {
   onValuesChange: (allValues: Record<string, any>) => void;
   getCultureOptionsForTarget: (target: WorklistItem) => CultureAntibioticOption[];
   formatReferenceRange: (item: WorklistItem) => string;
+  documentActionTargetId: string | null;
+  onUploadResultDocument: (target: WorklistItem, file: File) => Promise<void> | void;
+  onPreviewResultDocument: (target: WorklistItem) => Promise<void> | void;
+  onDownloadResultDocument: (target: WorklistItem) => Promise<void> | void;
+  onRemoveResultDocument: (target: WorklistItem) => Promise<void> | void;
 }
 
 export function ResultEntryModal({
@@ -185,7 +190,13 @@ export function ResultEntryModal({
   onValuesChange,
   getCultureOptionsForTarget,
   formatReferenceRange,
+  documentActionTargetId,
+  onUploadResultDocument,
+  onPreviewResultDocument,
+  onDownloadResultDocument,
+  onRemoveResultDocument,
 }: ResultEntryModalProps) {
+  const fileInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
   const focusEditableTarget = useCallback((targetId: string) => {
     const targetRoot = document.querySelector(
       `[data-entry-target-id="${targetId}"]`,
@@ -415,6 +426,8 @@ export function ResultEntryModal({
                       const showCustomResultInput =
                         target.resultEntryType === 'QUALITATIVE' &&
                         qualitativeSelection === '__other__';
+                      const isPdfEntry = target.resultEntryType === 'PDF_UPLOAD';
+                      const isDocumentBusy = documentActionTargetId === target.id;
 
                       return (
                         <div
@@ -464,6 +477,89 @@ export function ResultEntryModal({
                                   <Text className="result-entry-modal__muted">
                                     Culture details are entered below.
                                   </Text>
+                                ) : isPdfEntry ? (
+                                  <div
+                                    style={{
+                                      display: 'flex',
+                                      flexDirection: 'column',
+                                      gap: 8,
+                                      alignItems: 'flex-start',
+                                    }}
+                                  >
+                                    <input
+                                      ref={(node) => {
+                                        fileInputRefs.current[target.id] = node;
+                                      }}
+                                      type="file"
+                                      accept="application/pdf"
+                                      style={{ display: 'none' }}
+                                      onChange={(event) => {
+                                        const file = event.target.files?.[0];
+                                        event.currentTarget.value = '';
+                                        if (!file) return;
+                                        void onUploadResultDocument(target, file);
+                                      }}
+                                    />
+                                    {target.resultDocument ? (
+                                      <div>
+                                        <Text strong style={{ display: 'block' }}>
+                                          {target.resultDocument.fileName}
+                                        </Text>
+                                        <Text type="secondary" style={{ fontSize: 12 }}>
+                                          {(target.resultDocument.sizeBytes / 1024 / 1024).toFixed(2)} MB
+                                        </Text>
+                                      </div>
+                                    ) : (
+                                      <Text className="result-entry-modal__muted">
+                                        No PDF uploaded yet.
+                                      </Text>
+                                    )}
+                                    <Space wrap>
+                                      {!row.isReadOnly ? (
+                                        <Button
+                                          size="small"
+                                          loading={isDocumentBusy}
+                                          onClick={() => fileInputRefs.current[target.id]?.click()}
+                                        >
+                                          {target.resultDocument ? 'Replace PDF' : 'Upload PDF'}
+                                        </Button>
+                                      ) : null}
+                                      {target.resultDocument ? (
+                                        <>
+                                          <Button
+                                            size="small"
+                                            disabled={isDocumentBusy}
+                                            onClick={() => {
+                                              void onPreviewResultDocument(target);
+                                            }}
+                                          >
+                                            View PDF
+                                          </Button>
+                                          <Button
+                                            size="small"
+                                            disabled={isDocumentBusy}
+                                            onClick={() => {
+                                              void onDownloadResultDocument(target);
+                                            }}
+                                          >
+                                            Download
+                                          </Button>
+                                          {!row.isReadOnly ? (
+                                            <Button
+                                              size="small"
+                                              danger
+                                              disabled={isDocumentBusy}
+                                              onClick={() => {
+                                                void onRemoveResultDocument(target);
+                                              }}
+                                            >
+                                              Remove
+                                            </Button>
+                                          ) : null}
+                                        </>
+                                      ) : null}
+                                    </Space>
+                                  </div>
                                 ) : (
                                   <>
                                     <Form.Item

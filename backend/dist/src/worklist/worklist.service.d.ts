@@ -1,5 +1,5 @@
 import { Repository } from 'typeorm';
-import { CultureResultPayload, OrderTest, OrderTestStatus, ResultFlag } from '../entities/order-test.entity';
+import { CultureResultPayload, OrderTest, OrderTestResultDocumentSummary, OrderTestStatus, ResultFlag } from '../entities/order-test.entity';
 import { Order } from '../entities/order.entity';
 import { Test } from '../entities/test.entity';
 import { Antibiotic } from '../entities/antibiotic.entity';
@@ -11,6 +11,8 @@ import type { TestCultureConfig, TestParameterDefinition, TestResultEntryType, T
 import { AuditService } from '../audit/audit.service';
 import { PanelStatusService } from '../panels/panel-status.service';
 import { LabActorContext } from '../types/lab-actor-context';
+import { ResultDocumentsService } from '../result-documents/result-documents.service';
+import { ReportsService } from '../reports/reports.service';
 export interface WorklistItem {
     id: string;
     testId: string;
@@ -52,10 +54,16 @@ export interface WorklistItem {
     departmentName: string | null;
     parameterDefinitions: TestParameterDefinition[] | null;
     resultParameters: Record<string, string> | null;
+    resultDocument: OrderTestResultDocumentSummary | null;
     rejectionReason: string | null;
     sortOrder: number;
     panelSortOrder: number | null;
 }
+type UploadedResultDocumentFile = {
+    originalname: string;
+    mimetype?: string;
+    buffer: Buffer;
+};
 export declare enum WorklistView {
     FULL = "full",
     VERIFY = "verify"
@@ -115,11 +123,14 @@ export declare class WorklistService {
     private readonly departmentRepo;
     private readonly panelStatusService;
     private readonly auditService;
+    private readonly resultDocumentsService;
+    private readonly reportsService;
     private static readonly CULTURE_HISTORY_MAX_ITEMS;
     private static readonly CULTURE_HISTORY_MAX_VALUE_LENGTH;
     private readonly logger;
     private readonly worklistPerfLogThresholdMs;
-    constructor(orderTestRepo: Repository<OrderTest>, orderRepo: Repository<Order>, testRepo: Repository<Test>, testAntibioticRepo: Repository<TestAntibiotic>, antibioticRepo: Repository<Antibiotic>, labRepo: Repository<Lab>, userDeptRepo: Repository<UserDepartmentAssignment>, departmentRepo: Repository<Department>, panelStatusService: PanelStatusService, auditService: AuditService);
+    constructor(orderTestRepo: Repository<OrderTest>, orderRepo: Repository<Order>, testRepo: Repository<Test>, testAntibioticRepo: Repository<TestAntibiotic>, antibioticRepo: Repository<Antibiotic>, labRepo: Repository<Lab>, userDeptRepo: Repository<UserDepartmentAssignment>, departmentRepo: Repository<Department>, panelStatusService: PanelStatusService, auditService: AuditService, resultDocumentsService: ResultDocumentsService, reportsService: ReportsService);
+    private triggerReportStorageSync;
     getWorklist(labId: string, params: {
         status?: OrderTestStatus[];
         search?: string;
@@ -177,9 +188,21 @@ export declare class WorklistService {
         failed: number;
     }>;
     rejectResult(orderTestId: string, labId: string, actor: LabActorContext, reason: string): Promise<OrderTest>;
+    uploadResultDocument(orderTestId: string, labId: string, actor: LabActorContext, actorRole: string | undefined, file: UploadedResultDocumentFile | undefined, options?: {
+        forceEditVerified?: boolean;
+    }): Promise<OrderTest>;
+    removeResultDocument(orderTestId: string, labId: string, actor: LabActorContext, actorRole?: string, options?: {
+        forceEditVerified?: boolean;
+    }): Promise<OrderTest>;
+    getResultDocumentForLab(orderTestId: string, labId: string): Promise<{
+        buffer: Buffer;
+        fileName: string;
+        mimeType: string;
+    }>;
     private getAllowedDepartmentIdsForUser;
     private mapRawWorklistItem;
     private normalizeResultEntryType;
+    private mapResultDocumentSummary;
     private normalizeResultText;
     private normalizeResultTextOptions;
     private normalizeCultureConfig;
@@ -213,3 +236,4 @@ export declare class WorklistService {
     private getDateRangeOrThrow;
     private syncOrderStatus;
 }
+export {};

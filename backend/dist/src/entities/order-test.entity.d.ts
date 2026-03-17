@@ -40,6 +40,13 @@ export interface CultureResultPayload {
     notes?: string | null;
     isolates: CultureResultIsolate[];
 }
+export interface OrderTestResultDocumentSummary {
+    fileName: string;
+    mimeType: string;
+    sizeBytes: number;
+    uploadedAt: string | null;
+    uploadedBy: string | null;
+}
 export declare class OrderTest {
     id: string;
     labId: string | null;
@@ -59,6 +66,12 @@ export declare class OrderTest {
     verifiedBy: string | null;
     rejectionReason: string | null;
     comments: string | null;
+    resultDocumentStorageKey: string | null;
+    resultDocumentFileName: string | null;
+    resultDocumentMimeType: string | null;
+    resultDocumentSizeBytes: number | null;
+    resultDocumentUploadedAt: Date | null;
+    resultDocumentUploadedBy: string | null;
     panelSortOrder: number | null;
     createdAt: Date;
     updatedAt: Date;

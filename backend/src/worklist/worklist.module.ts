@@ -11,10 +11,14 @@ import { Lab } from '../entities/lab.entity';
 import { UserDepartmentAssignment } from '../entities/user-department-assignment.entity';
 import { Department } from '../entities/department.entity';
 import { PanelsModule } from '../panels/panels.module';
+import { ResultDocumentsModule } from '../result-documents/result-documents.module';
+import { ReportsModule } from '../reports/reports.module';
 
 @Module({
   imports: [
     PanelsModule,
+    ResultDocumentsModule,
+    ReportsModule,
     TypeOrmModule.forFeature([
       OrderTest,
       Order,

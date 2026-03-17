@@ -20,6 +20,8 @@ const lab_entity_1 = require("../entities/lab.entity");
 const user_department_assignment_entity_1 = require("../entities/user-department-assignment.entity");
 const department_entity_1 = require("../entities/department.entity");
 const panels_module_1 = require("../panels/panels.module");
+const result_documents_module_1 = require("../result-documents/result-documents.module");
+const reports_module_1 = require("../reports/reports.module");
 let WorklistModule = class WorklistModule {
 };
 exports.WorklistModule = WorklistModule;
@@ -27,6 +29,8 @@ exports.WorklistModule = WorklistModule = __decorate([
     (0, common_1.Module)({
         imports: [
             panels_module_1.PanelsModule,
+            result_documents_module_1.ResultDocumentsModule,
+            reports_module_1.ReportsModule,
             typeorm_1.TypeOrmModule.forFeature([
                 order_test_entity_1.OrderTest,
                 order_entity_1.Order,

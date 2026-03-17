@@ -9,6 +9,7 @@ import { Repository, In, SelectQueryBuilder } from 'typeorm';
 import {
   CultureResultPayload,
   OrderTest,
+  OrderTestResultDocumentSummary,
   OrderTestStatus,
   ResultFlag,
 } from '../entities/order-test.entity';
@@ -44,6 +45,8 @@ import {
 } from '../patients/patient-age.util';
 import { hasMeaningfulOrderTestResult } from '../order-tests/order-test-result.util';
 import { normalizeOrderTestFlag } from '../order-tests/order-test-flag.util';
+import { ResultDocumentsService } from '../result-documents/result-documents.service';
+import { ReportsService } from '../reports/reports.service';
 
 export interface WorklistItem {
   id: string;
@@ -86,10 +89,17 @@ export interface WorklistItem {
   departmentName: string | null;
   parameterDefinitions: TestParameterDefinition[] | null;
   resultParameters: Record<string, string> | null;
+  resultDocument: OrderTestResultDocumentSummary | null;
   rejectionReason: string | null;
   sortOrder: number;
   panelSortOrder: number | null;
 }
+
+type UploadedResultDocumentFile = {
+  originalname: string;
+  mimetype?: string;
+  buffer: Buffer;
+};
 
 export enum WorklistView {
   FULL = 'full',
@@ -185,7 +195,20 @@ export class WorklistService {
     private readonly departmentRepo: Repository<Department>,
     private readonly panelStatusService: PanelStatusService,
     private readonly auditService: AuditService,
+    private readonly resultDocumentsService: ResultDocumentsService,
+    private readonly reportsService: ReportsService,
   ) { }
+
+  private triggerReportStorageSync(orderId: string, labId: string, context: string): void {
+    this.reportsService.syncReportToS3(orderId, labId).catch((error) => {
+      const message = error instanceof Error ? error.message : String(error);
+      const stack = error instanceof Error ? error.stack : undefined;
+      this.logger.error(
+        `Failed to sync stored report for order ${orderId} after ${context}: ${message}`,
+        stack,
+      );
+    });
+  }
 
   async getWorklist(
     labId: string,
@@ -340,6 +363,12 @@ export class WorklistService {
         'ot.resultText AS "resultText"',
         'ot.resultParameters AS "resultParameters"',
         'ot.cultureResult AS "cultureResult"',
+        'ot.resultDocumentStorageKey AS "resultDocumentStorageKey"',
+        'ot.resultDocumentFileName AS "resultDocumentFileName"',
+        'ot.resultDocumentMimeType AS "resultDocumentMimeType"',
+        'ot.resultDocumentSizeBytes AS "resultDocumentSizeBytes"',
+        'ot.resultDocumentUploadedAt AS "resultDocumentUploadedAt"',
+        'ot.resultDocumentUploadedBy AS "resultDocumentUploadedBy"',
         'ot.rejectionReason AS "rejectionReason"',
         'ot.flag AS flag',
         'ot.resultedAt AS "resultedAt"',
@@ -465,6 +494,7 @@ export class WorklistService {
             null,
           resultParameters:
             (parseJsonField(item.resultParameters) as Record<string, string> | null) ?? null,
+          resultDocument: this.mapResultDocumentSummary(item),
           rejectionReason: item.rejectionReason ?? null,
           sortOrder: item.sortOrder != null ? Number(item.sortOrder) : 0,
           panelSortOrder: item.panelSortOrder != null ? Number(item.panelSortOrder) : null,
@@ -836,6 +866,12 @@ export class WorklistService {
           'ot.resultText AS "resultText"',
           'ot.resultParameters AS "resultParameters"',
           'ot.cultureResult AS "cultureResult"',
+          'ot.resultDocumentStorageKey AS "resultDocumentStorageKey"',
+          'ot.resultDocumentFileName AS "resultDocumentFileName"',
+          'ot.resultDocumentMimeType AS "resultDocumentMimeType"',
+          'ot.resultDocumentSizeBytes AS "resultDocumentSizeBytes"',
+          'ot.resultDocumentUploadedAt AS "resultDocumentUploadedAt"',
+          'ot.resultDocumentUploadedBy AS "resultDocumentUploadedBy"',
           'ot.rejectionReason AS "rejectionReason"',
           'ot.flag AS flag',
           'ot.resultedAt AS "resultedAt"',
@@ -1013,6 +1049,7 @@ export class WorklistService {
         departmentName: orderTest.test.department?.name ?? null,
         parameterDefinitions: orderTest.test.parameterDefinitions ?? null,
         resultParameters: orderTest.resultParameters ?? null,
+        resultDocument: this.mapResultDocumentSummary(orderTest as unknown as Record<string, unknown>),
         rejectionReason: orderTest.rejectionReason ?? null,
         sortOrder: orderTest.test.sortOrder ?? 0,
         panelSortOrder: orderTest.panelSortOrder ?? null,
@@ -1092,6 +1129,15 @@ export class WorklistService {
       );
     }
 
+    const resultEntryType = this.normalizeResultEntryType(
+      orderTest.test.resultEntryType,
+    );
+    if (resultEntryType === 'PDF_UPLOAD') {
+      throw new BadRequestException(
+        'PDF_UPLOAD tests must be completed by uploading a result document',
+      );
+    }
+
     if (data.resultValue !== undefined) {
       orderTest.resultValue = data.resultValue;
     }
@@ -1111,9 +1157,6 @@ export class WorklistService {
       );
     }
 
-    const resultEntryType = this.normalizeResultEntryType(
-      orderTest.test.resultEntryType,
-    );
     const resultTextOptions = this.normalizeResultTextOptions(
       orderTest.test.resultTextOptions,
     );
@@ -1228,6 +1271,8 @@ export class WorklistService {
     await this.panelStatusService.recomputeAfterChildUpdate(orderTest.id);
     await this.syncOrderStatus(orderTest.sample.orderId);
 
+    this.triggerReportStorageSync(orderTest.sample.orderId, labId, 'result entry');
+
     // Audit log
     const impersonationAudit =
       actor.isImpersonation && actor.platformUserId
@@ -1312,6 +1357,11 @@ export class WorklistService {
         continue;
       }
 
+      const resultEntryType = this.normalizeResultEntryType(orderTest.test.resultEntryType);
+      if (resultEntryType === 'PDF_UPLOAD') {
+        continue;
+      }
+
       if (data.resultValue !== undefined) {
         orderTest.resultValue = data.resultValue;
       }
@@ -1333,7 +1383,6 @@ export class WorklistService {
         );
       }
 
-      const resultEntryType = this.normalizeResultEntryType(orderTest.test.resultEntryType);
       const resultTextOptions = this.normalizeResultTextOptions(orderTest.test.resultTextOptions);
       const normalizedResultTextInput =
         data.resultText !== undefined ? this.normalizeResultText(data.resultText) : undefined;
@@ -1464,6 +1513,7 @@ export class WorklistService {
       }
       for (const oid of updatedOrderIds) {
         await this.syncOrderStatus(oid);
+        this.triggerReportStorageSync(oid, labId, 'batch result entry');
       }
       for (const log of auditLogs) {
         await this.auditService.log(log);
@@ -1516,6 +1566,8 @@ export class WorklistService {
     const saved = await this.orderTestRepo.save(orderTest);
     await this.panelStatusService.recomputeAfterChildUpdate(orderTest.id);
     await this.syncOrderStatus(orderTest.sample.orderId);
+
+    this.triggerReportStorageSync(orderTest.sample.orderId, labId, 'result verification');
 
     // Audit log
     const impersonationAudit =
@@ -1624,6 +1676,7 @@ export class WorklistService {
       }
       for (const oid of updatedOrderIds) {
         await this.syncOrderStatus(oid);
+        this.triggerReportStorageSync(oid, labId, 'batch result verification');
       }
       for (const log of auditLogs) {
         await this.auditService.log(log);
@@ -1665,6 +1718,8 @@ export class WorklistService {
     await this.panelStatusService.recomputeAfterChildUpdate(orderTest.id);
     await this.syncOrderStatus(orderTest.sample.orderId);
 
+    this.triggerReportStorageSync(orderTest.sample.orderId, labId, 'result rejection');
+
     // Audit log
     const impersonationAudit =
       actor.isImpersonation && actor.platformUserId
@@ -1693,6 +1748,214 @@ export class WorklistService {
     });
 
     return saved;
+  }
+
+  async uploadResultDocument(
+    orderTestId: string,
+    labId: string,
+    actor: LabActorContext,
+    actorRole: string | undefined,
+    file: UploadedResultDocumentFile | undefined,
+    options?: { forceEditVerified?: boolean },
+  ): Promise<OrderTest> {
+    if (!file?.buffer?.length) {
+      throw new BadRequestException('A PDF file is required');
+    }
+
+    const orderTest = await this.orderTestRepo.findOne({
+      where: { id: orderTestId },
+      relations: ['sample', 'sample.order', 'sample.order.patient', 'test'],
+    });
+
+    if (!orderTest || orderTest.sample.order.labId !== labId) {
+      throw new NotFoundException('Order test not found');
+    }
+
+    if (orderTest.test.type !== TestType.SINGLE) {
+      throw new BadRequestException('Result documents are only supported for single tests');
+    }
+
+    const resultEntryType = this.normalizeResultEntryType(orderTest.test.resultEntryType);
+    if (resultEntryType !== 'PDF_UPLOAD') {
+      throw new BadRequestException('This test is not configured for PDF_UPLOAD');
+    }
+
+    const forceEditVerified = options?.forceEditVerified === true;
+    const canForceEditVerified =
+      actor.isImpersonation ||
+      actorRole === 'LAB_ADMIN' ||
+      actorRole === 'SUPER_ADMIN';
+    const isVerifiedOverride =
+      orderTest.status === OrderTestStatus.VERIFIED &&
+      forceEditVerified &&
+      canForceEditVerified;
+
+    if (orderTest.status === OrderTestStatus.VERIFIED && !isVerifiedOverride) {
+      throw new BadRequestException('Cannot modify a verified result');
+    }
+
+    const hadExistingDocument = Boolean(orderTest.resultDocumentStorageKey?.trim());
+    const stored = await this.resultDocumentsService.savePdf({
+      labId,
+      orderTestId: orderTest.id,
+      buffer: file.buffer,
+      originalName: file.originalname,
+      mimeType: file.mimetype,
+      previousStorageKey: orderTest.resultDocumentStorageKey,
+    });
+
+    orderTest.resultValue = null;
+    orderTest.resultText = null;
+    orderTest.resultParameters = null;
+    orderTest.cultureResult = null;
+    orderTest.flag = null;
+    orderTest.resultDocumentStorageKey = stored.storageKey;
+    orderTest.resultDocumentFileName = stored.fileName;
+    orderTest.resultDocumentMimeType = stored.mimeType;
+    orderTest.resultDocumentSizeBytes = stored.sizeBytes;
+    orderTest.resultDocumentUploadedAt = new Date();
+    orderTest.resultDocumentUploadedBy = actor.userId ?? null;
+    orderTest.rejectionReason = null;
+    orderTest.resultedAt = new Date();
+    orderTest.resultedBy = actor.userId ?? orderTest.resultedBy;
+    orderTest.status = isVerifiedOverride
+      ? OrderTestStatus.VERIFIED
+      : OrderTestStatus.COMPLETED;
+    if (isVerifiedOverride) {
+      orderTest.verifiedAt = new Date();
+      orderTest.verifiedBy = actor.userId ?? orderTest.verifiedBy;
+    } else {
+      orderTest.verifiedAt = null;
+      orderTest.verifiedBy = null;
+    }
+
+    const saved = await this.orderTestRepo.save(orderTest);
+    await this.panelStatusService.recomputeAfterChildUpdate(orderTest.id);
+    await this.syncOrderStatus(orderTest.sample.orderId);
+
+    this.triggerReportStorageSync(orderTest.sample.orderId, labId, 'PDF result upload');
+
+    await this.auditService.log({
+      actorType: actor.actorType,
+      actorId: actor.actorId,
+      labId,
+      userId: actor.userId,
+      action:
+        hadExistingDocument
+          ? AuditAction.RESULT_UPDATE
+          : AuditAction.RESULT_ENTER,
+      entityType: 'order_test',
+      entityId: orderTestId,
+      newValues: {
+        resultDocument: {
+          fileName: stored.fileName,
+          mimeType: stored.mimeType,
+          sizeBytes: stored.sizeBytes,
+        },
+        forceEditVerified: isVerifiedOverride,
+      },
+      description: `Uploaded PDF result for test ${orderTest.test?.code || orderTestId}`,
+    });
+
+    return saved;
+  }
+
+  async removeResultDocument(
+    orderTestId: string,
+    labId: string,
+    actor: LabActorContext,
+    actorRole?: string,
+    options?: { forceEditVerified?: boolean },
+  ): Promise<OrderTest> {
+    const orderTest = await this.orderTestRepo.findOne({
+      where: { id: orderTestId },
+      relations: ['sample', 'sample.order', 'test'],
+    });
+
+    if (!orderTest || orderTest.sample.order.labId !== labId) {
+      throw new NotFoundException('Order test not found');
+    }
+
+    const resultEntryType = this.normalizeResultEntryType(orderTest.test.resultEntryType);
+    if (resultEntryType !== 'PDF_UPLOAD') {
+      throw new BadRequestException('This test is not configured for PDF_UPLOAD');
+    }
+
+    const forceEditVerified = options?.forceEditVerified === true;
+    const canForceEditVerified =
+      actor.isImpersonation ||
+      actorRole === 'LAB_ADMIN' ||
+      actorRole === 'SUPER_ADMIN';
+    const isVerifiedOverride =
+      orderTest.status === OrderTestStatus.VERIFIED &&
+      forceEditVerified &&
+      canForceEditVerified;
+
+    if (orderTest.status === OrderTestStatus.VERIFIED && !isVerifiedOverride) {
+      throw new BadRequestException('Cannot modify a verified result');
+    }
+
+    await this.resultDocumentsService.deleteDocument(orderTest.resultDocumentStorageKey);
+    orderTest.resultDocumentStorageKey = null;
+    orderTest.resultDocumentFileName = null;
+    orderTest.resultDocumentMimeType = null;
+    orderTest.resultDocumentSizeBytes = null;
+    orderTest.resultDocumentUploadedAt = null;
+    orderTest.resultDocumentUploadedBy = null;
+    orderTest.resultedAt = null;
+    orderTest.resultedBy = null;
+    orderTest.verifiedAt = null;
+    orderTest.verifiedBy = null;
+    orderTest.status = OrderTestStatus.PENDING;
+
+    const saved = await this.orderTestRepo.save(orderTest);
+    await this.panelStatusService.recomputeAfterChildUpdate(orderTest.id);
+    await this.syncOrderStatus(orderTest.sample.orderId);
+
+    this.triggerReportStorageSync(orderTest.sample.orderId, labId, 'PDF result removal');
+
+    await this.auditService.log({
+      actorType: actor.actorType,
+      actorId: actor.actorId,
+      labId,
+      userId: actor.userId,
+      action: AuditAction.RESULT_UPDATE,
+      entityType: 'order_test',
+      entityId: orderTestId,
+      newValues: {
+        resultDocument: null,
+      },
+      description: `Removed PDF result for test ${orderTest.test?.code || orderTestId}`,
+    });
+
+    return saved;
+  }
+
+  async getResultDocumentForLab(
+    orderTestId: string,
+    labId: string,
+  ): Promise<{
+    buffer: Buffer;
+    fileName: string;
+    mimeType: string;
+  }> {
+    const orderTest = await this.orderTestRepo.findOne({
+      where: { id: orderTestId },
+      relations: ['sample', 'sample.order'],
+    });
+
+    if (!orderTest || orderTest.sample.order.labId !== labId) {
+      throw new NotFoundException('Order test not found');
+    }
+
+    const buffer = await this.resultDocumentsService.readDocument(
+      orderTest.resultDocumentStorageKey,
+    );
+    return {
+      buffer,
+      fileName: orderTest.resultDocumentFileName ?? 'result.pdf',
+      mimeType: orderTest.resultDocumentMimeType ?? 'application/pdf',
+    };
   }
 
   private async getAllowedDepartmentIdsForUser(
@@ -1803,6 +2066,7 @@ export class WorklistService {
         (parseJsonField(item.parameterDefinitions) as TestParameterDefinition[] | null) ?? null,
       resultParameters:
         (parseJsonField(item.resultParameters) as Record<string, string> | null) ?? null,
+      resultDocument: this.mapResultDocumentSummary(item),
       rejectionReason: (item.rejectionReason as string | null) ?? null,
       sortOrder:
         item.sortOrder != null
@@ -1823,11 +2087,36 @@ export class WorklistService {
       normalized === 'NUMERIC' ||
       normalized === 'QUALITATIVE' ||
       normalized === 'TEXT' ||
-      normalized === 'CULTURE_SENSITIVITY'
+      normalized === 'CULTURE_SENSITIVITY' ||
+      normalized === 'PDF_UPLOAD'
     ) {
       return normalized;
     }
     return 'NUMERIC';
+  }
+
+  private mapResultDocumentSummary(
+    item: Record<string, unknown>,
+  ): OrderTestResultDocumentSummary | null {
+    const storageKey = String(item.resultDocumentStorageKey ?? '').trim();
+    const fileName = String(item.resultDocumentFileName ?? '').trim();
+    if (!storageKey || !fileName) {
+      return null;
+    }
+
+    const rawSize = Number(item.resultDocumentSizeBytes ?? 0);
+    return {
+      fileName,
+      mimeType: String(item.resultDocumentMimeType ?? 'application/pdf').trim() || 'application/pdf',
+      sizeBytes: Number.isFinite(rawSize) && rawSize > 0 ? Math.round(rawSize) : 0,
+      uploadedAt:
+        item.resultDocumentUploadedAt instanceof Date
+          ? item.resultDocumentUploadedAt.toISOString()
+          : typeof item.resultDocumentUploadedAt === 'string'
+            ? item.resultDocumentUploadedAt
+            : null,
+      uploadedBy: (item.resultDocumentUploadedBy as string | null) ?? null,
+    };
   }
 
   private normalizeResultText(

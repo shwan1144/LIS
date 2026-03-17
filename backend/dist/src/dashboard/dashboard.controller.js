@@ -66,6 +66,7 @@ let DashboardController = class DashboardController {
         return this.dashboardService.getStatistics(labId, startDate, endDate, {
             shiftId: query.shiftId ?? null,
             departmentId: query.departmentId ?? null,
+            sourceType: query.sourceType ?? 'ALL',
         });
     }
     async getStatisticsPdf(req, query, res) {
@@ -77,12 +78,14 @@ let DashboardController = class DashboardController {
         const { startDate, endDate, startDateLabel, endDateLabel } = this.resolveRange(timeZone, query.startDate, query.endDate);
         const shiftToken = query.shiftId ? this.toSafeFileToken(query.shiftId) : 'all';
         const departmentToken = query.departmentId ? this.toSafeFileToken(query.departmentId) : 'all';
-        const fileName = `statistics-${startDateLabel}-to-${endDateLabel}-${shiftToken}-${departmentToken}.pdf`;
+        const sourceToken = this.toSafeFileToken(query.sourceType ?? 'all');
+        const fileName = `statistics-${startDateLabel}-to-${endDateLabel}-${shiftToken}-${departmentToken}-${sourceToken}.pdf`;
         const actor = (0, lab_actor_context_1.buildLabActorContext)(req.user);
         try {
             const pdfBuffer = await this.dashboardService.generateStatisticsPdf(labId, startDate, endDate, {
                 shiftId: query.shiftId ?? null,
                 departmentId: query.departmentId ?? null,
+                sourceType: query.sourceType ?? 'ALL',
             });
             const impersonationAudit = actor.isImpersonation && actor.platformUserId
                 ? {
@@ -106,6 +109,7 @@ let DashboardController = class DashboardController {
                     endDate: endDateLabel,
                     shiftId: query.shiftId ?? null,
                     departmentId: query.departmentId ?? null,
+                    sourceType: query.sourceType ?? 'ALL',
                     ...impersonationAudit,
                 },
                 ipAddress: req.ip ?? null,
@@ -137,6 +141,21 @@ let DashboardController = class DashboardController {
                 targetMinutes: 60,
             },
             quality: { abnormalCount: 0, totalVerified: 0 },
+            subLabBilling: {
+                activeSourceType: 'ALL',
+                billableRootTests: 0,
+                billableAmount: 0,
+                completedRootTests: 0,
+                verifiedRootTests: 0,
+                inHouse: {
+                    billableRootTests: 0,
+                    billableAmount: 0,
+                    completedRootTests: 0,
+                    verifiedRootTests: 0,
+                },
+                bySubLab: [],
+                byTest: [],
+            },
             unmatched: { pending: 0, resolved: 0, discarded: 0, byReason: {} },
             instrumentWorkload: [],
         };

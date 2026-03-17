@@ -16,6 +16,7 @@ exports.LAB_ROLES = [
     'VERIFIER',
     'DOCTOR',
     'INSTRUMENT_SERVICE',
+    'SUB_LAB',
 ];
 const ADMIN = ['LAB_ADMIN', 'SUPER_ADMIN'];
 const ORDERS_WORKFLOW = ['RECEPTION', ...ADMIN];
@@ -32,6 +33,7 @@ const DEPARTMENTS_READ = ['RECEPTION', 'TECHNICIAN', 'VERIFIER', ...ADMIN];
 const SHIFTS_READ = ['RECEPTION', ...ADMIN];
 const ANTIBIOTICS_READ = ['TECHNICIAN', 'VERIFIER', ...ADMIN];
 const SETTINGS_LAB_READ = ['RECEPTION', 'DOCTOR', ...ADMIN];
+const SUB_LAB_PORTAL = ['SUB_LAB'];
 exports.LAB_ROLE_GROUPS = {
     ADMIN,
     ORDERS_WORKFLOW,
@@ -48,6 +50,7 @@ exports.LAB_ROLE_GROUPS = {
     SHIFTS_READ,
     ANTIBIOTICS_READ,
     SETTINGS_LAB_READ,
+    SUB_LAB_PORTAL,
 };
 function hasLabRole(role, allowedRoles) {
     if (!role) {

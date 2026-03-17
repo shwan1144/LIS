@@ -265,6 +265,8 @@ export interface UserDto {
   username: string;
   fullName: string | null;
   role: string;
+  subLabId?: string | null;
+  subLabName?: string | null;
   isImpersonation?: boolean;
 }
 
@@ -1221,6 +1223,8 @@ export async function getOrdersTrend(days?: number): Promise<OrdersTrendPoint[]>
 }
 
 // Statistics (date range)
+export type StatisticsSourceType = 'ALL' | 'IN_HOUSE' | 'SUB_LAB';
+
 export interface StatisticsDto {
   orders: {
     total: number;
@@ -1247,6 +1251,28 @@ export interface StatisticsDto {
     abnormalCount: number;
     totalVerified: number;
   };
+  subLabBilling: {
+    activeSourceType: StatisticsSourceType;
+    billableRootTests: number;
+    billableAmount: number;
+    completedRootTests: number;
+    verifiedRootTests: number;
+    inHouse: {
+      billableRootTests: number;
+      billableAmount: number;
+      completedRootTests: number;
+      verifiedRootTests: number;
+    };
+    bySubLab: {
+      subLabId: string;
+      subLabName: string;
+      billableRootTests: number;
+      billableAmount: number;
+      completedRootTests: number;
+      verifiedRootTests: number;
+    }[];
+    byTest: { testId: string; testCode: string; testName: string; count: number; amount: number }[];
+  };
   unmatched: {
     pending: number;
     resolved: number;
@@ -1261,6 +1287,7 @@ export async function getStatistics(params: {
   endDate?: string;
   shiftId?: string;
   departmentId?: string;
+  sourceType?: StatisticsSourceType;
 }): Promise<StatisticsDto> {
   const res = await api.get<StatisticsDto>('/dashboard/statistics', { params });
   return res.data;
@@ -1271,6 +1298,7 @@ export async function downloadStatisticsPDF(params: {
   endDate?: string;
   shiftId?: string;
   departmentId?: string;
+  sourceType?: StatisticsSourceType;
 }): Promise<Blob> {
   const res = await api.get('/dashboard/statistics/pdf', {
     params,
@@ -1314,6 +1342,7 @@ export interface OrderTestDto {
   verifiedBy: string | null;
   rejectionReason: string | null;
   comments?: string | null;
+  resultDocument?: ResultDocumentDto | null;
   test: TestDto;
 }
 
@@ -1337,6 +1366,7 @@ export interface OrderDto {
   patientId: string;
   labId: string;
   shiftId: string | null;
+  sourceSubLabId: string | null;
   orderNumber: string | null;
   status: OrderStatus;
   patientType: PatientType;
@@ -1355,6 +1385,7 @@ export interface OrderDto {
   patient: PatientDto;
   lab: LabDto;
   shift: { id: string; code: string; name: string | null } | null;
+  sourceSubLab?: { id: string; name: string } | null;
   samples: SampleDto[];
   testsCount?: number;
   readyTestsCount?: number;
@@ -1379,6 +1410,7 @@ export interface CreateOrderDto {
   shiftId?: string;
   patientType?: PatientType;
   notes?: string;
+  sourceSubLabId?: string;
   discountPercent?: number;
   deliveryMethods?: DeliveryMethod[];
   samples: CreateSampleDto[];
@@ -1392,6 +1424,7 @@ export interface OrderSearchParams {
   resultStatus?: OrderResultStatus;
   patientId?: string;
   shiftId?: string;
+  sourceSubLabId?: string;
   startDate?: string;
   endDate?: string;
   dateFilterTimeZone?: string;
@@ -1418,10 +1451,12 @@ export interface OrderHistoryItemDto {
   finalAmount: number;
   patient: PatientDto;
   shift: { id: string; code: string; name: string | null } | null;
+  sourceSubLab: { id: string; name: string } | null;
   testsCount: number;
   readyTestsCount: number;
   reportReady: boolean;
   resultStatus?: OrderResultStatus;
+  resultSummary?: string | null;
   pendingTestsCount?: number;
   completedTestsCount?: number;
   verifiedTestsCount?: number;
@@ -1449,10 +1484,12 @@ export interface OrderCreateSummaryDto {
   finalAmount: number;
   patient: PatientDto;
   shift: { id: string; code: string; name: string | null } | null;
+  sourceSubLab: { id: string; name: string } | null;
   testsCount: number;
   readyTestsCount: number;
   reportReady: boolean;
   resultStatus?: OrderResultStatus;
+  resultSummary?: string | null;
   pendingTestsCount?: number;
   completedTestsCount?: number;
   verifiedTestsCount?: number;
@@ -1461,10 +1498,14 @@ export interface OrderCreateSummaryDto {
 
 export async function getOrderPriceEstimate(
   testIds: string[],
-  shiftId?: string | null
+  shiftId?: string | null,
+  sourceSubLabId?: string | null,
 ): Promise<{ subtotal: number }> {
-  const params: { testIds: string; shiftId?: string } = { testIds: testIds.join(',') };
+  const params: { testIds: string; shiftId?: string; sourceSubLabId?: string } = {
+    testIds: testIds.join(','),
+  };
   if (shiftId) params.shiftId = shiftId;
+  if (sourceSubLabId) params.sourceSubLabId = sourceSubLabId;
   const res = await api.get<{ subtotal: number }>('/orders/estimate-price', { params });
   return res.data;
 }
@@ -1543,12 +1584,14 @@ function toHistoryItem(order: OrderDto): OrderHistoryItemDto {
     finalAmount: Number(order.finalAmount ?? 0),
     patient: order.patient,
     shift: order.shift,
+    sourceSubLab: order.sourceSubLab ?? null,
     testsCount,
     readyTestsCount: Number(order.readyTestsCount ?? 0) || 0,
     reportReady:
       Boolean(order.reportReady) ||
       (testsCount > 0 && verifiedTestsCount === testsCount),
     resultStatus,
+    resultSummary: null,
     pendingTestsCount,
     completedTestsCount,
     verifiedTestsCount,
@@ -1583,6 +1626,38 @@ export async function getOrder(
   return res.data;
 }
 
+export async function getSubLabPortalProfile(): Promise<{ id: string; name: string; labId: string }> {
+  const res = await api.get<{ id: string; name: string; labId: string }>('/sub-lab/profile');
+  return res.data;
+}
+
+export async function getSubLabPortalOrders(
+  params: OrderSearchParams,
+): Promise<OrderHistorySearchResult> {
+  const res = await api.get<OrderHistorySearchResult>('/sub-lab/orders', { params });
+  return res.data;
+}
+
+export async function getSubLabPortalOrder(orderId: string): Promise<OrderDto> {
+  const res = await api.get<OrderDto>(`/sub-lab/orders/${orderId}`);
+  return res.data;
+}
+
+export async function downloadSubLabTestResultsPDF(orderId: string): Promise<Blob> {
+  const res = await api.get<Blob>(`/sub-lab/orders/${orderId}/results`, {
+    responseType: 'blob',
+  });
+  return res.data;
+}
+
+export async function getSubLabPortalStatistics(params: {
+  startDate?: string;
+  endDate?: string;
+}): Promise<StatisticsDto> {
+  const res = await api.get<StatisticsDto>('/sub-lab/statistics', { params });
+  return res.data;
+}
+
 export async function updateOrderPayment(
   orderId: string,
   data: { paymentStatus: 'unpaid' | 'partial' | 'paid'; paidAmount?: number }
@@ -1609,7 +1684,7 @@ export async function previewLabReportPdf(data: AdminReportPreviewRequest): Prom
 
 export async function updateOrderNotes(
   orderId: string,
-  data: { notes?: string | null },
+  data: { notes?: string | null; sourceSubLabId?: string | null },
 ): Promise<OrderDto> {
   const res = await api.patch<OrderDto>(`/orders/${orderId}/notes`, data);
   return res.data;
@@ -1862,11 +1937,20 @@ export interface CultureResultPayload {
   isolates: CultureResultIsolate[];
 }
 
+export interface ResultDocumentDto {
+  fileName: string;
+  mimeType: string;
+  sizeBytes: number;
+  uploadedAt: string | null;
+  uploadedBy: string | null;
+}
+
 export type TestResultEntryType =
   | 'NUMERIC'
   | 'QUALITATIVE'
   | 'TEXT'
-  | 'CULTURE_SENSITIVITY';
+  | 'CULTURE_SENSITIVITY'
+  | 'PDF_UPLOAD';
 
 export interface TestResultTextOption {
   value: string;
@@ -2123,6 +2207,7 @@ export interface WorklistItem {
   departmentName: string | null;
   parameterDefinitions: TestParameterDefinition[] | null;
   resultParameters: Record<string, string> | null;
+  resultDocument: ResultDocumentDto | null;
   rejectionReason: string | null;
   sortOrder: number;
   panelSortOrder: number | null;
@@ -2140,6 +2225,41 @@ export async function enterResult(
   }
 ): Promise<void> {
   await api.patch(`/worklist/${id}/result`, data);
+}
+
+export async function uploadResultDocument(
+  id: string,
+  file: File,
+  options?: { forceEditVerified?: boolean },
+): Promise<void> {
+  const formData = new FormData();
+  formData.append('file', file);
+  if (options?.forceEditVerified) {
+    formData.append('forceEditVerified', 'true');
+  }
+  await api.post(`/worklist/order-tests/${id}/result-document`, formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  });
+}
+
+export async function removeResultDocument(
+  id: string,
+  options?: { forceEditVerified?: boolean },
+): Promise<void> {
+  await api.delete(`/worklist/order-tests/${id}/result-document`, {
+    params: options?.forceEditVerified ? { forceEditVerified: 'true' } : undefined,
+  });
+}
+
+export async function downloadResultDocument(
+  id: string,
+  options?: { download?: boolean },
+): Promise<Blob> {
+  const res = await api.get(`/worklist/order-tests/${id}/result-document`, {
+    params: options?.download ? { download: 'true' } : undefined,
+    responseType: 'blob',
+  });
+  return res.data;
 }
 
 export async function batchEnterResults(
@@ -2485,6 +2605,77 @@ export interface UpdateLabSettingsDto {
 export async function updateLabSettings(data: UpdateLabSettingsDto): Promise<LabSettingsDto> {
   const res = await api.patch<LabSettingsDto>('/settings/lab', data);
   return res.data;
+}
+
+export interface SubLabOptionDto {
+  id: string;
+  name: string;
+}
+
+export interface SubLabListItemDto {
+  id: string;
+  name: string;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+  username: string | null;
+  priceCount: number;
+}
+
+export interface SubLabPriceDto {
+  id?: string;
+  testId: string;
+  price: number;
+}
+
+export interface SubLabDetailDto {
+  id: string;
+  name: string;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+  username: string | null;
+  prices: SubLabPriceDto[];
+}
+
+export interface SaveSubLabRequest {
+  name: string;
+  username: string;
+  password?: string;
+  isActive?: boolean;
+  prices?: Array<{ testId: string; price: number }>;
+}
+
+export async function getSubLabOptions(): Promise<SubLabOptionDto[]> {
+  const res = await api.get<SubLabOptionDto[]>('/settings/sub-labs/options');
+  return res.data;
+}
+
+export async function getSubLabs(): Promise<SubLabListItemDto[]> {
+  const res = await api.get<SubLabListItemDto[]>('/settings/sub-labs');
+  return res.data;
+}
+
+export async function getSubLab(id: string): Promise<SubLabDetailDto> {
+  const res = await api.get<SubLabDetailDto>(`/settings/sub-labs/${id}`);
+  return res.data;
+}
+
+export async function createSubLab(data: SaveSubLabRequest): Promise<SubLabDetailDto> {
+  const res = await api.post<SubLabDetailDto>('/settings/sub-labs', data);
+  return res.data;
+}
+
+export async function updateSubLab(
+  id: string,
+  data: SaveSubLabRequest,
+): Promise<SubLabDetailDto> {
+  const res = await api.patch<SubLabDetailDto>(`/settings/sub-labs/${id}`, data);
+  return res.data;
+}
+
+export async function deleteSubLab(id: string): Promise<void> {
+  await api.delete(`/settings/sub-labs/${id}`);
 }
 
 // Test pricing by shift

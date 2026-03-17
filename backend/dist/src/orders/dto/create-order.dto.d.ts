@@ -13,6 +13,7 @@ export declare class CreateOrderDto {
     shiftId?: string;
     patientType?: PatientType;
     notes?: string;
+    sourceSubLabId?: string;
     discountPercent?: number;
     samples: CreateSampleDto[];
     deliveryMethods?: DeliveryMethod[];

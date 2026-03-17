@@ -208,8 +208,13 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 8px;
+  margin-bottom: 4px;
   gap: 8px;
+}
+
+.order-composer-toolbar .ant-typography {
+  margin: 0;
+  font-size: 14px;
 }
 
 .order-composer-field,
@@ -223,6 +228,12 @@
   margin-bottom: 12px !important;
 }
 
+.order-composer-field-compact {
+  grid-template-columns: 132px minmax(0, 1fr) !important;
+  column-gap: 10px !important;
+  margin-bottom: 6px !important;
+}
+
 .order-composer-field-label.ant-typography,
 .order-draft-referred-row > .ant-typography:first-child {
   margin: 0 !important;
@@ -233,6 +244,12 @@
   min-height: 44px;
 }
 
+.order-composer-field-compact .order-composer-field-label,
+.order-composer-field-compact > .ant-typography:first-child {
+  min-height: 34px;
+  font-size: 13px;
+}
+
 html[data-theme='dark'] .order-composer-field-label.ant-typography,
 html[data-theme='dark'] .order-draft-referred-row > .ant-typography:first-child {
   color: rgba(248, 250, 252, 0.92) !important;
@@ -241,6 +258,13 @@ html[data-theme='dark'] .order-draft-referred-row > .ant-typography:first-child 
 .order-composer-field-control {
   width: 100%;
   min-width: 0;
+}
+
+.order-composer-field-value {
+  display: flex;
+  align-items: center;
+  min-height: 34px;
+  font-size: 13.5px;
 }
 
 .order-composer-select-card {
@@ -262,6 +286,7 @@ html[data-theme='dark'] .order-draft-referred-row > .ant-typography:first-child 
   flex-direction: column;
   min-height: 0;
   overflow: hidden;
+  padding-top: 8px;
   padding-bottom: 0;
 }
 
@@ -276,9 +301,14 @@ html[data-theme='dark'] .order-draft-referred-row > .ant-typography:first-child 
 .order-selected-tests-panel>.ant-empty {
   display: flex;
   flex: 1;
-  align-items: center;
-  justify-content: center;
+  align-items: flex-start;
+  justify-content: flex-start;
   margin: 0;
+  padding-top: 8px;
+}
+
+.order-selected-tests-panel>.ant-empty .ant-empty-description {
+  font-size: 13px;
 }
 
 .order-selected-tests-table .ant-table-thead>tr>th {
@@ -1308,6 +1338,11 @@ html[data-theme='dark'] .order-tests-readonly-table .ant-table-tbody>tr>td {
   box-shadow: var(--orders-field-shadow);
 }
 
+.order-composer-field-compact .ant-select-selector {
+  min-height: 40px !important;
+  padding-block: 4px !important;
+}
+
 .order-composer-select-card .ant-select-single:not(.ant-select-customize-input) .ant-select-selector,
 .order-draft-referred-row .ant-select-single:not(.ant-select-customize-input) .ant-select-selector {
   display: flex;
@@ -1324,6 +1359,13 @@ html[data-theme='dark'] .order-tests-readonly-table .ant-table-tbody>tr>td {
   height: 28px !important;
 }
 
+.order-composer-select-card .ant-input,
+.order-composer-select-card .ant-input-affix-wrapper,
+.order-draft-referred-row .ant-input,
+.order-draft-referred-row .ant-input-affix-wrapper {
+  font-size: 13.5px;
+}
+
 .orders-history-card .ant-input,
 .orders-history-card .ant-select-selection-item,
 .orders-history-card .ant-select-selection-placeholder,
@@ -1332,7 +1374,7 @@ html[data-theme='dark'] .order-tests-readonly-table .ant-table-tbody>tr>td {
 .order-composer-select-card .ant-select-selection-placeholder,
 .order-draft-referred-row .ant-select-selection-item,
 .order-draft-referred-row .ant-select-selection-placeholder {
-  font-size: 13px;
+  font-size: 13.5px;
 }
 
 .orders-history-card .ant-input-prefix,
@@ -2488,13 +2530,13 @@ html[data-theme='dark'] .orders-patient-form-modal .ant-input-textarea,
 .orders-edit-tests-shell {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 10px;
 }
 
 .orders-edit-tests-description.ant-typography {
   margin: 0;
   font-size: 13px;
-  line-height: 1.65;
+  line-height: 1.45;
 }
 
 .orders-edit-tests-toolbar {

@@ -19,6 +19,8 @@ describe('ReportsService public result link resolution', () => {
       {} as any,
       {} as any,
       {} as any,
+      {} as any,
+      {} as any,
     );
   }
 

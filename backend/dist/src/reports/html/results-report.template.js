@@ -35,6 +35,11 @@ function isAbnormalFlag(flag) {
     return flag === 'H' || flag === 'L';
 }
 function formatResultValue(ot) {
+    const resultEntryType = String(ot.test?.resultEntryType ?? '').toUpperCase();
+    if (resultEntryType === 'PDF_UPLOAD' &&
+        String(ot.resultDocumentStorageKey ?? '').trim()) {
+        return 'See attached PDF result';
+    }
     const cultureResult = ot.cultureResult;
     if (cultureResult && typeof cultureResult === 'object') {
         if (cultureResult.noGrowth === true) {

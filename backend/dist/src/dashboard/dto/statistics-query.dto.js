@@ -11,6 +11,7 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.StatisticsQueryDto = void 0;
 const class_validator_1 = require("class-validator");
+const STATISTICS_SOURCE_TYPES = ['ALL', 'IN_HOUSE', 'SUB_LAB'];
 class StatisticsQueryDto {
 }
 exports.StatisticsQueryDto = StatisticsQueryDto;
@@ -34,4 +35,10 @@ __decorate([
     (0, class_validator_1.IsUUID)(),
     __metadata("design:type", String)
 ], StatisticsQueryDto.prototype, "departmentId", void 0);
+__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    (0, class_validator_1.IsIn)(STATISTICS_SOURCE_TYPES),
+    __metadata("design:type", String)
+], StatisticsQueryDto.prototype, "sourceType", void 0);
 //# sourceMappingURL=statistics-query.dto.js.map

@@ -1,0 +1,145 @@
+.sub-lab-portal-page {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.sub-lab-page-header.ant-space {
+  width: 100%;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.sub-lab-portal-card {
+  border-radius: 14px;
+}
+
+.sub-lab-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+}
+
+.sub-lab-filter-control {
+  min-width: 180px;
+}
+
+.sub-lab-filter-search {
+  width: 260px;
+}
+
+.sub-lab-filter-apply {
+  min-width: 96px;
+}
+
+.sub-lab-orders-table .sub-lab-orders-clickable-row {
+  cursor: pointer;
+}
+
+.sub-lab-orders-table .sub-lab-orders-clickable-row:hover > td {
+  background: rgba(59, 130, 246, 0.04);
+}
+
+.sub-lab-order-mobile-card {
+  width: 100%;
+  border-radius: 14px;
+  cursor: pointer;
+}
+
+.sub-lab-order-mobile-top,
+.sub-lab-test-mobile-top {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: flex-start;
+}
+
+.sub-lab-order-mobile-meta,
+.sub-lab-test-mobile-meta,
+.sub-lab-order-mobile-result,
+.sub-lab-test-mobile-result {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 10px;
+}
+
+.sub-lab-order-mobile-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.sub-lab-test-mobile-card {
+  width: 100%;
+}
+
+.sub-lab-layout-shell .sub-lab-layout-header.ant-layout-header {
+  height: auto;
+  line-height: 1.4;
+}
+
+.sub-lab-layout-header-left {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.sub-lab-mobile-nav {
+  margin-bottom: 16px;
+}
+
+.sub-lab-layout-content {
+  min-width: 0;
+}
+
+.sub-lab-stats-toolbar {
+  justify-content: flex-end;
+}
+
+@media (max-width: 991px) {
+  .sub-lab-page-header.ant-space {
+    align-items: stretch;
+  }
+
+  .sub-lab-page-header.ant-space,
+  .sub-lab-page-header.ant-space .ant-space-item {
+    width: 100%;
+  }
+
+  .sub-lab-filters {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .sub-lab-filter-control,
+  .sub-lab-filter-search,
+  .sub-lab-filter-apply {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .sub-lab-layout-header.ant-layout-header {
+    flex-direction: column;
+    align-items: flex-start !important;
+    gap: 10px;
+  }
+
+  .sub-lab-layout-header .ant-space {
+    flex-wrap: wrap;
+  }
+
+  .sub-lab-stats-toolbar {
+    width: 100%;
+    justify-content: stretch;
+  }
+
+  .sub-lab-order-drawer .ant-drawer-content-wrapper {
+    max-width: 100vw;
+  }
+}

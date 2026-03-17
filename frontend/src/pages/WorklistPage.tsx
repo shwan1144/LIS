@@ -20,12 +20,15 @@ import {
 import type { ColumnsType } from 'antd/es/table';
 import dayjs from 'dayjs';
 import {
+  downloadResultDocument,
   enterResult,
   getAntibiotics,
   getDepartments,
   getWorklistOrderTests,
   getWorklistOrders,
   getWorklistStats,
+  removeResultDocument,
+  uploadResultDocument,
   type AntibioticDto,
   type CultureResultPayload,
   type DepartmentDto,
@@ -104,6 +107,29 @@ function normalizeNumericResultInput(value: unknown): string | null {
   return normalized;
 }
 
+function openBlobInNewTab(blob: Blob): void {
+  const objectUrl = URL.createObjectURL(blob);
+  const popup = window.open(objectUrl, '_blank', 'noopener');
+  if (!popup) {
+    URL.revokeObjectURL(objectUrl);
+    throw new Error('Popup blocked');
+  }
+  const revoke = () => URL.revokeObjectURL(objectUrl);
+  popup.addEventListener('beforeunload', revoke, { once: true });
+  window.setTimeout(revoke, 60_000);
+}
+
+function downloadBlob(blob: Blob, fileName: string): void {
+  const objectUrl = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = objectUrl;
+  link.download = fileName;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.setTimeout(() => URL.revokeObjectURL(objectUrl), 0);
+}
+
 type ResultSubmissionPayload = {
   resultValue: number | null;
   resultText: string | null;
@@ -173,13 +199,18 @@ function buildResultSubmissionPayload(
     );
     resultValue = null;
     resultText = null;
+  } else if (resultEntryType === 'PDF_UPLOAD') {
+    resultValue = null;
+    resultText = null;
   }
 
   return {
     resultValue: resultValue === null ? null : Number(resultValue),
     resultText,
     resultParameters:
-      resultEntryType === 'CULTURE_SENSITIVITY' ? null : resultParameters,
+      resultEntryType === 'CULTURE_SENSITIVITY' || resultEntryType === 'PDF_UPLOAD'
+        ? null
+        : resultParameters,
     cultureResult,
   };
 }
@@ -365,7 +396,8 @@ function buildInitialFormValues(items: WorklistItem[]): Record<string, unknown> 
       resultValue:
         target.resultEntryType === 'QUALITATIVE' ||
           target.resultEntryType === 'TEXT' ||
-          target.resultEntryType === 'CULTURE_SENSITIVITY'
+          target.resultEntryType === 'CULTURE_SENSITIVITY' ||
+          target.resultEntryType === 'PDF_UPLOAD'
           ? undefined
           : numericInitialValue,
       resultText: initialResultText,
@@ -494,6 +526,7 @@ export function WorklistPage() {
   const [modalAppliedDepartmentId, setModalAppliedDepartmentId] = useState<string | null>(null);
   const [loadingAllTests, setLoadingAllTests] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [resultDocumentBusyTargetId, setResultDocumentBusyTargetId] = useState<string | null>(null);
   const [liveFlags, setLiveFlags] = useState<Record<string, ResultFlag | null>>({});
   const [resultForm] = Form.useForm<any>();
   const watchedModalValues = Form.useWatch([], resultForm);
@@ -758,7 +791,7 @@ export function WorklistPage() {
           continue;
         }
 
-        if (resultEntryType === 'CULTURE_SENSITIVITY') {
+        if (resultEntryType === 'CULTURE_SENSITIVITY' || resultEntryType === 'PDF_UPLOAD') {
           nextFlags[target.id] = target.flag ?? null;
           continue;
         }
@@ -892,6 +925,105 @@ export function WorklistPage() {
       setLoadingAllTests(false);
     }
   }, [hydrateModalPayload, modalGroup, modalOrder, orderCacheKey]);
+
+  const refreshCurrentModalGroup = useCallback(
+    async (
+      orderId: string,
+      groupIdentity: WorklistOrderGroupSummary | null,
+      appliedDepartmentId: string | null,
+    ) => {
+      const refreshed = await loadOrderGroups(orderId, {
+        force: true,
+        departmentOverride: appliedDepartmentId,
+      });
+      if (!refreshed || !groupIdentity) {
+        return;
+      }
+      const nextGroup = resolveGroupByIdentity(refreshed.groups, groupIdentity);
+      if (!nextGroup) {
+        closeEntryModal();
+        return;
+      }
+      hydrateModalPayload(refreshed.order, nextGroup, refreshed.appliedDepartmentId);
+    },
+    [closeEntryModal, hydrateModalPayload, loadOrderGroups],
+  );
+
+  const handlePreviewResultDocument = useCallback(async (target: WorklistItem) => {
+    if (!target.resultDocument) return;
+    setResultDocumentBusyTargetId(target.id);
+    try {
+      const blob = await downloadResultDocument(target.id);
+      openBlobInNewTab(blob);
+    } catch {
+      message.error('Failed to open result PDF');
+    } finally {
+      setResultDocumentBusyTargetId(null);
+    }
+  }, []);
+
+  const handleDownloadResultDocument = useCallback(async (target: WorklistItem) => {
+    if (!target.resultDocument) return;
+    setResultDocumentBusyTargetId(target.id);
+    try {
+      const blob = await downloadResultDocument(target.id, { download: true });
+      downloadBlob(blob, target.resultDocument.fileName || 'result.pdf');
+    } catch {
+      message.error('Failed to download result PDF');
+    } finally {
+      setResultDocumentBusyTargetId(null);
+    }
+  }, []);
+
+  const handleUploadResultDocument = useCallback(async (target: WorklistItem, file: File) => {
+    if (!modalOrder || !modalGroup) return;
+    setResultDocumentBusyTargetId(target.id);
+    try {
+      await uploadResultDocument(target.id, file, {
+        forceEditVerified: canAdminEditVerified && target.status === 'VERIFIED',
+      });
+      message.success('Result PDF uploaded');
+      await Promise.all([loadRows(), loadStats()]);
+      await refreshCurrentModalGroup(modalOrder.orderId, modalGroup, modalAppliedDepartmentId);
+    } catch {
+      message.error('Failed to upload result PDF');
+    } finally {
+      setResultDocumentBusyTargetId(null);
+    }
+  }, [
+    canAdminEditVerified,
+    loadRows,
+    loadStats,
+    modalAppliedDepartmentId,
+    modalGroup,
+    modalOrder,
+    refreshCurrentModalGroup,
+  ]);
+
+  const handleRemoveResultDocument = useCallback(async (target: WorklistItem) => {
+    if (!modalOrder || !modalGroup) return;
+    setResultDocumentBusyTargetId(target.id);
+    try {
+      await removeResultDocument(target.id, {
+        forceEditVerified: canAdminEditVerified && target.status === 'VERIFIED',
+      });
+      message.success('Result PDF removed');
+      await Promise.all([loadRows(), loadStats()]);
+      await refreshCurrentModalGroup(modalOrder.orderId, modalGroup, modalAppliedDepartmentId);
+    } catch {
+      message.error('Failed to remove result PDF');
+    } finally {
+      setResultDocumentBusyTargetId(null);
+    }
+  }, [
+    canAdminEditVerified,
+    loadRows,
+    loadStats,
+    modalAppliedDepartmentId,
+    modalGroup,
+    modalOrder,
+    refreshCurrentModalGroup,
+  ]);
 
   const handleRequestCloseEntryModal = useCallback(async () => {
     if (submitting) {
@@ -1545,6 +1677,11 @@ export function WorklistPage() {
         onValuesChange={recomputeLiveFlags}
         getCultureOptionsForTarget={getCultureOptionsForTarget}
         formatReferenceRange={formatReferenceRange}
+        documentActionTargetId={resultDocumentBusyTargetId}
+        onUploadResultDocument={handleUploadResultDocument}
+        onPreviewResultDocument={handlePreviewResultDocument}
+        onDownloadResultDocument={handleDownloadResultDocument}
+        onRemoveResultDocument={handleRemoveResultDocument}
       />
 
     </div>

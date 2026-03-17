@@ -3,6 +3,8 @@ type OrderTestResultSnapshot = {
   resultText?: unknown;
   resultParameters?: unknown;
   cultureResult?: unknown;
+  resultDocument?: unknown;
+  resultDocumentStorageKey?: unknown;
 };
 
 export function hasMeaningfulOrderTestResult(
@@ -65,6 +67,15 @@ export function hasMeaningfulOrderTestResult(
         return hasOrganism && hasAntibiotics;
       });
     }
+  }
+
+  if (typeof orderTest.resultDocumentStorageKey === 'string') {
+    return orderTest.resultDocumentStorageKey.trim().length > 0;
+  }
+
+  if (orderTest.resultDocument && typeof orderTest.resultDocument === 'object') {
+    const fileName = (orderTest.resultDocument as { fileName?: unknown }).fileName;
+    return typeof fileName === 'string' && fileName.trim().length > 0;
   }
 
   return false;

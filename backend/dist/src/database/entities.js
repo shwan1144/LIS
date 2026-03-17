@@ -20,6 +20,8 @@ const refresh_token_entity_1 = require("../entities/refresh-token.entity");
 const result_entity_1 = require("../entities/result.entity");
 const sample_entity_1 = require("../entities/sample.entity");
 const shift_entity_1 = require("../entities/shift.entity");
+const sub_lab_entity_1 = require("../entities/sub-lab.entity");
+const sub_lab_test_price_entity_1 = require("../entities/sub-lab-test-price.entity");
 const test_component_entity_1 = require("../entities/test-component.entity");
 const test_antibiotic_entity_1 = require("../entities/test-antibiotic.entity");
 const test_entity_1 = require("../entities/test.entity");
@@ -32,6 +34,8 @@ exports.DATABASE_ENTITIES = [
     admin_lab_portal_token_entity_1.AdminLabPortalToken,
     lab_entity_1.Lab,
     shift_entity_1.Shift,
+    sub_lab_entity_1.SubLab,
+    sub_lab_test_price_entity_1.SubLabTestPrice,
     user_entity_1.User,
     user_lab_assignment_entity_1.UserLabAssignment,
     user_shift_assignment_entity_1.UserShiftAssignment,

@@ -7,6 +7,8 @@ import { Test } from '../entities/test.entity';
 import { Pricing } from '../entities/pricing.entity';
 import { TestComponent } from '../entities/test-component.entity';
 import { LabOrdersWorklist } from '../entities/lab-orders-worklist.entity';
+import { SubLab } from '../entities/sub-lab.entity';
+import { SubLabTestPrice } from '../entities/sub-lab-test-price.entity';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { CreateOrderSummaryDto, CreateOrderView, OrderDetailView, OrderResultStatus } from './dto/create-order-response.dto';
 import { AuditService } from '../audit/audit.service';
@@ -28,11 +30,16 @@ export interface OrderListQueryParams {
     status?: OrderStatus;
     patientId?: string;
     shiftId?: string;
+    sourceSubLabId?: string;
     startDate?: string;
     endDate?: string;
     dateFilterTimeZone?: string;
     resultStatus?: OrderResultStatus;
 }
+type OrderSubLabSummary = {
+    id: string;
+    name: string;
+};
 export interface OrderHistoryItem {
     id: string;
     orderNumber: string | null;
@@ -44,10 +51,12 @@ export interface OrderHistoryItem {
     finalAmount: number;
     patient: Patient;
     shift: Shift | null;
+    sourceSubLab: OrderSubLabSummary | null;
     testsCount: number;
     readyTestsCount: number;
     reportReady: boolean;
     resultStatus: OrderResultStatus;
+    resultSummary?: string | null;
     pendingTestsCount: number;
     completedTestsCount: number;
     verifiedTestsCount: number;
@@ -62,12 +71,14 @@ export declare class OrdersService {
     private readonly pricingRepo;
     private readonly testComponentRepo;
     private readonly worklistRepo;
+    private readonly subLabRepo;
+    private readonly subLabTestPriceRepo;
     private readonly auditService;
     private readonly logger;
     private readonly createPerfLogThresholdMs;
     private readonly orderHistoryPerfLogThresholdMs;
     private readonly orderTestInsertChunkSize;
-    constructor(orderRepo: Repository<Order>, patientRepo: Repository<Patient>, labRepo: Repository<Lab>, shiftRepo: Repository<Shift>, testRepo: Repository<Test>, pricingRepo: Repository<Pricing>, testComponentRepo: Repository<TestComponent>, worklistRepo: Repository<LabOrdersWorklist>, auditService: AuditService);
+    constructor(orderRepo: Repository<Order>, patientRepo: Repository<Patient>, labRepo: Repository<Lab>, shiftRepo: Repository<Shift>, testRepo: Repository<Test>, pricingRepo: Repository<Pricing>, testComponentRepo: Repository<TestComponent>, worklistRepo: Repository<LabOrdersWorklist>, subLabRepo: Repository<SubLab>, subLabTestPriceRepo: Repository<SubLabTestPrice>, auditService: AuditService);
     create(labId: string, dto: CreateOrderDto, view?: CreateOrderView): Promise<Order | CreateOrderSummaryDto>;
     findAll(labId: string, params: OrderListQueryParams): Promise<{
         items: Order[];
@@ -89,7 +100,7 @@ export declare class OrdersService {
         paidAmount?: number;
     }): Promise<Order>;
     updateDiscount(id: string, labId: string, discountPercent: number): Promise<Order>;
-    updateNotes(id: string, labId: string, notes: string | null | undefined, actor: LabActorContext): Promise<Order>;
+    updateNotes(id: string, labId: string, notes: string | null | undefined, sourceSubLabId: string | null | undefined, actor: LabActorContext): Promise<Order>;
     updateDeliveryMethods(id: string, labId: string, deliveryMethods?: unknown[]): Promise<Order>;
     updateOrderTests(id: string, labId: string, testIds: string[], actor: LabActorContext, actorRole?: string, options?: {
         forceRemoveVerified?: boolean;
@@ -106,13 +117,14 @@ export declare class OrdersService {
     private buildRootOrderTestAuditItem;
     private getOrderTestLabel;
     private resolveUpdatedPaidAmount;
+    private resolveOrderPricingMap;
     private findPricing;
     getNextOrderNumber(labId: string, shiftId: string | null): Promise<string>;
     private generateOrderNumber;
     private computeNextOrderNumber;
     private getMaxOrderSequenceForDate;
     private getNextSequenceForScope;
-    estimatePrice(labId: string, testIds: string[], shiftId?: string | null): Promise<{
+    estimatePrice(labId: string, testIds: string[], shiftId?: string | null, sourceSubLabId?: string | null): Promise<{
         subtotal: number;
     }>;
     getOrdersTodayCount(labId: string): Promise<number>;
@@ -147,6 +159,8 @@ export declare class OrdersService {
     private assertOrderTestsEditableToday;
     private stripHeavyOrderPayload;
     private stripHeavyOrderTestsPayload;
+    private attachOrderTestResultDocuments;
+    private mapOrderTestResultDocument;
     private normalizeDeliveryMethods;
     private normalizePaymentStatus;
     private normalizeOrderResultStatus;
@@ -155,3 +169,4 @@ export declare class OrdersService {
     getWorklist(labId: string, shiftId: string | null): Promise<WorklistItemResponse[]>;
     saveWorklist(labId: string, shiftId: string | null, items: WorklistItemStored[]): Promise<void>;
 }
+export {};

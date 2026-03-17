@@ -117,6 +117,30 @@ __decorate([
     __metadata("design:type", Object)
 ], OrderTest.prototype, "comments", void 0);
 __decorate([
+    (0, typeorm_1.Column)({ type: 'text', nullable: true }),
+    __metadata("design:type", Object)
+], OrderTest.prototype, "resultDocumentStorageKey", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ type: 'varchar', length: 255, nullable: true }),
+    __metadata("design:type", Object)
+], OrderTest.prototype, "resultDocumentFileName", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ type: 'varchar', length: 100, nullable: true }),
+    __metadata("design:type", Object)
+], OrderTest.prototype, "resultDocumentMimeType", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ type: 'int', nullable: true }),
+    __metadata("design:type", Object)
+], OrderTest.prototype, "resultDocumentSizeBytes", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ type: 'timestamp', nullable: true }),
+    __metadata("design:type", Object)
+], OrderTest.prototype, "resultDocumentUploadedAt", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ type: 'uuid', nullable: true }),
+    __metadata("design:type", Object)
+], OrderTest.prototype, "resultDocumentUploadedBy", void 0);
+__decorate([
     (0, typeorm_1.Column)({ type: 'int', nullable: true }),
     __metadata("design:type", Object)
 ], OrderTest.prototype, "panelSortOrder", void 0);

@@ -91,6 +91,13 @@
   --dashboard-kpi-glow: rgba(139, 92, 246, 0.18);
 }
 
+.dashboard-kpi-card--green {
+  --dashboard-kpi-accent: #16a34a;
+  --dashboard-kpi-accent-strong: #15803d;
+  --dashboard-kpi-bg-start: rgba(220, 252, 231, 0.94);
+  --dashboard-kpi-glow: rgba(22, 163, 74, 0.18);
+}
+
 .dashboard-kpi-label {
   margin-bottom: 14px;
   color: #475569;
@@ -125,6 +132,46 @@
   font-weight: 800;
   line-height: 1;
   letter-spacing: -0.03em;
+}
+
+.statistics-sub-labs-header {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-bottom: 8px;
+}
+
+.statistics-payable-section {
+  margin-bottom: 16px;
+}
+
+.statistics-payable-grid {
+  margin-bottom: 0;
+}
+
+.statistics-sub-lab-card .ant-card-body {
+  min-height: 104px;
+  padding: 14px 18px 14px 20px;
+}
+
+.statistics-sub-lab-card-copy {
+  min-width: 0;
+}
+
+.statistics-sub-lab-card-value {
+  color: #0f172a;
+  font-size: 31px;
+  font-weight: 800;
+  line-height: 1.05;
+  letter-spacing: -0.02em;
+}
+
+.statistics-sub-lab-card-meta {
+  margin-top: 6px;
+  color: #475569;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.35;
 }
 
 .dashboard-announcement-banner {
@@ -203,6 +250,14 @@ html[data-theme='dark'] .dashboard-kpi-value {
   color: #f8fafc;
 }
 
+html[data-theme='dark'] .statistics-sub-lab-card-value {
+  color: #f8fafc;
+}
+
+html[data-theme='dark'] .statistics-sub-lab-card-meta {
+  color: rgba(219, 234, 254, 0.78);
+}
+
 html[data-theme='dark'] .dashboard-announcement-icon {
   background: rgba(251, 191, 36, 0.14);
   color: #fbbf24;
@@ -228,5 +283,9 @@ html[data-theme='dark'] .dashboard-announcement-text.ant-typography {
 
   .dashboard-kpi-value {
     font-size: 30px;
+  }
+
+  .statistics-sub-lab-card-value {
+    font-size: 27px;
   }
 }

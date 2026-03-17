@@ -16,6 +16,7 @@ const lab_entity_1 = require("../entities/lab.entity");
 const shift_entity_1 = require("../entities/shift.entity");
 const department_entity_1 = require("../entities/department.entity");
 const platform_setting_entity_1 = require("../entities/platform-setting.entity");
+const sub_lab_entity_1 = require("../entities/sub-lab.entity");
 const dashboard_service_1 = require("./dashboard.service");
 const dashboard_controller_1 = require("./dashboard.controller");
 const orders_module_1 = require("../orders/orders.module");
@@ -27,7 +28,16 @@ exports.DashboardModule = DashboardModule;
 exports.DashboardModule = DashboardModule = __decorate([
     (0, common_1.Module)({
         imports: [
-            typeorm_1.TypeOrmModule.forFeature([patient_entity_1.Patient, order_test_entity_1.OrderTest, order_entity_1.Order, lab_entity_1.Lab, shift_entity_1.Shift, department_entity_1.Department, platform_setting_entity_1.PlatformSetting]),
+            typeorm_1.TypeOrmModule.forFeature([
+                patient_entity_1.Patient,
+                order_test_entity_1.OrderTest,
+                order_entity_1.Order,
+                lab_entity_1.Lab,
+                shift_entity_1.Shift,
+                department_entity_1.Department,
+                platform_setting_entity_1.PlatformSetting,
+                sub_lab_entity_1.SubLab,
+            ]),
             orders_module_1.OrdersModule,
             unmatched_module_1.UnmatchedModule,
             auth_module_1.AuthModule,

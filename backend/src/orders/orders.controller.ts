@@ -42,6 +42,7 @@ interface RequestWithUser {
     username: string;
     labId: string;
     role?: string;
+    subLabId?: string | null;
   };
 }
 
@@ -92,6 +93,7 @@ export class OrdersController {
     @Query('status') status?: string,
     @Query('patientId') patientId?: string,
     @Query('shiftId') shiftId?: string,
+    @Query('sourceSubLabId') sourceSubLabId?: string,
     @Query('startDate') startDate?: string,
     @Query('endDate') endDate?: string,
     @Query('dateFilterTimeZone') dateFilterTimeZone?: string,
@@ -107,6 +109,7 @@ export class OrdersController {
       status: status as OrderStatus | undefined,
       patientId,
       shiftId,
+      sourceSubLabId,
       startDate,
       endDate,
       dateFilterTimeZone,
@@ -119,13 +122,14 @@ export class OrdersController {
     @Req() req: RequestWithUser,
     @Query('testIds') testIds?: string,
     @Query('shiftId') shiftId?: string,
+    @Query('sourceSubLabId') sourceSubLabId?: string,
   ) {
     const labId = req.user?.labId;
     if (!labId) {
       throw new Error('Lab ID not found in token');
     }
     const ids = testIds ? testIds.split(',').filter(Boolean) : [];
-    return this.ordersService.estimatePrice(labId, ids, shiftId || null);
+    return this.ordersService.estimatePrice(labId, ids, shiftId || null, sourceSubLabId || null);
   }
 
   @Get('today-patients')
@@ -184,6 +188,7 @@ export class OrdersController {
     @Query('status') status?: string,
     @Query('patientId') patientId?: string,
     @Query('shiftId') shiftId?: string,
+    @Query('sourceSubLabId') sourceSubLabId?: string,
     @Query('startDate') startDate?: string,
     @Query('endDate') endDate?: string,
     @Query('dateFilterTimeZone') dateFilterTimeZone?: string,
@@ -201,6 +206,7 @@ export class OrdersController {
       status: status as OrderStatus | undefined,
       patientId,
       shiftId,
+      sourceSubLabId,
       startDate,
       endDate,
       dateFilterTimeZone,
@@ -269,7 +275,7 @@ export class OrdersController {
     if (!labId) {
       throw new Error('Lab ID not found in token');
     }
-    return this.ordersService.updateNotes(id, labId, dto.notes, actor);
+    return this.ordersService.updateNotes(id, labId, dto.notes, dto.sourceSubLabId, actor);
   }
 
   @Patch(':id/tests')

@@ -310,6 +310,27 @@ function renderPendingPage(status) {
       font-weight: 600;
     }
 
+    .test-actions {
+      margin-top: 8px;
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .test-action-link {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 6px 10px;
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      background: #f8fafc;
+      color: #1d4ed8;
+      text-decoration: none;
+      font-size: 0.8rem;
+      font-weight: 600;
+    }
+
     .footer {
       border-top: 1px solid var(--line);
       padding: 10px 20px 14px;
@@ -533,6 +554,15 @@ function renderPendingPage(status) {
           var badge = getStatusBadge(status);
           var progress = resolveTestProgress(current, test, nowMs);
           var meta = progress.meta ? '<div class="test-meta">' + escapeHtml(progress.meta) + '</div>' : '<div class="test-meta"></div>';
+          var documentActions = '';
+          if (test.resultDocument && test.resultDocument.fileName) {
+            var documentPath = '/public/results/' + encodeURIComponent(current.orderId || '') + '/tests/' + encodeURIComponent(test.orderTestId || '') + '/document';
+            documentActions =
+              '<div class="test-actions">' +
+                '<a class="test-action-link" href="' + documentPath + '" target="_blank" rel="noopener">View PDF</a>' +
+                '<a class="test-action-link" href="' + documentPath + '?download=true" rel="noopener">Download PDF</a>' +
+              '</div>';
+          }
 
           rows.push(
             '<div class="test-row">' +
@@ -543,6 +573,7 @@ function renderPendingPage(status) {
               '<div class="test-dept">' + escapeHtml(test.departmentName || '-') + '</div>' +
               '<div class="bar-track"><div class="bar-fill ' + progress.barClass + '" style="width:' + progress.percent + '%"></div></div>' +
               meta +
+              documentActions +
             '</div>'
           );
         }
@@ -634,6 +665,19 @@ let PublicReportsController = class PublicReportsController {
         res.setHeader('Content-Type', 'text/html; charset=utf-8');
         res.setHeader('Content-Security-Policy', PUBLIC_RESULTS_HTML_CSP);
     }
+    async getResultDocument(orderId, orderTestId, download, res) {
+        try {
+            const result = await this.reportsService.getPublicResultDocument(orderId, orderTestId);
+            this.applyNoStoreHeaders(res);
+            res.setHeader('Content-Type', result.mimeType);
+            res.setHeader('Content-Disposition', `${download === 'true' ? 'attachment' : 'inline'}; filename="${encodeURIComponent(result.fileName)}"`);
+            return res.status(200).send(result.buffer);
+        }
+        catch (error) {
+            const message = extractErrorMessage(error, 'Result document unavailable');
+            return res.status(error instanceof common_1.HttpException ? error.getStatus() : 500).send(message);
+        }
+    }
     async getResultStatusJson(orderId, res) {
         try {
             const status = await this.reportsService.getPublicResultStatus(orderId);
@@ -679,6 +723,16 @@ let PublicReportsController = class PublicReportsController {
     }
 };
 exports.PublicReportsController = PublicReportsController;
+__decorate([
+    (0, common_1.Get)(':id/tests/:orderTestId/document'),
+    __param(0, (0, common_1.Param)('id', common_1.ParseUUIDPipe)),
+    __param(1, (0, common_1.Param)('orderTestId', common_1.ParseUUIDPipe)),
+    __param(2, (0, common_1.Query)('download')),
+    __param(3, (0, common_1.Res)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [String, String, Object, Object]),
+    __metadata("design:returntype", Promise)
+], PublicReportsController.prototype, "getResultDocument", null);
 __decorate([
     (0, common_1.Get)(':id/status'),
     __param(0, (0, common_1.Param)('id', common_1.ParseUUIDPipe)),

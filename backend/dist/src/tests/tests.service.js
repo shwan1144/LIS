@@ -69,8 +69,12 @@ let TestsService = class TestsService {
         }
         await this.ensureDepartmentBelongsToLab(dto.departmentId ?? null, labId);
         const resultEntryType = this.normalizeResultEntryType(dto.resultEntryType);
-        const resultTextOptions = this.normalizeResultTextOptions(dto.resultTextOptions);
-        const allowCustomResultText = dto.allowCustomResultText ?? false;
+        const resultTextOptions = resultEntryType === 'QUALITATIVE' || resultEntryType === 'TEXT'
+            ? this.normalizeResultTextOptions(dto.resultTextOptions)
+            : null;
+        const allowCustomResultText = resultEntryType === 'QUALITATIVE' || resultEntryType === 'TEXT'
+            ? dto.allowCustomResultText ?? false
+            : false;
         const allowPanelSaveWithChildDefaults = dto.allowPanelSaveWithChildDefaults ?? false;
         const cultureConfig = this.normalizeCultureConfig(dto.cultureConfig, resultEntryType);
         this.validateResultEntryConfig(resultEntryType, resultTextOptions, allowCustomResultText, allowPanelSaveWithChildDefaults, cultureConfig, dto.type || test_entity_1.TestType.SINGLE);
@@ -179,12 +183,16 @@ let TestsService = class TestsService {
         const nextResultEntryType = dto.resultEntryType !== undefined
             ? this.normalizeResultEntryType(dto.resultEntryType)
             : (test.resultEntryType ?? 'NUMERIC');
-        const nextResultTextOptions = dto.resultTextOptions !== undefined
-            ? this.normalizeResultTextOptions(dto.resultTextOptions)
-            : (test.resultTextOptions ?? null);
-        const nextAllowCustomResultText = dto.allowCustomResultText !== undefined
-            ? dto.allowCustomResultText
-            : (test.allowCustomResultText ?? false);
+        const nextResultTextOptions = nextResultEntryType === 'QUALITATIVE' || nextResultEntryType === 'TEXT'
+            ? dto.resultTextOptions !== undefined
+                ? this.normalizeResultTextOptions(dto.resultTextOptions)
+                : (test.resultTextOptions ?? null)
+            : null;
+        const nextAllowCustomResultText = nextResultEntryType === 'QUALITATIVE' || nextResultEntryType === 'TEXT'
+            ? dto.allowCustomResultText !== undefined
+                ? dto.allowCustomResultText
+                : (test.allowCustomResultText ?? false)
+            : false;
         const nextAllowPanelSaveWithChildDefaults = dto.allowPanelSaveWithChildDefaults !== undefined
             ? dto.allowPanelSaveWithChildDefaults
             : (test.allowPanelSaveWithChildDefaults ?? false);
@@ -294,10 +302,11 @@ let TestsService = class TestsService {
         if (normalized === 'NUMERIC' ||
             normalized === 'QUALITATIVE' ||
             normalized === 'TEXT' ||
-            normalized === 'CULTURE_SENSITIVITY') {
+            normalized === 'CULTURE_SENSITIVITY' ||
+            normalized === 'PDF_UPLOAD') {
             return normalized;
         }
-        throw new common_1.BadRequestException('Invalid resultEntryType. Allowed values: NUMERIC, QUALITATIVE, TEXT, CULTURE_SENSITIVITY');
+        throw new common_1.BadRequestException('Invalid resultEntryType. Allowed values: NUMERIC, QUALITATIVE, TEXT, CULTURE_SENSITIVITY, PDF_UPLOAD');
     }
     normalizeCultureConfig(value, resultEntryType) {
         if (resultEntryType !== 'CULTURE_SENSITIVITY') {
@@ -384,6 +393,9 @@ let TestsService = class TestsService {
         if (resultEntryType === 'CULTURE_SENSITIVITY' && testType !== test_entity_1.TestType.SINGLE) {
             throw new common_1.BadRequestException('CULTURE_SENSITIVITY entry mode is only supported for single tests');
         }
+        if (resultEntryType === 'PDF_UPLOAD' && testType !== test_entity_1.TestType.SINGLE) {
+            throw new common_1.BadRequestException('PDF_UPLOAD entry mode is only supported for single tests');
+        }
         if (resultEntryType === 'NUMERIC' && resultTextOptions?.length) {
             throw new common_1.BadRequestException('resultTextOptions are only valid for QUALITATIVE or TEXT result entry type');
         }
@@ -393,11 +405,25 @@ let TestsService = class TestsService {
         if (resultEntryType === 'NUMERIC' && allowCustomResultText) {
             throw new common_1.BadRequestException('allowCustomResultText can only be enabled for QUALITATIVE or TEXT tests');
         }
+        if (resultEntryType === 'PDF_UPLOAD' && allowCustomResultText) {
+            throw new common_1.BadRequestException('allowCustomResultText is not valid for PDF_UPLOAD tests');
+        }
         if (allowPanelSaveWithChildDefaults && testType !== test_entity_1.TestType.PANEL) {
             throw new common_1.BadRequestException('allowPanelSaveWithChildDefaults can only be enabled for panel tests');
         }
         if (resultEntryType !== 'CULTURE_SENSITIVITY' && cultureConfig) {
             throw new common_1.BadRequestException('cultureConfig is only valid for CULTURE_SENSITIVITY result entry type');
+        }
+        if (resultEntryType === 'PDF_UPLOAD') {
+            if (resultTextOptions?.length) {
+                throw new common_1.BadRequestException('resultTextOptions are not valid for PDF_UPLOAD tests');
+            }
+            if (allowPanelSaveWithChildDefaults) {
+                throw new common_1.BadRequestException('allowPanelSaveWithChildDefaults cannot be enabled for PDF_UPLOAD tests');
+            }
+            if (cultureConfig) {
+                throw new common_1.BadRequestException('cultureConfig is not valid for PDF_UPLOAD tests');
+            }
         }
         if (resultEntryType === 'CULTURE_SENSITIVITY') {
             if (resultTextOptions?.length) {

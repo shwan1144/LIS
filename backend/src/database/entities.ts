@@ -26,6 +26,8 @@ import { RefreshToken } from '../entities/refresh-token.entity';
 import { Result } from '../entities/result.entity';
 import { Sample } from '../entities/sample.entity';
 import { Shift } from '../entities/shift.entity';
+import { SubLab } from '../entities/sub-lab.entity';
+import { SubLabTestPrice } from '../entities/sub-lab-test-price.entity';
 import { TestComponent } from '../entities/test-component.entity';
 import { TestAntibiotic } from '../entities/test-antibiotic.entity';
 import { Test } from '../entities/test.entity';
@@ -39,6 +41,8 @@ export const DATABASE_ENTITIES = [
   AdminLabPortalToken,
   Lab,
   Shift,
+  SubLab,
+  SubLabTestPrice,
   User,
   UserLabAssignment,
   UserShiftAssignment,

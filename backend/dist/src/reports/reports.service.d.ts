@@ -1,13 +1,15 @@
 import { type OnModuleDestroy, type OnModuleInit } from '@nestjs/common';
 import { Repository } from 'typeorm';
 import { Order } from '../entities/order.entity';
-import { OrderTest } from '../entities/order-test.entity';
+import { OrderTest, type OrderTestResultDocumentSummary } from '../entities/order-test.entity';
 import { Patient } from '../entities/patient.entity';
 import { Lab } from '../entities/lab.entity';
 import { User } from '../entities/user.entity';
 import { AuditLog } from '../entities/audit-log.entity';
 import { TestComponent } from '../entities/test-component.entity';
 import type { ReportStyleConfig } from './report-style.config';
+import { ResultDocumentsService } from '../result-documents/result-documents.service';
+import { FileStorageService } from '../storage/file-storage.service';
 export interface PublicResultTestItem {
     orderTestId: string;
     testCode: string;
@@ -20,6 +22,8 @@ export interface PublicResultTestItem {
     resultValue: string | null;
     unit: string | null;
     verifiedAt: string | null;
+    resultEntryType: string;
+    resultDocument: OrderTestResultDocumentSummary | null;
 }
 export interface PublicResultStatus {
     orderId: string;
@@ -93,22 +97,29 @@ export declare class ReportsService implements OnModuleInit, OnModuleDestroy {
     private readonly labRepo;
     private readonly userRepo;
     private readonly auditLogRepo;
+    private readonly resultDocumentsService;
+    private readonly fileStorageService;
     private static readonly REPORT_PDF_LAYOUT_VERSION;
     private readonly logger;
     private browserPromise;
     private readonly pdfCache;
     private readonly pdfInFlight;
+    private readonly reportStorageSyncInFlight;
     private readonly pdfCacheTtlMs;
     private readonly pdfCacheMaxEntries;
     private readonly pdfPerfLogThresholdMs;
     private static cachedFont;
-    constructor(orderRepo: Repository<Order>, orderTestRepo: Repository<OrderTest>, testComponentRepo: Repository<TestComponent>, patientRepo: Repository<Patient>, labRepo: Repository<Lab>, userRepo: Repository<User>, auditLogRepo: Repository<AuditLog>);
+    constructor(orderRepo: Repository<Order>, orderTestRepo: Repository<OrderTest>, testComponentRepo: Repository<TestComponent>, patientRepo: Repository<Patient>, labRepo: Repository<Lab>, userRepo: Repository<User>, auditLogRepo: Repository<AuditLog>, resultDocumentsService: ResultDocumentsService, fileStorageService: FileStorageService);
     private parseEnvInt;
+    private mapResultDocumentSummary;
     onModuleInit(): void;
     private getBrowser;
     private renderPdfFromHtml;
     onModuleDestroy(): Promise<void>;
     private buildReportPdfCacheKey;
+    private buildStoredReportPdfObjectKey;
+    private isReportReadyForStorage;
+    private clearStoredReportArtifact;
     private loadPanelSectionLookup;
     private attachPanelSectionMetadata;
     private normalizeAbsoluteUrlBase;
@@ -134,6 +145,11 @@ export declare class ReportsService implements OnModuleInit, OnModuleDestroy {
     private loadOrderResultsSnapshot;
     getPublicResultStatus(orderId: string): Promise<PublicResultStatus>;
     generatePublicTestResultsPDF(orderId: string): Promise<Buffer>;
+    getPublicResultDocument(orderId: string, orderTestId: string): Promise<{
+        buffer: Buffer;
+        fileName: string;
+        mimeType: string;
+    }>;
     generateDraftTestResultsPreviewPDF(input: {
         orderId: string;
         labId: string;
@@ -143,6 +159,7 @@ export declare class ReportsService implements OnModuleInit, OnModuleDestroy {
     }): Promise<Buffer>;
     generateOrderReceiptPDF(orderId: string, labId: string): Promise<Buffer>;
     generateTestResultsPDF(orderId: string, labId: string, options?: GenerateTestResultsPdfOptions): Promise<Buffer>;
+    syncReportToS3(orderId: string, labId: string): Promise<string | null>;
     generateTestResultsPDFWithProfile(orderId: string, labId: string, options?: GenerateTestResultsPdfOptions): Promise<GenerateTestResultsPdfResult>;
     private renderTestResultsFallbackPDF;
 }

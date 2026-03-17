@@ -54,6 +54,10 @@ export class CreateOrderDto {
   notes?: string;
 
   @IsOptional()
+  @IsUUID()
+  sourceSubLabId?: string;
+
+  @IsOptional()
   @IsNumber()
   @Min(0)
   @Max(100)

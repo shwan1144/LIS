@@ -10,6 +10,8 @@ import { Test } from '../entities/test.entity';
 import { Pricing } from '../entities/pricing.entity';
 import { TestComponent } from '../entities/test-component.entity';
 import { LabOrdersWorklist } from '../entities/lab-orders-worklist.entity';
+import { SubLab } from '../entities/sub-lab.entity';
+import { SubLabTestPrice } from '../entities/sub-lab-test-price.entity';
 import { OrdersService } from './orders.service';
 import { OrdersController } from './orders.controller';
 
@@ -26,6 +28,8 @@ import { OrdersController } from './orders.controller';
       Pricing,
       TestComponent,
       LabOrdersWorklist,
+      SubLab,
+      SubLabTestPrice,
     ]),
   ],
   controllers: [OrdersController],

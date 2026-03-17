@@ -113,8 +113,14 @@ export class TestsService {
     }
     await this.ensureDepartmentBelongsToLab(dto.departmentId ?? null, labId);
     const resultEntryType = this.normalizeResultEntryType(dto.resultEntryType);
-    const resultTextOptions = this.normalizeResultTextOptions(dto.resultTextOptions);
-    const allowCustomResultText = dto.allowCustomResultText ?? false;
+    const resultTextOptions =
+      resultEntryType === 'QUALITATIVE' || resultEntryType === 'TEXT'
+        ? this.normalizeResultTextOptions(dto.resultTextOptions)
+        : null;
+    const allowCustomResultText =
+      resultEntryType === 'QUALITATIVE' || resultEntryType === 'TEXT'
+        ? dto.allowCustomResultText ?? false
+        : false;
     const allowPanelSaveWithChildDefaults =
       dto.allowPanelSaveWithChildDefaults ?? false;
     const cultureConfig = this.normalizeCultureConfig(dto.cultureConfig, resultEntryType);
@@ -224,13 +230,17 @@ export class TestsService {
         ? this.normalizeResultEntryType(dto.resultEntryType)
         : (test.resultEntryType ?? 'NUMERIC');
     const nextResultTextOptions =
-      dto.resultTextOptions !== undefined
-        ? this.normalizeResultTextOptions(dto.resultTextOptions)
-        : (test.resultTextOptions ?? null);
+      nextResultEntryType === 'QUALITATIVE' || nextResultEntryType === 'TEXT'
+        ? dto.resultTextOptions !== undefined
+          ? this.normalizeResultTextOptions(dto.resultTextOptions)
+          : (test.resultTextOptions ?? null)
+        : null;
     const nextAllowCustomResultText =
-      dto.allowCustomResultText !== undefined
-        ? dto.allowCustomResultText
-        : (test.allowCustomResultText ?? false);
+      nextResultEntryType === 'QUALITATIVE' || nextResultEntryType === 'TEXT'
+        ? dto.allowCustomResultText !== undefined
+          ? dto.allowCustomResultText
+          : (test.allowCustomResultText ?? false)
+        : false;
     const nextAllowPanelSaveWithChildDefaults =
       dto.allowPanelSaveWithChildDefaults !== undefined
         ? dto.allowPanelSaveWithChildDefaults
@@ -384,12 +394,13 @@ export class TestsService {
       normalized === 'NUMERIC' ||
       normalized === 'QUALITATIVE' ||
       normalized === 'TEXT' ||
-      normalized === 'CULTURE_SENSITIVITY'
+      normalized === 'CULTURE_SENSITIVITY' ||
+      normalized === 'PDF_UPLOAD'
     ) {
       return normalized;
     }
     throw new BadRequestException(
-      'Invalid resultEntryType. Allowed values: NUMERIC, QUALITATIVE, TEXT, CULTURE_SENSITIVITY',
+      'Invalid resultEntryType. Allowed values: NUMERIC, QUALITATIVE, TEXT, CULTURE_SENSITIVITY, PDF_UPLOAD',
     );
   }
 
@@ -511,6 +522,12 @@ export class TestsService {
       );
     }
 
+    if (resultEntryType === 'PDF_UPLOAD' && testType !== TestType.SINGLE) {
+      throw new BadRequestException(
+        'PDF_UPLOAD entry mode is only supported for single tests',
+      );
+    }
+
     if (resultEntryType === 'NUMERIC' && resultTextOptions?.length) {
       throw new BadRequestException(
         'resultTextOptions are only valid for QUALITATIVE or TEXT result entry type',
@@ -529,6 +546,12 @@ export class TestsService {
       );
     }
 
+    if (resultEntryType === 'PDF_UPLOAD' && allowCustomResultText) {
+      throw new BadRequestException(
+        'allowCustomResultText is not valid for PDF_UPLOAD tests',
+      );
+    }
+
     if (allowPanelSaveWithChildDefaults && testType !== TestType.PANEL) {
       throw new BadRequestException(
         'allowPanelSaveWithChildDefaults can only be enabled for panel tests',
@@ -539,6 +562,24 @@ export class TestsService {
       throw new BadRequestException(
         'cultureConfig is only valid for CULTURE_SENSITIVITY result entry type',
       );
+    }
+
+    if (resultEntryType === 'PDF_UPLOAD') {
+      if (resultTextOptions?.length) {
+        throw new BadRequestException(
+          'resultTextOptions are not valid for PDF_UPLOAD tests',
+        );
+      }
+      if (allowPanelSaveWithChildDefaults) {
+        throw new BadRequestException(
+          'allowPanelSaveWithChildDefaults cannot be enabled for PDF_UPLOAD tests',
+        );
+      }
+      if (cultureConfig) {
+        throw new BadRequestException(
+          'cultureConfig is not valid for PDF_UPLOAD tests',
+        );
+      }
     }
 
     if (resultEntryType === 'CULTURE_SENSITIVITY') {

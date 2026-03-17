@@ -12,6 +12,8 @@ export class UserDto {
   username: string;
   fullName: string | null;
   role: string;
+  subLabId?: string | null;
+  subLabName?: string | null;
   isImpersonation?: boolean;
 }
 

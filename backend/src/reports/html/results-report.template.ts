@@ -47,6 +47,16 @@ function isAbnormalFlag(flag: string): boolean {
 }
 
 function formatResultValue(ot: OrderTest): string {
+  const resultEntryType = String(
+    (ot.test as { resultEntryType?: unknown } | undefined)?.resultEntryType ?? '',
+  ).toUpperCase();
+  if (
+    resultEntryType === 'PDF_UPLOAD' &&
+    String((ot as { resultDocumentStorageKey?: unknown }).resultDocumentStorageKey ?? '').trim()
+  ) {
+    return 'See attached PDF result';
+  }
+
   const cultureResult = (ot as { cultureResult?: unknown }).cultureResult as
     | {
       noGrowth?: unknown;

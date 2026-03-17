@@ -1652,7 +1652,8 @@ let PlatformAdminService = PlatformAdminService_1 = class PlatformAdminService {
         const normalized = String(value ?? '').trim().toUpperCase();
         if (normalized === 'QUALITATIVE' ||
             normalized === 'TEXT' ||
-            normalized === 'CULTURE_SENSITIVITY') {
+            normalized === 'CULTURE_SENSITIVITY' ||
+            normalized === 'PDF_UPLOAD') {
             return normalized;
         }
         return 'NUMERIC';

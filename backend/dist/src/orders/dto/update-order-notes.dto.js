@@ -28,4 +28,22 @@ __decorate([
     }),
     __metadata("design:type", Object)
 ], UpdateOrderNotesDto.prototype, "notes", void 0);
+__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsUUID)(),
+    (0, class_transformer_1.Transform)(({ value }) => {
+        if (value === undefined) {
+            return undefined;
+        }
+        if (value === null) {
+            return null;
+        }
+        if (typeof value !== 'string') {
+            return value;
+        }
+        const trimmed = value.trim();
+        return trimmed || null;
+    }),
+    __metadata("design:type", Object)
+], UpdateOrderNotesDto.prototype, "sourceSubLabId", void 0);
 //# sourceMappingURL=update-order-notes.dto.js.map

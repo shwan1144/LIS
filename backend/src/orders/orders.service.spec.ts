@@ -10,6 +10,8 @@ import { Pricing } from '../entities/pricing.entity';
 import { TestComponent } from '../entities/test-component.entity';
 import { LabOrdersWorklist } from '../entities/lab-orders-worklist.entity';
 import { OrderTest, OrderTestStatus } from '../entities/order-test.entity';
+import { SubLab } from '../entities/sub-lab.entity';
+import { SubLabTestPrice } from '../entities/sub-lab-test-price.entity';
 import { AuditAction, AuditActorType } from '../entities/audit-log.entity';
 
 function createService(overrides?: {
@@ -25,6 +27,8 @@ function createService(overrides?: {
     {} as Repository<Pricing>,
     {} as Repository<TestComponent>,
     {} as Repository<LabOrdersWorklist>,
+    {} as Repository<SubLab>,
+    {} as Repository<SubLabTestPrice>,
     (overrides?.auditService ?? { log: jest.fn().mockResolvedValue(undefined) }) as never,
   );
 }
@@ -456,16 +460,27 @@ describe('OrdersService panel removal access and cancellation', () => {
       .mockResolvedValueOnce(updatedOrder);
     const update = jest.fn().mockResolvedValue({ affected: 1 });
     const auditService = { log: jest.fn().mockResolvedValue(undefined) };
-    const orderRepo = {
+    const orderRepo = ({
       findOne,
       update,
-    } as Partial<Repository<Order>>;
+      manager: {
+        transaction: async (
+          callback: (manager: {
+            getRepository: () => { update: typeof update };
+          }) => Promise<unknown>,
+        ) =>
+          callback({
+            getRepository: () => ({ update }),
+          }),
+      },
+    } as unknown) as Partial<Repository<Order>>;
     const service = createService({ orderRepo, auditService });
 
     const result = await service.updateNotes(
       'order-1',
       'lab-1',
       'Dr Sami',
+      undefined,
       {
         userId: 'user-1',
         actorType: AuditActorType.LAB_USER,
@@ -477,7 +492,7 @@ describe('OrdersService panel removal access and cancellation', () => {
 
     expect(update).toHaveBeenCalledWith(
       { id: 'order-1', labId: 'lab-1' },
-      { notes: 'Dr Sami' },
+      { notes: 'Dr Sami', sourceSubLabId: null },
     );
     expect(result.notes).toBe('Dr Sami');
     expect(auditService.log).toHaveBeenCalledWith(
@@ -502,6 +517,7 @@ describe('OrdersService panel removal access and cancellation', () => {
         'order-1',
         'lab-1',
         'Dr Sami',
+        undefined,
         {
           userId: 'user-1',
           actorType: AuditActorType.LAB_USER,

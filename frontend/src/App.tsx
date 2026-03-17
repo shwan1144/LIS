@@ -5,6 +5,7 @@ import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { ThemeProvider, useTheme } from './contexts/ThemeContext';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { AppLayout } from './components/Layout/AppLayout';
+import { SubLabLayout } from './components/Layout/SubLabLayout';
 import { AdminLayout } from './components/Layout/AdminLayout';
 import { LoginPage } from './pages/LoginPage';
 import { DashboardPage } from './pages/DashboardPage';
@@ -23,6 +24,7 @@ import { SettingsInstrumentsPage } from './pages/settings/SettingsInstrumentsPag
 import { SettingsLabelPage } from './pages/settings/SettingsLabelPage';
 import { SettingsPrintingPage } from './pages/settings/SettingsPrintingPage';
 import { SettingsReportDesignPage } from './pages/settings/SettingsReportDesignPage';
+import { SettingsSubLabsPage } from './pages/settings/SettingsSubLabsPage';
 import { SettingsTestGroupsPage } from './pages/settings/SettingsTestGroupsPage';
 import { SettingsReferringDoctorsPage } from './pages/settings/SettingsReferringDoctorsPage';
 import { AdminDashboardPage } from './pages/admin/AdminDashboardPage';
@@ -35,6 +37,8 @@ import { AdminSettingsPage } from './pages/admin/AdminSettingsPage';
 import { AdminLabDetailsPage } from './pages/admin/AdminLabDetailsPage';
 import { AdminAnnouncementsPage } from './pages/admin/AdminAnnouncementsPage';
 import { PublicResultProxyPage } from './pages/PublicResultProxyPage';
+import { SubLabOrdersPage } from './pages/sub-lab/SubLabOrdersPage';
+import { SubLabStatisticsPage } from './pages/sub-lab/SubLabStatisticsPage';
 import { Outlet } from 'react-router-dom';
 import { getCurrentAuthScope } from './utils/tenant-scope';
 import { InstallAppButton } from './components/InstallAppButton';
@@ -42,6 +46,11 @@ import './App.css';
 
 function SettingsLayout() {
   return <Outlet />;
+}
+
+function LabPortalLayout() {
+  const { user } = useAuth();
+  return user?.role === 'SUB_LAB' ? <SubLabLayout /> : <AppLayout />;
 }
 
 function AppTitleUpdater() {
@@ -141,7 +150,7 @@ function AppContent() {
                 path="/"
                 element={
                   <ProtectedRoute requiredScope="LAB">
-                    <AppLayout />
+                    <LabPortalLayout />
                   </ProtectedRoute>
                 }
               >
@@ -162,12 +171,15 @@ function AppContent() {
                   <Route path="label" element={<SettingsLabelPage />} />
                   <Route path="printing" element={<SettingsPrintingPage />} />
                   <Route path="report-design" element={<SettingsReportDesignPage />} />
+                  <Route path="sub-labs" element={<SettingsSubLabsPage />} />
                   <Route path="referring-doctors" element={<SettingsReferringDoctorsPage />} />
                   <Route path="instruments" element={<SettingsInstrumentsPage />} />
                   <Route path="test-groups" element={<SettingsTestGroupsPage />} />
                   <Route path="tests" element={<TestsPage />} />
                   <Route path="audit" element={<AuditLogPage />} />
                 </Route>
+                <Route path="sub-lab/orders" element={<SubLabOrdersPage />} />
+                <Route path="sub-lab/statistics" element={<SubLabStatisticsPage />} />
               </Route>
             )}
 

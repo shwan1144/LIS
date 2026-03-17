@@ -43,6 +43,13 @@ function hasMeaningfulOrderTestResult(orderTest) {
             });
         }
     }
+    if (typeof orderTest.resultDocumentStorageKey === 'string') {
+        return orderTest.resultDocumentStorageKey.trim().length > 0;
+    }
+    if (orderTest.resultDocument && typeof orderTest.resultDocument === 'object') {
+        const fileName = orderTest.resultDocument.fileName;
+        return typeof fileName === 'string' && fileName.trim().length > 0;
+    }
     return false;
 }
 //# sourceMappingURL=order-test-result.util.js.map

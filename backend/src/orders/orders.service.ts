@@ -9,7 +9,11 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, Between, EntityManager, SelectQueryBuilder } from 'typeorm';
 import { DeliveryMethod, Order, OrderStatus, PatientType } from '../entities/order.entity';
 import { Sample, TubeType as SampleTubeType } from '../entities/sample.entity';
-import { OrderTest, OrderTestStatus } from '../entities/order-test.entity';
+import {
+  OrderTest,
+  OrderTestResultDocumentSummary,
+  OrderTestStatus,
+} from '../entities/order-test.entity';
 import { Patient } from '../entities/patient.entity';
 import { Lab } from '../entities/lab.entity';
 import { Shift } from '../entities/shift.entity';
@@ -17,6 +21,8 @@ import { Test, TestType } from '../entities/test.entity';
 import { Pricing } from '../entities/pricing.entity';
 import { TestComponent } from '../entities/test-component.entity';
 import { LabOrdersWorklist } from '../entities/lab-orders-worklist.entity';
+import { SubLab } from '../entities/sub-lab.entity';
+import { SubLabTestPrice } from '../entities/sub-lab-test-price.entity';
 import { AuditAction } from '../entities/audit-log.entity';
 import { CreateOrderDto, CreateSampleDto } from './dto/create-order.dto';
 import {
@@ -60,11 +66,17 @@ export interface OrderListQueryParams {
   status?: OrderStatus;
   patientId?: string;
   shiftId?: string;
+  sourceSubLabId?: string;
   startDate?: string;
   endDate?: string;
   dateFilterTimeZone?: string;
   resultStatus?: OrderResultStatus;
 }
+
+type OrderSubLabSummary = {
+  id: string;
+  name: string;
+};
 
 export interface OrderHistoryItem {
   id: string;
@@ -77,10 +89,12 @@ export interface OrderHistoryItem {
   finalAmount: number;
   patient: Patient;
   shift: Shift | null;
+  sourceSubLab: OrderSubLabSummary | null;
   testsCount: number;
   readyTestsCount: number;
   reportReady: boolean;
   resultStatus: OrderResultStatus;
+  resultSummary?: string | null;
   pendingTestsCount: number;
   completedTestsCount: number;
   verifiedTestsCount: number;
@@ -140,6 +154,10 @@ export class OrdersService {
     private readonly testComponentRepo: Repository<TestComponent>,
     @InjectRepository(LabOrdersWorklist)
     private readonly worklistRepo: Repository<LabOrdersWorklist>,
+    @InjectRepository(SubLab)
+    private readonly subLabRepo: Repository<SubLab>,
+    @InjectRepository(SubLabTestPrice)
+    private readonly subLabTestPriceRepo: Repository<SubLabTestPrice>,
     private readonly auditService: AuditService,
   ) { }
 
@@ -175,6 +193,11 @@ export class OrdersService {
           where: { id: dto.shiftId, labId },
         })
         : Promise.resolve(null);
+      const sourceSubLabPromise: Promise<SubLab | null> = dto.sourceSubLabId
+        ? this.subLabRepo.findOne({
+            where: { id: dto.sourceSubLabId, labId },
+          })
+        : Promise.resolve(null);
       const testsPromise: Promise<Test[]> =
         uniqueTestIds.length > 0
           ? this.testRepo.find({
@@ -182,11 +205,12 @@ export class OrdersService {
           })
           : Promise.resolve([]);
 
-      const [patient, lab, shift, tests] = await Promise.all([
+      const [patient, lab, shift, tests, sourceSubLab] = await Promise.all([
         patientPromise,
         labPromise,
         shiftPromise,
         testsPromise,
+        sourceSubLabPromise,
       ]);
 
       if (!patient) {
@@ -198,6 +222,12 @@ export class OrdersService {
       if (dto.shiftId && !shift) {
         throw new NotFoundException('Shift not found or not assigned to this lab');
       }
+      if (dto.sourceSubLabId && !sourceSubLab) {
+        throw new NotFoundException('Sub lab not found');
+      }
+      if (sourceSubLab && !sourceSubLab.isActive) {
+        throw new BadRequestException('Selected sub lab is inactive');
+      }
       if (tests.length !== uniqueTestIds.length) {
         throw new NotFoundException('One or more tests not found');
       }
@@ -207,22 +237,14 @@ export class OrdersService {
       const pricingStartedAt = process.hrtime.bigint();
       const patientType = dto.patientType || PatientType.WALK_IN;
       const deliveryMethods = this.normalizeDeliveryMethods(dto.deliveryMethods);
-      const pricingValues =
-        uniqueTestIds.length > 0
-          ? await Promise.all(
-            uniqueTestIds.map((testId) =>
-              this.findPricing(
-                labId,
-                testId,
-                dto.shiftId || null,
-                patientType,
-              ),
-            ),
-          )
-          : [];
-      const precomputedPricingMap = new Map<string, number>();
-      uniqueTestIds.forEach((id, idx) => precomputedPricingMap.set(id, pricingValues[idx]));
-      const totalAmount = pricingValues.reduce((sum, value) => sum + value, 0);
+      const { pricingMap: precomputedPricingMap, total: totalAmount } =
+        await this.resolveOrderPricingMap({
+          labId,
+          testIds: uniqueTestIds,
+          shiftId: dto.shiftId || null,
+          patientType,
+          sourceSubLabId: sourceSubLab?.id ?? null,
+        });
       const discountPercent = Math.min(100, Math.max(0, dto.discountPercent ?? 0));
       const finalAmount = Math.round(totalAmount * (1 - discountPercent / 100) * 100) / 100;
       timings.pricingResolutionMs = this.elapsedMs(pricingStartedAt);
@@ -263,6 +285,7 @@ export class OrdersService {
           patientId: dto.patientId,
           labId,
           shiftId: dto.shiftId || null,
+          sourceSubLabId: sourceSubLab?.id ?? null,
           orderNumber,
           status: OrderStatus.REGISTERED,
           patientType,
@@ -332,7 +355,15 @@ export class OrdersService {
         if (view === CreateOrderView.FULL) {
           const fullOrder = await orderRepo.findOne({
             where: { id: orderId },
-            relations: ['patient', 'lab', 'shift', 'samples', 'samples.orderTests', 'samples.orderTests.test'],
+            relations: [
+              'patient',
+              'lab',
+              'shift',
+              'sourceSubLab',
+              'samples',
+              'samples.orderTests',
+              'samples.orderTests.test',
+            ],
           });
           timings.responseBuildMs = this.elapsedMs(responseBuildStartedAt);
           if (!fullOrder) {
@@ -359,6 +390,12 @@ export class OrdersService {
               code: shift.code,
               name: shift.name,
             }
+            : null,
+          sourceSubLab: sourceSubLab
+            ? {
+                id: sourceSubLab.id,
+                name: sourceSubLab.name,
+              }
             : null,
           testsCount: rootTestsCount,
           readyTestsCount: 0,
@@ -403,6 +440,7 @@ export class OrdersService {
       .createQueryBuilder('order')
       .leftJoinAndSelect('order.patient', 'patient')
       .leftJoinAndSelect('order.shift', 'shift')
+      .leftJoinAndSelect('order.sourceSubLab', 'sourceSubLab')
       .leftJoinAndSelect('order.samples', 'samples')
       .leftJoinAndSelect('samples.orderTests', 'orderTests')
       .leftJoinAndSelect('orderTests.test', 'test')
@@ -442,6 +480,7 @@ export class OrdersService {
         .createQueryBuilder('order')
         .leftJoinAndSelect('order.patient', 'patient')
         .leftJoinAndSelect('order.shift', 'shift')
+        .leftJoinAndSelect('order.sourceSubLab', 'sourceSubLab')
         .where('order.labId = :labId', { labId });
 
       await this.applyOrderQueryFilters(qb, labId, params);
@@ -481,6 +520,12 @@ export class OrdersService {
           finalAmount: Number(order.finalAmount ?? 0),
           patient: order.patient,
           shift: order.shift ?? null,
+          sourceSubLab: order.sourceSubLab
+            ? {
+                id: order.sourceSubLab.id,
+                name: order.sourceSubLab.name,
+              }
+            : null,
           testsCount,
           readyTestsCount,
           reportReady,
@@ -540,6 +585,7 @@ export class OrdersService {
           'patient',
           'lab',
           'shift',
+          'sourceSubLab',
           'samples',
           'samples.orderTests',
           'samples.orderTests.test',
@@ -622,11 +668,12 @@ export class OrdersService {
     id: string,
     labId: string,
     notes: string | null | undefined,
+    sourceSubLabId: string | null | undefined,
     actor: LabActorContext,
   ): Promise<Order> {
     const order = await this.orderRepo.findOne({
       where: { id, labId },
-      relations: ['lab'],
+      relations: ['lab', 'sourceSubLab'],
     });
     if (!order) {
       throw new NotFoundException('Order not found');
@@ -636,13 +683,89 @@ export class OrdersService {
 
     const normalizedNotes = typeof notes === 'string' ? notes.trim() || null : null;
     const previousNotes = order.notes ?? null;
+    let nextSourceSubLabId: string | null = order.sourceSubLabId ?? null;
+    let nextSourceSubLabName: string | null = order.sourceSubLab?.name ?? null;
 
-    await this.orderRepo.update(
-      { id, labId },
-      { notes: normalizedNotes },
-    );
+    if (sourceSubLabId !== undefined) {
+      if (sourceSubLabId === null) {
+        nextSourceSubLabId = null;
+        nextSourceSubLabName = null;
+      } else {
+        const nextSourceSubLab = await this.subLabRepo.findOne({
+          where: { id: sourceSubLabId, labId },
+        });
+        if (!nextSourceSubLab) {
+          throw new NotFoundException('Sub lab not found');
+        }
+        if (!nextSourceSubLab.isActive) {
+          throw new BadRequestException('Selected sub lab is inactive');
+        }
+        nextSourceSubLabId = nextSourceSubLab.id;
+        nextSourceSubLabName = nextSourceSubLab.name;
+      }
+    }
+    const previousSourceSubLabId = order.sourceSubLabId ?? null;
+    const previousSourceSubLabName = order.sourceSubLab?.name ?? null;
 
-    if (previousNotes !== normalizedNotes) {
+    await this.orderRepo.manager.transaction(async (manager) => {
+      if (previousSourceSubLabId !== nextSourceSubLabId) {
+        const rootOrderTests = await manager
+          .getRepository(OrderTest)
+          .createQueryBuilder('orderTest')
+          .innerJoin('orderTest.sample', 'sample')
+          .where('sample.orderId = :orderId', { orderId: id })
+          .andWhere('orderTest.parentOrderTestId IS NULL')
+          .getMany();
+
+        const rootTestIds = rootOrderTests.map((orderTest) => orderTest.testId);
+        const { pricingMap, total } = await this.resolveOrderPricingMap({
+          labId,
+          testIds: rootTestIds,
+          shiftId: order.shiftId ?? null,
+          patientType: order.patientType,
+          sourceSubLabId: nextSourceSubLabId,
+        });
+
+        for (const rootOrderTest of rootOrderTests) {
+          await manager.getRepository(OrderTest).update(
+            { id: rootOrderTest.id },
+            { price: pricingMap.get(rootOrderTest.testId) ?? 0 },
+          );
+        }
+
+        const totalAmount = Math.round(total * 100) / 100;
+        const finalAmount =
+          Math.round(totalAmount * (1 - Number(order.discountPercent ?? 0) / 100) * 100) / 100;
+        await manager.getRepository(Order).update(
+          { id, labId },
+          {
+            notes: normalizedNotes,
+            sourceSubLabId: nextSourceSubLabId,
+            totalAmount,
+            finalAmount,
+            paidAmount: this.resolveUpdatedPaidAmount(
+              this.normalizePaymentStatus(order.paymentStatus),
+              order.paidAmount != null ? Number(order.paidAmount) : null,
+              finalAmount,
+            ),
+          },
+        );
+        return;
+      }
+
+      await manager.getRepository(Order).update(
+        { id, labId },
+        {
+          notes: normalizedNotes,
+          sourceSubLabId: nextSourceSubLabId,
+        },
+      );
+    });
+
+    if (
+      previousNotes !== normalizedNotes ||
+      previousSourceSubLabId !== nextSourceSubLabId
+    ) {
       await this.auditService.log({
         actorType: actor.actorType,
         actorId: actor.actorId,
@@ -653,9 +776,13 @@ export class OrdersService {
         entityId: id,
         oldValues: {
           notes: previousNotes,
+          sourceSubLabId: previousSourceSubLabId,
+          sourceSubLabName: previousSourceSubLabName,
         },
         newValues: {
           notes: normalizedNotes,
+          sourceSubLabId: nextSourceSubLabId,
+          sourceSubLabName: nextSourceSubLabName,
         },
         description: `Updated referred by for order ${order.orderNumber ?? id}`,
       });
@@ -888,12 +1015,25 @@ export class OrdersService {
       }));
 
       if (bulkTestData.length > 0) {
+        const addedTestIds = Array.from(
+          new Set(
+            bulkTestData.flatMap((entry) => entry.tests.map((test) => test.id)),
+          ),
+        );
+        const { pricingMap } = await this.resolveOrderPricingMap({
+          labId,
+          testIds: addedTestIds,
+          shiftId: order.shiftId ?? null,
+          patientType: order.patientType,
+          sourceSubLabId: order.sourceSubLabId ?? null,
+        });
         await this.bulkCreateOrderTests(
           manager,
           labId,
           bulkTestData,
           order.shiftId ?? null,
           order.patientType,
+          pricingMap,
         );
       }
 
@@ -1398,6 +1538,48 @@ export class OrdersService {
     return Math.min(Number(currentPaidAmount), finalAmount);
   }
 
+  private async resolveOrderPricingMap(params: {
+    labId: string;
+    testIds: string[];
+    shiftId: string | null;
+    patientType: PatientType;
+    sourceSubLabId: string | null;
+  }): Promise<{ pricingMap: Map<string, number>; total: number }> {
+    const uniqueTestIds = [...new Set((params.testIds ?? []).filter(Boolean))];
+    const pricingMap = new Map<string, number>();
+    if (uniqueTestIds.length === 0) {
+      return { pricingMap, total: 0 };
+    }
+
+    if (params.sourceSubLabId) {
+      const subLabPrices = await this.subLabTestPriceRepo.find({
+        where: uniqueTestIds.map((testId) => ({
+          subLabId: params.sourceSubLabId as string,
+          testId,
+          isActive: true,
+        })),
+      });
+      for (const row of subLabPrices) {
+        pricingMap.set(row.testId, Number(row.price ?? 0));
+      }
+    }
+
+    const missingTestIds = uniqueTestIds.filter((testId) => !pricingMap.has(testId));
+    if (missingTestIds.length > 0) {
+      const fallbackPrices = await Promise.all(
+        missingTestIds.map((testId) =>
+          this.findPricing(params.labId, testId, params.shiftId, params.patientType),
+        ),
+      );
+      missingTestIds.forEach((testId, index) => {
+        pricingMap.set(testId, fallbackPrices[index] ?? 0);
+      });
+    }
+
+    const total = uniqueTestIds.reduce((sum, testId) => sum + (pricingMap.get(testId) ?? 0), 0);
+    return { pricingMap, total };
+  }
+
   private async findPricing(
     labId: string,
     testId: string,
@@ -1565,15 +1747,28 @@ export class OrdersService {
     labId: string,
     testIds: string[],
     shiftId: string | null = null,
+    sourceSubLabId: string | null = null,
   ): Promise<{ subtotal: number }> {
     if (!testIds?.length) return { subtotal: 0 };
-    const uniqueTestIds = [...new Set(testIds)];
-    const patientType = PatientType.WALK_IN;
-    const prices = await Promise.all(
-      uniqueTestIds.map((testId) => this.findPricing(labId, testId, shiftId, patientType)),
-    );
-    const subtotal = prices.reduce((sum, value) => sum + value, 0);
-    return { subtotal };
+    if (sourceSubLabId) {
+      const sourceSubLab = await this.subLabRepo.findOne({
+        where: { id: sourceSubLabId, labId },
+      });
+      if (!sourceSubLab) {
+        throw new NotFoundException('Sub lab not found');
+      }
+      if (!sourceSubLab.isActive) {
+        throw new BadRequestException('Selected sub lab is inactive');
+      }
+    }
+    const { total } = await this.resolveOrderPricingMap({
+      labId,
+      testIds,
+      shiftId,
+      patientType: PatientType.WALK_IN,
+      sourceSubLabId,
+    });
+    return { subtotal: total };
   }
 
   async getOrdersTodayCount(labId: string): Promise<number> {
@@ -1811,11 +2006,17 @@ export class OrdersService {
       qb.andWhere('order.shiftId = :shiftId', { shiftId: params.shiftId });
     }
 
+    if (params.sourceSubLabId) {
+      qb.andWhere('order.sourceSubLabId = :sourceSubLabId', {
+        sourceSubLabId: params.sourceSubLabId,
+      });
+    }
+
     if (params.search?.trim()) {
       const term = `%${params.search.trim()}%`;
       const exactSearch = params.search.trim();
       qb.andWhere(
-        '(order.orderNumber ILIKE :term OR patient.fullName ILIKE :term OR patient.patientNumber = :exactSearch OR patient.phone ILIKE :term)',
+        '(order.orderNumber ILIKE :term OR patient.fullName ILIKE :term OR patient.patientNumber = :exactSearch OR patient.phone ILIKE :term OR sourceSubLab.name ILIKE :term)',
         { term, exactSearch },
       );
     }
@@ -2093,6 +2294,7 @@ export class OrdersService {
     order.lab.reportWatermarkDataUrl = null;
     order.lab.onlineResultWatermarkDataUrl = null;
     order.lab.uiTestGroups = null;
+    this.attachOrderTestResultDocuments(order);
     return detailView === OrderDetailView.COMPACT
       ? this.stripHeavyOrderTestsPayload(order)
       : order;
@@ -2138,6 +2340,35 @@ export class OrdersService {
       }
     }
     return order;
+  }
+
+  private attachOrderTestResultDocuments(order: Order): void {
+    for (const sample of order.samples ?? []) {
+      for (const orderTest of sample.orderTests ?? []) {
+        (orderTest as OrderTest & { resultDocument?: OrderTestResultDocumentSummary | null }).resultDocument =
+          this.mapOrderTestResultDocument(orderTest);
+      }
+    }
+  }
+
+  private mapOrderTestResultDocument(
+    orderTest: OrderTest,
+  ): OrderTestResultDocumentSummary | null {
+    const storageKey = String(orderTest.resultDocumentStorageKey ?? '').trim();
+    const fileName = String(orderTest.resultDocumentFileName ?? '').trim();
+    if (!storageKey || !fileName) {
+      return null;
+    }
+
+    return {
+      fileName,
+      mimeType: String(orderTest.resultDocumentMimeType ?? 'application/pdf').trim() || 'application/pdf',
+      sizeBytes: Number(orderTest.resultDocumentSizeBytes ?? 0) || 0,
+      uploadedAt: orderTest.resultDocumentUploadedAt
+        ? orderTest.resultDocumentUploadedAt.toISOString()
+        : null,
+      uploadedBy: orderTest.resultDocumentUploadedBy ?? null,
+    };
   }
 
   private normalizeDeliveryMethods(

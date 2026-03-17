@@ -4,6 +4,7 @@ import { User } from '../entities/user.entity';
 import { Lab } from '../entities/lab.entity';
 import { PlatformUser } from '../entities/platform-user.entity';
 import { AdminLabPortalToken } from '../entities/admin-lab-portal-token.entity';
+import { SubLab } from '../entities/sub-lab.entity';
 import { LoginDto } from './dto/login.dto';
 import { LoginResponseDto } from './dto/login-response.dto';
 import { AuditService } from '../audit/audit.service';
@@ -14,11 +15,12 @@ export declare class AuthService {
     private readonly labRepository;
     private readonly platformUserRepository;
     private readonly adminLabPortalTokenRepository;
+    private readonly subLabRepository;
     private readonly jwtService;
     private readonly auditService;
     private readonly refreshTokenService;
     private readonly authRateLimitService;
-    constructor(userRepository: Repository<User>, labRepository: Repository<Lab>, platformUserRepository: Repository<PlatformUser>, adminLabPortalTokenRepository: Repository<AdminLabPortalToken>, jwtService: JwtService, auditService: AuditService, refreshTokenService: RefreshTokenService, authRateLimitService: AuthRateLimitService);
+    constructor(userRepository: Repository<User>, labRepository: Repository<Lab>, platformUserRepository: Repository<PlatformUser>, adminLabPortalTokenRepository: Repository<AdminLabPortalToken>, subLabRepository: Repository<SubLab>, jwtService: JwtService, auditService: AuditService, refreshTokenService: RefreshTokenService, authRateLimitService: AuthRateLimitService);
     login(dto: LoginDto, params?: {
         resolvedLabId?: string | null;
         ipAddress?: string | null;
@@ -52,6 +54,7 @@ export declare class AuthService {
     }): Promise<LoginResponseDto>;
     private refreshImpersonatedLabToken;
     private findUserForLogin;
+    private resolveActiveSubLabForUser;
     private resolveLabForUser;
     private getLabPortalBridgeTtlSeconds;
     private parseLabPortalBridgeToken;

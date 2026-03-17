@@ -16,6 +16,8 @@ import { RefreshToken } from '../entities/refresh-token.entity';
 import { Result } from '../entities/result.entity';
 import { Sample } from '../entities/sample.entity';
 import { Shift } from '../entities/shift.entity';
+import { SubLab } from '../entities/sub-lab.entity';
+import { SubLabTestPrice } from '../entities/sub-lab-test-price.entity';
 import { TestComponent } from '../entities/test-component.entity';
 import { TestAntibiotic } from '../entities/test-antibiotic.entity';
 import { UnmatchedInstrumentResult } from '../entities/unmatched-instrument-result.entity';
@@ -23,4 +25,4 @@ import { UserDepartmentAssignment } from '../entities/user-department-assignment
 import { UserLabAssignment } from '../entities/user-lab-assignment.entity';
 import { UserShiftAssignment } from '../entities/user-shift-assignment.entity';
 import { User } from '../entities/user.entity';
-export declare const DATABASE_ENTITIES: (typeof UserShiftAssignment | typeof User | typeof Shift | typeof Lab | typeof Department | typeof Patient | typeof Order | typeof Sample | typeof OrderTest | typeof UserLabAssignment | typeof UserDepartmentAssignment | typeof AuditLog | typeof AdminLabPortalToken | typeof InstrumentTestMapping | typeof InstrumentMessage | typeof LabOrdersWorklist | typeof GatewayDevice | typeof GatewayActivationCode | typeof GatewayToken | typeof GatewayMessageReceipt | typeof OrderTestResultHistory | typeof Pricing | typeof PlatformUser | typeof PlatformSetting | typeof RefreshToken | typeof Result | typeof TestComponent | typeof TestAntibiotic | typeof UnmatchedInstrumentResult)[];
+export declare const DATABASE_ENTITIES: (typeof UserShiftAssignment | typeof User | typeof Shift | typeof Lab | typeof Department | typeof Patient | typeof SubLabTestPrice | typeof SubLab | typeof Order | typeof Sample | typeof OrderTest | typeof UserLabAssignment | typeof UserDepartmentAssignment | typeof AuditLog | typeof AdminLabPortalToken | typeof InstrumentTestMapping | typeof InstrumentMessage | typeof LabOrdersWorklist | typeof GatewayDevice | typeof GatewayActivationCode | typeof GatewayToken | typeof GatewayMessageReceipt | typeof OrderTestResultHistory | typeof Pricing | typeof PlatformUser | typeof PlatformSetting | typeof RefreshToken | typeof Result | typeof TestComponent | typeof TestAntibiotic | typeof UnmatchedInstrumentResult)[];

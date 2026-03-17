@@ -1,5 +1,6 @@
 import { WorklistEntryStatus, WorklistOrderMode, WorklistService, WorklistVerificationStatus, WorklistView } from './worklist.service';
 import { CultureResultPayload } from '../entities/order-test.entity';
+import type { Response } from 'express';
 interface RequestWithUser {
     user: {
         userId?: string | null;
@@ -10,6 +11,11 @@ interface RequestWithUser {
         role?: string;
     };
 }
+type UploadedResultDocumentFile = {
+    originalname: string;
+    mimetype?: string;
+    buffer: Buffer;
+};
 export declare class WorklistController {
     private readonly worklistService;
     constructor(worklistService: WorklistService);
@@ -52,6 +58,9 @@ export declare class WorklistController {
             forceEditVerified?: boolean;
         }>;
     }): Promise<import("../entities/order-test.entity").OrderTest[]>;
+    uploadResultDocument(req: RequestWithUser, id: string, file: UploadedResultDocumentFile | undefined, forceEditVerified?: string | boolean): Promise<import("../entities/order-test.entity").OrderTest>;
+    removeResultDocument(req: RequestWithUser, id: string, forceEditVerified?: string): Promise<import("../entities/order-test.entity").OrderTest>;
+    downloadResultDocument(req: RequestWithUser, id: string, download?: string, res?: Response): Promise<Response<any, Record<string, any>>>;
     verifyResult(req: RequestWithUser, id: string): Promise<import("../entities/order-test.entity").OrderTest>;
     verifyMultiple(req: RequestWithUser, body: {
         ids: string[];

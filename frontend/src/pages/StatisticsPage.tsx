@@ -27,9 +27,12 @@ import {
   getDepartments,
   getShifts,
   getStatistics,
+  getSubLabs,
   type DepartmentDto,
   type ShiftDto,
   type StatisticsDto,
+  type StatisticsSourceType,
+  type SubLabListItemDto,
 } from '../api/client';
 import { useAuth } from '../contexts/AuthContext';
 import './DashboardPage.css';
@@ -62,24 +65,28 @@ function downloadBlob(blob: Blob, filename: string): void {
 export function StatisticsPage() {
   const { user } = useAuth();
   const canViewStatistics = user?.role === 'LAB_ADMIN' || user?.role === 'SUPER_ADMIN';
+  const defaultMonthRange = useMemo<[dayjs.Dayjs, dayjs.Dayjs]>(
+    () => [dayjs().startOf('month'), dayjs().endOf('month')],
+    [],
+  );
 
   const [data, setData] = useState<StatisticsDto | null>(null);
   const [loading, setLoading] = useState(true);
   const [pdfLoading, setPdfLoading] = useState(false);
   const [shifts, setShifts] = useState<ShiftDto[]>([]);
   const [departments, setDepartments] = useState<DepartmentDto[]>([]);
+  const [subLabs, setSubLabs] = useState<SubLabListItemDto[]>([]);
   const [shiftFilter, setShiftFilter] = useState<string>('all');
   const [departmentFilter, setDepartmentFilter] = useState<string>('all');
-  const [range, setRange] = useState<[dayjs.Dayjs, dayjs.Dayjs]>([
-    dayjs().subtract(30, 'day'),
-    dayjs(),
-  ]);
+  const [sourceFilter, setSourceFilter] = useState<StatisticsSourceType>('ALL');
+  const [range, setRange] = useState<[dayjs.Dayjs, dayjs.Dayjs]>(defaultMonthRange);
 
   const buildParams = () => ({
     startDate: range[0].format('YYYY-MM-DD'),
     endDate: range[1].format('YYYY-MM-DD'),
     shiftId: shiftFilter !== 'all' ? shiftFilter : undefined,
     departmentId: departmentFilter !== 'all' ? departmentFilter : undefined,
+    sourceType: sourceFilter,
   });
 
   const loadStatistics = async () => {
@@ -96,12 +103,18 @@ export function StatisticsPage() {
 
   const loadFilterOptions = async () => {
     try {
-      const [shiftRows, departmentRows] = await Promise.all([getShifts(), getDepartments()]);
+      const [shiftRows, departmentRows, subLabRows] = await Promise.all([
+        getShifts(),
+        getDepartments(),
+        getSubLabs().catch(() => []),
+      ]);
       setShifts(shiftRows ?? []);
       setDepartments(departmentRows ?? []);
+      setSubLabs(subLabRows ?? []);
     } catch {
       setShifts([]);
       setDepartments([]);
+      setSubLabs([]);
       message.warning('Failed to load shift/department filters');
     }
   };
@@ -134,58 +147,11 @@ export function StatisticsPage() {
     return selected ? selected.name || selected.code || selected.id : departmentFilter;
   }, [departmentFilter, departments]);
 
-  const handleExportCSV = () => {
-    if (!data) return;
-
-    const lines: string[] = [
-      'Section,Key,Value',
-      `Filter,Start Date,${range[0].format('YYYY-MM-DD')}`,
-      `Filter,End Date,${range[1].format('YYYY-MM-DD')}`,
-      `Filter,Shift,${selectedShiftLabel}`,
-      `Filter,Department,${selectedDepartmentLabel}`,
-      `KPI,Profit (IQD),${Math.round(data.profit ?? 0)}`,
-      `KPI,Orders,${data.orders.total}`,
-      `KPI,Department test,${data.departmentTestTotal}`,
-      `KPI,Total test,${data.tests.total}`,
-    ];
-
-    data.tests.byDepartment.forEach((row) => {
-      lines.push(`Department tests,${row.departmentName},${row.count}`);
-    });
-    data.tests.byTest.forEach((row) => {
-      lines.push(`Each test,${row.testCode} - ${row.testName},${row.count}`);
-    });
-
-    const csv = lines.join('\r\n');
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-    const shiftToken = shiftFilter === 'all' ? 'all' : sanitizeFileToken(selectedShiftLabel);
-    const departmentToken =
-      departmentFilter === 'all' ? 'all' : sanitizeFileToken(selectedDepartmentLabel);
-    downloadBlob(
-      blob,
-      `statistics-${range[0].format('YYYY-MM-DD')}-to-${range[1].format('YYYY-MM-DD')}-${shiftToken}-${departmentToken}.csv`,
-    );
-    message.success('CSV downloaded');
-  };
-
-  const handleDownloadPdf = async () => {
-    setPdfLoading(true);
-    try {
-      const blob = await downloadStatisticsPDF(buildParams());
-      const shiftToken = shiftFilter === 'all' ? 'all' : sanitizeFileToken(selectedShiftLabel);
-      const departmentToken =
-        departmentFilter === 'all' ? 'all' : sanitizeFileToken(selectedDepartmentLabel);
-      downloadBlob(
-        blob,
-        `statistics-${range[0].format('YYYY-MM-DD')}-to-${range[1].format('YYYY-MM-DD')}-${shiftToken}-${departmentToken}.pdf`,
-      );
-      message.success('PDF downloaded');
-    } catch {
-      message.error('Failed to download PDF');
-    } finally {
-      setPdfLoading(false);
-    }
-  };
+  const selectedSourceLabel = useMemo(() => {
+    if (sourceFilter === 'IN_HOUSE') return 'In-house';
+    if (sourceFilter === 'SUB_LAB') return 'Sub-lab';
+    return 'All';
+  }, [sourceFilter]);
 
   if (!canViewStatistics) {
     return <Navigate to="/" replace />;
@@ -203,6 +169,21 @@ export function StatisticsPage() {
   const orders = s.orders ?? { total: 0, byStatus: {}, byShift: [] };
   const tests = s.tests ?? { total: 0, byDepartment: [], byTest: [], byShift: [] };
   const profit = s.profit ?? 0;
+  const subLabBilling = s.subLabBilling ?? {
+    activeSourceType: sourceFilter,
+    billableRootTests: 0,
+    billableAmount: 0,
+    completedRootTests: 0,
+    verifiedRootTests: 0,
+    inHouse: {
+      billableRootTests: 0,
+      billableAmount: 0,
+      completedRootTests: 0,
+      verifiedRootTests: 0,
+    },
+    bySubLab: [],
+    byTest: [],
+  };
   const departmentTestTotal =
     s.departmentTestTotal ??
     (departmentFilter === 'all'
@@ -217,6 +198,117 @@ export function StatisticsPage() {
   const eachTestRows = [...(tests.byTest ?? [])].sort(
     (a, b) => b.count - a.count || a.testCode.localeCompare(b.testCode),
   );
+  const subLabBillingById = new Map(
+    (subLabBilling.bySubLab ?? []).map((row) => [row.subLabId, row] as const),
+  );
+  const visibleSubLabs = (() => {
+    const activeSubLabs = subLabs.filter((subLab) => subLab.isActive);
+    if (activeSubLabs.length) return activeSubLabs;
+    return (subLabBilling.bySubLab ?? []).map((row) => ({
+      id: row.subLabId,
+      name: row.subLabName,
+      isActive: true,
+    }));
+  })();
+  const activeSourceType = subLabBilling.activeSourceType ?? sourceFilter;
+  const payableCards = [
+    {
+      id: 'all',
+      name: 'All',
+      tone: 'green',
+      billableAmount: subLabBilling.billableAmount,
+      billableRootTests: subLabBilling.billableRootTests,
+      verifiedRootTests: subLabBilling.verifiedRootTests,
+      completedRootTests: subLabBilling.completedRootTests,
+    },
+    ...(activeSourceType !== 'SUB_LAB'
+      ? [
+          {
+            id: 'in-house',
+            name: 'In-house',
+            tone: 'blue',
+            billableAmount: subLabBilling.inHouse.billableAmount,
+            billableRootTests: subLabBilling.inHouse.billableRootTests,
+            verifiedRootTests: subLabBilling.inHouse.verifiedRootTests,
+            completedRootTests: subLabBilling.inHouse.completedRootTests,
+          },
+        ]
+      : []),
+    ...(activeSourceType !== 'IN_HOUSE'
+      ? visibleSubLabs.map((subLab) => {
+          const billingRow = subLabBillingById.get(subLab.id);
+          return {
+            id: subLab.id,
+            name: subLab.name,
+            tone: 'teal',
+            billableAmount: billingRow?.billableAmount ?? 0,
+            billableRootTests: billingRow?.billableRootTests ?? 0,
+            verifiedRootTests: billingRow?.verifiedRootTests ?? 0,
+            completedRootTests: billingRow?.completedRootTests ?? 0,
+          };
+        })
+      : []),
+  ];
+
+  const handleExportCSV = () => {
+    if (!data) return;
+
+    const lines: string[] = [
+      'Section,Key,Value',
+      `Filter,Start Date,${range[0].format('YYYY-MM-DD')}`,
+      `Filter,End Date,${range[1].format('YYYY-MM-DD')}`,
+      `Filter,Shift,${selectedShiftLabel}`,
+      `Filter,Department,${selectedDepartmentLabel}`,
+      `Filter,Source,${selectedSourceLabel}`,
+      `KPI,Profit (IQD),${Math.round(data.profit ?? 0)}`,
+      `KPI,Orders,${data.orders.total}`,
+      `KPI,Department test,${data.departmentTestTotal}`,
+      `KPI,Total test,${data.tests.total}`,
+    ];
+
+    payableCards.forEach((card) => {
+      lines.push(`Payable,${card.name},${Math.round(card.billableAmount)}`);
+    });
+
+    data.tests.byDepartment.forEach((row) => {
+      lines.push(`Department tests,${row.departmentName},${row.count}`);
+    });
+    data.tests.byTest.forEach((row) => {
+      lines.push(`Each test,${row.testCode} - ${row.testName},${row.count}`);
+    });
+
+    const csv = lines.join('\r\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const shiftToken = shiftFilter === 'all' ? 'all' : sanitizeFileToken(selectedShiftLabel);
+    const departmentToken =
+      departmentFilter === 'all' ? 'all' : sanitizeFileToken(selectedDepartmentLabel);
+    const sourceToken = sanitizeFileToken(selectedSourceLabel);
+    downloadBlob(
+      blob,
+      `statistics-${range[0].format('YYYY-MM-DD')}-to-${range[1].format('YYYY-MM-DD')}-${shiftToken}-${departmentToken}-${sourceToken}.csv`,
+    );
+    message.success('CSV downloaded');
+  };
+
+  const handleDownloadPdf = async () => {
+    setPdfLoading(true);
+    try {
+      const blob = await downloadStatisticsPDF(buildParams());
+      const shiftToken = shiftFilter === 'all' ? 'all' : sanitizeFileToken(selectedShiftLabel);
+      const departmentToken =
+        departmentFilter === 'all' ? 'all' : sanitizeFileToken(selectedDepartmentLabel);
+      const sourceToken = sanitizeFileToken(selectedSourceLabel);
+      downloadBlob(
+        blob,
+        `statistics-${range[0].format('YYYY-MM-DD')}-to-${range[1].format('YYYY-MM-DD')}-${shiftToken}-${departmentToken}-${sourceToken}.pdf`,
+      );
+      message.success('PDF downloaded');
+    } catch {
+      message.error('Failed to download PDF');
+    } finally {
+      setPdfLoading(false);
+    }
+  };
 
   const kpiCards = [
     {
@@ -280,6 +372,16 @@ export function StatisticsPage() {
             })),
           ]}
         />
+        <Select
+          value={sourceFilter}
+          onChange={setSourceFilter}
+          style={{ minWidth: 220 }}
+          options={[
+            { value: 'ALL', label: 'All' },
+            { value: 'IN_HOUSE', label: 'In-house' },
+            { value: 'SUB_LAB', label: 'Sub-lab' },
+          ]}
+        />
         <Button type="primary" onClick={handleApply} loading={loading}>
           Apply
         </Button>
@@ -296,7 +398,7 @@ export function StatisticsPage() {
         </Button>
       </Space>
 
-      <Row gutter={[16, 16]} style={{ marginBottom: 24 }}>
+      <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
         {kpiCards.map((item) => (
           <Col key={item.key} xs={24} sm={12} md={12} lg={6}>
             <Card className={`dashboard-kpi-card dashboard-kpi-card--${item.tone}`}>
@@ -311,6 +413,45 @@ export function StatisticsPage() {
           </Col>
         ))}
       </Row>
+
+      {payableCards.length ? (
+        <section className="statistics-payable-section">
+          <div className="statistics-sub-labs-header statistics-payable-header">
+            <Title level={5} style={{ margin: 0 }}>
+              Payable breakdown
+            </Title>
+            <Text type="secondary">
+              These amounts follow the selected time range and the active shift, department, and source filters.
+            </Text>
+          </div>
+          <Row gutter={[12, 12]} className="statistics-payable-grid">
+            {payableCards.map((item) => (
+              <Col key={item.id} xs={24} sm={12} xl={8}>
+                <Card className={`dashboard-kpi-card dashboard-kpi-card--${item.tone} statistics-sub-lab-card`}>
+                  <div className="dashboard-kpi-label">{item.name}</div>
+                  <div className="dashboard-kpi-body">
+                    <div className="dashboard-kpi-icon" aria-hidden="true">
+                      <DollarOutlined />
+                    </div>
+                    <div className="statistics-sub-lab-card-copy">
+                      <div className="statistics-sub-lab-card-value">
+                        {formatCurrency(item.billableAmount)}
+                      </div>
+                      <div className="statistics-sub-lab-card-meta">
+                        {item.billableRootTests} billable tests
+                        {' • '}
+                        {item.verifiedRootTests} verified
+                        {' • '}
+                        {item.completedRootTests} completed
+                      </div>
+                    </div>
+                  </div>
+                </Card>
+              </Col>
+            ))}
+          </Row>
+        </section>
+      ) : null}
 
       <Row gutter={[16, 16]}>
         <Col xs={24} lg={10}>

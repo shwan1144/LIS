@@ -2,6 +2,7 @@ import { UserLabAssignment } from './user-lab-assignment.entity';
 import { Shift } from './shift.entity';
 import { Department } from './department.entity';
 import { Test } from './test.entity';
+import { SubLab } from './sub-lab.entity';
 export interface LabCultureEntryHistory {
     microorganisms: string[];
     conditions: string[];
@@ -42,4 +43,5 @@ export declare class Lab {
     shifts: Shift[];
     departments: Department[];
     tests: Test[];
+    subLabs: SubLab[];
 }

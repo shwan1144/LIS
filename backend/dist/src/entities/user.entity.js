@@ -15,6 +15,7 @@ const user_lab_assignment_entity_1 = require("./user-lab-assignment.entity");
 const user_shift_assignment_entity_1 = require("./user-shift-assignment.entity");
 const user_department_assignment_entity_1 = require("./user-department-assignment.entity");
 const lab_entity_1 = require("./lab.entity");
+const sub_lab_entity_1 = require("./sub-lab.entity");
 let User = class User {
 };
 exports.User = User;
@@ -51,6 +52,10 @@ __decorate([
     __metadata("design:type", Object)
 ], User.prototype, "defaultLabId", void 0);
 __decorate([
+    (0, typeorm_1.Column)({ type: 'uuid', nullable: true }),
+    __metadata("design:type", Object)
+], User.prototype, "subLabId", void 0);
+__decorate([
     (0, typeorm_1.Column)({ type: 'boolean', default: true }),
     __metadata("design:type", Boolean)
 ], User.prototype, "isActive", void 0);
@@ -84,11 +89,20 @@ __decorate([
     (0, typeorm_1.JoinColumn)({ name: 'labId' }),
     __metadata("design:type", Object)
 ], User.prototype, "lab", void 0);
+__decorate([
+    (0, typeorm_1.ManyToOne)(() => sub_lab_entity_1.SubLab, { nullable: true, onDelete: 'SET NULL' }),
+    (0, typeorm_1.JoinColumn)({ name: 'subLabId' }),
+    __metadata("design:type", Object)
+], User.prototype, "subLab", void 0);
 exports.User = User = __decorate([
     (0, typeorm_1.Entity)('users'),
     (0, typeorm_1.Index)('UQ_users_lab_username', ['labId', 'username'], {
         unique: true,
         where: '"labId" IS NOT NULL',
+    }),
+    (0, typeorm_1.Index)('UQ_users_active_sub_lab', ['subLabId'], {
+        unique: true,
+        where: '"subLabId" IS NOT NULL AND "isActive" = true',
     })
 ], User);
 //# sourceMappingURL=user.entity.js.map

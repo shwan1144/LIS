@@ -31,6 +31,10 @@ export interface CreateOrderSummaryDto {
         code: string;
         name: string | null;
     } | null;
+    sourceSubLab: {
+        id: string;
+        name: string;
+    } | null;
     testsCount: number;
     readyTestsCount: number;
     reportReady: boolean;

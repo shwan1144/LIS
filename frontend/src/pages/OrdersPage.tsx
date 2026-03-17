@@ -49,6 +49,7 @@ import {
   getNextOrderNumber,
   getOrderPriceEstimate,
   getLabSettings,
+  getSubLabOptions,
   updateOrderPayment,
   updateOrderDiscount,
   updateOrderNotes,
@@ -67,6 +68,7 @@ import {
   type OrderStatus,
   type DepartmentDto,
   type ShiftDto,
+  type SubLabOptionDto,
 } from '../api/client';
 import {
   PatientFormFields,
@@ -311,6 +313,7 @@ function toOrderHistoryItem(order: OrderDto): OrderHistoryItemDto {
     finalAmount: Number(order.finalAmount ?? 0),
     patient: order.patient,
     shift: order.shift,
+    sourceSubLab: order.sourceSubLab ?? null,
     testsCount,
     readyTestsCount,
     reportReady:
@@ -339,6 +342,7 @@ function toOrderHistoryItemFromSummary(order: OrderCreateSummaryDto): OrderHisto
     finalAmount: Number(order.finalAmount ?? 0),
     patient: order.patient,
     shift: order.shift,
+    sourceSubLab: order.sourceSubLab ?? null,
     testsCount,
     readyTestsCount,
     reportReady:
@@ -428,6 +432,8 @@ export function OrdersPage() {
   const [directGatewayLabelPrinterName, setDirectGatewayLabelPrinterName] = useState<string | null>(null);
   const [directGatewayReceiptPrinterName, setDirectGatewayReceiptPrinterName] = useState<string | null>(null);
   const [referredBy, setReferredBy] = useState('');
+  const [subLabOptions, setSubLabOptions] = useState<SubLabOptionDto[]>([]);
+  const [selectedSubLabId, setSelectedSubLabId] = useState<string | undefined>(undefined);
   const [selectedDeliveryMethods, setSelectedDeliveryMethods] = useState<DeliveryMethod[]>([]);
   const [savingDeliveryMethods, setSavingDeliveryMethods] = useState(false);
 
@@ -454,6 +460,9 @@ export function OrdersPage() {
   const [partialPaymentAmount, setPartialPaymentAmount] = useState<number>(0);
   const [lockedOrderEditMode, setLockedOrderEditMode] = useState(false);
   const [lockedOrderReferredByDraft, setLockedOrderReferredByDraft] = useState('');
+  const [lockedOrderSourceSubLabIdDraft, setLockedOrderSourceSubLabIdDraft] = useState<
+    string | undefined
+  >(undefined);
   const [editingTests, setEditingTests] = useState<SelectedTest[]>([]);
   const [savingEditedTests, setSavingEditedTests] = useState(false);
   const [cancellingOrder, setCancellingOrder] = useState(false);
@@ -695,6 +704,7 @@ export function OrdersPage() {
         setSelectedTests([]);
         setDiscountPercent(0);
         setReferredBy('');
+        setSelectedSubLabId(undefined);
         draftDeliveryMethodsRef.current = [];
         setSelectedDeliveryMethods([]);
         setListPage(1);
@@ -816,14 +826,16 @@ export function OrdersPage() {
     async function init() {
       setLoadingTests(true);
       try {
-        const [depts, tsts, settings, shifts] = await Promise.all([
+        const [depts, tsts, settings, subLabs, shifts] = await Promise.all([
           getDepartments(),
           getTests(),
           getLabSettings(),
+          getSubLabOptions().catch(() => []),
           getShifts().catch(() => []),
         ]);
         setDepartments(depts);
         setTestOptions(tsts);
+        setSubLabOptions(subLabs ?? []);
         setHistoryShiftOptions(shifts ?? []);
         const activeIds = new Set(tsts.filter((t) => t.isActive).map((t) => t.id));
         const validGroups = (settings.uiTestGroups || []).map(g => ({
@@ -885,7 +897,11 @@ export function OrdersPage() {
     }
     let cancelled = false;
     setLoadingPrice(true);
-    getOrderPriceEstimate(selectedTests.map((t) => t.testId), currentShiftId ?? undefined)
+    getOrderPriceEstimate(
+      selectedTests.map((t) => t.testId),
+      currentShiftId ?? undefined,
+      selectedSubLabId ?? undefined,
+    )
       .then((res) => {
         if (!cancelled) setSubtotal(res.subtotal);
       })
@@ -896,7 +912,7 @@ export function OrdersPage() {
         if (!cancelled) setLoadingPrice(false);
       });
     return () => { cancelled = true; };
-  }, [selectedTests, currentShiftId]);
+  }, [selectedTests, currentShiftId, selectedSubLabId]);
 
   // When there are pending patients (or one is selected), fetch next order number for list and right panel.
   useEffect(() => {
@@ -1302,6 +1318,7 @@ export function OrdersPage() {
     setLockedOrderEditMode(false);
     setEditingTests([]);
     setLockedOrderReferredByDraft('');
+    setLockedOrderSourceSubLabIdDraft(undefined);
     setEditTestsRemovalReason('');
     setEditTestsRemovalReasonModalOpen(false);
   }, [selectedCreatedOrderSummary?.id]);
@@ -1311,6 +1328,7 @@ export function OrdersPage() {
     const currentRootTests = getRootOrderTests(selectedCreatedOrder);
     setEditingTests(currentRootTests);
     setLockedOrderReferredByDraft(selectedCreatedOrder.notes?.trim() || '');
+    setLockedOrderSourceSubLabIdDraft(selectedCreatedOrder.sourceSubLabId ?? undefined);
     setEditTestsRemovalReason('');
     setEditTestsRemovalReasonModalOpen(false);
     setLockedOrderEditMode(true);
@@ -1462,8 +1480,10 @@ export function OrdersPage() {
     const normalizedNotes = lockedOrderReferredByDraft.trim();
     const originalNotes = (selectedCreatedOrder.notes ?? '').trim();
     const notesChanged = normalizedNotes !== originalNotes;
+    const sourceSubLabChanged =
+      (lockedOrderSourceSubLabIdDraft ?? null) !== (selectedCreatedOrder.sourceSubLabId ?? null);
 
-    if (!testsChanged && !notesChanged) {
+    if (!testsChanged && !notesChanged && !sourceSubLabChanged) {
       closeLockedOrderEditor();
       message.info('No changes to save.');
       return;
@@ -1473,9 +1493,10 @@ export function OrdersPage() {
     try {
       let updated: OrderDto | null = null;
 
-      if (notesChanged) {
+      if (notesChanged || sourceSubLabChanged) {
         updated = await updateOrderNotes(selectedCreatedOrder.id, {
           notes: normalizedNotes || null,
+          sourceSubLabId: lockedOrderSourceSubLabIdDraft ?? null,
         });
         applyUpdatedOrderToList(updated);
       }
@@ -1580,6 +1601,7 @@ export function OrdersPage() {
         patientType: 'WALK_IN',
         discountPercent: discountPercent || undefined,
         notes: referredBy.trim() || undefined,
+        sourceSubLabId: selectedSubLabId ?? undefined,
         deliveryMethods: selectedDeliveryMethods.length > 0 ? selectedDeliveryMethods : undefined,
         ...(currentShiftId ? { shiftId: currentShiftId } : {}),
         samples: Object.entries(testsByTube).map(([tubeType, tests]) => ({
@@ -1630,6 +1652,7 @@ export function OrdersPage() {
       setDraftPatient(null);
       setSelectedTests([]);
       setReferredBy('');
+      setSelectedSubLabId(undefined);
       draftDeliveryMethodsRef.current = [];
       setSelectedDeliveryMethods([]);
       setListPage(1);
@@ -1674,6 +1697,7 @@ export function OrdersPage() {
     setSelectedTests([]);
     setDiscountPercent(0);
     setReferredBy('');
+    setSelectedSubLabId(undefined);
     draftDeliveryMethodsRef.current = [];
     setSelectedDeliveryMethods([]);
   };
@@ -1689,6 +1713,7 @@ export function OrdersPage() {
     setSelectedTests([]);
     setDiscountPercent(0);
     setReferredBy('');
+    setSelectedSubLabId(undefined);
     draftDeliveryMethodsRef.current = [];
     setSelectedDeliveryMethods([]);
     setListPage(1);
@@ -2657,7 +2682,7 @@ export function OrdersPage() {
                           <Col span={18}>
                             {lockedOrderEditMode ? (
                               <div className="orders-edit-tests-shell">
-                                <div className="order-composer-field order-draft-referred-row">
+                                <div className="order-composer-field order-composer-field-compact order-draft-referred-row">
                                   <Text strong className="order-composer-field-label">
                                     Referred by
                                   </Text>
@@ -2675,8 +2700,24 @@ export function OrdersPage() {
                                     allowClear
                                   />
                                 </div>
+                                <div className="order-composer-field order-composer-field-compact order-draft-referred-row">
+                                  <Text strong className="order-composer-field-label">
+                                    Sub Lab
+                                  </Text>
+                                  <Select
+                                    allowClear
+                                    className="order-composer-field-control"
+                                    placeholder="Optional external lab"
+                                    value={lockedOrderSourceSubLabIdDraft}
+                                    onChange={(value) => setLockedOrderSourceSubLabIdDraft(value)}
+                                    options={subLabOptions.map((item) => ({
+                                      value: item.id,
+                                      label: item.name,
+                                    }))}
+                                  />
+                                </div>
 
-                                <div className="order-composer-field orders-edit-tests-toolbar-row">
+                                <div className="order-composer-field order-composer-field-compact orders-edit-tests-toolbar-row">
                                   <div className="order-composer-field-label">
                                     <Text strong style={{ display: 'block' }}>Add test</Text>
                                     <Text type="secondary" style={{ fontSize: 10, lineHeight: 1.1, display: 'block' }}>By code or name</Text>
@@ -2745,6 +2786,10 @@ export function OrdersPage() {
                               <Space direction="vertical" size={8}>
                                 <Text strong>Referred by</Text>
                                 <Text type="secondary">{lockedOrderReferredByValue || 'Himself'}</Text>
+                                <Text strong>Sub Lab</Text>
+                                <Text type="secondary">
+                                  {selectedCreatedOrder.sourceSubLab?.name || 'In-house'}
+                                </Text>
                                 <Text type="secondary">No tests in this order.</Text>
                               </Space>
                             ) : (
@@ -2752,12 +2797,23 @@ export function OrdersPage() {
                                 className={`order-tests-readonly-wrapper${isDark ? ' order-tests-readonly-wrapper-dark' : ''
                                   }`}
                               >
-                                <div className="order-draft-referred-row" style={{ marginBottom: 12 }}>
+                                <div className="order-draft-referred-row order-composer-field-compact">
                                   <Text strong className="order-composer-field-label">
                                     Referred by
                                   </Text>
-                                  <Text type="secondary" className="order-composer-field-control" style={{ display: 'flex', alignItems: 'center', height: 44 }}>
+                                  <Text type="secondary" className="order-composer-field-control order-composer-field-value">
                                     {lockedOrderReferredByValue || 'Himself'}
+                                  </Text>
+                                </div>
+                                <div className="order-draft-referred-row order-composer-field-compact">
+                                  <Text strong className="order-composer-field-label">
+                                    Sub Lab
+                                  </Text>
+                                  <Text
+                                    type="secondary"
+                                    className="order-composer-field-control order-composer-field-value"
+                                  >
+                                    {selectedCreatedOrder.sourceSubLab?.name || 'In-house'}
                                   </Text>
                                 </div>
                                 <div className="order-tests-readonly-grid-header">
@@ -2929,7 +2985,7 @@ export function OrdersPage() {
                         className="orders-section-card order-composer-select-card"
                         title="Select tests"
                       >
-                        <div className="order-composer-field order-draft-referred-row">
+                        <div className="order-composer-field order-composer-field-compact order-draft-referred-row">
                           <Text strong className="order-composer-field-label">
                             Referred by
                           </Text>
@@ -2947,7 +3003,23 @@ export function OrdersPage() {
                             allowClear
                           />
                         </div>
-                        <div className="order-composer-field order-composer-search-row">
+                        <div className="order-composer-field order-composer-field-compact order-draft-referred-row">
+                          <Text strong className="order-composer-field-label">
+                            Sub Lab
+                          </Text>
+                          <Select
+                            allowClear
+                            className="order-composer-field-control"
+                            placeholder="Optional external lab"
+                            value={selectedSubLabId}
+                            onChange={(value) => setSelectedSubLabId(value)}
+                            options={subLabOptions.map((item) => ({
+                              value: item.id,
+                              label: item.name,
+                            }))}
+                          />
+                        </div>
+                        <div className="order-composer-field order-composer-field-compact order-composer-search-row">
                           <Text strong className="order-composer-field-label">
                             Search tests
                           </Text>

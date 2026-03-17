@@ -14,6 +14,7 @@ const typeorm_1 = require("typeorm");
 const order_test_entity_1 = require("./order-test.entity");
 const department_entity_1 = require("./department.entity");
 const lab_entity_1 = require("./lab.entity");
+const sub_lab_test_price_entity_1 = require("./sub-lab-test-price.entity");
 var TestType;
 (function (TestType) {
     TestType["SINGLE"] = "SINGLE";
@@ -187,6 +188,10 @@ __decorate([
     (0, typeorm_1.OneToMany)(() => order_test_entity_1.OrderTest, (orderTest) => orderTest.test),
     __metadata("design:type", Array)
 ], Test.prototype, "orderTests", void 0);
+__decorate([
+    (0, typeorm_1.OneToMany)(() => sub_lab_test_price_entity_1.SubLabTestPrice, (price) => price.test),
+    __metadata("design:type", Array)
+], Test.prototype, "subLabTestPrices", void 0);
 exports.Test = Test = __decorate([
     (0, typeorm_1.Entity)('tests'),
     (0, typeorm_1.Index)('UQ_tests_lab_code', ['labId', 'code'], { unique: true })

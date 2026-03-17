@@ -33,6 +33,8 @@ const lab_timezone_util_1 = require("../database/lab-timezone.util");
 const patient_age_util_1 = require("../patients/patient-age.util");
 const order_test_result_util_1 = require("../order-tests/order-test-result.util");
 const order_test_flag_util_1 = require("../order-tests/order-test-flag.util");
+const result_documents_service_1 = require("../result-documents/result-documents.service");
+const reports_service_1 = require("../reports/reports.service");
 var WorklistView;
 (function (WorklistView) {
     WorklistView["FULL"] = "full";
@@ -69,7 +71,7 @@ function parseJsonField(val) {
     return null;
 }
 let WorklistService = WorklistService_1 = class WorklistService {
-    constructor(orderTestRepo, orderRepo, testRepo, testAntibioticRepo, antibioticRepo, labRepo, userDeptRepo, departmentRepo, panelStatusService, auditService) {
+    constructor(orderTestRepo, orderRepo, testRepo, testAntibioticRepo, antibioticRepo, labRepo, userDeptRepo, departmentRepo, panelStatusService, auditService, resultDocumentsService, reportsService) {
         this.orderTestRepo = orderTestRepo;
         this.orderRepo = orderRepo;
         this.testRepo = testRepo;
@@ -80,8 +82,17 @@ let WorklistService = WorklistService_1 = class WorklistService {
         this.departmentRepo = departmentRepo;
         this.panelStatusService = panelStatusService;
         this.auditService = auditService;
+        this.resultDocumentsService = resultDocumentsService;
+        this.reportsService = reportsService;
         this.logger = new common_1.Logger(WorklistService_1.name);
         this.worklistPerfLogThresholdMs = this.resolveWorklistPerfLogThresholdMs();
+    }
+    triggerReportStorageSync(orderId, labId, context) {
+        this.reportsService.syncReportToS3(orderId, labId).catch((error) => {
+            const message = error instanceof Error ? error.message : String(error);
+            const stack = error instanceof Error ? error.stack : undefined;
+            this.logger.error(`Failed to sync stored report for order ${orderId} after ${context}: ${message}`, stack);
+        });
     }
     async getWorklist(labId, params, userId) {
         const startedAt = process.hrtime.bigint();
@@ -204,6 +215,12 @@ let WorklistService = WorklistService_1 = class WorklistService {
                 'ot.resultText AS "resultText"',
                 'ot.resultParameters AS "resultParameters"',
                 'ot.cultureResult AS "cultureResult"',
+                'ot.resultDocumentStorageKey AS "resultDocumentStorageKey"',
+                'ot.resultDocumentFileName AS "resultDocumentFileName"',
+                'ot.resultDocumentMimeType AS "resultDocumentMimeType"',
+                'ot.resultDocumentSizeBytes AS "resultDocumentSizeBytes"',
+                'ot.resultDocumentUploadedAt AS "resultDocumentUploadedAt"',
+                'ot.resultDocumentUploadedBy AS "resultDocumentUploadedBy"',
                 'ot.rejectionReason AS "rejectionReason"',
                 'ot.flag AS flag',
                 'ot.resultedAt AS "resultedAt"',
@@ -291,6 +308,7 @@ let WorklistService = WorklistService_1 = class WorklistService {
                     parameterDefinitions: parseJsonField(item.parameterDefinitions) ??
                         null,
                     resultParameters: parseJsonField(item.resultParameters) ?? null,
+                    resultDocument: this.mapResultDocumentSummary(item),
                     rejectionReason: item.rejectionReason ?? null,
                     sortOrder: item.sortOrder != null ? Number(item.sortOrder) : 0,
                     panelSortOrder: item.panelSortOrder != null ? Number(item.panelSortOrder) : null,
@@ -572,6 +590,12 @@ let WorklistService = WorklistService_1 = class WorklistService {
                 'ot.resultText AS "resultText"',
                 'ot.resultParameters AS "resultParameters"',
                 'ot.cultureResult AS "cultureResult"',
+                'ot.resultDocumentStorageKey AS "resultDocumentStorageKey"',
+                'ot.resultDocumentFileName AS "resultDocumentFileName"',
+                'ot.resultDocumentMimeType AS "resultDocumentMimeType"',
+                'ot.resultDocumentSizeBytes AS "resultDocumentSizeBytes"',
+                'ot.resultDocumentUploadedAt AS "resultDocumentUploadedAt"',
+                'ot.resultDocumentUploadedBy AS "resultDocumentUploadedBy"',
                 'ot.rejectionReason AS "rejectionReason"',
                 'ot.flag AS flag',
                 'ot.resultedAt AS "resultedAt"',
@@ -713,6 +737,7 @@ let WorklistService = WorklistService_1 = class WorklistService {
                 departmentName: orderTest.test.department?.name ?? null,
                 parameterDefinitions: orderTest.test.parameterDefinitions ?? null,
                 resultParameters: orderTest.resultParameters ?? null,
+                resultDocument: this.mapResultDocumentSummary(orderTest),
                 rejectionReason: orderTest.rejectionReason ?? null,
                 sortOrder: orderTest.test.sortOrder ?? 0,
                 panelSortOrder: orderTest.panelSortOrder ?? null,
@@ -766,6 +791,10 @@ let WorklistService = WorklistService_1 = class WorklistService {
         if (orderTest.test.type === test_entity_1.TestType.PANEL && !orderTest.parentOrderTestId) {
             throw new common_1.BadRequestException('Panel roots cannot be entered directly. Enter results through the child tests.');
         }
+        const resultEntryType = this.normalizeResultEntryType(orderTest.test.resultEntryType);
+        if (resultEntryType === 'PDF_UPLOAD') {
+            throw new common_1.BadRequestException('PDF_UPLOAD tests must be completed by uploading a result document');
+        }
         if (data.resultValue !== undefined) {
             orderTest.resultValue = data.resultValue;
         }
@@ -780,7 +809,6 @@ let WorklistService = WorklistService_1 = class WorklistService {
         if (data.cultureResult !== undefined) {
             orderTest.cultureResult = await this.normalizeCultureResultInput(data.cultureResult, orderTest.test, labId);
         }
-        const resultEntryType = this.normalizeResultEntryType(orderTest.test.resultEntryType);
         const resultTextOptions = this.normalizeResultTextOptions(orderTest.test.resultTextOptions);
         const normalizedResultTextInput = data.resultText !== undefined
             ? this.normalizeResultText(data.resultText)
@@ -856,6 +884,7 @@ let WorklistService = WorklistService_1 = class WorklistService {
         }
         await this.panelStatusService.recomputeAfterChildUpdate(orderTest.id);
         await this.syncOrderStatus(orderTest.sample.orderId);
+        this.triggerReportStorageSync(orderTest.sample.orderId, labId, 'result entry');
         const impersonationAudit = actor.isImpersonation && actor.platformUserId
             ? {
                 impersonation: {
@@ -914,6 +943,10 @@ let WorklistService = WorklistService_1 = class WorklistService {
             if (orderTest.test.type === test_entity_1.TestType.PANEL && !orderTest.parentOrderTestId) {
                 continue;
             }
+            const resultEntryType = this.normalizeResultEntryType(orderTest.test.resultEntryType);
+            if (resultEntryType === 'PDF_UPLOAD') {
+                continue;
+            }
             if (data.resultValue !== undefined) {
                 orderTest.resultValue = data.resultValue;
             }
@@ -929,7 +962,6 @@ let WorklistService = WorklistService_1 = class WorklistService {
             if (data.cultureResult !== undefined) {
                 orderTest.cultureResult = await this.normalizeCultureResultInput(data.cultureResult, orderTest.test, labId, antibioticCacheById);
             }
-            const resultEntryType = this.normalizeResultEntryType(orderTest.test.resultEntryType);
             const resultTextOptions = this.normalizeResultTextOptions(orderTest.test.resultTextOptions);
             const normalizedResultTextInput = data.resultText !== undefined ? this.normalizeResultText(data.resultText) : undefined;
             if (resultEntryType === 'QUALITATIVE') {
@@ -1035,6 +1067,7 @@ let WorklistService = WorklistService_1 = class WorklistService {
             }
             for (const oid of updatedOrderIds) {
                 await this.syncOrderStatus(oid);
+                this.triggerReportStorageSync(oid, labId, 'batch result entry');
             }
             for (const log of auditLogs) {
                 await this.auditService.log(log);
@@ -1071,6 +1104,7 @@ let WorklistService = WorklistService_1 = class WorklistService {
         const saved = await this.orderTestRepo.save(orderTest);
         await this.panelStatusService.recomputeAfterChildUpdate(orderTest.id);
         await this.syncOrderStatus(orderTest.sample.orderId);
+        this.triggerReportStorageSync(orderTest.sample.orderId, labId, 'result verification');
         const impersonationAudit = actor.isImpersonation && actor.platformUserId
             ? {
                 impersonation: {
@@ -1160,6 +1194,7 @@ let WorklistService = WorklistService_1 = class WorklistService {
             }
             for (const oid of updatedOrderIds) {
                 await this.syncOrderStatus(oid);
+                this.triggerReportStorageSync(oid, labId, 'batch result verification');
             }
             for (const log of auditLogs) {
                 await this.auditService.log(log);
@@ -1188,6 +1223,7 @@ let WorklistService = WorklistService_1 = class WorklistService {
         const saved = await this.orderTestRepo.save(orderTest);
         await this.panelStatusService.recomputeAfterChildUpdate(orderTest.id);
         await this.syncOrderStatus(orderTest.sample.orderId);
+        this.triggerReportStorageSync(orderTest.sample.orderId, labId, 'result rejection');
         const impersonationAudit = actor.isImpersonation && actor.platformUserId
             ? {
                 impersonation: {
@@ -1212,6 +1248,162 @@ let WorklistService = WorklistService_1 = class WorklistService {
             description: `Rejected result: ${reason}`,
         });
         return saved;
+    }
+    async uploadResultDocument(orderTestId, labId, actor, actorRole, file, options) {
+        if (!file?.buffer?.length) {
+            throw new common_1.BadRequestException('A PDF file is required');
+        }
+        const orderTest = await this.orderTestRepo.findOne({
+            where: { id: orderTestId },
+            relations: ['sample', 'sample.order', 'sample.order.patient', 'test'],
+        });
+        if (!orderTest || orderTest.sample.order.labId !== labId) {
+            throw new common_1.NotFoundException('Order test not found');
+        }
+        if (orderTest.test.type !== test_entity_1.TestType.SINGLE) {
+            throw new common_1.BadRequestException('Result documents are only supported for single tests');
+        }
+        const resultEntryType = this.normalizeResultEntryType(orderTest.test.resultEntryType);
+        if (resultEntryType !== 'PDF_UPLOAD') {
+            throw new common_1.BadRequestException('This test is not configured for PDF_UPLOAD');
+        }
+        const forceEditVerified = options?.forceEditVerified === true;
+        const canForceEditVerified = actor.isImpersonation ||
+            actorRole === 'LAB_ADMIN' ||
+            actorRole === 'SUPER_ADMIN';
+        const isVerifiedOverride = orderTest.status === order_test_entity_1.OrderTestStatus.VERIFIED &&
+            forceEditVerified &&
+            canForceEditVerified;
+        if (orderTest.status === order_test_entity_1.OrderTestStatus.VERIFIED && !isVerifiedOverride) {
+            throw new common_1.BadRequestException('Cannot modify a verified result');
+        }
+        const hadExistingDocument = Boolean(orderTest.resultDocumentStorageKey?.trim());
+        const stored = await this.resultDocumentsService.savePdf({
+            labId,
+            orderTestId: orderTest.id,
+            buffer: file.buffer,
+            originalName: file.originalname,
+            mimeType: file.mimetype,
+            previousStorageKey: orderTest.resultDocumentStorageKey,
+        });
+        orderTest.resultValue = null;
+        orderTest.resultText = null;
+        orderTest.resultParameters = null;
+        orderTest.cultureResult = null;
+        orderTest.flag = null;
+        orderTest.resultDocumentStorageKey = stored.storageKey;
+        orderTest.resultDocumentFileName = stored.fileName;
+        orderTest.resultDocumentMimeType = stored.mimeType;
+        orderTest.resultDocumentSizeBytes = stored.sizeBytes;
+        orderTest.resultDocumentUploadedAt = new Date();
+        orderTest.resultDocumentUploadedBy = actor.userId ?? null;
+        orderTest.rejectionReason = null;
+        orderTest.resultedAt = new Date();
+        orderTest.resultedBy = actor.userId ?? orderTest.resultedBy;
+        orderTest.status = isVerifiedOverride
+            ? order_test_entity_1.OrderTestStatus.VERIFIED
+            : order_test_entity_1.OrderTestStatus.COMPLETED;
+        if (isVerifiedOverride) {
+            orderTest.verifiedAt = new Date();
+            orderTest.verifiedBy = actor.userId ?? orderTest.verifiedBy;
+        }
+        else {
+            orderTest.verifiedAt = null;
+            orderTest.verifiedBy = null;
+        }
+        const saved = await this.orderTestRepo.save(orderTest);
+        await this.panelStatusService.recomputeAfterChildUpdate(orderTest.id);
+        await this.syncOrderStatus(orderTest.sample.orderId);
+        this.triggerReportStorageSync(orderTest.sample.orderId, labId, 'PDF result upload');
+        await this.auditService.log({
+            actorType: actor.actorType,
+            actorId: actor.actorId,
+            labId,
+            userId: actor.userId,
+            action: hadExistingDocument
+                ? audit_log_entity_1.AuditAction.RESULT_UPDATE
+                : audit_log_entity_1.AuditAction.RESULT_ENTER,
+            entityType: 'order_test',
+            entityId: orderTestId,
+            newValues: {
+                resultDocument: {
+                    fileName: stored.fileName,
+                    mimeType: stored.mimeType,
+                    sizeBytes: stored.sizeBytes,
+                },
+                forceEditVerified: isVerifiedOverride,
+            },
+            description: `Uploaded PDF result for test ${orderTest.test?.code || orderTestId}`,
+        });
+        return saved;
+    }
+    async removeResultDocument(orderTestId, labId, actor, actorRole, options) {
+        const orderTest = await this.orderTestRepo.findOne({
+            where: { id: orderTestId },
+            relations: ['sample', 'sample.order', 'test'],
+        });
+        if (!orderTest || orderTest.sample.order.labId !== labId) {
+            throw new common_1.NotFoundException('Order test not found');
+        }
+        const resultEntryType = this.normalizeResultEntryType(orderTest.test.resultEntryType);
+        if (resultEntryType !== 'PDF_UPLOAD') {
+            throw new common_1.BadRequestException('This test is not configured for PDF_UPLOAD');
+        }
+        const forceEditVerified = options?.forceEditVerified === true;
+        const canForceEditVerified = actor.isImpersonation ||
+            actorRole === 'LAB_ADMIN' ||
+            actorRole === 'SUPER_ADMIN';
+        const isVerifiedOverride = orderTest.status === order_test_entity_1.OrderTestStatus.VERIFIED &&
+            forceEditVerified &&
+            canForceEditVerified;
+        if (orderTest.status === order_test_entity_1.OrderTestStatus.VERIFIED && !isVerifiedOverride) {
+            throw new common_1.BadRequestException('Cannot modify a verified result');
+        }
+        await this.resultDocumentsService.deleteDocument(orderTest.resultDocumentStorageKey);
+        orderTest.resultDocumentStorageKey = null;
+        orderTest.resultDocumentFileName = null;
+        orderTest.resultDocumentMimeType = null;
+        orderTest.resultDocumentSizeBytes = null;
+        orderTest.resultDocumentUploadedAt = null;
+        orderTest.resultDocumentUploadedBy = null;
+        orderTest.resultedAt = null;
+        orderTest.resultedBy = null;
+        orderTest.verifiedAt = null;
+        orderTest.verifiedBy = null;
+        orderTest.status = order_test_entity_1.OrderTestStatus.PENDING;
+        const saved = await this.orderTestRepo.save(orderTest);
+        await this.panelStatusService.recomputeAfterChildUpdate(orderTest.id);
+        await this.syncOrderStatus(orderTest.sample.orderId);
+        this.triggerReportStorageSync(orderTest.sample.orderId, labId, 'PDF result removal');
+        await this.auditService.log({
+            actorType: actor.actorType,
+            actorId: actor.actorId,
+            labId,
+            userId: actor.userId,
+            action: audit_log_entity_1.AuditAction.RESULT_UPDATE,
+            entityType: 'order_test',
+            entityId: orderTestId,
+            newValues: {
+                resultDocument: null,
+            },
+            description: `Removed PDF result for test ${orderTest.test?.code || orderTestId}`,
+        });
+        return saved;
+    }
+    async getResultDocumentForLab(orderTestId, labId) {
+        const orderTest = await this.orderTestRepo.findOne({
+            where: { id: orderTestId },
+            relations: ['sample', 'sample.order'],
+        });
+        if (!orderTest || orderTest.sample.order.labId !== labId) {
+            throw new common_1.NotFoundException('Order test not found');
+        }
+        const buffer = await this.resultDocumentsService.readDocument(orderTest.resultDocumentStorageKey);
+        return {
+            buffer,
+            fileName: orderTest.resultDocumentFileName ?? 'result.pdf',
+            mimeType: orderTest.resultDocumentMimeType ?? 'application/pdf',
+        };
     }
     async getAllowedDepartmentIdsForUser(userId, labId) {
         if (!userId) {
@@ -1288,6 +1480,7 @@ let WorklistService = WorklistService_1 = class WorklistService {
             departmentName: item.departmentName ?? null,
             parameterDefinitions: parseJsonField(item.parameterDefinitions) ?? null,
             resultParameters: parseJsonField(item.resultParameters) ?? null,
+            resultDocument: this.mapResultDocumentSummary(item),
             rejectionReason: item.rejectionReason ?? null,
             sortOrder: item.sortOrder != null
                 ? Number(item.sortOrder)
@@ -1302,10 +1495,30 @@ let WorklistService = WorklistService_1 = class WorklistService {
         if (normalized === 'NUMERIC' ||
             normalized === 'QUALITATIVE' ||
             normalized === 'TEXT' ||
-            normalized === 'CULTURE_SENSITIVITY') {
+            normalized === 'CULTURE_SENSITIVITY' ||
+            normalized === 'PDF_UPLOAD') {
             return normalized;
         }
         return 'NUMERIC';
+    }
+    mapResultDocumentSummary(item) {
+        const storageKey = String(item.resultDocumentStorageKey ?? '').trim();
+        const fileName = String(item.resultDocumentFileName ?? '').trim();
+        if (!storageKey || !fileName) {
+            return null;
+        }
+        const rawSize = Number(item.resultDocumentSizeBytes ?? 0);
+        return {
+            fileName,
+            mimeType: String(item.resultDocumentMimeType ?? 'application/pdf').trim() || 'application/pdf',
+            sizeBytes: Number.isFinite(rawSize) && rawSize > 0 ? Math.round(rawSize) : 0,
+            uploadedAt: item.resultDocumentUploadedAt instanceof Date
+                ? item.resultDocumentUploadedAt.toISOString()
+                : typeof item.resultDocumentUploadedAt === 'string'
+                    ? item.resultDocumentUploadedAt
+                    : null,
+            uploadedBy: item.resultDocumentUploadedBy ?? null,
+        };
     }
     normalizeResultText(value) {
         const normalized = String(value ?? '').trim();
@@ -1877,6 +2090,8 @@ exports.WorklistService = WorklistService = WorklistService_1 = __decorate([
         typeorm_2.Repository,
         typeorm_2.Repository,
         panel_status_service_1.PanelStatusService,
-        audit_service_1.AuditService])
+        audit_service_1.AuditService,
+        result_documents_service_1.ResultDocumentsService,
+        reports_service_1.ReportsService])
 ], WorklistService);
 //# sourceMappingURL=worklist.service.js.map

@@ -12,6 +12,7 @@ import {
 import { OrderTest } from './order-test.entity';
 import { Department } from './department.entity';
 import { Lab } from './lab.entity';
+import { SubLabTestPrice } from './sub-lab-test-price.entity';
 
 export interface TestParameterDefinition {
   code: string;
@@ -47,7 +48,8 @@ export type TestResultEntryType =
   | 'NUMERIC'
   | 'QUALITATIVE'
   | 'TEXT'
-  | 'CULTURE_SENSITIVITY';
+  | 'CULTURE_SENSITIVITY'
+  | 'PDF_UPLOAD';
 export type TestResultFlag = 'N' | 'H' | 'L' | 'POS' | 'NEG' | 'ABN';
 
 export interface TestResultTextOption {
@@ -208,6 +210,9 @@ export class Test {
 
   @OneToMany(() => OrderTest, (orderTest) => orderTest.test)
   orderTests: OrderTest[];
+
+  @OneToMany(() => SubLabTestPrice, (price) => price.test)
+  subLabTestPrices: SubLabTestPrice[];
 
   /** Derived field loaded from the test_antibiotics mapping table. */
   cultureAntibioticIds?: string[];

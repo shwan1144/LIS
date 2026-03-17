@@ -13,6 +13,7 @@ import { Patient } from './patient.entity';
 import { Lab } from './lab.entity';
 import { Shift } from './shift.entity';
 import { Sample } from './sample.entity';
+import { SubLab } from './sub-lab.entity';
 
 export enum OrderStatus {
   REGISTERED = 'REGISTERED',
@@ -51,6 +52,9 @@ export class Order {
 
   @Column({ type: 'uuid', nullable: true })
   shiftId: string | null;
+
+  @Column({ type: 'uuid', nullable: true })
+  sourceSubLabId: string | null;
 
   @Column({ type: 'varchar', length: 64, nullable: true })
   orderNumber: string | null;
@@ -95,6 +99,14 @@ export class Order {
   @Column({ type: 'simple-array', nullable: true })
   deliveryMethods: DeliveryMethod[];
 
+  /** Key of the pre-generated PDF report in S3 (Cloudflare R2) */
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  reportS3Key: string | null;
+
+  /** When the PDF report was last successfully generated and uploaded to S3 */
+  @Column({ type: 'timestamp', nullable: true })
+  reportGeneratedAt: Date | null;
+
   @CreateDateColumn()
   createdAt: Date;
 
@@ -112,6 +124,10 @@ export class Order {
   @ManyToOne(() => Shift, { nullable: true, onDelete: 'SET NULL' })
   @JoinColumn({ name: 'shiftId' })
   shift: Shift | null;
+
+  @ManyToOne(() => SubLab, { nullable: true, onDelete: 'SET NULL' })
+  @JoinColumn({ name: 'sourceSubLabId' })
+  sourceSubLab: SubLab | null;
 
   @OneToMany(() => Sample, (sample) => sample.order, { cascade: true })
   samples: Sample[];

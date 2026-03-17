@@ -13,11 +13,16 @@ import { UserLabAssignment } from './user-lab-assignment.entity';
 import { UserShiftAssignment } from './user-shift-assignment.entity';
 import { UserDepartmentAssignment } from './user-department-assignment.entity';
 import { Lab } from './lab.entity';
+import { SubLab } from './sub-lab.entity';
 
 @Entity('users')
 @Index('UQ_users_lab_username', ['labId', 'username'], {
   unique: true,
   where: '"labId" IS NOT NULL',
+})
+@Index('UQ_users_active_sub_lab', ['subLabId'], {
+  unique: true,
+  where: '"subLabId" IS NOT NULL AND "isActive" = true',
 })
 export class User {
   @PrimaryGeneratedColumn('uuid')
@@ -44,6 +49,9 @@ export class User {
   @Column({ type: 'uuid', nullable: true })
   defaultLabId: string | null;
 
+  @Column({ type: 'uuid', nullable: true })
+  subLabId: string | null;
+
   @Column({ type: 'boolean', default: true })
   isActive: boolean;
 
@@ -69,4 +77,8 @@ export class User {
   @ManyToOne(() => Lab, { nullable: true })
   @JoinColumn({ name: 'labId' })
   lab: Lab | null;
+
+  @ManyToOne(() => SubLab, { nullable: true, onDelete: 'SET NULL' })
+  @JoinColumn({ name: 'subLabId' })
+  subLab: SubLab | null;
 }

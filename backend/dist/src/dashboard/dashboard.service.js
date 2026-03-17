@@ -23,6 +23,7 @@ const lab_entity_1 = require("../entities/lab.entity");
 const platform_setting_entity_1 = require("../entities/platform-setting.entity");
 const shift_entity_1 = require("../entities/shift.entity");
 const department_entity_1 = require("../entities/department.entity");
+const sub_lab_entity_1 = require("../entities/sub-lab.entity");
 const orders_service_1 = require("../orders/orders.service");
 const unmatched_results_service_1 = require("../unmatched/unmatched-results.service");
 const lab_timezone_util_1 = require("../database/lab-timezone.util");
@@ -30,7 +31,7 @@ const PDFDocument = require('pdfkit');
 const GLOBAL_DASHBOARD_ANNOUNCEMENT_KEY = 'dashboard.announcement.all_labs';
 const TAT_TARGET_MINUTES = 60;
 let DashboardService = class DashboardService {
-    constructor(patientRepo, orderTestRepo, orderRepo, labRepo, platformSettingRepo, shiftRepo, departmentRepo, ordersService, unmatchedService) {
+    constructor(patientRepo, orderTestRepo, orderRepo, labRepo, platformSettingRepo, shiftRepo, departmentRepo, subLabRepo, ordersService, unmatchedService) {
         this.patientRepo = patientRepo;
         this.orderTestRepo = orderTestRepo;
         this.orderRepo = orderRepo;
@@ -38,6 +39,7 @@ let DashboardService = class DashboardService {
         this.platformSettingRepo = platformSettingRepo;
         this.shiftRepo = shiftRepo;
         this.departmentRepo = departmentRepo;
+        this.subLabRepo = subLabRepo;
         this.ordersService = ordersService;
         this.unmatchedService = unmatchedService;
     }
@@ -109,11 +111,12 @@ let DashboardService = class DashboardService {
     }
     async getStatistics(labId, startDate, endDate, filters = {}) {
         const normalizedFilters = this.normalizeFilters(filters);
-        const [orderStats, testsData, tatData, qualityData, unmatchedStats, instrumentWorkload] = await Promise.all([
+        const [orderStats, testsData, tatData, qualityData, subLabBilling, unmatchedStats, instrumentWorkload,] = await Promise.all([
             this.getOrderStatsForPeriod(labId, startDate, endDate, normalizedFilters),
             this.getTestsStatsForPeriod(labId, startDate, endDate, normalizedFilters),
             this.getTatForPeriod(labId, startDate, endDate, normalizedFilters),
             this.getQualityForPeriod(labId, startDate, endDate, normalizedFilters),
+            this.getSubLabBillingForPeriod(labId, startDate, endDate, normalizedFilters),
             this.unmatchedService.getStats(labId, startDate, endDate),
             this.unmatchedService.getCountByInstrumentInPeriod(labId, startDate, endDate),
         ]);
@@ -134,6 +137,7 @@ let DashboardService = class DashboardService {
             },
             tat: tatData,
             quality: qualityData,
+            subLabBilling,
             unmatched: unmatchedStats,
             instrumentWorkload,
         };
@@ -154,6 +158,7 @@ let DashboardService = class DashboardService {
         const departmentLabel = department
             ? department.name || department.code || department.id
             : 'All departments';
+        const sourceLabel = this.getSourceTypeLabel(normalizedFilters.sourceType);
         const startLabel = this.formatDateLabel(startDate);
         const endLabel = this.formatDateLabel(endDate);
         const generatedAt = new Date().toLocaleString();
@@ -176,6 +181,7 @@ let DashboardService = class DashboardService {
             doc.text(`Duration: ${startLabel} to ${endLabel}`);
             doc.text(`Shift: ${shiftLabel}`);
             doc.text(`Department: ${departmentLabel}`);
+            doc.text(`Source: ${sourceLabel}`);
             doc.moveDown(0.8);
             doc.font('Helvetica-Bold').fontSize(12).fillColor('#111').text('KPI Summary');
             doc.moveDown(0.2);
@@ -185,6 +191,35 @@ let DashboardService = class DashboardService {
             doc.text(`Department test: ${stats.departmentTestTotal}`);
             doc.text(`Total test: ${stats.tests.total}`);
             doc.moveDown(0.8);
+            const payableRows = [
+                [
+                    'All',
+                    String(stats.subLabBilling.billableRootTests),
+                    String(stats.subLabBilling.verifiedRootTests),
+                    String(stats.subLabBilling.completedRootTests),
+                    this.formatCurrency(stats.subLabBilling.billableAmount),
+                ],
+            ];
+            if (stats.subLabBilling.activeSourceType !== 'SUB_LAB') {
+                payableRows.push([
+                    'In-house',
+                    String(stats.subLabBilling.inHouse.billableRootTests),
+                    String(stats.subLabBilling.inHouse.verifiedRootTests),
+                    String(stats.subLabBilling.inHouse.completedRootTests),
+                    this.formatCurrency(stats.subLabBilling.inHouse.billableAmount),
+                ]);
+            }
+            const subLabRows = [...(stats.subLabBilling.bySubLab ?? [])].sort((a, b) => b.billableAmount - a.billableAmount || a.subLabName.localeCompare(b.subLabName));
+            if (stats.subLabBilling.activeSourceType !== 'IN_HOUSE') {
+                payableRows.push(...subLabRows.map((row) => [
+                    row.subLabName,
+                    String(row.billableRootTests),
+                    String(row.verifiedRootTests),
+                    String(row.completedRootTests),
+                    this.formatCurrency(row.billableAmount),
+                ]));
+            }
+            this.drawTable(doc, 'Payable breakdown', ['Source', 'Billable tests', 'Verified', 'Completed', 'Amount'], payableRows);
             this.drawTable(doc, 'Department tests', ['Department', 'Count'], departmentRows.map((row) => [
                 row.departmentName,
                 String(row.count),
@@ -257,9 +292,12 @@ let DashboardService = class DashboardService {
         return `${y}-${m}-${d}`;
     }
     normalizeFilters(filters) {
+        const sourceType = filters.sourceType ?? 'ALL';
         return {
             shiftId: filters.shiftId?.trim() || null,
             departmentId: filters.departmentId?.trim() || null,
+            sourceType: sourceType === 'IN_HOUSE' || sourceType === 'SUB_LAB' ? sourceType : 'ALL',
+            subLabId: filters.subLabId?.trim() || null,
         };
     }
     buildFilteredRootTestsQuery(labId, startDate, endDate, filters) {
@@ -280,7 +318,8 @@ let DashboardService = class DashboardService {
         if (filters.departmentId) {
             qb.andWhere('t.departmentId = :departmentId', { departmentId: filters.departmentId });
         }
-        return qb;
+        this.applySourceTypeFilter(qb, filters.sourceType);
+        return this.applySpecificSubLabFilter(qb, filters.subLabId);
     }
     buildFilteredOrdersQuery(labId, startDate, endDate, filters) {
         const qb = this.orderRepo
@@ -310,7 +349,8 @@ let DashboardService = class DashboardService {
         if (filters.departmentId) {
             qb.setParameter('departmentId', filters.departmentId);
         }
-        return qb;
+        this.applySourceTypeFilter(qb, filters.sourceType);
+        return this.applySpecificSubLabFilter(qb, filters.subLabId);
     }
     async getOrderStatsForPeriod(labId, startDate, endDate, filters) {
         const base = this.buildFilteredOrdersQuery(labId, startDate, endDate, filters);
@@ -321,6 +361,8 @@ let DashboardService = class DashboardService {
         if (filters.shiftId) {
             statusBase.andWhere('o.shiftId = :shiftId', { shiftId: filters.shiftId });
         }
+        this.applySourceTypeFilter(statusBase, filters.sourceType);
+        this.applySpecificSubLabFilter(statusBase, filters.subLabId);
         statusBase.andWhere((subQueryBuilder) => {
             const sub = subQueryBuilder
                 .subQuery()
@@ -466,6 +508,8 @@ let DashboardService = class DashboardService {
         if (filters.departmentId) {
             qb.andWhere('t.departmentId = :departmentId', { departmentId: filters.departmentId });
         }
+        this.applySourceTypeFilter(qb, filters.sourceType);
+        this.applySpecificSubLabFilter(qb, filters.subLabId);
         const rows = await qb.getRawMany();
         const minutes = rows
             .map((row) => parseFloat(row.minutes))
@@ -536,6 +580,8 @@ let DashboardService = class DashboardService {
         if (filters.departmentId) {
             base.andWhere('t.departmentId = :departmentId', { departmentId: filters.departmentId });
         }
+        this.applySourceTypeFilter(base, filters.sourceType);
+        this.applySpecificSubLabFilter(base, filters.subLabId);
         const [abnormalCount, totalVerified] = await Promise.all([
             base
                 .clone()
@@ -549,6 +595,167 @@ let DashboardService = class DashboardService {
         const trimmed = String(value ?? '').trim();
         return trimmed || null;
     }
+    async getSubLabBillingForPeriod(labId, startDate, endDate, filters) {
+        const filteredBase = this.buildFilteredBillableRootTestsQuery(labId, startDate, endDate, filters);
+        const filteredStatusBase = filteredBase.clone();
+        const inHouseBase = filteredBase.clone().andWhere('o.sourceSubLabId IS NULL');
+        const inHouseStatusBase = inHouseBase.clone();
+        const subLabBreakdownBase = filteredBase.clone().andWhere('o.sourceSubLabId IS NOT NULL');
+        const [summary, inHouseSummary, statusCountMap, inHouseStatusCountMap, byTestRows, bySubLabRows, activeSubLabs,] = await Promise.all([
+            this.getBillingSummaryForQuery(filteredBase),
+            this.getBillingSummaryForQuery(inHouseBase),
+            this.getBillingStatusCountMap(filteredStatusBase),
+            this.getBillingStatusCountMap(inHouseStatusBase),
+            filteredBase
+                .clone()
+                .select('t.id', 'testId')
+                .addSelect('t.code', 'testCode')
+                .addSelect('MAX(t.name)', 'testName')
+                .addSelect('COUNT(*)', 'count')
+                .addSelect('COALESCE(SUM(ot.price), 0)', 'amount')
+                .groupBy('t.id')
+                .addGroupBy('t.code')
+                .getRawMany(),
+            subLabBreakdownBase
+                .clone()
+                .leftJoin('o.sourceSubLab', 'subLab')
+                .select('o.sourceSubLabId', 'subLabId')
+                .addSelect('MAX(subLab.name)', 'subLabName')
+                .addSelect('COUNT(*)', 'count')
+                .addSelect('COALESCE(SUM(ot.price), 0)', 'amount')
+                .addSelect('SUM(CASE WHEN ot.status = :completedStatus THEN 1 ELSE 0 END)', 'completedCount')
+                .addSelect('SUM(CASE WHEN ot.status = :verifiedStatus THEN 1 ELSE 0 END)', 'verifiedCount')
+                .setParameters({
+                completedStatus: order_test_entity_1.OrderTestStatus.COMPLETED,
+                verifiedStatus: order_test_entity_1.OrderTestStatus.VERIFIED,
+            })
+                .groupBy('o.sourceSubLabId')
+                .getRawMany(),
+            this.subLabRepo.find({
+                where: {
+                    labId,
+                    isActive: true,
+                },
+                select: {
+                    id: true,
+                    name: true,
+                },
+                order: {
+                    name: 'ASC',
+                },
+            }),
+        ]);
+        const bySubLabRowMap = new Map(bySubLabRows.map((row) => [
+            row.subLabId,
+            {
+                subLabId: row.subLabId,
+                subLabName: String(row.subLabName ?? row.subLabId ?? 'Unknown sub lab'),
+                billableRootTests: parseInt(row.count, 10) || 0,
+                billableAmount: parseFloat(row.amount ?? '0') || 0,
+                completedRootTests: parseInt(row.completedCount, 10) || 0,
+                verifiedRootTests: parseInt(row.verifiedCount, 10) || 0,
+            },
+        ]));
+        const configuredSubLabRows = activeSubLabs.map((subLab) => ({
+            subLabId: subLab.id,
+            subLabName: subLab.name,
+            billableRootTests: bySubLabRowMap.get(subLab.id)?.billableRootTests ?? 0,
+            billableAmount: bySubLabRowMap.get(subLab.id)?.billableAmount ?? 0,
+            completedRootTests: bySubLabRowMap.get(subLab.id)?.completedRootTests ?? 0,
+            verifiedRootTests: bySubLabRowMap.get(subLab.id)?.verifiedRootTests ?? 0,
+        }));
+        const fallbackSubLabRows = [...bySubLabRowMap.values()].filter((row) => !activeSubLabs.some((subLab) => subLab.id === row.subLabId));
+        return {
+            activeSourceType: filters.sourceType,
+            billableRootTests: summary.billableRootTests,
+            billableAmount: summary.billableAmount,
+            completedRootTests: statusCountMap.get(order_test_entity_1.OrderTestStatus.COMPLETED) ?? 0,
+            verifiedRootTests: statusCountMap.get(order_test_entity_1.OrderTestStatus.VERIFIED) ?? 0,
+            inHouse: {
+                billableRootTests: inHouseSummary.billableRootTests,
+                billableAmount: inHouseSummary.billableAmount,
+                completedRootTests: inHouseStatusCountMap.get(order_test_entity_1.OrderTestStatus.COMPLETED) ?? 0,
+                verifiedRootTests: inHouseStatusCountMap.get(order_test_entity_1.OrderTestStatus.VERIFIED) ?? 0,
+            },
+            bySubLab: [...configuredSubLabRows, ...fallbackSubLabRows],
+            byTest: byTestRows.map((row) => ({
+                testId: row.testId,
+                testCode: String(row.testCode ?? ''),
+                testName: String(row.testName ?? row.testCode ?? ''),
+                count: parseInt(row.count, 10) || 0,
+                amount: parseFloat(row.amount ?? '0') || 0,
+            })),
+        };
+    }
+    buildFilteredBillableRootTestsQuery(labId, startDate, endDate, filters) {
+        const qb = this.orderTestRepo
+            .createQueryBuilder('ot')
+            .innerJoin('ot.sample', 's')
+            .innerJoin('s.order', 'o')
+            .innerJoin('ot.test', 't')
+            .where('o.labId = :labId', { labId })
+            .andWhere('o.status != :cancelled', { cancelled: order_entity_1.OrderStatus.CANCELLED })
+            .andWhere('ot.parentOrderTestId IS NULL')
+            .andWhere('ot.status IN (:...billableStatuses)', {
+            billableStatuses: [order_test_entity_1.OrderTestStatus.COMPLETED, order_test_entity_1.OrderTestStatus.VERIFIED],
+        })
+            .andWhere('COALESCE(ot.verifiedAt, ot.resultedAt) BETWEEN :startDate AND :endDate', {
+            startDate,
+            endDate,
+        });
+        if (filters.shiftId) {
+            qb.andWhere('o.shiftId = :shiftId', { shiftId: filters.shiftId });
+        }
+        if (filters.departmentId) {
+            qb.andWhere('t.departmentId = :departmentId', { departmentId: filters.departmentId });
+        }
+        this.applySourceTypeFilter(qb, filters.sourceType);
+        return this.applySpecificSubLabFilter(qb, filters.subLabId);
+    }
+    async getBillingSummaryForQuery(base) {
+        const row = await base
+            .clone()
+            .select('COUNT(*)', 'count')
+            .addSelect('COALESCE(SUM(ot.price), 0)', 'amount')
+            .getRawOne();
+        return {
+            billableRootTests: parseInt(row?.count ?? '0', 10) || 0,
+            billableAmount: parseFloat(row?.amount ?? '0') || 0,
+            completedRootTests: 0,
+            verifiedRootTests: 0,
+        };
+    }
+    async getBillingStatusCountMap(base) {
+        const rows = await base
+            .clone()
+            .select('ot.status', 'status')
+            .addSelect('COUNT(*)', 'count')
+            .groupBy('ot.status')
+            .getRawMany();
+        return new Map(rows.map((row) => [row.status, parseInt(row.count, 10) || 0]));
+    }
+    applySourceTypeFilter(qb, sourceType) {
+        if (sourceType === 'IN_HOUSE') {
+            return qb.andWhere('o.sourceSubLabId IS NULL');
+        }
+        if (sourceType === 'SUB_LAB') {
+            return qb.andWhere('o.sourceSubLabId IS NOT NULL');
+        }
+        return qb;
+    }
+    applySpecificSubLabFilter(qb, subLabId) {
+        if (subLabId) {
+            return qb.andWhere('o.sourceSubLabId = :subLabId', { subLabId });
+        }
+        return qb;
+    }
+    getSourceTypeLabel(sourceType) {
+        if (sourceType === 'IN_HOUSE')
+            return 'In-house';
+        if (sourceType === 'SUB_LAB')
+            return 'Sub-lab';
+        return 'All';
+    }
 };
 exports.DashboardService = DashboardService;
 exports.DashboardService = DashboardService = __decorate([
@@ -560,7 +767,9 @@ exports.DashboardService = DashboardService = __decorate([
     __param(4, (0, typeorm_1.InjectRepository)(platform_setting_entity_1.PlatformSetting)),
     __param(5, (0, typeorm_1.InjectRepository)(shift_entity_1.Shift)),
     __param(6, (0, typeorm_1.InjectRepository)(department_entity_1.Department)),
+    __param(7, (0, typeorm_1.InjectRepository)(sub_lab_entity_1.SubLab)),
     __metadata("design:paramtypes", [typeorm_2.Repository,
+        typeorm_2.Repository,
         typeorm_2.Repository,
         typeorm_2.Repository,
         typeorm_2.Repository,

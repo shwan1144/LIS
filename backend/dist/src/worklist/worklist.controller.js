@@ -14,6 +14,7 @@ var __param = (this && this.__param) || function (paramIndex, decorator) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.WorklistController = void 0;
 const common_1 = require("@nestjs/common");
+const platform_express_1 = require("@nestjs/platform-express");
 const worklist_service_1 = require("./worklist.service");
 const jwt_auth_guard_1 = require("../auth/jwt-auth.guard");
 const roles_guard_1 = require("../auth/roles.guard");
@@ -125,6 +126,34 @@ let WorklistController = class WorklistController {
             throw new Error('Lab ID not found in token');
         }
         return this.worklistService.batchEnterResults(labId, actor, req.user?.role, body.updates);
+    }
+    async uploadResultDocument(req, id, file, forceEditVerified) {
+        const labId = req.user?.labId;
+        const actor = (0, lab_actor_context_1.buildLabActorContext)(req.user);
+        if (!labId) {
+            throw new Error('Lab ID not found in token');
+        }
+        return this.worklistService.uploadResultDocument(id, labId, actor, req.user?.role, file, { forceEditVerified: forceEditVerified === true || forceEditVerified === 'true' });
+    }
+    async removeResultDocument(req, id, forceEditVerified) {
+        const labId = req.user?.labId;
+        const actor = (0, lab_actor_context_1.buildLabActorContext)(req.user);
+        if (!labId) {
+            throw new Error('Lab ID not found in token');
+        }
+        return this.worklistService.removeResultDocument(id, labId, actor, req.user?.role, {
+            forceEditVerified: forceEditVerified === 'true',
+        });
+    }
+    async downloadResultDocument(req, id, download, res) {
+        const labId = req.user?.labId;
+        if (!labId || !res) {
+            throw new Error('Lab ID not found in token');
+        }
+        const result = await this.worklistService.getResultDocumentForLab(id, labId);
+        res.setHeader('Content-Type', result.mimeType);
+        res.setHeader('Content-Disposition', `${download === 'true' ? 'attachment' : 'inline'}; filename="${encodeURIComponent(result.fileName)}"`);
+        return res.send(result.buffer);
     }
     async verifyResult(req, id) {
         const labId = req.user?.labId;
@@ -238,6 +267,39 @@ __decorate([
     __metadata("design:paramtypes", [Object, Object]),
     __metadata("design:returntype", Promise)
 ], WorklistController.prototype, "batchEnterResults", null);
+__decorate([
+    (0, common_1.Post)('order-tests/:id/result-document'),
+    (0, roles_decorator_1.Roles)(...lab_role_matrix_1.LAB_ROLE_GROUPS.WORKLIST_ENTRY),
+    (0, common_1.UseInterceptors)((0, platform_express_1.FileInterceptor)('file')),
+    __param(0, (0, common_1.Req)()),
+    __param(1, (0, common_1.Param)('id', common_1.ParseUUIDPipe)),
+    __param(2, (0, common_1.UploadedFile)()),
+    __param(3, (0, common_1.Body)('forceEditVerified')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, String, Object, Object]),
+    __metadata("design:returntype", Promise)
+], WorklistController.prototype, "uploadResultDocument", null);
+__decorate([
+    (0, common_1.Delete)('order-tests/:id/result-document'),
+    (0, roles_decorator_1.Roles)(...lab_role_matrix_1.LAB_ROLE_GROUPS.WORKLIST_ENTRY),
+    __param(0, (0, common_1.Req)()),
+    __param(1, (0, common_1.Param)('id', common_1.ParseUUIDPipe)),
+    __param(2, (0, common_1.Query)('forceEditVerified')),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, String, String]),
+    __metadata("design:returntype", Promise)
+], WorklistController.prototype, "removeResultDocument", null);
+__decorate([
+    (0, common_1.Get)('order-tests/:id/result-document'),
+    (0, roles_decorator_1.Roles)(...lab_role_matrix_1.LAB_ROLE_GROUPS.WORKLIST_LANE_READ),
+    __param(0, (0, common_1.Req)()),
+    __param(1, (0, common_1.Param)('id', common_1.ParseUUIDPipe)),
+    __param(2, (0, common_1.Query)('download')),
+    __param(3, (0, common_1.Res)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, String, String, Object]),
+    __metadata("design:returntype", Promise)
+], WorklistController.prototype, "downloadResultDocument", null);
 __decorate([
     (0, common_1.Patch)(':id/verify'),
     (0, roles_decorator_1.Roles)(...lab_role_matrix_1.LAB_ROLE_GROUPS.WORKLIST_VERIFY),

@@ -15,6 +15,7 @@ const patient_entity_1 = require("./patient.entity");
 const lab_entity_1 = require("./lab.entity");
 const shift_entity_1 = require("./shift.entity");
 const sample_entity_1 = require("./sample.entity");
+const sub_lab_entity_1 = require("./sub-lab.entity");
 var OrderStatus;
 (function (OrderStatus) {
     OrderStatus["REGISTERED"] = "REGISTERED";
@@ -54,6 +55,10 @@ __decorate([
     (0, typeorm_1.Column)({ type: 'uuid', nullable: true }),
     __metadata("design:type", Object)
 ], Order.prototype, "shiftId", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ type: 'uuid', nullable: true }),
+    __metadata("design:type", Object)
+], Order.prototype, "sourceSubLabId", void 0);
 __decorate([
     (0, typeorm_1.Column)({ type: 'varchar', length: 64, nullable: true }),
     __metadata("design:type", Object)
@@ -107,6 +112,14 @@ __decorate([
     __metadata("design:type", Array)
 ], Order.prototype, "deliveryMethods", void 0);
 __decorate([
+    (0, typeorm_1.Column)({ type: 'varchar', length: 255, nullable: true }),
+    __metadata("design:type", Object)
+], Order.prototype, "reportS3Key", void 0);
+__decorate([
+    (0, typeorm_1.Column)({ type: 'timestamp', nullable: true }),
+    __metadata("design:type", Object)
+], Order.prototype, "reportGeneratedAt", void 0);
+__decorate([
     (0, typeorm_1.CreateDateColumn)(),
     __metadata("design:type", Date)
 ], Order.prototype, "createdAt", void 0);
@@ -129,6 +142,11 @@ __decorate([
     (0, typeorm_1.JoinColumn)({ name: 'shiftId' }),
     __metadata("design:type", Object)
 ], Order.prototype, "shift", void 0);
+__decorate([
+    (0, typeorm_1.ManyToOne)(() => sub_lab_entity_1.SubLab, { nullable: true, onDelete: 'SET NULL' }),
+    (0, typeorm_1.JoinColumn)({ name: 'sourceSubLabId' }),
+    __metadata("design:type", Object)
+], Order.prototype, "sourceSubLab", void 0);
 __decorate([
     (0, typeorm_1.OneToMany)(() => sample_entity_1.Sample, (sample) => sample.order, { cascade: true }),
     __metadata("design:type", Array)

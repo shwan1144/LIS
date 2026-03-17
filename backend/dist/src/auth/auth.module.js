@@ -17,6 +17,7 @@ const audit_log_entity_1 = require("../entities/audit-log.entity");
 const lab_entity_1 = require("../entities/lab.entity");
 const platform_user_entity_1 = require("../entities/platform-user.entity");
 const admin_lab_portal_token_entity_1 = require("../entities/admin-lab-portal-token.entity");
+const sub_lab_entity_1 = require("../entities/sub-lab.entity");
 const auth_service_1 = require("./auth.service");
 const auth_controller_1 = require("./auth.controller");
 const jwt_strategy_1 = require("./jwt.strategy");
@@ -40,6 +41,7 @@ exports.AuthModule = AuthModule = __decorate([
                 lab_entity_1.Lab,
                 platform_user_entity_1.PlatformUser,
                 admin_lab_portal_token_entity_1.AdminLabPortalToken,
+                sub_lab_entity_1.SubLab,
             ]),
             passport_1.PassportModule.register({ defaultStrategy: 'lab-jwt' }),
             jwt_1.JwtModule.register({

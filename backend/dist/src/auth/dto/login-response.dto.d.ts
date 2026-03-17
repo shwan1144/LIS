@@ -11,6 +11,8 @@ export declare class UserDto {
     username: string;
     fullName: string | null;
     role: string;
+    subLabId?: string | null;
+    subLabName?: string | null;
     isImpersonation?: boolean;
 }
 export declare class LoginResponseDto {
