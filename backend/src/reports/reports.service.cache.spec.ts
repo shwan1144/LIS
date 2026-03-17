@@ -1,6 +1,6 @@
 import { ReportsService } from './reports.service';
 
-describe('ReportsService cache behavior', () => {
+describe('ReportsService stored report behavior', () => {
   function createFileStorageMock() {
     return {
       isConfigured: jest.fn().mockReturnValue(true),
@@ -70,7 +70,7 @@ describe('ReportsService cache behavior', () => {
     jest.restoreAllMocks();
   });
 
-  it('uses the in-memory PDF cache before reading a stored report from S3', async () => {
+  it('reads a matching stored report from S3 before generating a new PDF', async () => {
     const fileStorageService = createFileStorageMock();
     const service = createService({ fileStorageService });
     const reportableOrderTests = [buildOrderTest()];
@@ -94,24 +94,30 @@ describe('ReportsService cache behavior', () => {
       .mockImplementation((tests: unknown[]) => tests);
     jest.spyOn(service as any, 'resolveOrderQrValue').mockReturnValue('qr-value');
     jest
-      .spyOn(service as any, 'getCachedPdf')
-      .mockReturnValue(Buffer.from('memory-cached-pdf'));
+      .spyOn(service as any, 'buildStoredReportPdfObjectKey')
+      .mockReturnValue('reports/lab-1/order-1/stored.pdf');
+    fileStorageService.getFile.mockResolvedValue(Buffer.from('stored-pdf'));
+    const syncSpy = jest.spyOn(service, 'syncReportToS3');
+    const renderSpy = jest.spyOn(service as any, 'renderPdfFromHtml');
 
-    const result = await service.generateTestResultsPDFWithProfile('order-1', 'lab-1', {
-      bypassResultCompletionCheck: true,
-    });
+    const result = await service.generateTestResultsPDFWithProfile('order-1', 'lab-1');
 
-    expect(result.pdf.toString()).toBe('memory-cached-pdf');
-    expect(fileStorageService.getFile).not.toHaveBeenCalled();
+    expect(result.pdf.toString()).toBe('stored-pdf');
+    expect(fileStorageService.getFile).toHaveBeenCalledWith('reports/lab-1/order-1/stored.pdf');
+    expect(syncSpy).not.toHaveBeenCalled();
+    expect(renderSpy).not.toHaveBeenCalled();
     expect(result.performance.cacheHit).toBe(true);
   });
 
-  it('primes the in-memory PDF cache after syncing a stored report to S3', async () => {
+  it('regenerates and uploads when stored metadata matches but the S3 object is missing', async () => {
     const fileStorageService = createFileStorageMock();
     const orderRepo = { update: jest.fn().mockResolvedValue(undefined) };
     const service = createService({ fileStorageService, orderRepo });
     const reportableOrderTests = [buildOrderTest()];
-    const order = buildOrder({ paymentStatus: 'unpaid' });
+    const order = buildOrder({
+      reportS3Key: 'reports/lab-1/order-1/stored.pdf',
+      reportGeneratedAt: new Date('2026-03-17T09:00:00.000Z'),
+    });
 
     jest.spyOn(service as any, 'loadOrderResultsSnapshot').mockResolvedValue({
       order,
@@ -130,8 +136,7 @@ describe('ReportsService cache behavior', () => {
     jest
       .spyOn(service as any, 'buildStoredReportPdfObjectKey')
       .mockReturnValue('reports/lab-1/order-1/stored.pdf');
-    jest.spyOn(service as any, 'buildReportPdfCacheKey').mockReturnValue('report-cache-key');
-    const setCachedPdfSpy = jest.spyOn(service as any, 'setCachedPdf');
+    fileStorageService.getFile.mockRejectedValue(new Error('missing'));
     jest.spyOn(service, 'generateTestResultsPDFWithProfile').mockResolvedValue({
       pdf: Buffer.from('freshly-generated-pdf'),
       performance: {
@@ -147,10 +152,7 @@ describe('ReportsService cache behavior', () => {
     const storageKey = await service.syncReportToS3('order-1', 'lab-1');
 
     expect(storageKey).toBe('reports/lab-1/order-1/stored.pdf');
-    expect(setCachedPdfSpy).toHaveBeenCalledWith(
-      'report-cache-key',
-      Buffer.from('freshly-generated-pdf'),
-    );
+    expect(fileStorageService.getFile).toHaveBeenCalledWith('reports/lab-1/order-1/stored.pdf');
     expect(fileStorageService.uploadFile).toHaveBeenCalledWith(
       'reports/lab-1/order-1/stored.pdf',
       Buffer.from('freshly-generated-pdf'),
@@ -162,5 +164,55 @@ describe('ReportsService cache behavior', () => {
         reportS3Key: 'reports/lab-1/order-1/stored.pdf',
       }),
     );
+  });
+
+  it('tries sync and then reads the stored report when the current S3 object is missing', async () => {
+    const fileStorageService = createFileStorageMock();
+    const service = createService({ fileStorageService });
+    const reportableOrderTests = [buildOrderTest()];
+    const order = buildOrder({
+      reportS3Key: 'reports/lab-1/order-1/stored.pdf',
+      reportGeneratedAt: new Date('2026-03-17T09:00:00.000Z'),
+    });
+
+    jest.spyOn(service as any, 'loadOrderResultsSnapshot').mockResolvedValue({
+      order,
+      reportableOrderTests,
+      verifiedTests: reportableOrderTests,
+      latestVerifiedAt: new Date('2026-03-17T08:45:00.000Z'),
+    });
+    jest.spyOn(service as any, 'loadPanelSectionLookup').mockResolvedValue({
+      byPanelAndChildTest: new Map(),
+      fingerprint: 'panel-fingerprint',
+    });
+    jest
+      .spyOn(service as any, 'attachPanelSectionMetadata')
+      .mockImplementation((tests: unknown[]) => tests);
+    jest.spyOn(service as any, 'resolveOrderQrValue').mockReturnValue('qr-value');
+    jest
+      .spyOn(service as any, 'buildStoredReportPdfObjectKey')
+      .mockReturnValue('reports/lab-1/order-1/stored.pdf');
+    fileStorageService.getFile
+      .mockRejectedValueOnce(new Error('missing'))
+      .mockResolvedValueOnce(Buffer.from('synced-pdf'));
+    const syncSpy = jest
+      .spyOn(service, 'syncReportToS3')
+      .mockResolvedValue('reports/lab-1/order-1/stored.pdf');
+    const renderSpy = jest.spyOn(service as any, 'renderPdfFromHtml');
+
+    const result = await service.generateTestResultsPDFWithProfile('order-1', 'lab-1');
+
+    expect(syncSpy).toHaveBeenCalledWith('order-1', 'lab-1');
+    expect(fileStorageService.getFile).toHaveBeenNthCalledWith(
+      1,
+      'reports/lab-1/order-1/stored.pdf',
+    );
+    expect(fileStorageService.getFile).toHaveBeenNthCalledWith(
+      2,
+      'reports/lab-1/order-1/stored.pdf',
+    );
+    expect(renderSpy).not.toHaveBeenCalled();
+    expect(result.pdf.toString()).toBe('synced-pdf');
+    expect(result.performance.cacheHit).toBe(true);
   });
 });

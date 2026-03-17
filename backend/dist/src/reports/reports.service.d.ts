@@ -102,11 +102,7 @@ export declare class ReportsService implements OnModuleInit, OnModuleDestroy {
     private static readonly REPORT_PDF_LAYOUT_VERSION;
     private readonly logger;
     private browserPromise;
-    private readonly pdfCache;
-    private readonly pdfInFlight;
     private readonly reportStorageSyncInFlight;
-    private readonly pdfCacheTtlMs;
-    private readonly pdfCacheMaxEntries;
     private readonly pdfPerfLogThresholdMs;
     private static cachedFont;
     constructor(orderRepo: Repository<Order>, orderTestRepo: Repository<OrderTest>, testComponentRepo: Repository<TestComponent>, patientRepo: Repository<Patient>, labRepo: Repository<Lab>, userRepo: Repository<User>, auditLogRepo: Repository<AuditLog>, resultDocumentsService: ResultDocumentsService, fileStorageService: FileStorageService);
@@ -116,7 +112,6 @@ export declare class ReportsService implements OnModuleInit, OnModuleDestroy {
     private getBrowser;
     private renderPdfFromHtml;
     onModuleDestroy(): Promise<void>;
-    private buildReportPdfCacheKey;
     private buildStoredReportPdfObjectKey;
     private isReportReadyForStorage;
     private clearStoredReportArtifact;
@@ -128,8 +123,6 @@ export declare class ReportsService implements OnModuleInit, OnModuleDestroy {
     private resolvePublicResultsLabBaseDomain;
     private resolveOrderQrValue;
     private generateOrderQrDataUrl;
-    private getCachedPdf;
-    private setCachedPdf;
     private logResultsPdfPerformance;
     ensureOrderBelongsToLab(orderId: string, labId: string): Promise<void>;
     getOrderActionFlags(labId: string, orderIds: string[]): Promise<Record<string, ReportActionFlags>>;

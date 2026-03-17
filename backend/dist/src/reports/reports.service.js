@@ -266,11 +266,7 @@ let ReportsService = ReportsService_1 = class ReportsService {
         this.fileStorageService = fileStorageService;
         this.logger = new common_1.Logger(ReportsService_1.name);
         this.browserPromise = null;
-        this.pdfCache = new Map();
-        this.pdfInFlight = new Map();
         this.reportStorageSyncInFlight = new Map();
-        this.pdfCacheTtlMs = this.parseEnvInt('REPORTS_PDF_CACHE_TTL_MS', 120_000, 0, 900_000);
-        this.pdfCacheMaxEntries = this.parseEnvInt('REPORTS_PDF_CACHE_MAX_ENTRIES', 30, 1, 1000);
         this.pdfPerfLogThresholdMs = this.parseEnvInt('REPORTS_PDF_PERF_LOG_THRESHOLD_MS', 500, 0, 60_000);
     }
     parseEnvInt(name, fallback, min, max) {
@@ -638,8 +634,6 @@ let ReportsService = ReportsService_1 = class ReportsService {
     async onModuleDestroy() {
         const browserPromise = this.browserPromise;
         this.browserPromise = null;
-        this.pdfCache.clear();
-        this.pdfInFlight.clear();
         this.reportStorageSyncInFlight.clear();
         if (!browserPromise)
             return;
@@ -649,35 +643,6 @@ let ReportsService = ReportsService_1 = class ReportsService {
         }
         catch {
         }
-    }
-    buildReportPdfCacheKey(input) {
-        const reportableFingerprint = input.reportableOrderTests
-            .map((ot) => {
-            const updatedAtMs = ot.updatedAt ? new Date(ot.updatedAt).getTime() : 0;
-            const resultValue = ot.resultValue == null ? '' : String(ot.resultValue);
-            const resultText = ot.resultText?.trim() ?? '';
-            return `${ot.id}:${updatedAtMs}:${ot.status}:${ot.flag ?? ''}:${resultValue}:${resultText}`;
-        })
-            .sort()
-            .join('|');
-        const reportDesignFingerprint = buildLabReportDesignFingerprint(input.order.lab);
-        const rawKey = [
-            ReportsService_1.REPORT_PDF_LAYOUT_VERSION,
-            input.labId,
-            input.order.id,
-            input.order.paymentStatus,
-            input.order.updatedAt ? new Date(input.order.updatedAt).toISOString() : '-',
-            input.order.lab?.updatedAt ? new Date(input.order.lab.updatedAt).toISOString() : '-',
-            reportDesignFingerprint,
-            input.latestVerifiedAt ? new Date(input.latestVerifiedAt).toISOString() : '-',
-            input.bypassPaymentCheck ? 'bypass' : 'strict',
-            input.cultureOnly ? 'culture-only' : 'full',
-            input.orderQrValue,
-            input.panelSectionFingerprint ?? '-',
-            String(input.reportableOrderTests.length),
-            reportableFingerprint,
-        ].join('::');
-        return (0, crypto_1.createHash)('sha1').update(rawKey).digest('hex');
     }
     buildStoredReportPdfObjectKey(input) {
         const patient = input.order.patient;
@@ -889,42 +854,6 @@ let ReportsService = ReportsService_1 = class ReportsService {
             const message = error instanceof Error ? error.message : 'Unknown error';
             this.logger.warn(`Failed to generate order QR for order ${order.id}: ${message}`);
             return null;
-        }
-    }
-    getCachedPdf(cacheKey) {
-        if (this.pdfCacheTtlMs <= 0)
-            return null;
-        const now = Date.now();
-        const entry = this.pdfCache.get(cacheKey);
-        if (!entry)
-            return null;
-        if (entry.expiresAt <= now) {
-            this.pdfCache.delete(cacheKey);
-            return null;
-        }
-        entry.lastAccessedAt = now;
-        return Buffer.from(entry.buffer);
-    }
-    setCachedPdf(cacheKey, pdf) {
-        if (this.pdfCacheTtlMs <= 0)
-            return;
-        const now = Date.now();
-        this.pdfCache.set(cacheKey, {
-            buffer: Buffer.from(pdf),
-            expiresAt: now + this.pdfCacheTtlMs,
-            lastAccessedAt: now,
-        });
-        for (const [key, entry] of this.pdfCache) {
-            if (entry.expiresAt <= now)
-                this.pdfCache.delete(key);
-        }
-        if (this.pdfCache.size <= this.pdfCacheMaxEntries)
-            return;
-        const oldest = [...this.pdfCache.entries()]
-            .sort((a, b) => a[1].lastAccessedAt - b[1].lastAccessedAt)
-            .slice(0, this.pdfCache.size - this.pdfCacheMaxEntries);
-        for (const [key] of oldest) {
-            this.pdfCache.delete(key);
         }
     }
     logResultsPdfPerformance(input) {
@@ -1528,7 +1457,14 @@ let ReportsService = ReportsService_1 = class ReportsService {
                     panelSectionFingerprint: panelSectionLookup.fingerprint,
                 });
                 if (order.reportS3Key === expectedKey && order.reportGeneratedAt) {
-                    return expectedKey;
+                    try {
+                        await this.fileStorageService.getFile(expectedKey);
+                        return expectedKey;
+                    }
+                    catch (error) {
+                        const message = error instanceof Error ? error.message : String(error);
+                        this.logger.warn(`Stored report object missing for order ${orderId} (${expectedKey}); regenerating: ${message}`);
+                    }
                 }
                 const result = await this.generateTestResultsPDFWithProfile(orderId, labId, {
                     bypassPaymentCheck: true,
@@ -1597,39 +1533,6 @@ let ReportsService = ReportsService_1 = class ReportsService {
                 panelSectionFingerprint: panelSectionLookup.fingerprint,
             })
             : null;
-        if (storedReportKey &&
-            this.fileStorageService.isConfigured() &&
-            order.reportS3Key === storedReportKey) {
-            try {
-                const cachedPdf = await this.fileStorageService.getFile(storedReportKey);
-                return {
-                    pdf: cachedPdf,
-                    performance: {
-                        orderId,
-                        labId,
-                        correlationId: options?.correlationId ?? null,
-                        totalMs: Date.now() - startMs,
-                        snapshotMs,
-                        cacheHit: true,
-                        inFlightJoin: false,
-                    },
-                };
-            }
-            catch (error) {
-                const message = error instanceof Error ? error.message : String(error);
-                this.logger.warn(`Stored report fetch failed for order ${orderId} (${storedReportKey}): ${message}`);
-            }
-        }
-        const cacheKey = this.buildReportPdfCacheKey({
-            labId,
-            order: orderForRender,
-            reportableOrderTests: renderedOrderTestsWithSections,
-            latestVerifiedAt,
-            bypassPaymentCheck,
-            orderQrValue,
-            panelSectionFingerprint: panelSectionLookup.fingerprint,
-            cultureOnly,
-        });
         let verifierLookupMs = 0;
         let assetsMs = 0;
         let htmlMs = 0;
@@ -1650,6 +1553,39 @@ let ReportsService = ReportsService_1 = class ReportsService {
             cacheHit,
             inFlightJoin,
         });
+        if (storedReportKey && this.fileStorageService.isConfigured()) {
+            if (order.reportS3Key === storedReportKey) {
+                try {
+                    const storedPdf = await this.fileStorageService.getFile(storedReportKey);
+                    const performance = buildPerformance(true, false);
+                    this.logResultsPdfPerformance(performance);
+                    return {
+                        pdf: storedPdf,
+                        performance,
+                    };
+                }
+                catch (error) {
+                    const message = error instanceof Error ? error.message : String(error);
+                    this.logger.warn(`Stored report fetch failed for order ${orderId} (${storedReportKey}): ${message}`);
+                }
+            }
+            const syncedKey = await this.syncReportToS3(orderId, labId);
+            if (syncedKey) {
+                try {
+                    const storedPdf = await this.fileStorageService.getFile(syncedKey);
+                    const performance = buildPerformance(true, false);
+                    this.logResultsPdfPerformance(performance);
+                    return {
+                        pdf: storedPdf,
+                        performance,
+                    };
+                }
+                catch (error) {
+                    const message = error instanceof Error ? error.message : String(error);
+                    this.logger.warn(`Stored report fetch after sync failed for order ${orderId} (${syncedKey}): ${message}`);
+                }
+            }
+        }
         const generatePdf = async () => {
             const verifierLookupStartMs = Date.now();
             const verifierIds = [
@@ -1731,49 +1667,13 @@ let ReportsService = ReportsService_1 = class ReportsService {
                 return fallbackPdf;
             }
         };
-        if (disableCache) {
-            const pdf = await generatePdf();
-            const performance = buildPerformance(false, false);
-            this.logResultsPdfPerformance(performance);
-            return {
-                pdf: Buffer.from(pdf),
-                performance,
-            };
-        }
-        const cachedPdf = this.getCachedPdf(cacheKey);
-        if (cachedPdf) {
-            const performance = buildPerformance(true, false);
-            this.logResultsPdfPerformance(performance);
-            return {
-                pdf: cachedPdf,
-                performance,
-            };
-        }
-        const existingInFlight = this.pdfInFlight.get(cacheKey);
-        if (existingInFlight) {
-            const pdf = await existingInFlight;
-            const performance = buildPerformance(false, true);
-            this.logResultsPdfPerformance(performance);
-            return {
-                pdf: Buffer.from(pdf),
-                performance,
-            };
-        }
-        const generatePromise = generatePdf();
-        this.pdfInFlight.set(cacheKey, generatePromise);
-        try {
-            const pdf = await generatePromise;
-            this.setCachedPdf(cacheKey, pdf);
-            const performance = buildPerformance(false, false);
-            this.logResultsPdfPerformance(performance);
-            return {
-                pdf: Buffer.from(pdf),
-                performance,
-            };
-        }
-        finally {
-            this.pdfInFlight.delete(cacheKey);
-        }
+        const pdf = await generatePdf();
+        const performance = buildPerformance(false, false);
+        this.logResultsPdfPerformance(performance);
+        return {
+            pdf: Buffer.from(pdf),
+            performance,
+        };
     }
     async renderTestResultsFallbackPDF(input) {
         const { order, orderTests, verifiers, latestVerifiedAt, comments } = input;

@@ -67,7 +67,7 @@ describe('ReportsService public result link resolution', () => {
     expect(url).toBe('https://lab02.staging.medilis.net/public/results/order-4');
   });
 
-  it('changes the report cache key when panel section fingerprint changes', () => {
+  it('changes the stored report object key when panel section fingerprint changes', () => {
     const service = createService();
     const baseInput = {
       labId: 'lab-1',
@@ -91,16 +91,14 @@ describe('ReportsService public result link resolution', () => {
         },
       ],
       latestVerifiedAt: new Date('2026-03-16T09:00:00.000Z'),
-      bypassPaymentCheck: false,
       orderQrValue: 'https://lab01.medilis.net/public/results/order-1',
-      cultureOnly: false,
     };
 
-    const keyA = (service as any).buildReportPdfCacheKey({
+    const keyA = (service as any).buildStoredReportPdfObjectKey({
       ...baseInput,
       panelSectionFingerprint: 'panel-a:child-1:Macroscopic:1710576000000',
     });
-    const keyB = (service as any).buildReportPdfCacheKey({
+    const keyB = (service as any).buildStoredReportPdfObjectKey({
       ...baseInput,
       panelSectionFingerprint: 'panel-a:child-1:Microscopic:1710576000000',
     });
