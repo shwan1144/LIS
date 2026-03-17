@@ -6,6 +6,7 @@ describe('CreateTestDto numeric coercion', () => {
   const basePayload = {
     code: 'GLU',
     name: 'Glucose',
+    abbreviation: 'GLU',
   };
 
   it('coerces top-level numeric string fields into numbers', () => {
@@ -90,5 +91,30 @@ describe('CreateTestDto numeric coercion', () => {
     expect(errors).toHaveLength(0);
     expect(dto.numericAgeRanges?.[0].minAgeYears).toBe(1);
     expect(dto.numericAgeRanges?.[0].maxAgeYears).toBe(12);
+  });
+
+  it('trims abbreviation before validation', () => {
+    const dto = plainToInstance(CreateTestDto, {
+      ...basePayload,
+      abbreviation: '  glu  ',
+    });
+
+    const errors = validateSync(dto);
+
+    expect(errors).toHaveLength(0);
+    expect(dto.abbreviation).toBe('glu');
+  });
+
+  it('fails validation when abbreviation is blank after trimming', () => {
+    const dto = plainToInstance(CreateTestDto, {
+      ...basePayload,
+      abbreviation: '   ',
+    });
+
+    const errors = validateSync(dto);
+    const abbreviationError = errors.find((error) => error.property === 'abbreviation');
+
+    expect(abbreviationError?.constraints).toBeDefined();
+    expect(abbreviationError?.constraints?.minLength).toBeDefined();
   });
 });

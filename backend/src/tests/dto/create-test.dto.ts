@@ -13,7 +13,7 @@ import {
   Min,
   ValidateNested,
 } from 'class-validator';
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import { TestType, TubeType } from '../../entities/test.entity';
 
 export const TEST_RESULT_ENTRY_TYPES = [
@@ -162,10 +162,11 @@ export class CreateTestDto {
   @MaxLength(255)
   name: string;
 
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
   @IsString()
+  @MinLength(1)
   @MaxLength(32)
-  @IsOptional()
-  abbreviation?: string;
+  abbreviation: string;
 
   @IsEnum(TestType)
   @IsOptional()

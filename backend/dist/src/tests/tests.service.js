@@ -63,6 +63,7 @@ let TestsService = class TestsService {
     }
     async create(labId, dto) {
         const normalizedCode = dto.code.toUpperCase().trim();
+        const normalizedAbbreviation = dto.abbreviation.toUpperCase().trim();
         const existing = await this.findByCode(normalizedCode, labId);
         if (existing) {
             throw new common_1.ConflictException(`Test with code "${normalizedCode}" already exists`);
@@ -82,6 +83,7 @@ let TestsService = class TestsService {
             labId,
             code: normalizedCode,
             name: dto.name.trim(),
+            abbreviation: normalizedAbbreviation,
             type: dto.type || test_entity_1.TestType.SINGLE,
             tubeType: dto.tubeType || test_entity_1.TubeType.SERUM,
             unit: dto.unit?.trim() || null,
@@ -133,6 +135,8 @@ let TestsService = class TestsService {
             test.code = dto.code.toUpperCase().trim();
         if (dto.name !== undefined)
             test.name = dto.name.trim();
+        if (dto.abbreviation !== undefined)
+            test.abbreviation = dto.abbreviation.toUpperCase().trim();
         const previousResultEntryType = test.resultEntryType ?? 'NUMERIC';
         const previousType = test.type ?? test_entity_1.TestType.SINGLE;
         if (dto.type !== undefined)

@@ -192,9 +192,10 @@ __decorate([
     __metadata("design:type", String)
 ], CreateTestDto.prototype, "name", void 0);
 __decorate([
+    (0, class_transformer_1.Transform)(({ value }) => (typeof value === 'string' ? value.trim() : value)),
     (0, class_validator_1.IsString)(),
+    (0, class_validator_1.MinLength)(1),
     (0, class_validator_1.MaxLength)(32),
-    (0, class_validator_1.IsOptional)(),
     __metadata("design:type", String)
 ], CreateTestDto.prototype, "abbreviation", void 0);
 __decorate([

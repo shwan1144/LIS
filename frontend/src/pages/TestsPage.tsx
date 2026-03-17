@@ -807,6 +807,7 @@ export function TestsPage() {
       setEditingTest(fullTest);
       form.setFieldsValue({
         ...fullTest,
+        abbreviation: fullTest.abbreviation ?? undefined,
         category: fullTest.category || undefined,
         normalMin: toNumberOrUndefined(fullTest.normalMin),
         normalMax: toNumberOrUndefined(fullTest.normalMax),
@@ -1090,6 +1091,7 @@ export function TestsPage() {
     const normalizedExpectedCompletionMinutes = toNumberOrNull(values.expectedCompletionMinutes);
     const payload: CreateTestDto = {
       ...values,
+      abbreviation: values.abbreviation.trim().toUpperCase(),
       normalMin: normalizedNormalMin,
       normalMax: normalizedNormalMax,
       normalMinMale: toNumberOrNull(values.normalMinMale),
@@ -1603,6 +1605,7 @@ export function TestsPage() {
                   <Form.Item
                     name="abbreviation"
                     label="Abbreviation"
+                    rules={[{ required: true, whitespace: true, message: 'Abbreviation is required' }]}
                   >
                     <Input placeholder="e.g., GUE" style={{ textTransform: 'uppercase' }} />
                   </Form.Item>
@@ -2058,7 +2061,11 @@ export function TestsPage() {
                     <Form.Item name="name" label="Test Name" rules={[{ required: true, message: 'Name is required' }]}>
                       <Input placeholder="e.g., Blood Glucose, Complete Blood Count" />
                     </Form.Item>
-                    <Form.Item name="abbreviation" label="Abbreviation">
+                    <Form.Item
+                      name="abbreviation"
+                      label="Abbreviation"
+                      rules={[{ required: true, whitespace: true, message: 'Abbreviation is required' }]}
+                    >
                       <Input placeholder="e.g., GUE" style={{ textTransform: 'uppercase' }} />
                     </Form.Item>
                     <Form.Item name="category" label="Category">

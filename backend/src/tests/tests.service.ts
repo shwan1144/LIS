@@ -106,6 +106,7 @@ export class TestsService {
 
   async create(labId: string, dto: CreateTestDto): Promise<Test> {
     const normalizedCode = dto.code.toUpperCase().trim();
+    const normalizedAbbreviation = dto.abbreviation.toUpperCase().trim();
     // Check for duplicate code
     const existing = await this.findByCode(normalizedCode, labId);
     if (existing) {
@@ -137,6 +138,7 @@ export class TestsService {
       labId,
       code: normalizedCode,
       name: dto.name.trim(),
+      abbreviation: normalizedAbbreviation,
       type: dto.type || TestType.SINGLE,
       tubeType: dto.tubeType || TubeType.SERUM,
       unit: dto.unit?.trim() || null,
@@ -195,6 +197,7 @@ export class TestsService {
 
     if (dto.code !== undefined) test.code = dto.code.toUpperCase().trim();
     if (dto.name !== undefined) test.name = dto.name.trim();
+    if (dto.abbreviation !== undefined) test.abbreviation = dto.abbreviation.toUpperCase().trim();
     const previousResultEntryType = test.resultEntryType ?? 'NUMERIC';
     const previousType = test.type ?? TestType.SINGLE;
     if (dto.type !== undefined) test.type = dto.type;

@@ -1978,6 +1978,7 @@ export interface TestDto {
   id: string;
   code: string;
   name: string;
+  abbreviation: string | null;
   type: TestType;
   tubeType: TestTubeType;
   unit: string | null;
@@ -2014,6 +2015,7 @@ export interface TestDto {
 export interface CreateTestDto {
   code: string;
   name: string;
+  abbreviation: string;
   type?: TestType;
   tubeType?: TestTubeType;
   unit?: string;

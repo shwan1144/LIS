@@ -39,7 +39,7 @@ export declare class TestPanelComponentDto {
 export declare class CreateTestDto {
     code: string;
     name: string;
-    abbreviation?: string;
+    abbreviation: string;
     type?: TestType;
     tubeType?: TubeType;
     unit?: string;
