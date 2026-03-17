@@ -15,6 +15,7 @@ const SUMATRA_BINARY_NAME = 'SumatraPDF-3.4.6-32.exe';
 const execFileAsync = promisify(execFile);
 
 type LogType = 'error' | 'info' | 'success';
+type PdfPrintEngine = 'auto' | 'adobe' | 'shell' | 'sumatra';
 
 export interface GatewayLogMessage {
     text: string;
@@ -65,6 +66,12 @@ export interface ServerEvent {
     type: 'log' | 'status';
 }
 
+type PrinterSpoolIdentity = {
+    driverName: string;
+    name: string;
+    portName: string;
+};
+
 type JsonError = {
     error: string;
     message: string;
@@ -93,6 +100,7 @@ export class PrintServer {
     private readonly onEvent: (event: ServerEvent) => void;
 
     private readonly port = parsePort(process.env.PORT);
+    private readonly pdfPrintEngine = this.resolvePdfPrintEngine();
 
     private readonly startedAt = new Date().toISOString();
 
@@ -145,6 +153,7 @@ export class PrintServer {
 
         this.server.listen(this.port, () => {
             this.log(`Gateway listening on http://localhost:${this.port}`, 'success');
+            this.log(`PDF print engine preference: ${this.pdfPrintEngine}.`);
             void this.notifyStatus();
         });
     }
@@ -192,27 +201,256 @@ export class PrintServer {
                 options.sumatraPdfPath = this.tempSumatraPath;
             }
 
-            await printPdf(tempFilePath, options);
-
-            const durationMs = Date.now() - requestStartedAt;
-            this.log(
-                `Printed ${jobName}${printerName ? ` on ${printerName}` : ''} in ${durationMs} ms (${pdfBuffer.length} bytes).`,
-                'success',
-            );
-            this.respondJson(res, 200, {
+            this.respondJson(res, 202, {
                 jobName,
                 printerName: printerName ?? null,
-                status: 'success',
+                status: 'accepted',
             });
-            void this.notifyStatus();
+            const acceptedMs = Date.now() - requestStartedAt;
+            this.log(
+                `Accepted ${jobName}${printerName ? ` on ${printerName}` : ''} in ${acceptedMs} ms. Printer completion will continue in background.`,
+            );
+            void this.runQueuedPdfPrintJob({
+                jobName,
+                pdfSizeBytes: pdfBuffer.length,
+                printerName,
+                requestStartedAt,
+                tempDir,
+                tempFilePath,
+                options,
+            });
         } catch (error) {
             const message = error instanceof Error ? error.message : 'Print failed.';
             this.log(`Print failed: ${message}`, 'error');
-            throw new HttpError(500, message);
-        } finally {
             setTimeout(() => {
                 fs.rmSync(tempDir, { force: true, recursive: true });
             }, 10_000);
+            throw new HttpError(500, message);
+        }
+    }
+
+    private async runQueuedPdfPrintJob(input: {
+        jobName: string;
+        pdfSizeBytes: number;
+        printerName?: string;
+        requestStartedAt: number;
+        tempDir: string;
+        tempFilePath: string;
+        options: PrintOptions;
+    }): Promise<void> {
+        try {
+            const engineUsed = await this.printPdfWithPreferredEngine({
+                options: input.options,
+                pdfPath: input.tempFilePath,
+                printerName: input.printerName,
+            });
+            const durationMs = Date.now() - input.requestStartedAt;
+            this.log(
+                `Printed ${input.jobName}${input.printerName ? ` on ${input.printerName}` : ''} in ${durationMs} ms (${input.pdfSizeBytes} bytes) via ${engineUsed}.`,
+                'success',
+            );
+        } catch (error) {
+            const message = error instanceof Error ? error.message : 'Print failed.';
+            this.log(`Print failed for ${input.jobName}: ${message}`, 'error');
+        } finally {
+            setTimeout(() => {
+                fs.rmSync(input.tempDir, { force: true, recursive: true });
+            }, 10_000);
+            void this.notifyStatus();
+        }
+    }
+
+    private resolvePdfPrintEngine(): PdfPrintEngine {
+        const raw = String(
+            process.env.LIS_GATEWAY_PDF_PRINT_ENGINE
+            ?? process.env.PDF_PRINT_ENGINE
+            ?? 'auto',
+        )
+            .trim()
+            .toLowerCase();
+
+        if (raw === 'adobe' || raw === 'shell' || raw === 'sumatra') {
+            return raw;
+        }
+
+        return 'auto';
+    }
+
+    private async printPdfWithPreferredEngine(input: {
+        options: PrintOptions;
+        pdfPath: string;
+        printerName?: string;
+    }): Promise<'adobe' | 'shell' | 'sumatra'> {
+        const attempt = async (
+            engine: 'adobe' | 'shell' | 'sumatra',
+        ): Promise<'adobe' | 'shell' | 'sumatra'> => {
+            if (engine === 'adobe') {
+                if (!input.printerName) {
+                    throw new Error('Adobe Reader print requires an explicit printer name.');
+                }
+                await this.printPdfViaAdobeReader(input.pdfPath, input.printerName);
+                return engine;
+            }
+
+            if (engine === 'shell') {
+                await this.printPdfViaWindowsShell(input.pdfPath, input.printerName);
+                return engine;
+            }
+
+            await printPdf(input.pdfPath, input.options);
+            return engine;
+        };
+
+        const engines: Array<'adobe' | 'shell' | 'sumatra'> =
+            this.pdfPrintEngine === 'adobe'
+                ? ['adobe', 'sumatra']
+                : this.pdfPrintEngine === 'shell'
+                    ? ['shell', 'sumatra']
+                    : this.pdfPrintEngine === 'sumatra'
+                        ? ['sumatra']
+                        : ['adobe', 'shell', 'sumatra'];
+
+        let lastError: unknown;
+        for (const engine of engines) {
+            try {
+                return await attempt(engine);
+            } catch (error) {
+                lastError = error;
+                const message = this.getCommandErrorMessage(
+                    error,
+                    `PDF print failed via ${engine}.`,
+                );
+                this.log(
+                    `PDF print engine ${engine} failed${input.printerName ? ` for ${input.printerName}` : ''}: ${message}`,
+                    'error',
+                );
+            }
+        }
+
+        throw lastError instanceof Error ? lastError : new Error('All PDF print engines failed.');
+    }
+
+    private getPossibleAdobeReaderPaths(): string[] {
+        const programFiles = process.env.ProgramFiles ?? 'C:\\Program Files';
+        const programFilesX86 = process.env['ProgramFiles(x86)'] ?? 'C:\\Program Files (x86)';
+
+        return [
+            path.join(programFiles, 'Adobe', 'Acrobat DC', 'Acrobat', 'Acrobat.exe'),
+            path.join(programFiles, 'Adobe', 'Acrobat Reader DC', 'Reader', 'AcroRd32.exe'),
+            path.join(programFiles, 'Adobe', 'Acrobat Reader', 'Reader', 'AcroRd32.exe'),
+            path.join(programFilesX86, 'Adobe', 'Acrobat Reader DC', 'Reader', 'AcroRd32.exe'),
+            path.join(programFilesX86, 'Adobe', 'Acrobat Reader', 'Reader', 'AcroRd32.exe'),
+        ];
+    }
+
+    private resolveAdobeReaderPath(): string | null {
+        for (const candidate of this.getPossibleAdobeReaderPaths()) {
+            if (fs.existsSync(candidate)) {
+                return candidate;
+            }
+        }
+
+        return null;
+    }
+
+    private async getPrinterSpoolIdentity(printerName: string): Promise<PrinterSpoolIdentity> {
+        const escapedPrinterName = printerName.replace(/'/g, "''");
+        const command = [
+            `$printer = Get-CimInstance Win32_Printer | Where-Object { $_.Name -eq '${escapedPrinterName}' } | Select-Object -First 1 Name, DriverName, PortName;`,
+            'if (-not $printer) { throw "Printer metadata not found." }',
+            '$printer | ConvertTo-Json -Compress',
+        ].join(' ');
+
+        try {
+            const { stdout } = await execFileAsync(
+                'Powershell.exe',
+                ['-NoProfile', '-Command', command],
+                { windowsHide: true },
+            );
+            const raw = stdout.trim();
+            if (!raw) {
+                throw new Error('Printer metadata command returned no data.');
+            }
+
+            const parsed = JSON.parse(raw) as {
+                DriverName?: string | null;
+                Name?: string | null;
+                PortName?: string | null;
+            };
+            const resolvedName = typeof parsed.Name === 'string' ? parsed.Name.trim() : '';
+            const driverName = typeof parsed.DriverName === 'string' ? parsed.DriverName.trim() : '';
+            const portName = typeof parsed.PortName === 'string' ? parsed.PortName.trim() : '';
+            if (!resolvedName || !driverName || !portName) {
+                throw new Error('Incomplete printer metadata returned from PowerShell.');
+            }
+
+            return {
+                driverName,
+                name: resolvedName,
+                portName,
+            };
+        } catch (error) {
+            const message = this.getCommandErrorMessage(
+                error,
+                'Failed to read printer metadata.',
+            );
+            throw new Error(message);
+        }
+    }
+
+    private async printPdfViaAdobeReader(pdfPath: string, printerName: string): Promise<void> {
+        const adobeReaderPath = this.resolveAdobeReaderPath();
+        if (!adobeReaderPath) {
+            throw new Error('Adobe Reader executable was not found.');
+        }
+
+        const printer = await this.getPrinterSpoolIdentity(printerName);
+        try {
+            await execFileAsync(
+                adobeReaderPath,
+                ['/t', pdfPath, printer.name, printer.driverName, printer.portName],
+                { windowsHide: true },
+            );
+        } catch (error) {
+            const message = this.getCommandErrorMessage(error, 'Adobe Reader print command failed.');
+            throw new Error(message);
+        }
+    }
+
+    private async printPdfViaWindowsShell(
+        pdfPath: string,
+        printerName?: string,
+    ): Promise<void> {
+        const escapedPdfPath = pdfPath.replace(/'/g, "''");
+        let command: string;
+
+        if (printerName) {
+            const printer = await this.getPrinterSpoolIdentity(printerName);
+            const escapedPrinterName = printer.name.replace(/'/g, "''");
+            const escapedDriverName = printer.driverName.replace(/'/g, "''");
+            const escapedPortName = printer.portName.replace(/'/g, "''");
+            command = [
+                `$process = Start-Process -FilePath '${escapedPdfPath}' -Verb PrintTo -ArgumentList @('${escapedPrinterName}', '${escapedDriverName}', '${escapedPortName}') -PassThru -WindowStyle Hidden;`,
+                '$process.WaitForExit();',
+                'if ($process.ExitCode -ne 0) { exit $process.ExitCode }',
+            ].join(' ');
+        } else {
+            command = [
+                `$process = Start-Process -FilePath '${escapedPdfPath}' -Verb Print -PassThru -WindowStyle Hidden;`,
+                '$process.WaitForExit();',
+                'if ($process.ExitCode -ne 0) { exit $process.ExitCode }',
+            ].join(' ');
+        }
+
+        try {
+            await execFileAsync(
+                'Powershell.exe',
+                ['-NoProfile', '-Command', command],
+                { windowsHide: true },
+            );
+        } catch (error) {
+            const message = this.getCommandErrorMessage(error, 'Windows shell PDF print failed.');
+            throw new Error(message);
         }
     }
 
