@@ -956,7 +956,7 @@ export class ReportsService implements OnModuleInit, OnModuleDestroy {
     orderId: string,
     existingKey: string | null | undefined,
   ): Promise<void> {
-    if (existingKey) {
+    if (existingKey && this.fileStorageService.isConfigured()) {
       await this.fileStorageService.deleteFile(existingKey);
     }
     await this.orderRepo.update(orderId, {
@@ -1930,6 +1930,13 @@ export class ReportsService implements OnModuleInit, OnModuleDestroy {
    * Updates the Order record with the S3 key and timestamp.
    */
   async syncReportToS3(orderId: string, labId: string): Promise<string | null> {
+    if (!this.fileStorageService.isConfigured()) {
+      this.logger.debug(
+        `Skipping report storage sync for order ${orderId}: S3/R2 storage is not configured.`,
+      );
+      return null;
+    }
+
     const syncKey = `${labId}:${orderId}`;
     const existingSync = this.reportStorageSyncInFlight.get(syncKey);
     if (existingSync) {
@@ -2052,7 +2059,11 @@ export class ReportsService implements OnModuleInit, OnModuleDestroy {
         })
         : null;
 
-    if (storedReportKey && order.reportS3Key === storedReportKey) {
+    if (
+      storedReportKey &&
+      this.fileStorageService.isConfigured() &&
+      order.reportS3Key === storedReportKey
+    ) {
       try {
         const cachedPdf = await this.fileStorageService.getFile(storedReportKey);
         return {

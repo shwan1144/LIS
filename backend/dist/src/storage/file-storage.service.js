@@ -21,8 +21,11 @@ let FileStorageService = FileStorageService_1 = class FileStorageService {
         const accessKeyId = process.env.S3_ACCESS_KEY_ID;
         const secretAccessKey = process.env.S3_SECRET_ACCESS_KEY;
         const region = process.env.S3_REGION || 'auto';
-        if (!this.bucket || !endpoint || !accessKeyId || !secretAccessKey) {
+        this.configured = Boolean(this.bucket && endpoint && accessKeyId && secretAccessKey);
+        if (!this.configured) {
             this.logger.warn('S3 Storage is not fully configured. File uploads will fail.');
+            this.client = null;
+            return;
         }
         const clientConfig = {
             region,
@@ -39,15 +42,25 @@ let FileStorageService = FileStorageService_1 = class FileStorageService {
         }
         this.client = new client_s3_1.S3Client(clientConfig);
     }
+    isConfigured() {
+        return this.configured;
+    }
+    getClientOrThrow() {
+        if (!this.client || !this.configured) {
+            throw new Error('S3 storage is not configured. Set S3_ENDPOINT, S3_BUCKET_NAME, S3_ACCESS_KEY_ID, and S3_SECRET_ACCESS_KEY.');
+        }
+        return this.client;
+    }
     async uploadFile(key, body, contentType) {
         try {
+            const client = this.getClientOrThrow();
             const command = new client_s3_1.PutObjectCommand({
                 Bucket: this.bucket,
                 Key: key,
                 Body: body,
                 ContentType: contentType,
             });
-            await this.client.send(command);
+            await client.send(command);
             return key;
         }
         catch (error) {
@@ -57,11 +70,12 @@ let FileStorageService = FileStorageService_1 = class FileStorageService {
     }
     async deleteFile(key) {
         try {
+            const client = this.getClientOrThrow();
             const command = new client_s3_1.DeleteObjectCommand({
                 Bucket: this.bucket,
                 Key: key,
             });
-            await this.client.send(command);
+            await client.send(command);
         }
         catch (error) {
             this.logger.error(`Failed to delete file from S3 (${key}): ${error.message}`);
@@ -69,11 +83,12 @@ let FileStorageService = FileStorageService_1 = class FileStorageService {
     }
     async getFile(key) {
         try {
+            const client = this.getClientOrThrow();
             const command = new client_s3_1.GetObjectCommand({
                 Bucket: this.bucket,
                 Key: key,
             });
-            const response = await this.client.send(command);
+            const response = await client.send(command);
             if (!response.Body) {
                 throw new Error('Empty response body from S3');
             }

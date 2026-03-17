@@ -717,7 +717,7 @@ let ReportsService = ReportsService_1 = class ReportsService {
         return reportableOrderTests.length > 0 && verifiedTests.length === reportableOrderTests.length;
     }
     async clearStoredReportArtifact(orderId, existingKey) {
-        if (existingKey) {
+        if (existingKey && this.fileStorageService.isConfigured()) {
             await this.fileStorageService.deleteFile(existingKey);
         }
         await this.orderRepo.update(orderId, {
@@ -1500,6 +1500,10 @@ let ReportsService = ReportsService_1 = class ReportsService {
         return result.pdf;
     }
     async syncReportToS3(orderId, labId) {
+        if (!this.fileStorageService.isConfigured()) {
+            this.logger.debug(`Skipping report storage sync for order ${orderId}: S3/R2 storage is not configured.`);
+            return null;
+        }
         const syncKey = `${labId}:${orderId}`;
         const existingSync = this.reportStorageSyncInFlight.get(syncKey);
         if (existingSync) {
@@ -1593,7 +1597,9 @@ let ReportsService = ReportsService_1 = class ReportsService {
                 panelSectionFingerprint: panelSectionLookup.fingerprint,
             })
             : null;
-        if (storedReportKey && order.reportS3Key === storedReportKey) {
+        if (storedReportKey &&
+            this.fileStorageService.isConfigured() &&
+            order.reportS3Key === storedReportKey) {
             try {
                 const cachedPdf = await this.fileStorageService.getFile(storedReportKey);
                 return {
