@@ -192,27 +192,58 @@ export class PrintServer {
                 options.sumatraPdfPath = this.tempSumatraPath;
             }
 
-            await printPdf(tempFilePath, options);
-
-            const durationMs = Date.now() - requestStartedAt;
-            this.log(
-                `Printed ${jobName}${printerName ? ` on ${printerName}` : ''} in ${durationMs} ms (${pdfBuffer.length} bytes).`,
-                'success',
-            );
-            this.respondJson(res, 200, {
+            this.respondJson(res, 202, {
                 jobName,
                 printerName: printerName ?? null,
-                status: 'success',
+                status: 'accepted',
             });
-            void this.notifyStatus();
+            const acceptedMs = Date.now() - requestStartedAt;
+            this.log(
+                `Accepted ${jobName}${printerName ? ` on ${printerName}` : ''} in ${acceptedMs} ms. Printer completion will continue in background.`,
+            );
+            void this.runQueuedPdfPrintJob({
+                jobName,
+                pdfSizeBytes: pdfBuffer.length,
+                printerName,
+                requestStartedAt,
+                tempDir,
+                tempFilePath,
+                options,
+            });
         } catch (error) {
             const message = error instanceof Error ? error.message : 'Print failed.';
             this.log(`Print failed: ${message}`, 'error');
-            throw new HttpError(500, message);
-        } finally {
             setTimeout(() => {
                 fs.rmSync(tempDir, { force: true, recursive: true });
             }, 10_000);
+            throw new HttpError(500, message);
+        }
+    }
+
+    private async runQueuedPdfPrintJob(input: {
+        jobName: string;
+        pdfSizeBytes: number;
+        printerName?: string;
+        requestStartedAt: number;
+        tempDir: string;
+        tempFilePath: string;
+        options: PrintOptions;
+    }): Promise<void> {
+        try {
+            await printPdf(input.tempFilePath, input.options);
+            const durationMs = Date.now() - input.requestStartedAt;
+            this.log(
+                `Printed ${input.jobName}${input.printerName ? ` on ${input.printerName}` : ''} in ${durationMs} ms (${input.pdfSizeBytes} bytes).`,
+                'success',
+            );
+        } catch (error) {
+            const message = error instanceof Error ? error.message : 'Print failed.';
+            this.log(`Print failed for ${input.jobName}: ${message}`, 'error');
+        } finally {
+            setTimeout(() => {
+                fs.rmSync(input.tempDir, { force: true, recursive: true });
+            }, 10_000);
+            void this.notifyStatus();
         }
     }
 
