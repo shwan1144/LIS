@@ -867,11 +867,11 @@ export class ReportsService implements OnModuleInit, OnModuleDestroy {
     order: Order;
     reportableOrderTests: OrderTest[];
     latestVerifiedAt: Date | null;
-    bypassPaymentCheck: boolean;
     orderQrValue: string;
     panelSectionFingerprint?: string;
     cultureOnly?: boolean;
   }): string {
+    const patient = input.order.patient;
     const reportableFingerprint = input.reportableOrderTests
       .map((ot) => {
         const updatedAtMs = ot.updatedAt ? new Date(ot.updatedAt).getTime() : 0;
@@ -887,12 +887,16 @@ export class ReportsService implements OnModuleInit, OnModuleDestroy {
       ReportsService.REPORT_PDF_LAYOUT_VERSION,
       input.labId,
       input.order.id,
-      input.order.paymentStatus,
-      input.order.updatedAt ? new Date(input.order.updatedAt).toISOString() : '-',
+      input.order.orderNumber ?? '-',
+      input.order.registeredAt ? new Date(input.order.registeredAt).toISOString() : '-',
+      patient?.id ?? '-',
+      patient?.updatedAt ? new Date(patient.updatedAt).toISOString() : '-',
+      patient?.fullName ?? '-',
+      patient?.sex ?? '-',
+      patient?.dateOfBirth ? new Date(patient.dateOfBirth).toISOString() : '-',
       input.order.lab?.updatedAt ? new Date(input.order.lab.updatedAt).toISOString() : '-',
       reportDesignFingerprint,
       input.latestVerifiedAt ? new Date(input.latestVerifiedAt).toISOString() : '-',
-      input.bypassPaymentCheck ? 'bypass' : 'strict',
       input.cultureOnly ? 'culture-only' : 'full',
       input.orderQrValue,
       input.panelSectionFingerprint ?? '-',
@@ -1967,6 +1971,14 @@ export class ReportsService implements OnModuleInit, OnModuleDestroy {
           orderQrValue,
           panelSectionFingerprint: panelSectionLookup.fingerprint,
         });
+        const cacheKey = this.buildReportPdfCacheKey({
+          labId,
+          order,
+          reportableOrderTests: reportableOrderTestsWithSections,
+          latestVerifiedAt,
+          orderQrValue,
+          panelSectionFingerprint: panelSectionLookup.fingerprint,
+        });
 
         if (order.reportS3Key === expectedKey && order.reportGeneratedAt) {
           return expectedKey;
@@ -1977,6 +1989,7 @@ export class ReportsService implements OnModuleInit, OnModuleDestroy {
           disableCache: true,
         });
 
+        this.setCachedPdf(cacheKey, result.pdf);
         await this.fileStorageService.uploadFile(expectedKey, result.pdf, 'application/pdf');
         await this.orderRepo.update(orderId, {
           reportS3Key: expectedKey,
@@ -2058,45 +2071,18 @@ export class ReportsService implements OnModuleInit, OnModuleDestroy {
           panelSectionFingerprint: panelSectionLookup.fingerprint,
         })
         : null;
-
-    if (
-      storedReportKey &&
-      this.fileStorageService.isConfigured() &&
-      order.reportS3Key === storedReportKey
-    ) {
-      try {
-        const cachedPdf = await this.fileStorageService.getFile(storedReportKey);
-        return {
-          pdf: cachedPdf,
-          performance: {
-            orderId,
-            labId,
-            correlationId: options?.correlationId ?? null,
-            totalMs: Date.now() - startMs,
-            snapshotMs,
-            cacheHit: true,
-            inFlightJoin: false,
-          },
-        };
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        this.logger.warn(
-          `Stored report fetch failed for order ${orderId} (${storedReportKey}): ${message}`,
-        );
-      }
-    }
-
-    const cacheKey = this.buildReportPdfCacheKey({
-      labId,
-      order: orderForRender,
-      reportableOrderTests: renderedOrderTestsWithSections,
-      latestVerifiedAt,
-      bypassPaymentCheck,
-      orderQrValue,
-      panelSectionFingerprint: panelSectionLookup.fingerprint,
-      cultureOnly,
-    });
-
+    const cacheKey =
+      !disableCache
+        ? this.buildReportPdfCacheKey({
+          labId,
+          order: orderForRender,
+          reportableOrderTests: renderedOrderTestsWithSections,
+          latestVerifiedAt,
+          orderQrValue,
+          panelSectionFingerprint: panelSectionLookup.fingerprint,
+          cultureOnly,
+        })
+        : null;
     let verifierLookupMs = 0;
     let assetsMs = 0;
     let htmlMs = 0;
@@ -2120,6 +2106,53 @@ export class ReportsService implements OnModuleInit, OnModuleDestroy {
       cacheHit,
       inFlightJoin,
     });
+
+    if (cacheKey) {
+      const cachedPdf = this.getCachedPdf(cacheKey);
+      if (cachedPdf) {
+        const performance = buildPerformance(true, false);
+        this.logResultsPdfPerformance(performance);
+        return {
+          pdf: cachedPdf,
+          performance,
+        };
+      }
+
+      const existingInFlight = this.pdfInFlight.get(cacheKey);
+      if (existingInFlight) {
+        const pdf = await existingInFlight;
+        const performance = buildPerformance(false, true);
+        this.logResultsPdfPerformance(performance);
+        return {
+          pdf: Buffer.from(pdf),
+          performance,
+        };
+      }
+    }
+
+    if (
+      storedReportKey &&
+      this.fileStorageService.isConfigured() &&
+      order.reportS3Key === storedReportKey
+    ) {
+      try {
+        const cachedPdf = await this.fileStorageService.getFile(storedReportKey);
+        if (cacheKey) {
+          this.setCachedPdf(cacheKey, cachedPdf);
+        }
+        const performance = buildPerformance(true, false);
+        this.logResultsPdfPerformance(performance);
+        return {
+          pdf: cachedPdf,
+          performance,
+        };
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        this.logger.warn(
+          `Stored report fetch failed for order ${orderId} (${storedReportKey}): ${message}`,
+        );
+      }
+    }
 
     const generatePdf = async () => {
       const verifierLookupStartMs = Date.now();
@@ -2230,33 +2263,13 @@ export class ReportsService implements OnModuleInit, OnModuleDestroy {
       };
     }
 
-    const cachedPdf = this.getCachedPdf(cacheKey);
-    if (cachedPdf) {
-      const performance = buildPerformance(true, false);
-      this.logResultsPdfPerformance(performance);
-      return {
-        pdf: cachedPdf,
-        performance,
-      };
-    }
-
-    const existingInFlight = this.pdfInFlight.get(cacheKey);
-    if (existingInFlight) {
-      const pdf = await existingInFlight;
-      const performance = buildPerformance(false, true);
-      this.logResultsPdfPerformance(performance);
-      return {
-        pdf: Buffer.from(pdf),
-        performance,
-      };
-    }
-
+    const resolvedCacheKey = cacheKey as string;
     const generatePromise = generatePdf();
 
-    this.pdfInFlight.set(cacheKey, generatePromise);
+    this.pdfInFlight.set(resolvedCacheKey, generatePromise);
     try {
       const pdf = await generatePromise;
-      this.setCachedPdf(cacheKey, pdf);
+      this.setCachedPdf(resolvedCacheKey, pdf);
       const performance = buildPerformance(false, false);
       this.logResultsPdfPerformance(performance);
       return {
@@ -2264,7 +2277,7 @@ export class ReportsService implements OnModuleInit, OnModuleDestroy {
         performance,
       };
     } finally {
-      this.pdfInFlight.delete(cacheKey);
+      this.pdfInFlight.delete(resolvedCacheKey);
     }
   }
 
