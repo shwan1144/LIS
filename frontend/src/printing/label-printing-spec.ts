@@ -75,7 +75,7 @@ export type PrinterCapabilityProfile = ZebraLabelGeometry & {
 
 export const DEFAULT_LABEL_LAYOUT_SPEC: LabelLayoutSpec = {
   barcodeTextGapMm: 0.2,
-  bodyTopGapMm: 1,
+  bodyTopGapMm: 1.0,
   borderThicknessRatio: 0.01,
   headerHeightMm: 4.6,
   innerLeftMarginMm: 0.05,
@@ -91,20 +91,20 @@ export const DEFAULT_LABEL_LAYOUT_SPEC: LabelLayoutSpec = {
   previewHeaderSexFontPx: 8,
   previewSideStripFontPx: 8.1,
   previewSideMetaFontPx: 5.9,
-  previewTestFontPx: 6.8,
+  previewTestFontPx: 7.8,
   rightStripWidthMm: 2.9,
   sexWidthRatio: 0.12,
-  testRowHeightMm: 6.4,
+  testRowHeightMm: 10.2,
 };
 
 export const DEFAULT_LABEL_BARCODE_SPEC: BarcodeSpec = {
   allowedPayload: 'printable_ascii_without_zpl_control_chars',
-  heightMm: 8.8,
+  heightMm: 5,
   humanReadableText: 'match_payload',
   maxZplModuleWidthDots: 3,
   minimumQuietZoneMm: 1.5,
   previewFormat: 'CODE128',
-  previewHeightPx: 34,
+  previewHeightPx: 20,
   previewModuleWidthMm: 0.24,
   previewTextFontPx: 7,
   previewTextMarginPx: -1,

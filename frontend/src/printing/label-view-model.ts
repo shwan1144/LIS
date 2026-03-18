@@ -66,7 +66,7 @@ export function buildSampleLabelViewModel(
       : formatTubeType(sample.tubeType);
   const testCodes = (sample.orderTests ?? [])
     .filter((orderTest) => !orderTest.parentOrderTestId)
-    .map((orderTest) => orderTest.test.code?.trim() || orderTest.test.name?.trim() || '')
+    .map((orderTest) => orderTest.test.abbreviation?.trim() || orderTest.test.code?.trim() || orderTest.test.name?.trim() || '')
     .filter(Boolean)
     .join(', ');
 
