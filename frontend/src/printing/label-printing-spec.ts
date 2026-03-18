@@ -91,7 +91,7 @@ export const DEFAULT_LABEL_LAYOUT_SPEC: LabelLayoutSpec = {
   previewHeaderSexFontPx: 8,
   previewSideStripFontPx: 8.1,
   previewSideMetaFontPx: 5.9,
-  previewTestFontPx: 7.8,
+  previewTestFontPx: 12.5,
   rightStripWidthMm: 2.9,
   sexWidthRatio: 0.12,
   testRowHeightMm: 10.2,

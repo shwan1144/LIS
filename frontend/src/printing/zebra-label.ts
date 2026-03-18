@@ -260,7 +260,7 @@ async function buildZplDocument(
     testCodesShouldRenderGraphic
       ? cachedRenderTextGraphic({
         align: 'center',
-        fontSize: Math.max(11, Math.round(geometry.heightDots * 0.066)),
+        fontSize: Math.max(18, Math.round(geometry.heightDots * 0.11)),
         fontWeight: 700,
         height: layout.testHeight,
         lineHeight: 1.05,
@@ -428,8 +428,8 @@ async function buildZplDocument(
       ? graphicToZpl(layout.barcodeX, layout.testY, testCodesGraphic)
       : nativeTextField({
         align: 'C',
-        fontHeight: Math.max(12, Math.round(geometry.heightDots * 0.07)),
-        fontWidth: Math.max(10, Math.round(geometry.heightDots * 0.058)),
+        fontHeight: Math.max(16, Math.round(geometry.heightDots * 0.09)),
+        fontWidth: Math.max(13, Math.round(geometry.heightDots * 0.075)),
         lineSpacing: 0,
         maxLines: 2,
         text: testCodesText,
@@ -622,7 +622,7 @@ async function renderCompositeRasterLabelLayerUncached(
   appendTextBox(root, {
     align: 'center',
     fontFamily: getCanvasFontFamily(params.testCodesText),
-    fontSize: Math.max(11, Math.round(params.geometry.heightDots * 0.066)),
+    fontSize: Math.max(14, Math.round(params.geometry.heightDots * 0.085)),
     fontWeight: 700,
     height: params.layout.testHeight,
     lineHeight: 1.05,
