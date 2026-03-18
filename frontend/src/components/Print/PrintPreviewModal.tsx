@@ -28,7 +28,7 @@ export function PrintPreviewModal({
 }: PrintPreviewModalProps) {
   const printRef = useRef<HTMLDivElement>(null);
   const printContainerStyle = type === 'receipt'
-    ? ({ '--receipt-width': '76mm' } as CSSProperties)
+    ? ({ '--receipt-width': '74mm' } as CSSProperties)
     : undefined;
 
   const handlePrint = useReactToPrint({

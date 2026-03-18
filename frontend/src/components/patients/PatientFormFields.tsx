@@ -20,6 +20,17 @@ export const PATIENT_FORM_TODAY_ISO = new Date(
   .toISOString()
   .slice(0, 10);
 
+const ARABIC_INDIC_DIGITS = '٠١٢٣٤٥٦٧٨٩';
+const EASTERN_ARABIC_DIGITS = '۰۱۲۳۴۵۶۷۸۹';
+
+function normalizeLocalizedDigits(value: string): string {
+  return String(value ?? '')
+    .replace(/[٠-٩]/g, (char) => String(ARABIC_INDIC_DIGITS.indexOf(char)))
+    .replace(/[۰-۹]/g, (char) => String(EASTERN_ARABIC_DIGITS.indexOf(char)))
+    .replace(/٫/g, '.')
+    .replace(/٬/g, ',');
+}
+
 export function PatientFormFields() {
   return (
     <div className="orders-patient-form-grid">
@@ -32,11 +43,19 @@ export function PatientFormFields() {
           <Input placeholder="Full name" />
         </Form.Item>
       </div>
-      <Form.Item name="nationalId" label="National ID">
-        <Input placeholder="National ID" />
+      <Form.Item
+        name="nationalId"
+        label="National ID"
+        getValueFromEvent={(event) => normalizeLocalizedDigits(event?.target?.value ?? '')}
+      >
+        <Input placeholder="National ID" inputMode="numeric" />
       </Form.Item>
-      <Form.Item name="phone" label="Phone">
-        <Input placeholder="Phone" />
+      <Form.Item
+        name="phone"
+        label="Phone"
+        getValueFromEvent={(event) => normalizeLocalizedDigits(event?.target?.value ?? '')}
+      >
+        <Input placeholder="Phone" inputMode="tel" />
       </Form.Item>
       <Form.Item name="dateOfBirth" label="Date of birth">
         <Input type="date" max={PATIENT_FORM_TODAY_ISO} />
@@ -96,7 +115,19 @@ function AgeSyncFields() {
   return (
     <Space.Compact style={{ width: '100%' }}>
       <Form.Item name="ageValue" noStyle>
-        <InputNumber min={0} placeholder="Age" style={{ width: '60%' }} />
+        <InputNumber
+          min={0}
+          placeholder="Age"
+          style={{ width: '60%' }}
+          inputMode="numeric"
+          parser={(displayValue) => normalizeLocalizedDigits(displayValue ?? '').replace(/[^\d]/g, '')}
+          formatter={(value) => {
+            if (value === undefined || value === null || value === '') {
+              return '';
+            }
+            return normalizeLocalizedDigits(String(value));
+          }}
+        />
       </Form.Item>
       <Form.Item name="ageUnit" noStyle>
         <Select style={{ width: '40%' }}>
@@ -117,8 +148,8 @@ export function getPatientFormInitialValues(
 
   return {
     fullName: patient?.fullName ?? '',
-    nationalId: patient?.nationalId ?? '',
-    phone: patient?.phone ?? '',
+    nationalId: normalizeLocalizedDigits(patient?.nationalId ?? ''),
+    phone: normalizeLocalizedDigits(patient?.phone ?? ''),
     dateOfBirth,
     ageValue: age?.value,
     ageUnit: age?.unit ?? 'year',
@@ -132,8 +163,8 @@ export function normalizePatientFormPayload(
 ): CreatePatientDto {
   return {
     fullName: values.fullName.trim(),
-    nationalId: values.nationalId?.trim() || undefined,
-    phone: values.phone?.trim() || undefined,
+    nationalId: normalizeLocalizedDigits(values.nationalId ?? '').trim() || undefined,
+    phone: normalizeLocalizedDigits(values.phone ?? '').trim() || undefined,
     sex: values.sex || undefined,
     address: values.address?.trim() || undefined,
     dateOfBirth: values.dateOfBirth || undefined,
