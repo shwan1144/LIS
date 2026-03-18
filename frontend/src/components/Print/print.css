@@ -19,12 +19,13 @@
    ===================================================== */
 
 .print-receipt {
-  width: 72mm;
-  padding: 2mm 2mm;
+  box-sizing: border-box;
+  width: 78mm;
+  padding: 1.2mm 1.3mm 1.6mm;
   font-family: 'Consolas', 'Lucida Console', 'Courier New', monospace;
-  font-size: 12.5px;
-  font-weight: 600;
-  line-height: 1.35;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.32;
   background: white;
   color: #000;
 }
@@ -74,17 +75,25 @@
 .receipt-row {
   display: flex;
   justify-content: space-between;
+  align-items: flex-start;
+  gap: 8px;
   margin: 1px 0;
-  line-height: 1.35;
+  line-height: 1.32;
 }
 
 .receipt-label {
+  flex: 0 0 auto;
   color: #000;
   font-weight: 700;
 }
 
 .receipt-value {
+  flex: 1 1 auto;
+  min-width: 0;
   font-weight: 700;
+  text-align: right;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .receipt-order-number {
@@ -108,6 +117,7 @@
 
 .receipt-table {
   width: 100%;
+  table-layout: fixed;
   border-collapse: collapse;
   border: 1px solid #000;
 }
@@ -121,10 +131,12 @@
 }
 
 .receipt-th-left {
+  width: 62%;
   text-align: left;
 }
 
 .receipt-th-right {
+  width: 38%;
   text-align: right;
 }
 
@@ -507,12 +519,12 @@
 
   .print-receipt {
     page: receipt;
-    width: 72mm;
-    /* 80mm paper - ~8mm non-printable edges */
-    padding: 2mm;
-    margin: 0 auto;
-    font-size: 12.5px !important;
-    line-height: 1.35 !important;
+    box-sizing: border-box;
+    width: 78mm;
+    padding: 1.2mm 1.3mm 1.6mm;
+    margin: 0;
+    font-size: 13px !important;
+    line-height: 1.32 !important;
   }
 
   .print-receipt .receipt-subtitle,

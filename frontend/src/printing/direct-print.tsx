@@ -27,6 +27,14 @@ const GATEWAY_PRINTER_TIMEOUT_MS = 5_000;
 const GATEWAY_PRINT_TIMEOUT_MS = 20_000;
 const GATEWAY_PRINTER_CONFIG_CACHE_TTL_MS = 5 * 60_000;
 const RECEIPT_PDF_CACHE_TTL_MS = 5 * 60_000;
+const RECEIPT_DEFAULT_PAPER_WIDTH_MM = 80;
+const RECEIPT_DEFAULT_TARGET_DPI = 203;
+const RECEIPT_MAX_TARGET_DPI = 300;
+const RECEIPT_RENDER_MIN_SCALE = 2.5;
+const RECEIPT_RENDER_MAX_SCALE = 5;
+const RECEIPT_THRESHOLD = 216;
+const RECEIPT_MIN_PAPER_WIDTH_MM = 58;
+const RECEIPT_MAX_PAPER_WIDTH_MM = 82;
 const VIRTUAL_SAVE_PRINTER_KEYWORDS = [
   'print to pdf',
   'pdfcreator',
@@ -80,6 +88,12 @@ type CachedGatewayPrinterConfigEntry = {
 type CachedReceiptPdfEntry = {
   blob: Blob;
   expiresAt: number;
+};
+
+type ReceiptRenderProfile = {
+  pageWidthMm: number;
+  targetDpi: number;
+  thermalThreshold: number;
 };
 
 export type DirectLabelPrintResult = {
@@ -277,15 +291,60 @@ async function convertHtmlToPdf(
   element: HTMLElement,
   options?: {
     orientation?: 'portrait' | 'landscape';
+    pageWidthMm?: number;
+    targetDpi?: number;
+    thermalThreshold?: number;
   },
 ): Promise<Blob> {
+  const elementRect = element.getBoundingClientRect();
+  const shouldUsePhysicalSizing =
+    typeof options?.pageWidthMm === 'number'
+    && Number.isFinite(options.pageWidthMm)
+    && options.pageWidthMm > 0;
+  let renderScale = 2;
+
+  if (shouldUsePhysicalSizing) {
+    const targetWidthPx = Math.max(
+      1,
+      Math.round(
+        ((options?.pageWidthMm ?? RECEIPT_DEFAULT_PAPER_WIDTH_MM) / 25.4)
+        * (options?.targetDpi ?? RECEIPT_DEFAULT_TARGET_DPI),
+      ),
+    );
+    renderScale = Math.max(
+      RECEIPT_RENDER_MIN_SCALE,
+      Math.min(
+        RECEIPT_RENDER_MAX_SCALE,
+        targetWidthPx / Math.max(elementRect.width, 1),
+      ),
+    );
+  }
+
   const canvas = await html2canvas(element, {
-    scale: 2,
+    scale: renderScale,
     useCORS: true,
     logging: false,
     backgroundColor: '#ffffff',
   });
+
+  if (options?.thermalThreshold != null) {
+    thresholdCanvasForThermalPrint(canvas, options.thermalThreshold);
+  }
+
   const imgData = canvas.toDataURL('image/png');
+
+  if (shouldUsePhysicalSizing) {
+    const pageWidthMm = options?.pageWidthMm ?? RECEIPT_DEFAULT_PAPER_WIDTH_MM;
+    const pageHeightMm = pageWidthMm * (canvas.height / Math.max(canvas.width, 1));
+    const pdf = new jsPDF({
+      orientation: options?.orientation ?? 'portrait',
+      unit: 'mm',
+      format: [pageWidthMm, pageHeightMm],
+    });
+    pdf.addImage(imgData, 'PNG', 0, 0, pageWidthMm, pageHeightMm);
+    return pdf.output('blob');
+  }
+
   const pdf = new jsPDF({
     orientation: options?.orientation ?? (canvas.width > canvas.height ? 'landscape' : 'portrait'),
     unit: 'px',
@@ -299,7 +358,14 @@ export async function renderLabelsToPdf(
   element: React.ReactElement,
   pageWidthMm: number,
   pageHeightMm: number,
+  options?: {
+    orientation?: 'portrait' | 'landscape';
+  },
 ): Promise<Blob> {
+  const orientation = options?.orientation ?? 'landscape';
+  const shouldRotateToPortrait = orientation === 'portrait';
+  const pdfPageWidthMm = shouldRotateToPortrait ? pageHeightMm : pageWidthMm;
+  const pdfPageHeightMm = shouldRotateToPortrait ? pageWidthMm : pageHeightMm;
   const host = document.createElement('div');
   host.style.position = 'fixed';
   host.style.left = '-100000px';
@@ -320,14 +386,14 @@ export async function renderLabelsToPdf(
     }
 
     const pdf = new jsPDF({
-      orientation: 'landscape',
+      orientation,
       unit: 'mm',
-      format: [pageWidthMm, pageHeightMm],
+      format: [pdfPageWidthMm, pdfPageHeightMm],
     });
 
     for (const [index, label] of labels.entries()) {
       if (index > 0) {
-        pdf.addPage([pageWidthMm, pageHeightMm], 'landscape');
+        pdf.addPage([pdfPageWidthMm, pdfPageHeightMm], orientation);
       }
 
       const captureTarget = document.createElement('div');
@@ -384,6 +450,10 @@ export async function renderLabelsToPdf(
         captureTarget.remove();
       }
 
+      if (shouldRotateToPortrait) {
+        canvas = rotateCanvasClockwise(canvas);
+      }
+
       thresholdCanvasForThermalPrint(canvas);
 
       pdf.addImage(
@@ -391,8 +461,8 @@ export async function renderLabelsToPdf(
         'PNG',
         0,
         0,
-        pageWidthMm,
-        pageHeightMm,
+        pdfPageWidthMm,
+        pdfPageHeightMm,
       );
     }
 
@@ -403,7 +473,10 @@ export async function renderLabelsToPdf(
   }
 }
 
-function thresholdCanvasForThermalPrint(canvas: HTMLCanvasElement): void {
+function thresholdCanvasForThermalPrint(
+  canvas: HTMLCanvasElement,
+  threshold = LABEL_THRESHOLD,
+): void {
   const context = canvas.getContext('2d', { willReadFrequently: true });
   if (!context) {
     return;
@@ -422,7 +495,7 @@ function thresholdCanvasForThermalPrint(canvas: HTMLCanvasElement): void {
     }
 
     const luminance = (0.299 * data[index]) + (0.587 * data[index + 1]) + (0.114 * data[index + 2]);
-    const value = luminance < LABEL_THRESHOLD ? 0 : 255;
+    const value = luminance < threshold ? 0 : 255;
     data[index] = value;
     data[index + 1] = value;
     data[index + 2] = value;
@@ -432,7 +505,10 @@ function thresholdCanvasForThermalPrint(canvas: HTMLCanvasElement): void {
   context.putImageData(imageData, 0, 0);
 }
 
-async function renderReceiptToPdf(element: React.ReactElement): Promise<Blob> {
+async function renderReceiptToPdf(
+  element: React.ReactElement,
+  renderProfile: ReceiptRenderProfile,
+): Promise<Blob> {
   const host = document.createElement('div');
   host.style.position = 'fixed';
   host.style.left = '-100000px';
@@ -453,11 +529,32 @@ async function renderReceiptToPdf(element: React.ReactElement): Promise<Blob> {
       throw new Error('Receipt content unavailable to print.');
     }
 
-    return await convertHtmlToPdf(receipt, { orientation: 'portrait' });
+    return await convertHtmlToPdf(receipt, {
+      orientation: 'portrait',
+      pageWidthMm: renderProfile.pageWidthMm,
+      targetDpi: renderProfile.targetDpi,
+      thermalThreshold: renderProfile.thermalThreshold,
+    });
   } finally {
     root.unmount();
     host.remove();
   }
+}
+
+function rotateCanvasClockwise(sourceCanvas: HTMLCanvasElement): HTMLCanvasElement {
+  const rotatedCanvas = document.createElement('canvas');
+  rotatedCanvas.width = sourceCanvas.height;
+  rotatedCanvas.height = sourceCanvas.width;
+
+  const rotatedContext = rotatedCanvas.getContext('2d');
+  if (!rotatedContext) {
+    throw new Error('Unable to rotate label canvas for direct print.');
+  }
+
+  rotatedContext.translate(rotatedCanvas.width, 0);
+  rotatedContext.rotate(Math.PI / 2);
+  rotatedContext.drawImage(sourceCanvas, 0, 0);
+  return rotatedCanvas;
 }
 
 async function waitForRenderAndEffects(): Promise<void> {
@@ -517,21 +614,54 @@ export async function directPrintReceipt(params: {
   printerName: string;
 }): Promise<void> {
   const jobName = `Receipt-${params.order.orderNumber || params.order.id}`;
+  let printerConfig: GatewayPrinterConfigResponse = {};
+  let paperSize: string | undefined;
+
+  try {
+    const configResult = await fetchGatewayPrinterConfigCached(params.printerName);
+    printerConfig = configResult.config;
+    if (typeof printerConfig.paperSize === 'string' && printerConfig.paperSize.trim()) {
+      paperSize = printerConfig.paperSize.trim();
+    }
+  } catch {
+    // Receipt printing still falls back to the default thermal profile if config lookup fails.
+  }
+
   const blob = await getCachedReceiptPdf({
     labName: params.labName,
     order: params.order,
+    printerConfig,
   });
   await gatewayPrintPdf(blob, params.printerName, jobName, {
     orientation: 'portrait',
+    paperSize,
+    scale: 'noscale',
   });
 }
 
 export async function warmDirectReceiptPrintAssets(params: {
   order: OrderDto;
   labName?: string;
+  printerName?: string | null;
 }): Promise<void> {
   try {
-    await getCachedReceiptPdf(params);
+    const normalizedPrinterName = params.printerName?.trim();
+    let printerConfig: GatewayPrinterConfigResponse = {};
+
+    if (normalizedPrinterName) {
+      try {
+        const configResult = await fetchGatewayPrinterConfigCached(normalizedPrinterName);
+        printerConfig = configResult.config;
+      } catch {
+        printerConfig = {};
+      }
+    }
+
+    await getCachedReceiptPdf({
+      labName: params.labName,
+      order: params.order,
+      printerConfig,
+    });
   } catch {
     // Warming is best-effort and must never block visible printing flows.
   }
@@ -619,11 +749,12 @@ export async function directPrintLabels(params: {
         labelsElement,
         geometry.pageWidthMm,
         geometry.pageHeightMm,
+        { orientation: 'portrait' },
       ),
     );
     const dispatchResult = await measureAsync(() =>
       gatewayPrintPdf(pdfResult.result, params.printerName, jobName, {
-        orientation: 'landscape',
+        orientation: 'portrait',
         paperSize,
         scale: 'noscale',
       }),
@@ -652,7 +783,9 @@ export async function directPrintLabels(params: {
 function buildReceiptCacheKey(params: {
   order: OrderDto;
   labName?: string;
+  printerConfig?: GatewayPrinterConfigResponse;
 }): string {
+  const renderProfile = resolveReceiptRenderProfile(params.printerConfig);
   const rootTests = (params.order.samples ?? []).flatMap((sample) =>
     (sample.orderTests ?? [])
       .filter((orderTest) => !orderTest.parentOrderTestId)
@@ -665,6 +798,7 @@ function buildReceiptCacheKey(params: {
 
   return JSON.stringify({
     labName: params.labName ?? params.order.lab?.name ?? null,
+    renderProfile,
     order: {
       discountPercent: params.order.discountPercent ?? null,
       finalAmount: params.order.finalAmount ?? null,
@@ -695,8 +829,10 @@ function buildReceiptCacheKey(params: {
 async function getCachedReceiptPdf(params: {
   order: OrderDto;
   labName?: string;
+  printerConfig?: GatewayPrinterConfigResponse;
 }): Promise<Blob> {
   const cacheKey = buildReceiptCacheKey(params);
+  const renderProfile = resolveReceiptRenderProfile(params.printerConfig);
   const now = nowMs();
   const cached = receiptPdfCache.get(cacheKey);
   if (cached && cached.expiresAt > now) {
@@ -713,6 +849,7 @@ async function getCachedReceiptPdf(params: {
       <style>{printCss}</style>
       <OrderReceipt order={params.order} labName={params.labName} />
     </div>,
+    renderProfile,
   )
     .then((blob) => {
       receiptPdfCache.set(cacheKey, {
@@ -731,6 +868,43 @@ async function getCachedReceiptPdf(params: {
 
   receiptPdfInFlight.set(cacheKey, promise);
   return promise;
+}
+
+function resolveReceiptRenderProfile(
+  printerConfig?: GatewayPrinterConfigResponse,
+): ReceiptRenderProfile {
+  const pageWidthMm = clampNumber(
+    toPositiveNumber(printerConfig?.mediaWidthMm) ?? RECEIPT_DEFAULT_PAPER_WIDTH_MM,
+    RECEIPT_MIN_PAPER_WIDTH_MM,
+    RECEIPT_MAX_PAPER_WIDTH_MM,
+  );
+  const targetDpi = clampNumber(
+    Math.round(
+      toPositiveNumber(printerConfig?.resolutionXDpi)
+      ?? toPositiveNumber(printerConfig?.resolutionYDpi)
+      ?? RECEIPT_DEFAULT_TARGET_DPI,
+    ),
+    RECEIPT_DEFAULT_TARGET_DPI,
+    RECEIPT_MAX_TARGET_DPI,
+  );
+
+  return {
+    pageWidthMm,
+    targetDpi,
+    thermalThreshold: RECEIPT_THRESHOLD,
+  };
+}
+
+function toPositiveNumber(value: unknown): number | null {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) {
+    return null;
+  }
+
+  return value;
+}
+
+function clampNumber(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
 }
 
 export async function directPrintReportPdf(params: {

@@ -50,6 +50,9 @@ export const OrderReceipt = forwardRef<HTMLDivElement, OrderReceiptProps>(
           <QRCodeSVG
             value={qrValue}
             size={80}
+            bgColor="#ffffff"
+            fgColor="#000000"
+            includeMargin={false}
             level="M"
           />
           <div className="receipt-qr-note">{qrNote}</div>
@@ -59,7 +62,7 @@ export const OrderReceipt = forwardRef<HTMLDivElement, OrderReceiptProps>(
         <div className="receipt-order-info">
           <div className="receipt-row">
             <span className="receipt-label">Order #:</span>
-            <span className="receipt-value receipt-order-number">{order.orderNumber || '—'}</span>
+            <span className="receipt-value receipt-order-number">{order.orderNumber || '-'}</span>
           </div>
           <div className="receipt-row">
             <span className="receipt-label">Date:</span>
@@ -115,7 +118,7 @@ export const OrderReceipt = forwardRef<HTMLDivElement, OrderReceiptProps>(
                 <tr key={idx}>
                   <td className="receipt-td-left">{test.code}</td>
                   <td className="receipt-td-right">
-                    {test.price !== null ? `${parseFloat(test.price.toString()).toFixed(0)} IQD` : '—'}
+                    {test.price !== null ? `${parseFloat(test.price.toString()).toFixed(0)} IQD` : '-'}
                   </td>
                 </tr>
               ))}
@@ -167,7 +170,7 @@ export const OrderReceipt = forwardRef<HTMLDivElement, OrderReceiptProps>(
         <div className="receipt-divider" />
         {order.paymentStatus === 'paid' ? (
           <div className="receipt-payment-status receipt-payment-paid">
-            ✓ PAID
+            PAID
           </div>
         ) : order.paymentStatus === 'partial' ? (
           <div className="receipt-payment-status receipt-payment-partial">
@@ -196,7 +199,7 @@ export const OrderReceipt = forwardRef<HTMLDivElement, OrderReceiptProps>(
           </div>
         ) : (
           <div className="receipt-payment-status receipt-payment-unpaid">
-            ✗ NOT PAID
+            X NOT PAID
           </div>
         )}
 

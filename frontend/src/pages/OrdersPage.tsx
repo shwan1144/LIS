@@ -1288,6 +1288,7 @@ export function OrdersPage() {
     void warmDirectReceiptPrintAssets({
       labName: lab?.name,
       order: selectedCreatedOrder,
+      printerName: directGatewayReceiptPrinterName,
     });
   }, [directGatewayReceiptPrinterName, lab?.name, selectedCreatedOrder]);
 
