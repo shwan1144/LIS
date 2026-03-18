@@ -11,7 +11,7 @@ import type {
 } from '../../api/client';
 import {
   RESULT_FLAG_COLOR as FLAG_COLOR,
-  RESULT_FLAG_LABEL as FLAG_LABEL,
+  getResultFlagLabel,
 } from '../../utils/result-flag';
 import type { WorklistOrderGroupSummary } from '../../pages/worklistGrouping';
 import type { ResultEntryRowModel, ResultEntrySection } from './resultEntryModel';
@@ -655,7 +655,7 @@ export function ResultEntryModal({
                             <div className="result-entry-modal__cell" data-label="Flag">
                               {displayFlag ? (
                                 <Tag color={FLAG_COLOR[displayFlag] || 'default'} style={{ margin: 0 }}>
-                                  {FLAG_LABEL[displayFlag] || displayFlag}
+                                  {getResultFlagLabel(displayFlag) || displayFlag}
                                 </Tag>
                               ) : (
                                 <Text className="result-entry-modal__muted">-</Text>

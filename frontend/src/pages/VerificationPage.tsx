@@ -53,7 +53,7 @@ import {
 } from '../utils/culture-sensitivity';
 import {
   RESULT_FLAG_COLOR as FLAG_COLOR,
-  RESULT_FLAG_LABEL as FLAG_LABEL,
+  getResultFlagLabel,
 } from '../utils/result-flag';
 import './QueuePages.css';
 
@@ -1366,7 +1366,7 @@ export function VerificationPage() {
                       <div style={{ flex: '1 1 9%', textAlign: 'center' }}>
                         {item.flag ? (
                           <Tag color={FLAG_COLOR[item.flag] || 'default'} style={{ margin: 0, fontSize: 11 }}>
-                            {FLAG_LABEL[item.flag] || item.flag}
+                            {getResultFlagLabel(item.flag) || item.flag}
                           </Tag>
                         ) : (
                           <Text type="secondary" style={{ fontSize: 12 }}>

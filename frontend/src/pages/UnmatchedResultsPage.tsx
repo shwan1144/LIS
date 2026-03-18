@@ -37,7 +37,6 @@ import {
 import {
   getResultFlagLabel,
   getResultFlagTagColor,
-  normalizeResultFlag,
 } from '../utils/result-flag';
 
 const { Title, Text } = Typography;
@@ -200,7 +199,7 @@ export function UnmatchedResultsPage() {
           <Text>{formatValue(record)}</Text>
           {record.flag && (
             <Tag color={getResultFlagTagColor(record.flag)}>
-              {getResultFlagLabel(record.flag) ?? normalizeResultFlag(record.flag) ?? record.flag}
+              {getResultFlagLabel(record.flag) ?? record.flag}
             </Tag>
           )}
         </Space>
@@ -361,7 +360,7 @@ export function UnmatchedResultsPage() {
                 <Text>{formatValue(selectedItem)}</Text>
                 {selectedItem.flag && (
                   <Tag color={getResultFlagTagColor(selectedItem.flag)}>
-                    {getResultFlagLabel(selectedItem.flag) ?? normalizeResultFlag(selectedItem.flag) ?? selectedItem.flag}
+                    {getResultFlagLabel(selectedItem.flag) ?? selectedItem.flag}
                   </Tag>
                 )}
               </Space>

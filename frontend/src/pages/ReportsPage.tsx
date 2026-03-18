@@ -49,6 +49,7 @@ import {
   updateOrderPayment,
   type AntibioticDto,
   type DownloadTestResultsPdfProfilingHeaders,
+  type LabSettingsDto,
   type ReportActionFlagsDto,
   type ReportActionKind,
   type OrderHistoryItemDto,
@@ -70,7 +71,7 @@ import {
   normalizeCultureResultForForm,
 } from '../utils/culture-sensitivity';
 import { buildPublicResultUrl } from '../utils/public-result-link';
-import { normalizeResultFlag } from '../utils/result-flag';
+import { getResultFlagLabel, normalizeResultFlag } from '../utils/result-flag';
 import {
   directPrintReceipt,
   directPrintReportPdf,
@@ -96,7 +97,7 @@ type ResultsPdfCacheEntry = {
   blob: Blob;
   cachedAt: number;
   lastAccessedAt: number;
-  reportDesignFingerprint: string;
+  reportDesignFingerprint: string | null;
 };
 
 type ResultsPdfFetchResult = {
@@ -106,6 +107,27 @@ type ResultsPdfFetchResult = {
   fetchStartedAtMs: number | null;
   fetchCompletedAtMs: number;
   profilingHeaders: DownloadTestResultsPdfProfilingHeaders | null;
+  fingerprintWaitMs: number | null;
+  settingsRequestShared: boolean;
+};
+
+type LabSettingsLoadResult = {
+  settings: LabSettingsDto | null;
+  source: 'cache' | 'network';
+  requestShared: boolean;
+  fetchStartedAtMs: number | null;
+  fetchCompletedAtMs: number;
+};
+
+type LabSettingsInFlightOutcome = {
+  settings: LabSettingsDto | null;
+  fetchStartedAtMs: number;
+  fetchCompletedAtMs: number;
+};
+
+type LabSettingsInFlightState = {
+  waiters: number;
+  promise: Promise<LabSettingsInFlightOutcome>;
 };
 
 type BrowserPrintInstrumentation = {
@@ -146,6 +168,8 @@ type ReportPrintProfileRecord = {
   clickToFetchStartMs: number | null;
   fetchDurationMs: number | null;
   settingsLoadMs: number | null;
+  fingerprintWaitMs: number | null;
+  settingsRequestShared: boolean | null;
   clickToBlobReadyMs: number | null;
   backendTotalMs: number | null;
   backendSnapshotMs: number | null;
@@ -211,6 +235,7 @@ type ExpandedOrderTestRow = {
   testCode: string;
   testName: string;
   resultPreview: string;
+  unitPreview: string;
   status: OrderTestDto['status'];
   flag: OrderTestDto['flag'];
   verifiedAt: string | null;
@@ -237,13 +262,13 @@ const ORDER_TEST_STATUS_COLORS: Record<string, string> = {
 const REPORT_PRINT_WARMUP_COUNT = 2;
 const REPORT_PRINT_WARMUP_DELAY_MS = 800;
 
-const RESULT_FLAG_META: Record<string, { color: string; label: string }> = {
-  N: { color: 'green', label: 'Normal' },
-  H: { color: 'orange', label: 'High' },
-  L: { color: 'blue', label: 'Low' },
-  POS: { color: 'red', label: 'Positive' },
-  NEG: { color: 'green', label: 'Negative' },
-  ABN: { color: 'purple', label: 'Abnormal' },
+const RESULT_FLAG_META: Record<string, { color: string }> = {
+  N: { color: 'green' },
+  H: { color: 'orange' },
+  L: { color: 'blue' },
+  POS: { color: 'red' },
+  NEG: { color: 'green' },
+  ABN: { color: 'purple' },
 };
 
 function cleanPhoneNumber(phone: string): string {
@@ -328,15 +353,19 @@ function classifyReportPrintBottleneck(profile: Omit<ReportPrintProfileRecord, '
     profile.fetchDurationMs != null && profile.backendTotalMs != null
       ? Math.max(0, profile.fetchDurationMs - profile.backendTotalMs)
       : 0;
+  const fingerprintWaitMs = profile.fingerprintWaitMs ?? 0;
   const previewMs =
     profile.clickToPrintInvokeMs != null && profile.clickToBlobReadyMs != null
       ? Math.max(0, profile.clickToPrintInvokeMs - profile.clickToBlobReadyMs)
       : 0;
   const gatewayMs = profile.directPrintDurationMs ?? 0;
-  const dominant = Math.max(backendMs, transportMs, previewMs, gatewayMs);
+  const dominant = Math.max(backendMs, transportMs, previewMs, gatewayMs, fingerprintWaitMs);
 
   if (profile.resultPath === 'direct_gateway' && gatewayMs >= Math.max(500, dominant * 0.7)) {
     return 'gateway print bound';
+  }
+  if (fingerprintWaitMs >= Math.max(500, dominant * 0.7)) {
+    return 'frontend fingerprint wait bound';
   }
   if (profile.resultPath !== 'direct_gateway' && previewMs >= Math.max(500, dominant * 0.7)) {
     return 'browser preview bound';
@@ -348,7 +377,8 @@ function classifyReportPrintBottleneck(profile: Omit<ReportPrintProfileRecord, '
     return 'network/transfer bound';
   }
 
-  const significantPhases = [backendMs, transportMs, previewMs, gatewayMs].filter((value) => value >= 300);
+  const significantPhases = [backendMs, transportMs, previewMs, gatewayMs, fingerprintWaitMs]
+    .filter((value) => value >= 300);
   if (significantPhases.length >= 2) {
     return 'mixed';
   }
@@ -371,6 +401,8 @@ function summarizeReportPrintProfile(profile: ReportPrintProfileRecord): Record<
     clickToFetchStartMs: profile.clickToFetchStartMs,
     fetchDurationMs: profile.fetchDurationMs,
     settingsLoadMs: profile.settingsLoadMs,
+    fingerprintWaitMs: profile.fingerprintWaitMs,
+    settingsRequestShared: profile.settingsRequestShared,
     backendTotalMs: profile.backendTotalMs,
     clickToBlobReadyMs: profile.clickToBlobReadyMs,
     clickToPreviewReadyMs: profile.clickToPreviewReadyMs,
@@ -611,8 +643,7 @@ function formatOrderTestResultPreview(orderTest: OrderTestDto, allTests: OrderTe
     orderTest.test?.resultEntryType === 'NUMERIC' &&
     orderTest.resultText?.trim()
   ) {
-    const unit = orderTest.test?.unit ? ` ${orderTest.test.unit}` : '';
-    return `${orderTest.resultText.trim()}${unit}`;
+    return orderTest.resultText.trim();
   }
 
   if (orderTest.resultValue !== null && orderTest.resultValue !== undefined) {
@@ -620,8 +651,7 @@ function formatOrderTestResultPreview(orderTest: OrderTestDto, allTests: OrderTe
     if (formattedValue === '-') {
       return '-';
     }
-    const unit = orderTest.test?.unit ? ` ${orderTest.test.unit}` : '';
-    return `${formattedValue}${unit}`;
+    return formattedValue;
   }
 
   if (orderTest.resultText?.trim()) {
@@ -798,6 +828,7 @@ function getOrderTestRows(order: OrderDto): ExpandedOrderTestRow[] {
         testCode: orderTest.test?.code || '-',
         testName: orderTest.test?.name || '-',
         resultPreview: formatOrderTestResultPreview(orderTest, allTestsInOrder),
+        unitPreview: orderTest.test?.unit?.trim() ?? '',
         status: orderTest.status,
         flag: orderTest.flag,
         verifiedAt: orderTest.verifiedAt,
@@ -844,11 +875,11 @@ export function ReportsPage() {
   const [receiptPreviewOrder, setReceiptPreviewOrder] = useState<OrderDto | null>(null);
   const resultsPdfCacheRef = useRef<Record<string, ResultsPdfCacheEntry>>({});
   const resultsPdfInFlightRef = useRef<Record<string, Promise<ResultsPdfFetchResult>>>({});
-  const reportDesignFingerprintRef = useRef<{ value: string; fetchedAt: number }>({
-    value: '0',
+  const labSettingsRef = useRef<{ value: LabSettingsDto | null; fetchedAt: number }>({
+    value: null,
     fetchedAt: 0,
   });
-  const reportDesignFingerprintInFlightRef = useRef<Promise<string> | null>(null);
+  const labSettingsInFlightRef = useRef<LabSettingsInFlightState | null>(null);
   const reportPrintAttemptCountsRef = useRef<Record<string, number>>({});
 
   const [editResultModalOpen, setEditResultModalOpen] = useState(false);
@@ -1070,55 +1101,116 @@ export function ReportsPage() {
     document.body.removeChild(link);
   };
 
-  const getReportDesignFingerprint = useCallback(async (): Promise<string> => {
+  const trimResultsPdfCache = useCallback(() => {
+    const cacheEntries = Object.entries(resultsPdfCacheRef.current);
+    if (cacheEntries.length <= REPORT_PDF_CACHE_MAX_ENTRIES) {
+      return;
+    }
+
+    cacheEntries
+      .sort(([, a], [, b]) => a.lastAccessedAt - b.lastAccessedAt)
+      .slice(0, cacheEntries.length - REPORT_PDF_CACHE_MAX_ENTRIES)
+      .forEach(([staleOrderId]) => {
+        delete resultsPdfCacheRef.current[staleOrderId];
+      });
+  }, []);
+
+  const loadLabSettingsCached = useCallback(async (): Promise<LabSettingsLoadResult> => {
     const now = Date.now();
-    const cached = reportDesignFingerprintRef.current;
+    const cached = labSettingsRef.current;
     if (
-      cached.value &&
+      cached.fetchedAt > 0 &&
       now - cached.fetchedAt <= REPORT_DESIGN_FINGERPRINT_STALE_MS
     ) {
-      return cached.value;
+      return {
+        settings: cached.value,
+        source: 'cache',
+        requestShared: false,
+        fetchStartedAtMs: null,
+        fetchCompletedAtMs: now,
+      };
     }
 
-    if (reportDesignFingerprintInFlightRef.current) {
-      return reportDesignFingerprintInFlightRef.current;
+    const existing = labSettingsInFlightRef.current;
+    if (existing) {
+      existing.waiters += 1;
+      const outcome = await existing.promise;
+      return {
+        ...outcome,
+        source: 'network',
+        requestShared: true,
+      };
     }
 
-    const request = getLabSettings()
-      .then((settings) => {
-        const nextFingerprint = settings.reportDesignFingerprint || '0';
-        if (cached.value && cached.value !== nextFingerprint) {
-          resultsPdfCacheRef.current = {};
-        }
-        reportDesignFingerprintRef.current = {
-          value: nextFingerprint,
-          fetchedAt: Date.now(),
-        };
-        return nextFingerprint;
-      })
-      .catch(() => {
-        reportDesignFingerprintRef.current = {
-          value: cached.value || '0',
-          fetchedAt: Date.now(),
-        };
-        return cached.value || '0';
-      })
-      .finally(() => {
-        reportDesignFingerprintInFlightRef.current = null;
-      });
+    const fetchStartedAtMs = Date.now();
+    const state: LabSettingsInFlightState = {
+      waiters: 1,
+      promise: getLabSettings()
+        .then((settings) => {
+          const fetchCompletedAtMs = Date.now();
+          labSettingsRef.current = {
+            value: settings,
+            fetchedAt: fetchCompletedAtMs,
+          };
+          return {
+            settings,
+            fetchStartedAtMs,
+            fetchCompletedAtMs,
+          };
+        })
+        .catch(() => {
+          const fetchCompletedAtMs = Date.now();
+          const fallbackSettings = labSettingsRef.current.value;
+          labSettingsRef.current = {
+            value: fallbackSettings,
+            fetchedAt: fetchCompletedAtMs,
+          };
+          return {
+            settings: fallbackSettings,
+            fetchStartedAtMs,
+            fetchCompletedAtMs,
+          };
+        })
+        .finally(() => {
+          labSettingsInFlightRef.current = null;
+        }),
+    };
 
-    reportDesignFingerprintInFlightRef.current = request;
-    return request;
+    labSettingsInFlightRef.current = state;
+    const outcome = await state.promise;
+    return {
+      ...outcome,
+      source: 'network',
+      requestShared: state.waiters > 1,
+    };
+  }, []);
+
+  const getFreshReportDesignFingerprint = useCallback((): string | null => {
+    const cached = labSettingsRef.current;
+    if (
+      !cached.value ||
+      cached.fetchedAt === 0 ||
+      Date.now() - cached.fetchedAt > REPORT_DESIGN_FINGERPRINT_STALE_MS
+    ) {
+      return null;
+    }
+    return cached.value.reportDesignFingerprint || '0';
   }, []);
 
   const getResultsPdfBlobDetailed = useCallback(async (
     orderId: string,
-    options?: { correlationId?: string },
+    options?: {
+      correlationId?: string;
+      labSettingsPromise?: Promise<LabSettingsLoadResult>;
+    },
   ): Promise<ResultsPdfFetchResult> => {
-    const reportDesignFingerprint = await getReportDesignFingerprint();
+    const fingerprintStartedAtMs = Date.now();
+    const reportDesignFingerprint = getFreshReportDesignFingerprint();
+    const fingerprintWaitMs = Date.now() - fingerprintStartedAtMs;
     const now = Date.now();
     const cached = resultsPdfCacheRef.current[orderId];
     if (
+      reportDesignFingerprint &&
       cached &&
       cached.reportDesignFingerprint === reportDesignFingerprint &&
       now - cached.cachedAt <= REPORT_PDF_CACHE_TTL_MS
@@ -1131,6 +1223,8 @@ export function ReportsPage() {
         fetchStartedAtMs: null,
         fetchCompletedAtMs: now,
         profilingHeaders: null,
+        fingerprintWaitMs,
+        settingsRequestShared: false,
       };
     }
 
@@ -1143,25 +1237,37 @@ export function ReportsPage() {
       };
     }
 
+    const settingsRefreshPromise =
+      reportDesignFingerprint === null
+        ? (options?.labSettingsPromise ?? loadLabSettingsCached())
+        : null;
+    const settingsRequestShared = reportDesignFingerprint === null && Boolean(options?.labSettingsPromise);
     const fetchStartedAtMs = Date.now();
     const fetchPromise = downloadTestResultsPDF(orderId, options)
       .then(({ blob, profilingHeaders }) => {
         const cachedAt = Date.now();
-        resultsPdfCacheRef.current[orderId] = {
+        const cacheEntry: ResultsPdfCacheEntry = {
           blob,
           cachedAt,
           lastAccessedAt: cachedAt,
           reportDesignFingerprint,
         };
+        resultsPdfCacheRef.current[orderId] = cacheEntry;
+        trimResultsPdfCache();
 
-        const cacheEntries = Object.entries(resultsPdfCacheRef.current);
-        if (cacheEntries.length > REPORT_PDF_CACHE_MAX_ENTRIES) {
-          cacheEntries
-            .sort(([, a], [, b]) => a.lastAccessedAt - b.lastAccessedAt)
-            .slice(0, cacheEntries.length - REPORT_PDF_CACHE_MAX_ENTRIES)
-            .forEach(([staleOrderId]) => {
-              delete resultsPdfCacheRef.current[staleOrderId];
-            });
+        if (reportDesignFingerprint === null && settingsRefreshPromise) {
+          void settingsRefreshPromise.then(({ settings }) => {
+            const refreshedFingerprint = settings?.reportDesignFingerprint || null;
+            const existingEntry = resultsPdfCacheRef.current[orderId];
+            if (
+              existingEntry &&
+              existingEntry.blob === cacheEntry.blob &&
+              existingEntry.cachedAt === cacheEntry.cachedAt
+            ) {
+              existingEntry.reportDesignFingerprint = refreshedFingerprint;
+              existingEntry.lastAccessedAt = Date.now();
+            }
+          });
         }
 
         return {
@@ -1171,6 +1277,8 @@ export function ReportsPage() {
           fetchStartedAtMs,
           fetchCompletedAtMs: cachedAt,
           profilingHeaders,
+          fingerprintWaitMs,
+          settingsRequestShared,
         };
       })
       .finally(() => {
@@ -1179,7 +1287,7 @@ export function ReportsPage() {
 
     resultsPdfInFlightRef.current[orderId] = fetchPromise;
     return fetchPromise;
-  }, [getReportDesignFingerprint]);
+  }, [getFreshReportDesignFingerprint, loadLabSettingsCached, trimResultsPdfCache]);
 
   const getResultsPdfBlob = useCallback(async (orderId: string): Promise<Blob> => {
     const result = await getResultsPdfBlobDetailed(orderId);
@@ -1195,7 +1303,8 @@ export function ReportsPage() {
     const timerId = window.setTimeout(() => {
       void (async () => {
         try {
-          const settings = await getLabSettings().catch(() => null);
+          const settingsLoad = await loadLabSettingsCached();
+          const settings = settingsLoad.settings;
           if (cancelled) {
             return;
           }
@@ -1233,7 +1342,7 @@ export function ReportsPage() {
       cancelled = true;
       window.clearTimeout(timerId);
     };
-  }, [getResultsPdfBlobDetailed, orders]);
+  }, [getResultsPdfBlobDetailed, loadLabSettingsCached, orders]);
 
   const handleDownloadResults = async (
     orderId: string,
@@ -1315,17 +1424,20 @@ export function ReportsPage() {
     setDownloading(`print-${orderId}`);
     try {
       const settingsStartedAtMs = Date.now();
-      const settingsPromise = getLabSettings()
-        .catch(() => null)
+      const settingsPromise = loadLabSettingsCached()
         .finally(() => {
           settingsLoadMs = Date.now() - settingsStartedAtMs;
         });
 
-      const [nextFetchResult, settings] = await Promise.all([
-        getResultsPdfBlobDetailed(orderId, { correlationId: attemptId }),
+      const [nextFetchResult, settingsLoad] = await Promise.all([
+        getResultsPdfBlobDetailed(orderId, {
+          correlationId: attemptId,
+          labSettingsPromise: settingsPromise,
+        }),
         settingsPromise,
       ]);
       fetchResult = nextFetchResult;
+      const settings = settingsLoad.settings;
       backendProfile = parseReportPdfProfilingHeaders(fetchResult.profilingHeaders);
       clickToBlobReadyMs = fetchResult.fetchCompletedAtMs - attemptStartedAtMs;
       try {
@@ -1425,6 +1537,8 @@ export function ReportsPage() {
               ? fetchResult.fetchCompletedAtMs - fetchResult.fetchStartedAtMs
               : null,
           settingsLoadMs,
+          fingerprintWaitMs: fetchResult.fingerprintWaitMs,
+          settingsRequestShared: fetchResult.settingsRequestShared,
           clickToBlobReadyMs,
           backendTotalMs: backendProfile?.totalMs ?? null,
           backendSnapshotMs: backendProfile?.snapshotMs ?? null,
@@ -1465,9 +1579,10 @@ export function ReportsPage() {
       }
 
       try {
-        const settings = await getLabSettings();
-        const printerName = settings.printing?.receiptPrinterName?.trim();
-        const mode = settings.printing?.mode;
+        const settingsLoad = await loadLabSettingsCached();
+        const settings = settingsLoad.settings;
+        const printerName = settings?.printing?.receiptPrinterName?.trim();
+        const mode = settings?.printing?.mode;
         if (mode === 'direct_gateway' && printerName) {
           if (!isVirtualSavePrinterName(printerName)) {
             try {
@@ -1974,7 +2089,7 @@ export function ReportsPage() {
         title: 'Result',
         dataIndex: 'resultPreview',
         key: 'result',
-        width: 220,
+        width: 180,
         render: (value: string, row: ExpandedOrderTestRow) => (
           <div>
             {isEtaLoadingStatus(row.status) ? (
@@ -2031,13 +2146,22 @@ export function ReportsPage() {
         onCell: () => ({ style: compactCellStyle }),
       },
       {
+        title: 'Unit',
+        dataIndex: 'unitPreview',
+        key: 'unit',
+        width: 90,
+        render: (value: string) => <Text style={{ fontSize: 12 }}>{value}</Text>,
+        onCell: () => ({ style: compactCellStyle }),
+      },
+      {
         title: 'Flag',
         key: 'flag',
         width: 100,
         render: (_: unknown, row: ExpandedOrderTestRow) => {
           const normalizedFlag = normalizeResultFlag(row.flag);
+          const flagLabel = getResultFlagLabel(row.flag);
           const meta = normalizedFlag ? RESULT_FLAG_META[normalizedFlag] : null;
-          if (!meta || normalizedFlag === 'N')
+          if (!meta || !flagLabel)
             return (
               <Text type="secondary" style={{ fontSize: 10 }}>
                 -
@@ -2045,7 +2169,7 @@ export function ReportsPage() {
             );
           return (
             <Tag color={meta.color} style={{ margin: 0, fontSize: 10, lineHeight: '14px' }}>
-              {meta.label}
+              {flagLabel}
             </Tag>
           );
         },

@@ -39,7 +39,7 @@ function containsArabicScript(text: string): boolean {
 
 function normalizeFlag(flag: string | null | undefined): string {
   const f = normalizeOrderTestFlag(flag) ?? String(flag ?? '').trim().toUpperCase();
-  return f || '-';
+  return f || '';
 }
 
 function isAbnormalFlag(flag: string): boolean {
@@ -214,9 +214,13 @@ function formatParams(params: Record<string, string> | null): string[] {
 
 function flagToStatus(flag: string): string {
   const f = normalizeFlag(flag);
+  if (f === 'N') return 'Normal';
   if (f === 'H') return 'High';
   if (f === 'L') return 'Low';
-  if (f === '-' || f === '') return 'Normal';
+  if (f === 'POS') return 'Positive';
+  if (f === 'NEG') return 'Negative';
+  if (f === 'ABN') return 'Abnormal';
+  if (f === '') return '';
   return f;
 }
 

@@ -27,7 +27,7 @@ import {
 } from '../../api/client';
 import { useAuth } from '../../contexts/AuthContext';
 import { loadAdminLabs } from '../../utils/admin-labs-cache';
-import { getResultFlagTagColor, normalizeResultFlag } from '../../utils/result-flag';
+import { getResultFlagLabel, getResultFlagTagColor } from '../../utils/result-flag';
 import {
   ADMIN_DATE_RANGE_EVENT,
   ADMIN_DATE_RANGE_KEY,
@@ -504,7 +504,7 @@ export function AdminOrdersPage() {
                   render: (value: string | null) =>
                     value ? (
                       <Tag color={getResultFlagTagColor(value)}>
-                        {normalizeResultFlag(value) ?? value}
+                        {getResultFlagLabel(value) ?? value}
                       </Tag>
                     ) : '-',
                 },

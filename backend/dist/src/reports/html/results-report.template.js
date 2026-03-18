@@ -29,7 +29,7 @@ function containsArabicScript(text) {
 }
 function normalizeFlag(flag) {
     const f = (0, order_test_flag_util_1.normalizeOrderTestFlag)(flag) ?? String(flag ?? '').trim().toUpperCase();
-    return f || '-';
+    return f || '';
 }
 function isAbnormalFlag(flag) {
     return flag === 'H' || flag === 'L';
@@ -165,12 +165,20 @@ function formatParams(params) {
 }
 function flagToStatus(flag) {
     const f = normalizeFlag(flag);
+    if (f === 'N')
+        return 'Normal';
     if (f === 'H')
         return 'High';
     if (f === 'L')
         return 'Low';
-    if (f === '-' || f === '')
-        return 'Normal';
+    if (f === 'POS')
+        return 'Positive';
+    if (f === 'NEG')
+        return 'Negative';
+    if (f === 'ABN')
+        return 'Abnormal';
+    if (f === '')
+        return '';
     return f;
 }
 function getCategoryName(test) {

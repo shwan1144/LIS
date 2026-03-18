@@ -58,6 +58,7 @@ function createOrderTest(
     sortOrder?: number;
     resultEntryType?: string | null;
     cultureResult?: unknown;
+    flag?: string | null;
   },
 ): OrderTest {
   return {
@@ -67,7 +68,7 @@ function createOrderTest(
     resultValue: options.resultValue ?? null,
     resultParameters: options.resultParameters ?? null,
     cultureResult: options.cultureResult ?? null,
-    flag: null,
+    flag: options.flag ?? null,
     test: {
       name: options.name,
       code: options.code,
@@ -187,6 +188,60 @@ function buildRegularResultsHtml(
 }
 
 describe('buildResultsReportHtml panel page isolation', () => {
+  it('renders full-word status labels and leaves missing flags blank', () => {
+    const order = createOrder();
+    const regularNormal = createOrderTest('regular-normal', {
+      name: 'Glucose',
+      code: 'GLU',
+      resultValue: 95,
+      unit: 'mg/dL',
+      flag: 'N',
+    });
+    const regularHigh = createOrderTest('regular-high', {
+      name: 'TSH',
+      code: 'TSH',
+      resultValue: 6.1,
+      unit: 'uIU/mL',
+      flag: 'H',
+    });
+    const regularBlank = createOrderTest('regular-blank', {
+      name: 'Creatinine',
+      code: 'CRE',
+      resultValue: 0.9,
+      unit: 'mg/dL',
+      flag: null,
+    });
+    const panelParent = createOrderTest('panel-parent', {
+      name: 'CBC Panel',
+      code: 'CBC',
+      type: TestType.PANEL,
+    });
+    const panelChildLow = createOrderTest('panel-child-low', {
+      name: 'Hemoglobin',
+      code: 'HGB',
+      parentOrderTestId: panelParent.id,
+      resultValue: 10.2,
+      unit: 'g/dL',
+      flag: 'L',
+    });
+
+    const html = buildResultsReportHtml({
+      order,
+      orderTests: [regularNormal, regularHigh, regularBlank, panelParent, panelChildLow],
+      reportableCount: 5,
+      verifiedCount: 5,
+      verifiers: ['Verifier'],
+      latestVerifiedAt: new Date('2026-02-26T11:00:00.000Z'),
+      comments: [],
+    });
+
+    expect(html).toContain('>Normal</td>');
+    expect(html).toContain('>High</td>');
+    expect(html).toContain('>Low</td>');
+    expect(html).toContain('<td class="col-status status-normal" style="width:10%;"></td>');
+    expect(html).not.toContain('>N</td>');
+  });
+
   it('keeps panel children out of regular section and renders them on panel-only pages', () => {
     const order = createOrder();
     const panelParent = createOrderTest('panel-1', {
