@@ -62,7 +62,9 @@ export const OrderReceipt = forwardRef<HTMLDivElement, OrderReceiptProps>(
         <div className="receipt-order-info">
           <div className="receipt-row">
             <span className="receipt-label">Order #:</span>
-            <span className="receipt-value receipt-order-number">{order.orderNumber || '-'}</span>
+            <span className="receipt-value receipt-value-numeric receipt-order-number">
+              {order.orderNumber || '-'}
+            </span>
           </div>
           <div className="receipt-row">
             <span className="receipt-label">Date:</span>
@@ -109,15 +111,15 @@ export const OrderReceipt = forwardRef<HTMLDivElement, OrderReceiptProps>(
           <table className="receipt-table">
             <thead>
               <tr>
-                <th className="receipt-th-left">Test</th>
-                <th className="receipt-th-right">Price</th>
+                <th className="receipt-th-left receipt-th-test">Test</th>
+                <th className="receipt-th-right receipt-th-price">Price</th>
               </tr>
             </thead>
             <tbody>
               {allTests.map((test, idx) => (
                 <tr key={idx}>
-                  <td className="receipt-td-left">{test.code}</td>
-                  <td className="receipt-td-right">
+                  <td className="receipt-td-left receipt-td-test">{test.code}</td>
+                  <td className="receipt-td-right receipt-td-price">
                     {test.price !== null ? `${parseFloat(test.price.toString()).toFixed(0)} IQD` : '-'}
                   </td>
                 </tr>
@@ -131,7 +133,7 @@ export const OrderReceipt = forwardRef<HTMLDivElement, OrderReceiptProps>(
         {/* Subtotal */}
         <div className="receipt-row">
           <span className="receipt-label">Subtotal</span>
-          <span className="receipt-value">
+          <span className="receipt-value receipt-value-numeric">
             {parseFloat(order.totalAmount.toString()).toFixed(0)} IQD
           </span>
         </div>
@@ -139,13 +141,13 @@ export const OrderReceipt = forwardRef<HTMLDivElement, OrderReceiptProps>(
           <>
             <div className="receipt-row">
               <span className="receipt-label">Discount</span>
-              <span className="receipt-value">
+              <span className="receipt-value receipt-value-numeric">
                 {parseFloat(order.discountPercent.toString()).toFixed(0)}%
               </span>
             </div>
-            <div className="receipt-row">
+            <div className="receipt-row receipt-row-wide-label">
               <span className="receipt-label">Discount Amount</span>
-              <span className="receipt-value">
+              <span className="receipt-value receipt-value-numeric">
                 -{(
                   parseFloat(order.totalAmount.toString()) -
                   parseFloat((order.finalAmount ?? order.totalAmount).toString())
@@ -157,7 +159,7 @@ export const OrderReceipt = forwardRef<HTMLDivElement, OrderReceiptProps>(
         {/* Total */}
         <div className="receipt-total">
           <span className="receipt-total-label">TOTAL</span>
-          <span className="receipt-total-value">
+          <span className="receipt-total-value receipt-value-numeric">
             {(
               order.finalAmount != null
                 ? parseFloat(order.finalAmount.toString())
@@ -179,13 +181,13 @@ export const OrderReceipt = forwardRef<HTMLDivElement, OrderReceiptProps>(
               <>
                 <div className="receipt-row">
                   <span className="receipt-label">Paid</span>
-                  <span className="receipt-value">
+                  <span className="receipt-value receipt-value-numeric">
                     {parseFloat(order.paidAmount.toString()).toFixed(0)} IQD
                   </span>
                 </div>
                 <div className="receipt-row">
                   <span className="receipt-label">Remaining</span>
-                  <span className="receipt-value" style={{ fontWeight: 'bold' }}>
+                  <span className="receipt-value receipt-value-numeric" style={{ fontWeight: 'bold' }}>
                     {(
                       (order.finalAmount != null
                         ? parseFloat(order.finalAmount.toString())

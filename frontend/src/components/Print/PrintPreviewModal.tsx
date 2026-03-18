@@ -1,4 +1,4 @@
-import { useRef } from 'react';
+import { useRef, type CSSProperties } from 'react';
 import { Modal, Button, Space } from 'antd';
 import { PrinterOutlined } from '@ant-design/icons';
 import { useReactToPrint } from 'react-to-print';
@@ -27,6 +27,9 @@ export function PrintPreviewModal({
   departments,
 }: PrintPreviewModalProps) {
   const printRef = useRef<HTMLDivElement>(null);
+  const printContainerStyle = type === 'receipt'
+    ? ({ '--receipt-width': '76mm' } as CSSProperties)
+    : undefined;
 
   const handlePrint = useReactToPrint({
     contentRef: printRef,
@@ -59,7 +62,7 @@ export function PrintPreviewModal({
     >
       <div className="print-preview-container">
         <div className="print-preview-paper">
-          <div ref={printRef} className="print-container">
+          <div ref={printRef} className="print-container" style={printContainerStyle}>
             {type === 'receipt' ? (
               <OrderReceipt order={order} labName={labName} />
             ) : (

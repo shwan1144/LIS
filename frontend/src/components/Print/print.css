@@ -20,8 +20,10 @@
 
 .print-receipt {
   box-sizing: border-box;
-  width: var(--receipt-width, 72mm);
-  padding: 1.4mm 1.6mm 1.8mm;
+  width: var(--receipt-width, 76mm);
+  max-width: 100%;
+  margin: 0 auto;
+  padding: 1.2mm 1.3mm 1.7mm;
   font-family: 'Consolas', 'Lucida Console', 'Courier New', monospace;
   font-size: 12.2px;
   font-weight: 700;
@@ -73,27 +75,36 @@
 }
 
 .receipt-row {
-  display: flex;
-  justify-content: space-between;
+  --receipt-label-width: 18.5mm;
+  display: grid;
+  grid-template-columns: minmax(0, var(--receipt-label-width)) minmax(0, 1fr);
   align-items: flex-start;
-  gap: 6px;
+  column-gap: 5px;
   margin: 1px 0;
   line-height: 1.28;
+  width: 100%;
+}
+
+.receipt-row-wide-label {
+  --receipt-label-width: 22mm;
 }
 
 .receipt-label {
-  flex: 0 0 auto;
+  min-width: 0;
   color: #000;
   font-weight: 700;
 }
 
 .receipt-value {
-  flex: 1 1 auto;
   min-width: 0;
   font-weight: 700;
   text-align: right;
   overflow-wrap: anywhere;
   word-break: break-word;
+}
+
+.receipt-value-numeric {
+  white-space: nowrap;
 }
 
 .receipt-order-number {
@@ -113,6 +124,7 @@
 
 .receipt-tests {
   margin: 0;
+  width: 100%;
 }
 
 .receipt-table {
@@ -131,12 +143,12 @@
 }
 
 .receipt-th-left {
-  width: 62%;
+  width: 65%;
   text-align: left;
 }
 
 .receipt-th-right {
-  width: 38%;
+  width: 35%;
   text-align: right;
 }
 
@@ -151,15 +163,21 @@
 .receipt-td-left {
   text-align: left;
   font-weight: bold;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .receipt-td-right {
   text-align: right;
+  white-space: nowrap;
 }
 
 .receipt-total {
   display: flex;
   justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+  width: 100%;
   font-size: 16px;
   font-weight: bold;
   margin: 4px 0;
@@ -175,6 +193,8 @@
   text-align: center;
   font-weight: bold;
   font-size: 14px;
+  width: 100%;
+  box-sizing: border-box;
   padding: 4px 0;
   margin: 2px 0;
   border: 1px solid #000;
@@ -207,6 +227,7 @@
 .receipt-footer {
   margin-top: 6px;
   text-align: center;
+  width: 100%;
 }
 
 .receipt-notes {
@@ -520,8 +541,9 @@
   .print-receipt {
     page: receipt;
     box-sizing: border-box;
-    width: var(--receipt-width, 72mm);
-    padding: 1.4mm 1.6mm 1.8mm;
+    width: var(--receipt-width, 76mm);
+    max-width: 100%;
+    padding: 1.2mm 1.3mm 1.7mm;
     margin: 0;
     font-size: 12.2px !important;
     line-height: 1.28 !important;
