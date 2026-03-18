@@ -1,4 +1,5 @@
-const CACHE_NAME = "lis-pwa-v2";
+// Bump this version whenever we need to force clients off an old cached app shell.
+const CACHE_NAME = "lis-pwa-v3";
 const APP_SHELL = ["/", "/manifest.webmanifest", "/icons/icon-192.png", "/icons/icon-512.png"];
 const STATIC_DESTINATIONS = new Set([
   "style",
