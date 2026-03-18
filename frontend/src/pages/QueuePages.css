@@ -139,6 +139,24 @@
   background: transparent;
 }
 
+.queue-patient-name.ant-typography {
+  display: block;
+  min-width: 0;
+  margin: 0;
+  font-size: 16px;
+  line-height: 20px;
+  font-family: 'Noto Sans Arabic', sans-serif;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.queue-patient-meta.ant-typography {
+  display: block;
+  font-size: 11px;
+  line-height: 14px;
+}
+
 .queue-orders-table .ant-table-placeholder {
   background: transparent !important;
 }

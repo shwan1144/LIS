@@ -20,12 +20,12 @@
 
 .print-receipt {
   box-sizing: border-box;
-  width: 78mm;
-  padding: 1.2mm 1.3mm 1.6mm;
+  width: var(--receipt-width, 72mm);
+  padding: 1.4mm 1.6mm 1.8mm;
   font-family: 'Consolas', 'Lucida Console', 'Courier New', monospace;
-  font-size: 13px;
+  font-size: 12.2px;
   font-weight: 700;
-  line-height: 1.32;
+  line-height: 1.28;
   background: white;
   color: #000;
 }
@@ -76,9 +76,9 @@
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  gap: 8px;
+  gap: 6px;
   margin: 1px 0;
-  line-height: 1.32;
+  line-height: 1.28;
 }
 
 .receipt-label {
@@ -520,11 +520,11 @@
   .print-receipt {
     page: receipt;
     box-sizing: border-box;
-    width: 78mm;
-    padding: 1.2mm 1.3mm 1.6mm;
+    width: var(--receipt-width, 72mm);
+    padding: 1.4mm 1.6mm 1.8mm;
     margin: 0;
-    font-size: 13px !important;
-    line-height: 1.32 !important;
+    font-size: 12.2px !important;
+    line-height: 1.28 !important;
   }
 
   .print-receipt .receipt-subtitle,

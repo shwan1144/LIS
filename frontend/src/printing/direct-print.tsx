@@ -28,6 +28,7 @@ const GATEWAY_PRINT_TIMEOUT_MS = 20_000;
 const GATEWAY_PRINTER_CONFIG_CACHE_TTL_MS = 5 * 60_000;
 const RECEIPT_PDF_CACHE_TTL_MS = 5 * 60_000;
 const RECEIPT_DEFAULT_PAPER_WIDTH_MM = 80;
+const RECEIPT_DEFAULT_CONTENT_WIDTH_MM = 72;
 const RECEIPT_DEFAULT_TARGET_DPI = 203;
 const RECEIPT_MAX_TARGET_DPI = 300;
 const RECEIPT_RENDER_MIN_SCALE = 2.5;
@@ -35,6 +36,8 @@ const RECEIPT_RENDER_MAX_SCALE = 5;
 const RECEIPT_THRESHOLD = 216;
 const RECEIPT_MIN_PAPER_WIDTH_MM = 58;
 const RECEIPT_MAX_PAPER_WIDTH_MM = 82;
+const RECEIPT_SAFE_HORIZONTAL_MARGIN_MM = 4;
+const RECEIPT_MIN_CONTENT_WIDTH_MM = 48;
 const VIRTUAL_SAVE_PRINTER_KEYWORDS = [
   'print to pdf',
   'pdfcreator',
@@ -91,6 +94,7 @@ type CachedReceiptPdfEntry = {
 };
 
 type ReceiptRenderProfile = {
+  contentWidthMm: number;
   pageWidthMm: number;
   targetDpi: number;
   thermalThreshold: number;
@@ -290,6 +294,7 @@ async function gatewayPrintRaw(params: {
 async function convertHtmlToPdf(
   element: HTMLElement,
   options?: {
+    contentWidthMm?: number;
     orientation?: 'portrait' | 'landscape';
     pageWidthMm?: number;
     targetDpi?: number;
@@ -304,10 +309,11 @@ async function convertHtmlToPdf(
   let renderScale = 2;
 
   if (shouldUsePhysicalSizing) {
+    const targetContentWidthMm = options?.contentWidthMm ?? options?.pageWidthMm ?? RECEIPT_DEFAULT_PAPER_WIDTH_MM;
     const targetWidthPx = Math.max(
       1,
       Math.round(
-        ((options?.pageWidthMm ?? RECEIPT_DEFAULT_PAPER_WIDTH_MM) / 25.4)
+        (targetContentWidthMm / 25.4)
         * (options?.targetDpi ?? RECEIPT_DEFAULT_TARGET_DPI),
       ),
     );
@@ -335,13 +341,19 @@ async function convertHtmlToPdf(
 
   if (shouldUsePhysicalSizing) {
     const pageWidthMm = options?.pageWidthMm ?? RECEIPT_DEFAULT_PAPER_WIDTH_MM;
-    const pageHeightMm = pageWidthMm * (canvas.height / Math.max(canvas.width, 1));
+    const contentWidthMm = clampNumber(
+      options?.contentWidthMm ?? pageWidthMm,
+      RECEIPT_MIN_CONTENT_WIDTH_MM,
+      pageWidthMm,
+    );
+    const pageHeightMm = contentWidthMm * (canvas.height / Math.max(canvas.width, 1));
+    const offsetXmm = Math.max(0, (pageWidthMm - contentWidthMm) / 2);
     const pdf = new jsPDF({
       orientation: options?.orientation ?? 'portrait',
       unit: 'mm',
       format: [pageWidthMm, pageHeightMm],
     });
-    pdf.addImage(imgData, 'PNG', 0, 0, pageWidthMm, pageHeightMm);
+    pdf.addImage(imgData, 'PNG', offsetXmm, 0, contentWidthMm, pageHeightMm);
     return pdf.output('blob');
   }
 
@@ -530,6 +542,7 @@ async function renderReceiptToPdf(
     }
 
     return await convertHtmlToPdf(receipt, {
+      contentWidthMm: renderProfile.contentWidthMm,
       orientation: 'portrait',
       pageWidthMm: renderProfile.pageWidthMm,
       targetDpi: renderProfile.targetDpi,
@@ -845,7 +858,10 @@ async function getCachedReceiptPdf(params: {
   }
 
   const promise = renderReceiptToPdf(
-    <div className="print-container">
+    <div
+      className="print-container"
+      style={{ '--receipt-width': `${renderProfile.contentWidthMm}mm` } as React.CSSProperties}
+    >
       <style>{printCss}</style>
       <OrderReceipt order={params.order} labName={params.labName} />
     </div>,
@@ -878,6 +894,14 @@ function resolveReceiptRenderProfile(
     RECEIPT_MIN_PAPER_WIDTH_MM,
     RECEIPT_MAX_PAPER_WIDTH_MM,
   );
+  const contentWidthMm = clampNumber(
+    Math.min(
+      RECEIPT_DEFAULT_CONTENT_WIDTH_MM,
+      pageWidthMm - (RECEIPT_SAFE_HORIZONTAL_MARGIN_MM * 2),
+    ),
+    RECEIPT_MIN_CONTENT_WIDTH_MM,
+    pageWidthMm,
+  );
   const targetDpi = clampNumber(
     Math.round(
       toPositiveNumber(printerConfig?.resolutionXDpi)
@@ -889,6 +913,7 @@ function resolveReceiptRenderProfile(
   );
 
   return {
+    contentWidthMm,
     pageWidthMm,
     targetDpi,
     thermalThreshold: RECEIPT_THRESHOLD,

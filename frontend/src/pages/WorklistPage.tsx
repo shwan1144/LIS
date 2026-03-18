@@ -1191,10 +1191,10 @@ export function WorklistPage() {
       width: 280,
       render: (_: unknown, record) => (
         <div>
-          <Text strong style={{ display: 'block', fontSize: 16, lineHeight: '20px' }}>
-            {record.patientName}
+          <Text strong className="queue-patient-name">
+            {record.patientName || '-'}
           </Text>
-          <Text type="secondary" style={{ fontSize: 11, lineHeight: '14px' }}>
+          <Text type="secondary" className="queue-patient-meta">
             {record.patientAgeDisplay || '-'}
           </Text>
         </div>
