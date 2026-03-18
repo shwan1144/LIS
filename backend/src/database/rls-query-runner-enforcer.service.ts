@@ -106,7 +106,7 @@ export class RlsQueryRunnerEnforcerService implements OnModuleInit {
           }
         }
       } catch (error) {
-        if (!pendingError) {
+        if (!pendingError && !queryFailed) {
           pendingError = error;
         }
       }
@@ -116,7 +116,7 @@ export class RlsQueryRunnerEnforcerService implements OnModuleInit {
           await runner.rollbackTransaction();
         }
       } catch (error) {
-        if (!pendingError) {
+        if (!pendingError && !queryFailed) {
           pendingError = error;
         }
       }
@@ -126,13 +126,17 @@ export class RlsQueryRunnerEnforcerService implements OnModuleInit {
           await this.rlsSessionService.resetRequestContextWithExecutor(rawExecutor);
         }
       } catch (error) {
-        if (!pendingError) {
+        if (!pendingError && !queryFailed) {
           pendingError = error;
         }
       }
 
       try {
         await originalRelease();
+      } catch (error) {
+        if (!pendingError && !queryFailed) {
+          pendingError = error;
+        }
       }
 
       if (pendingError) {

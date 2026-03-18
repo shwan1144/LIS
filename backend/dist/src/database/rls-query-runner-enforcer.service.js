@@ -94,7 +94,7 @@ let RlsQueryRunnerEnforcerService = RlsQueryRunnerEnforcerService_1 = class RlsQ
                 }
             }
             catch (error) {
-                if (!pendingError) {
+                if (!pendingError && !queryFailed) {
                     pendingError = error;
                 }
             }
@@ -104,7 +104,7 @@ let RlsQueryRunnerEnforcerService = RlsQueryRunnerEnforcerService_1 = class RlsQ
                 }
             }
             catch (error) {
-                if (!pendingError) {
+                if (!pendingError && !queryFailed) {
                     pendingError = error;
                 }
             }
@@ -114,14 +114,17 @@ let RlsQueryRunnerEnforcerService = RlsQueryRunnerEnforcerService_1 = class RlsQ
                 }
             }
             catch (error) {
-                if (!pendingError) {
+                if (!pendingError && !queryFailed) {
                     pendingError = error;
                 }
             }
             try {
                 await originalRelease();
             }
-            finally {
+            catch (error) {
+                if (!pendingError && !queryFailed) {
+                    pendingError = error;
+                }
             }
             if (pendingError) {
                 throw pendingError;

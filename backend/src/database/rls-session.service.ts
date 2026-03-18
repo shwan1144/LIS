@@ -110,7 +110,15 @@ export class RlsSessionService {
     try {
       await executeQuery('RESET ROLE');
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
+      const recoveredError = await this.retryResetAfterRollbackIfTransactionAborted(
+        executeQuery,
+        error,
+      );
+      if (!recoveredError) {
+        return;
+      }
+
+      const message = this.getErrorMessage(recoveredError);
       const failureMessage = `Failed to reset DB request context: ${message}`;
       if (this.strictRlsMode) {
         throw new Error(`[SECURITY][RLS] ${failureMessage}`);
@@ -165,6 +173,42 @@ export class RlsSessionService {
       this.logger.warn(message);
       warnedSet.add(key);
     }
+  }
+
+  private async retryResetAfterRollbackIfTransactionAborted(
+    executeQuery: QueryExecutor,
+    error: unknown,
+  ): Promise<unknown | null> {
+    if (!this.isFailedTransactionStateError(error)) {
+      return error;
+    }
+
+    try {
+      await executeQuery('ROLLBACK');
+    } catch (rollbackError) {
+      return rollbackError;
+    }
+
+    try {
+      await executeQuery('RESET ROLE');
+      return null;
+    } catch (retryError) {
+      return retryError;
+    }
+  }
+
+  private isFailedTransactionStateError(error: unknown): boolean {
+    if (!error || typeof error !== 'object') {
+      return false;
+    }
+
+    const code = 'code' in error && typeof error.code === 'string' ? error.code : null;
+    const message = this.getErrorMessage(error).toLowerCase();
+    return code === '25P02' || message.includes('current transaction is aborted');
+  }
+
+  private getErrorMessage(error: unknown): string {
+    return error instanceof Error ? error.message : String(error);
   }
 
   private async resetThenFinalizeRunner(

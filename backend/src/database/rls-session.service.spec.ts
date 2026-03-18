@@ -71,6 +71,31 @@ describe('RlsSessionService strict mode', () => {
     );
   });
 
+  it('recovers reset context in strict mode after aborted transaction state', async () => {
+    const service = createService(true);
+    let resetAttempts = 0;
+    const executeQuery = jest.fn(async (query: string) => {
+      if (query.includes('RESET ROLE') && resetAttempts === 0) {
+        resetAttempts += 1;
+        const error = new Error(
+          'current transaction is aborted, commands ignored until end of transaction block',
+        ) as Error & { code?: string };
+        error.code = '25P02';
+        throw error;
+      }
+      if (query.includes('RESET ROLE')) {
+        resetAttempts += 1;
+      }
+      return [];
+    });
+
+    await expect(service.resetRequestContextWithExecutor(executeQuery)).resolves.toBeUndefined();
+
+    const calls = executeQuery.mock.calls.map(([query]) => query.trim());
+    expect(calls).toEqual(['RESET ROLE', 'ROLLBACK', 'RESET ROLE']);
+    expect(resetAttempts).toBe(2);
+  });
+
   it('uses transaction-local lab context and avoids metadata checks', async () => {
     const service = createService(true);
     const executeQuery = createExecutor();

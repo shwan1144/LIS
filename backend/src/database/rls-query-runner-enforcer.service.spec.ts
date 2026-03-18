@@ -110,6 +110,44 @@ describe('RlsQueryRunnerEnforcerService', () => {
     expect(runner.commitTransaction).not.toHaveBeenCalled();
   });
 
+  it('preserves the original query error when release cleanup also fails', async () => {
+    const runner = createRunner({ throwOnQuery: 'SELECT fail' });
+    const dataSource = {
+      createQueryRunner: jest.fn(() => runner),
+    } as unknown as DataSource;
+    const requestContextService = {
+      getContext: jest.fn(() => ({ scope: 'lab', labId: 'lab-1' })),
+    } as unknown as RequestRlsContextService;
+    const rlsSessionService = {
+      applyRequestContextWithExecutor: jest.fn(async () => true),
+      resetRequestContextWithExecutor: jest.fn(async () => {
+        throw new Error('cleanup failed');
+      }),
+    } as unknown as RlsSessionService;
+
+    const service = new RlsQueryRunnerEnforcerService(
+      dataSource,
+      requestContextService,
+      rlsSessionService,
+    );
+    service.onModuleInit();
+
+    const patchedRunner = dataSource.createQueryRunner();
+    await expect(
+      (async () => {
+        try {
+          await patchedRunner.query('SELECT fail');
+        } finally {
+          await patchedRunner.release();
+        }
+      })(),
+    ).rejects.toThrow('query failed');
+
+    expect(rlsSessionService.applyRequestContextWithExecutor).toHaveBeenCalledTimes(1);
+    expect(rlsSessionService.resetRequestContextWithExecutor).toHaveBeenCalledTimes(1);
+    expect(runner.rollbackTransaction).toHaveBeenCalledTimes(1);
+  });
+
   it('skips auto context when runner marks skip flag', async () => {
     const runner = createRunner();
     runner.data = { skipAutomaticRlsContext: true };

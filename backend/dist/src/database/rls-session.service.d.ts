@@ -15,6 +15,9 @@ export declare class RlsSessionService {
     private markRunnerSkipAutoContext;
     private trySetRole;
     private failOrWarn;
+    private retryResetAfterRollbackIfTransactionAborted;
+    private isFailedTransactionStateError;
+    private getErrorMessage;
     private resetThenFinalizeRunner;
 }
 export {};
