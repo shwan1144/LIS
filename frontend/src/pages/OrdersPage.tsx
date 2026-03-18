@@ -153,6 +153,16 @@ type PrintPreviewJob = {
   type: PrintActionType;
 };
 
+type PatientCreateSeedField = 'fullName' | 'phone';
+
+type PatientPickerQueryMeta = {
+  query: string;
+  isPhoneLike: boolean;
+  hasExactPhoneMatch: boolean;
+  canCreateNewPatient: boolean;
+  createSeedField: PatientCreateSeedField;
+};
+
 const ORDER_PAGE_SIZE = 25;
 const CREATE_ORDER_TIMEOUT_MS = 15_000;
 const CREATE_ORDER_SLOW_FEEDBACK_MS = 1_200;
@@ -223,6 +233,34 @@ function getShiftTagColor(shiftLabel: string): (typeof SHIFT_COLOR_PALETTE)[numb
 function formatPatientPickerValue(value: string | null | undefined): string {
   const normalized = String(value ?? '').trim();
   return normalized || '-';
+}
+
+function isPhoneLikePatientPickerQuery(value: string): boolean {
+  const query = value.trim();
+  if (!query || !/\d/.test(query)) {
+    return false;
+  }
+  return /^\+?[\d\s().-]+$/.test(query);
+}
+
+function getPatientPickerQueryMeta(
+  rawQuery: string,
+  results: PatientDto[],
+  isLoading: boolean,
+): PatientPickerQueryMeta {
+  const query = rawQuery.trim();
+  const isPhoneLike = isPhoneLikePatientPickerQuery(query);
+  const hasExactPhoneMatch = isPhoneLike
+    && results.some((patient) => String(patient.phone ?? '').trim() === query);
+
+  return {
+    query,
+    isPhoneLike,
+    hasExactPhoneMatch,
+    canCreateNewPatient:
+      !isLoading && query.length >= 1 && (isPhoneLike ? !hasExactPhoneMatch : results.length === 0),
+    createSeedField: isPhoneLike ? 'phone' : 'fullName',
+  };
 }
 
 
@@ -410,6 +448,7 @@ export function OrdersPage() {
   const [patientPickerSearchResults, setPatientPickerSearchResults] = useState<PatientDto[]>([]);
   const [patientPickerSearchLoading, setPatientPickerSearchLoading] = useState(false);
   const [patientPickerSelectedPatient, setPatientPickerSelectedPatient] = useState<PatientDto | null>(null);
+  const [patientCreateSeedField, setPatientCreateSeedField] = useState<PatientCreateSeedField>('fullName');
   const [patientCreateSubmitting, setPatientCreateSubmitting] = useState(false);
   const [patientEditSubmitting, setPatientEditSubmitting] = useState(false);
   const [patientCreateForm] = Form.useForm<PatientFormValues>();
@@ -567,7 +606,16 @@ export function OrdersPage() {
     setPrintOrder(nextJob.order);
     setPrintModalOpen(true);
   }, [isPrintPreviewActive, printPreviewQueue]);
-  const patientPickerQuery = patientPickerSearchInput.trim();
+  const patientPickerQueryMeta = useMemo(
+    () =>
+      getPatientPickerQueryMeta(
+        patientPickerSearchInput,
+        patientPickerSearchResults,
+        patientPickerSearchLoading,
+      ),
+    [patientPickerSearchInput, patientPickerSearchResults, patientPickerSearchLoading],
+  );
+  const patientPickerQuery = patientPickerQueryMeta.query;
   const patientPickerModalBusy = patientCreateSubmitting || patientEditSubmitting;
   const canAdminOverrideLockedTestRemoval =
     Boolean(user?.isImpersonation) ||
@@ -1734,6 +1782,7 @@ export function OrdersPage() {
     setPatientPickerSearchResults([]);
     setPatientPickerSearchLoading(false);
     setPatientPickerSelectedPatient(null);
+    setPatientCreateSeedField('fullName');
     patientCreateForm.resetFields();
     patientEditForm.resetFields();
   }, [
@@ -1755,16 +1804,22 @@ export function OrdersPage() {
     setPatientPickerSelectedPatient(null);
     setPatientCreateModalOpen(false);
     setPatientEditModalOpen(false);
+    setPatientCreateSeedField('fullName');
     patientCreateForm.resetFields();
     patientEditForm.resetFields();
     setPatientPickerModalOpen(true);
   };
 
-  const openPatientCreateModal = (defaultName?: string) => {
+  const openPatientCreateModal = () => {
     const initialValues = getPatientFormInitialValues();
-    if (typeof defaultName === 'string' && defaultName.trim()) {
-      initialValues.fullName = defaultName.trim();
+    if (patientPickerQueryMeta.query) {
+      if (patientPickerQueryMeta.createSeedField === 'phone') {
+        initialValues.phone = patientPickerQueryMeta.query;
+      } else {
+        initialValues.fullName = patientPickerQueryMeta.query;
+      }
     }
+    setPatientCreateSeedField(patientPickerQueryMeta.createSeedField);
     patientCreateForm.setFieldsValue(initialValues);
     setPatientCreateModalOpen(true);
   };
@@ -1783,11 +1838,15 @@ export function OrdersPage() {
       const createdPatient = await createPatient(
         normalizePatientFormPayload(values),
       );
+      const nextSearchValue = patientCreateSeedField === 'phone'
+        ? String(createdPatient.phone ?? '').trim() || getPatientName(createdPatient)
+        : getPatientName(createdPatient);
       message.success('Patient registered');
       setPatientPickerSelectedPatient(createdPatient);
-      setPatientPickerSearchInput(createdPatient.fullName ?? '');
+      setPatientPickerSearchInput(nextSearchValue);
       setPatientPickerSearchResults([createdPatient]);
       setPatientCreateModalOpen(false);
+      setPatientCreateSeedField('fullName');
       patientCreateForm.resetFields();
     } catch (error: unknown) {
       message.error(getPatientMutationErrorMessage(error, 'Registration failed'));
@@ -3250,15 +3309,9 @@ export function OrdersPage() {
                     type="primary"
                     size="small"
                     icon={<PlusOutlined />}
-                    onClick={() => openPatientCreateModal(patientPickerSearchInput)}
-                    disabled={
-                      patientPickerSearchLoading ||
-                      patientPickerQuery.length < 1 ||
-                      patientPickerSearchResults.length > 0
-                    }
-                    className={`orders-patient-picker-input-btn ${patientPickerQuery.length >= 1 &&
-                      patientPickerSearchResults.length === 0 &&
-                      !patientPickerSearchLoading
+                    onClick={openPatientCreateModal}
+                    disabled={!patientPickerQueryMeta.canCreateNewPatient}
+                    className={`orders-patient-picker-input-btn ${patientPickerQueryMeta.canCreateNewPatient
                       ? 'is-active'
                       : ''
                       }`}
@@ -3377,6 +3430,7 @@ export function OrdersPage() {
         onCancel={() => {
           if (patientCreateSubmitting) return;
           setPatientCreateModalOpen(false);
+          setPatientCreateSeedField('fullName');
           patientCreateForm.resetFields();
         }}
         className={`orders-patient-form-modal${isDark ? ' orders-patient-form-modal-dark' : ''}`}
@@ -3401,6 +3455,7 @@ export function OrdersPage() {
               onClick={() => {
                 if (patientCreateSubmitting) return;
                 setPatientCreateModalOpen(false);
+                setPatientCreateSeedField('fullName');
                 patientCreateForm.resetFields();
               }}
             >
