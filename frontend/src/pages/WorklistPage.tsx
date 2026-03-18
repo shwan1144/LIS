@@ -527,6 +527,7 @@ export function WorklistPage() {
   const [loadingAllTests, setLoadingAllTests] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [resultDocumentBusyTargetId, setResultDocumentBusyTargetId] = useState<string | null>(null);
+  const [hasDocumentSessionChanges, setHasDocumentSessionChanges] = useState(false);
   const [liveFlags, setLiveFlags] = useState<Record<string, ResultFlag | null>>({});
   const [resultForm] = Form.useForm<any>();
   const watchedModalValues = Form.useWatch([], resultForm);
@@ -548,6 +549,7 @@ export function WorklistPage() {
     setModalGroup(null);
     setModalAppliedDepartmentId(null);
     setLoadingAllTests(false);
+    setHasDocumentSessionChanges(false);
     setLiveFlags({});
     initialModalFormValuesRef.current = {};
     resultForm.resetFields();
@@ -761,7 +763,9 @@ export function WorklistPage() {
   );
 
   const saveDisabled =
-    submitting || modalLoading || submittableCandidates.length === 0;
+    submitting ||
+    modalLoading ||
+    (submittableCandidates.length === 0 && !hasDocumentSessionChanges);
   const hasTouchedChanges = resultForm.isFieldsTouched(true);
 
   const recomputeLiveFlags = useCallback(
@@ -982,6 +986,7 @@ export function WorklistPage() {
       await uploadResultDocument(target.id, file, {
         forceEditVerified: canAdminEditVerified && target.status === 'VERIFIED',
       });
+      setHasDocumentSessionChanges(true);
       message.success('Result PDF uploaded');
       await Promise.all([loadRows(), loadStats()]);
       await refreshCurrentModalGroup(modalOrder.orderId, modalGroup, modalAppliedDepartmentId);
@@ -1007,6 +1012,7 @@ export function WorklistPage() {
       await removeResultDocument(target.id, {
         forceEditVerified: canAdminEditVerified && target.status === 'VERIFIED',
       });
+      setHasDocumentSessionChanges(true);
       message.success('Result PDF removed');
       await Promise.all([loadRows(), loadStats()]);
       await refreshCurrentModalGroup(modalOrder.orderId, modalGroup, modalAppliedDepartmentId);
@@ -1074,38 +1080,8 @@ export function WorklistPage() {
       return;
     }
 
-    const verifiedOverrideCount = editableTargets.filter(
-      (target) => canAdminEditVerified && target.status === 'VERIFIED',
-    ).length;
-
-    if (verifiedOverrideCount > 0) {
-      const proceed = await new Promise<boolean>((resolve) => {
-        Modal.confirm({
-          title: 'Edit verified results?',
-          content: 'You are editing verified result(s). Continue?',
-          okText: 'Continue',
-          cancelText: 'Cancel',
-          onOk: () => resolve(true),
-          onCancel: () => resolve(false),
-        });
-      });
-      if (!proceed) {
-        return;
-      }
-    }
-
     setSubmitting(true);
     try {
-      if (import.meta.env.DEV) {
-        console.debug('[worklist.submit]', {
-          orderId: modalOrder.orderId,
-          groupId: modalGroup?.groupId,
-          totalTargets: editableTargets.length,
-          verifiedOverrideCount,
-          departmentFilter: modalAppliedDepartmentId,
-        });
-      }
-
       const invalidNumericTargets = editableTargets
         .filter((target) => target.resultEntryType === 'NUMERIC')
         .map((target) => ({
@@ -1136,27 +1112,62 @@ export function WorklistPage() {
           isEffectivelyChanged && hasMeaningfulPayload,
       );
 
-      if (submissions.length === 0) {
+      const verifiedOverrideCount = submissions.filter(
+        ({ isVerifiedOverride }) => isVerifiedOverride,
+      ).length;
+
+      if (import.meta.env.DEV) {
+        console.debug('[worklist.submit]', {
+          orderId: modalOrder.orderId,
+          groupId: modalGroup?.groupId,
+          totalTargets: editableTargets.length,
+          verifiedOverrideCount,
+          departmentFilter: modalAppliedDepartmentId,
+          hasDocumentSessionChanges,
+        });
+      }
+
+      if (submissions.length === 0 && !hasDocumentSessionChanges) {
         message.info('Enter or change at least one result before saving.');
         return;
       }
 
-      await Promise.all(
-        submissions.map(async ({ target, payload, isVerifiedOverride }) => {
-          await enterResult(target.id, {
-            resultValue: payload.resultValue,
-            resultText: payload.resultText,
-            resultParameters: payload.resultParameters,
-            cultureResult: payload.cultureResult,
-            ...(isVerifiedOverride ? { forceEditVerified: true } : {}),
+      if (verifiedOverrideCount > 0) {
+        const proceed = await new Promise<boolean>((resolve) => {
+          Modal.confirm({
+            title: 'Edit verified results?',
+            content: 'You are editing verified result(s). Continue?',
+            okText: 'Continue',
+            cancelText: 'Cancel',
+            onOk: () => resolve(true),
+            onCancel: () => resolve(false),
           });
-        }),
-      );
+        });
+        if (!proceed) {
+          return;
+        }
+      }
+
+      if (submissions.length > 0) {
+        await Promise.all(
+          submissions.map(async ({ target, payload, isVerifiedOverride }) => {
+            await enterResult(target.id, {
+              resultValue: payload.resultValue,
+              resultText: payload.resultText,
+              resultParameters: payload.resultParameters,
+              cultureResult: payload.cultureResult,
+              ...(isVerifiedOverride ? { forceEditVerified: true } : {}),
+            });
+          }),
+        );
+      }
 
       message.success(
         verifiedOverrideCount > 0
           ? 'Verified results updated by admin'
-          : 'Results saved',
+          : hasDocumentSessionChanges && submissions.length === 0
+            ? 'Result document saved'
+            : 'Results saved',
       );
       const submittedOrderId = modalOrder.orderId;
       const submittedDepartment = modalAppliedDepartmentId;
@@ -1664,6 +1675,7 @@ export function WorklistPage() {
         dirtyCount={dirtySubmissionCount}
         submittableCount={submittableCandidates.length}
         hasTouchedChanges={hasTouchedChanges}
+        hasDocumentSessionChanges={hasDocumentSessionChanges}
         onCancel={() => {
           void handleRequestCloseEntryModal();
         }}

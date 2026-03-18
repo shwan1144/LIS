@@ -148,6 +148,7 @@ interface ResultEntryModalProps {
   dirtyCount: number;
   submittableCount: number;
   hasTouchedChanges: boolean;
+  hasDocumentSessionChanges: boolean;
   onCancel: () => void;
   onLoadAllTests: () => void;
   onSubmit: () => void;
@@ -183,6 +184,7 @@ export function ResultEntryModal({
   dirtyCount,
   submittableCount,
   hasTouchedChanges,
+  hasDocumentSessionChanges,
   onCancel,
   onLoadAllTests,
   onSubmit,
@@ -282,6 +284,8 @@ export function ResultEntryModal({
       ? saveBlockedReason
       : submittableCount > 0
         ? `${submittableCount} row${submittableCount === 1 ? '' : 's'} ready to save`
+        : hasDocumentSessionChanges
+          ? 'PDF changes applied. Hit Save to finish.'
         : dirtyCount > 0
           ? 'Results applied. Hit Save to confirm.'
           : hasTouchedChanges
