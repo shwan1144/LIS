@@ -134,5 +134,52 @@ export declare class SettingsController {
         password?: string;
     }): Promise<void>;
     deleteUser(req: RequestWithUser, id: string): Promise<void>;
+    getReportThemes(req: RequestWithUser): Promise<import("../entities/report-theme.entity").ReportTheme[]>;
+    saveReportTheme(req: RequestWithUser, body: {
+        name: string;
+        reportStyle: ReportStyleConfig;
+        reportBranding: {
+            bannerDataUrl?: string | null;
+            footerDataUrl?: string | null;
+            logoDataUrl?: string | null;
+            watermarkDataUrl?: string | null;
+        };
+        onlineResultWatermarkDataUrl: string | null;
+        onlineResultWatermarkText: string | null;
+    }): Promise<import("../entities/report-theme.entity").ReportTheme>;
+    applyReportTheme(req: RequestWithUser, id: string): Promise<{
+        id: string;
+        code: string;
+        name: string;
+        labelSequenceBy: string;
+        sequenceResetBy: string;
+        enableOnlineResults: boolean;
+        onlineResultWatermarkDataUrl: string | null;
+        onlineResultWatermarkText: string | null;
+        printing: {
+            mode: string;
+            receiptPrinterName: string | null;
+            labelsPrinterName: string | null;
+            reportPrinterName: string | null;
+        };
+        reportBranding: {
+            bannerDataUrl: string | null;
+            footerDataUrl: string | null;
+            logoDataUrl: string | null;
+            watermarkDataUrl: string | null;
+        };
+        reportStyle: ReportStyleConfig | null;
+        reportDesignFingerprint: string;
+        uiTestGroups: {
+            id: string;
+            name: string;
+            testIds: string[];
+        }[];
+        referringDoctors: string[];
+        dashboardAnnouncementText: string | null;
+    }>;
+    deleteReportTheme(req: RequestWithUser, id: string): Promise<{
+        success: boolean;
+    }>;
 }
 export {};

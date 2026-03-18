@@ -82,6 +82,7 @@ export interface ReportResultsTableSectionStyle {
   textAlign: ReportTextAlign;
   paddingYpx: number;
   paddingXpx: number;
+  borderRadiusPx: number;
 }
 
 export interface ReportResultsTableFilledSectionStyle extends ReportResultsTableSectionStyle {
@@ -238,6 +239,7 @@ export const DEFAULT_REPORT_STYLE_V1: ReportStyleConfig = {
       textAlign: 'left',
       paddingYpx: 6,
       paddingXpx: 8,
+      borderRadiusPx: 0,
     },
     bodyStyle: {
       textColor: '#333333',
@@ -247,6 +249,7 @@ export const DEFAULT_REPORT_STYLE_V1: ReportStyleConfig = {
       textAlign: 'left',
       paddingYpx: 6,
       paddingXpx: 8,
+      borderRadiusPx: 0,
     },
     panelSectionStyle: {
       backgroundColor: '#F3F6FB',
@@ -278,6 +281,7 @@ export const DEFAULT_REPORT_STYLE_V1: ReportStyleConfig = {
       textAlign: 'left',
       paddingYpx: 8,
       paddingXpx: 12,
+      borderRadiusPx: 0,
     },
     showCategoryRow: true,
     categoryRowStyle: {
@@ -289,6 +293,7 @@ export const DEFAULT_REPORT_STYLE_V1: ReportStyleConfig = {
       textAlign: 'left',
       paddingYpx: 6,
       paddingXpx: 12,
+      borderRadiusPx: 0,
     },
     statusNormalColor: '#0F8A1F',
     statusHighColor: '#D00000',
@@ -389,6 +394,7 @@ const REPORT_RESULTS_SECTION_STYLE_KEYS: Array<keyof ReportResultsTableSectionSt
   'textAlign',
   'paddingYpx',
   'paddingXpx',
+  'borderRadiusPx',
 ];
 const REPORT_RESULTS_FILLED_SECTION_STYLE_KEYS: Array<keyof ReportResultsTableFilledSectionStyle> = [
   'backgroundColor',
@@ -399,6 +405,7 @@ const REPORT_RESULTS_FILLED_SECTION_STYLE_KEYS: Array<keyof ReportResultsTableFi
   'textAlign',
   'paddingYpx',
   'paddingXpx',
+  'borderRadiusPx',
 ];
 const REPORT_PANEL_SECTION_STYLE_KEYS: Array<keyof ReportPanelSectionStyle> = [
   'backgroundColor',
@@ -629,6 +636,7 @@ function validateResultsTableSectionStyle(
     textAlign: assertFromSet(sectionObj.textAlign, TEXT_ALIGN_SET, `${fieldName}.textAlign`),
     paddingYpx: assertIntRange(sectionObj.paddingYpx, 0, 20, `${fieldName}.paddingYpx`),
     paddingXpx: assertIntRange(sectionObj.paddingXpx, 0, 24, `${fieldName}.paddingXpx`),
+    borderRadiusPx: assertIntRange(sectionObj.borderRadiusPx, 0, 24, `${fieldName}.borderRadiusPx`),
   };
 }
 
@@ -647,6 +655,7 @@ function validateResultsTableFilledSectionStyle(
     textAlign: assertFromSet(sectionObj.textAlign, TEXT_ALIGN_SET, `${fieldName}.textAlign`),
     paddingYpx: assertIntRange(sectionObj.paddingYpx, 0, 20, `${fieldName}.paddingYpx`),
     paddingXpx: assertIntRange(sectionObj.paddingXpx, 0, 24, `${fieldName}.paddingXpx`),
+    borderRadiusPx: assertIntRange(sectionObj.borderRadiusPx, 0, 24, `${fieldName}.borderRadiusPx`),
   };
 }
 

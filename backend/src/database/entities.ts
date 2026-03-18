@@ -36,10 +36,12 @@ import { UserDepartmentAssignment } from '../entities/user-department-assignment
 import { UserLabAssignment } from '../entities/user-lab-assignment.entity';
 import { UserShiftAssignment } from '../entities/user-shift-assignment.entity';
 import { User } from '../entities/user.entity';
+import { ReportTheme } from '../entities/report-theme.entity';
 
 export const DATABASE_ENTITIES = [
   AdminLabPortalToken,
   Lab,
+  ReportTheme,
   Shift,
   SubLab,
   SubLabTestPrice,

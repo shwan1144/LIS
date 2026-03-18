@@ -14,6 +14,7 @@ import { UserDepartmentAssignment } from '../entities/user-department-assignment
 import { Department } from '../entities/department.entity';
 import { Lab } from '../entities/lab.entity';
 import { Shift } from '../entities/shift.entity';
+import { ReportTheme } from '../entities/report-theme.entity';
 import { hashPassword } from '../auth/password.util';
 import {
   type ReportStyleConfig,
@@ -67,6 +68,8 @@ export class SettingsService {
     private readonly labRepo: Repository<Lab>,
     @InjectRepository(Shift)
     private readonly shiftRepo: Repository<Shift>,
+    @InjectRepository(ReportTheme)
+    private readonly reportThemeRepo: Repository<ReportTheme>,
     private readonly reportsService: ReportsService,
   ) { }
 
@@ -284,6 +287,64 @@ export class SettingsService {
     }
 
     return settings;
+  }
+
+  async getReportThemes(labId: string) {
+    return this.reportThemeRepo.find({
+      where: { labId },
+      order: { createdAt: 'DESC' },
+    });
+  }
+
+  async saveReportTheme(
+    labId: string,
+    data: {
+      name: string;
+      reportStyle: ReportStyleConfig;
+      reportBranding: ReportBrandingUpdate;
+      onlineResultWatermarkDataUrl: string | null;
+      onlineResultWatermarkText: string | null;
+    },
+  ) {
+    const theme = this.reportThemeRepo.create({
+      labId,
+      name: data.name.trim(),
+      reportStyle: validateAndNormalizeReportStyleConfig(data.reportStyle, 'reportStyle'),
+      reportBranding: this.normalizePreviewReportBranding(data.reportBranding),
+      onlineResultWatermarkDataUrl: this.normalizeReportImageDataUrl(
+        data.onlineResultWatermarkDataUrl,
+        'onlineResultWatermarkDataUrl',
+      ),
+      onlineResultWatermarkText: this.normalizeOnlineResultWatermarkText(
+        data.onlineResultWatermarkText,
+      ),
+    });
+    return this.reportThemeRepo.save(theme);
+  }
+
+  async applyReportTheme(labId: string, themeId: string) {
+    const theme = await this.reportThemeRepo.findOne({ where: { id: themeId, labId } });
+    if (!theme) throw new NotFoundException('Theme not found');
+
+    const lab = await this.labRepo.findOne({ where: { id: labId } });
+    if (!lab) throw new NotFoundException('Lab not found');
+
+    lab.reportStyle = theme.reportStyle;
+    lab.reportBannerDataUrl = theme.reportBranding.bannerDataUrl;
+    lab.reportFooterDataUrl = theme.reportBranding.footerDataUrl;
+    lab.reportLogoDataUrl = theme.reportBranding.logoDataUrl;
+    lab.reportWatermarkDataUrl = theme.reportBranding.watermarkDataUrl;
+    lab.onlineResultWatermarkDataUrl = theme.onlineResultWatermarkDataUrl;
+    lab.onlineResultWatermarkText = theme.onlineResultWatermarkText;
+
+    await this.labRepo.save(lab);
+    return this.getLabSettings(labId);
+  }
+
+  async deleteReportTheme(labId: string, themeId: string) {
+    const theme = await this.reportThemeRepo.findOne({ where: { id: themeId, labId } });
+    if (!theme) throw new NotFoundException('Theme not found');
+    await this.reportThemeRepo.remove(theme);
   }
 
   async generateLabReportPreviewPdf(

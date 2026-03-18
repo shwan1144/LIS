@@ -156,6 +156,7 @@ export interface ReportResultsTableSectionStyleDto {
   textAlign: ReportTextAlign;
   paddingYpx: number;
   paddingXpx: number;
+  borderRadiusPx: number;
 }
 
 export interface ReportResultsTableFilledSectionStyleDto extends ReportResultsTableSectionStyleDto {
@@ -1121,13 +1122,13 @@ export async function searchPatients(params: PatientSearchParams): Promise<Patie
     };
   }
 
-  if (payload && typeof payload === 'object') {
+  if (payload && typeof payload === 'object' && 'items' in payload) {
     const items = Array.isArray(payload.items) ? payload.items : [];
     const page = Number((payload as PatientSearchResult).page ?? params.page ?? 1);
     const size = Number((payload as PatientSearchResult).size ?? params.size ?? 20);
     const total = Number((payload as PatientSearchResult).total ?? items.length);
     const totalPages = Number((payload as PatientSearchResult).totalPages ?? Math.max(1, Math.ceil(total / Math.max(1, size))));
-  return {
+    return {
       items,
       total,
       page,
@@ -1805,8 +1806,8 @@ export async function downloadTestResultsPDF(
     responseType: 'blob',
     headers: options?.correlationId
       ? {
-          'x-report-print-attempt-id': options.correlationId,
-        }
+        'x-report-print-attempt-id': options.correlationId,
+      }
       : undefined,
   });
 
@@ -2607,6 +2608,42 @@ export interface UpdateLabSettingsDto {
 export async function updateLabSettings(data: UpdateLabSettingsDto): Promise<LabSettingsDto> {
   const res = await api.patch<LabSettingsDto>('/settings/lab', data);
   return res.data;
+}
+
+export interface ReportThemeDto {
+  id: string;
+  name: string;
+  reportStyle: ReportStyleDto;
+  reportBranding: ReportBrandingDto;
+  onlineResultWatermarkDataUrl: string | null;
+  onlineResultWatermarkText: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export async function getReportThemes(): Promise<ReportThemeDto[]> {
+  const res = await api.get<ReportThemeDto[]>('/settings/lab/themes');
+  return res.data;
+}
+
+export async function saveReportTheme(data: {
+  name: string;
+  reportStyle: ReportStyleDto;
+  reportBranding: Partial<ReportBrandingDto>;
+  onlineResultWatermarkDataUrl: string | null;
+  onlineResultWatermarkText: string | null;
+}): Promise<ReportThemeDto> {
+  const res = await api.post<ReportThemeDto>('/settings/lab/themes', data);
+  return res.data;
+}
+
+export async function applyReportTheme(id: string): Promise<LabSettingsDto> {
+  const res = await api.post<LabSettingsDto>(`/settings/lab/themes/${id}/apply`);
+  return res.data;
+}
+
+export async function deleteReportTheme(id: string): Promise<void> {
+  await api.delete(`/settings/lab/themes/${id}`);
 }
 
 export interface SubLabOptionDto {

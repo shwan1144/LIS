@@ -75,6 +75,31 @@ let SettingsController = class SettingsController {
     async deleteUser(req, id) {
         throw new common_1.ForbiddenException('Lab user management moved to admin panel. Use admin endpoints.');
     }
+    async getReportThemes(req) {
+        const labId = req.user?.labId;
+        if (!labId)
+            throw new Error('Lab ID not found in token');
+        return this.settingsService.getReportThemes(labId);
+    }
+    async saveReportTheme(req, body) {
+        const labId = req.user?.labId;
+        if (!labId)
+            throw new Error('Lab ID not found in token');
+        return this.settingsService.saveReportTheme(labId, body);
+    }
+    async applyReportTheme(req, id) {
+        const labId = req.user?.labId;
+        if (!labId)
+            throw new Error('Lab ID not found in token');
+        return this.settingsService.applyReportTheme(labId, id);
+    }
+    async deleteReportTheme(req, id) {
+        const labId = req.user?.labId;
+        if (!labId)
+            throw new Error('Lab ID not found in token');
+        await this.settingsService.deleteReportTheme(labId, id);
+        return { success: true };
+    }
 };
 exports.SettingsController = SettingsController;
 __decorate([
@@ -155,6 +180,41 @@ __decorate([
     __metadata("design:paramtypes", [Object, String]),
     __metadata("design:returntype", Promise)
 ], SettingsController.prototype, "deleteUser", null);
+__decorate([
+    (0, common_1.Get)('lab/themes'),
+    (0, roles_decorator_1.Roles)(...lab_role_matrix_1.LAB_ROLE_GROUPS.SETTINGS_LAB_READ),
+    __param(0, (0, common_1.Req)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object]),
+    __metadata("design:returntype", Promise)
+], SettingsController.prototype, "getReportThemes", null);
+__decorate([
+    (0, common_1.Post)('lab/themes'),
+    (0, roles_decorator_1.Roles)(...lab_role_matrix_1.LAB_ROLE_GROUPS.ADMIN),
+    __param(0, (0, common_1.Req)()),
+    __param(1, (0, common_1.Body)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, Object]),
+    __metadata("design:returntype", Promise)
+], SettingsController.prototype, "saveReportTheme", null);
+__decorate([
+    (0, common_1.Post)('lab/themes/:id/apply'),
+    (0, roles_decorator_1.Roles)(...lab_role_matrix_1.LAB_ROLE_GROUPS.ADMIN),
+    __param(0, (0, common_1.Req)()),
+    __param(1, (0, common_1.Param)('id', common_1.ParseUUIDPipe)),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, String]),
+    __metadata("design:returntype", Promise)
+], SettingsController.prototype, "applyReportTheme", null);
+__decorate([
+    (0, common_1.Delete)('lab/themes/:id'),
+    (0, roles_decorator_1.Roles)(...lab_role_matrix_1.LAB_ROLE_GROUPS.ADMIN),
+    __param(0, (0, common_1.Req)()),
+    __param(1, (0, common_1.Param)('id', common_1.ParseUUIDPipe)),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, String]),
+    __metadata("design:returntype", Promise)
+], SettingsController.prototype, "deleteReportTheme", null);
 exports.SettingsController = SettingsController = __decorate([
     (0, common_1.Controller)('settings'),
     (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard, roles_guard_1.RolesGuard),

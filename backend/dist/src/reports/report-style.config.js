@@ -87,6 +87,7 @@ exports.DEFAULT_REPORT_STYLE_V1 = {
             textAlign: 'left',
             paddingYpx: 6,
             paddingXpx: 8,
+            borderRadiusPx: 0,
         },
         bodyStyle: {
             textColor: '#333333',
@@ -96,6 +97,7 @@ exports.DEFAULT_REPORT_STYLE_V1 = {
             textAlign: 'left',
             paddingYpx: 6,
             paddingXpx: 8,
+            borderRadiusPx: 0,
         },
         panelSectionStyle: {
             backgroundColor: '#F3F6FB',
@@ -127,6 +129,7 @@ exports.DEFAULT_REPORT_STYLE_V1 = {
             textAlign: 'left',
             paddingYpx: 8,
             paddingXpx: 12,
+            borderRadiusPx: 0,
         },
         showCategoryRow: true,
         categoryRowStyle: {
@@ -138,6 +141,7 @@ exports.DEFAULT_REPORT_STYLE_V1 = {
             textAlign: 'left',
             paddingYpx: 6,
             paddingXpx: 12,
+            borderRadiusPx: 0,
         },
         statusNormalColor: '#0F8A1F',
         statusHighColor: '#D00000',
@@ -237,6 +241,7 @@ const REPORT_RESULTS_SECTION_STYLE_KEYS = [
     'textAlign',
     'paddingYpx',
     'paddingXpx',
+    'borderRadiusPx',
 ];
 const REPORT_RESULTS_FILLED_SECTION_STYLE_KEYS = [
     'backgroundColor',
@@ -247,6 +252,7 @@ const REPORT_RESULTS_FILLED_SECTION_STYLE_KEYS = [
     'textAlign',
     'paddingYpx',
     'paddingXpx',
+    'borderRadiusPx',
 ];
 const REPORT_PANEL_SECTION_STYLE_KEYS = [
     'backgroundColor',
@@ -460,6 +466,7 @@ function validateResultsTableSectionStyle(value, fieldName) {
         textAlign: assertFromSet(sectionObj.textAlign, TEXT_ALIGN_SET, `${fieldName}.textAlign`),
         paddingYpx: assertIntRange(sectionObj.paddingYpx, 0, 20, `${fieldName}.paddingYpx`),
         paddingXpx: assertIntRange(sectionObj.paddingXpx, 0, 24, `${fieldName}.paddingXpx`),
+        borderRadiusPx: assertIntRange(sectionObj.borderRadiusPx, 0, 24, `${fieldName}.borderRadiusPx`),
     };
 }
 function validateResultsTableFilledSectionStyle(value, fieldName) {
@@ -474,6 +481,7 @@ function validateResultsTableFilledSectionStyle(value, fieldName) {
         textAlign: assertFromSet(sectionObj.textAlign, TEXT_ALIGN_SET, `${fieldName}.textAlign`),
         paddingYpx: assertIntRange(sectionObj.paddingYpx, 0, 20, `${fieldName}.paddingYpx`),
         paddingXpx: assertIntRange(sectionObj.paddingXpx, 0, 24, `${fieldName}.paddingXpx`),
+        borderRadiusPx: assertIntRange(sectionObj.borderRadiusPx, 0, 24, `${fieldName}.borderRadiusPx`),
     };
 }
 function validatePanelSectionStyle(value, fieldName) {

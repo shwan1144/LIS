@@ -941,6 +941,7 @@ export function buildResultsReportHtml(input: {
       --results-header-align: ${reportStyle.resultsTable.headerStyle.textAlign};
       --results-header-padding-y: ${reportStyle.resultsTable.headerStyle.paddingYpx}px;
       --results-header-padding-x: ${reportStyle.resultsTable.headerStyle.paddingXpx}px;
+      --results-header-radius: ${reportStyle.resultsTable.headerStyle.borderRadiusPx}px;
       --results-body-text-color: ${reportStyle.resultsTable.bodyStyle.textColor};
       --results-body-border-color: ${reportStyle.resultsTable.bodyStyle.borderColor};
       --results-body-font-family: ${resultsBodyFontFamily};
@@ -948,12 +949,13 @@ export function buildResultsReportHtml(input: {
       --results-cell-align: ${reportStyle.resultsTable.bodyStyle.textAlign};
       --results-body-padding-y: ${reportStyle.resultsTable.bodyStyle.paddingYpx}px;
       --results-body-padding-x: ${reportStyle.resultsTable.bodyStyle.paddingXpx}px;
+      --results-body-radius: ${reportStyle.resultsTable.bodyStyle.borderRadiusPx}px;
       --results-panel-section-bg: ${reportStyle.resultsTable.panelSectionStyle.backgroundColor};
       --results-panel-section-text-color: ${reportStyle.resultsTable.panelSectionStyle.textColor};
       --results-panel-section-border-color: ${reportStyle.resultsTable.panelSectionStyle.borderColor};
       --results-panel-section-font-family: ${resolveReportFontStackWithArabicFallback(
-        reportStyle.resultsTable.panelSectionStyle.fontFamily,
-      )};
+    reportStyle.resultsTable.panelSectionStyle.fontFamily,
+  )};
       --results-panel-section-font-size: ${reportStyle.resultsTable.panelSectionStyle.fontSizePx}px;
       --results-panel-section-text-align: ${reportStyle.resultsTable.panelSectionStyle.textAlign};
       --results-panel-section-font-weight: ${reportStyle.resultsTable.panelSectionStyle.bold ? 700 : 400};
@@ -993,6 +995,7 @@ export function buildResultsReportHtml(input: {
       --results-dept-text-align: ${reportStyle.resultsTable.departmentRowStyle.textAlign};
       --results-dept-padding-y: ${reportStyle.resultsTable.departmentRowStyle.paddingYpx}px;
       --results-dept-padding-x: ${reportStyle.resultsTable.departmentRowStyle.paddingXpx}px;
+      --results-dept-radius: ${reportStyle.resultsTable.departmentRowStyle.borderRadiusPx}px;
       --results-cat-bg: ${reportStyle.resultsTable.categoryRowStyle.backgroundColor};
       --results-cat-text-color: ${reportStyle.resultsTable.categoryRowStyle.textColor};
       --results-cat-border-color: ${reportStyle.resultsTable.categoryRowStyle.borderColor};
@@ -1001,6 +1004,7 @@ export function buildResultsReportHtml(input: {
       --results-cat-text-align: ${reportStyle.resultsTable.categoryRowStyle.textAlign};
       --results-cat-padding-y: ${reportStyle.resultsTable.categoryRowStyle.paddingYpx}px;
       --results-cat-padding-x: ${reportStyle.resultsTable.categoryRowStyle.paddingXpx}px;
+      --results-cat-radius: ${reportStyle.resultsTable.categoryRowStyle.borderRadiusPx}px;
       --results-status-normal-color: ${reportStyle.resultsTable.statusNormalColor};
       --results-status-high-color: ${reportStyle.resultsTable.statusHighColor};
       --results-status-low-color: ${reportStyle.resultsTable.statusLowColor};
@@ -1271,6 +1275,15 @@ export function buildResultsReportHtml(input: {
       font-family: var(--results-header-font-family);
       font-size: var(--results-header-font-size);
       text-align: var(--results-header-align);
+      border-radius: var(--results-header-radius);
+    }
+    th:first-child {
+      border-top-left-radius: var(--results-header-radius);
+      border-bottom-left-radius: var(--results-header-radius);
+    }
+    th:last-child {
+      border-top-right-radius: var(--results-header-radius);
+      border-bottom-right-radius: var(--results-header-radius);
     }
     td {
       padding: var(--results-body-padding-y) var(--results-body-padding-x);
@@ -1279,6 +1292,15 @@ export function buildResultsReportHtml(input: {
       font-family: var(--results-body-font-family);
       font-size: var(--results-body-font-size);
       text-align: var(--results-cell-align);
+      border-radius: var(--results-body-radius);
+    }
+    tr:not(.dept-row):not(.cat-row) td:first-child {
+      border-top-left-radius: var(--results-body-radius);
+      border-bottom-left-radius: var(--results-body-radius);
+    }
+    tr:not(.dept-row):not(.cat-row) td:last-child {
+      border-top-right-radius: var(--results-body-radius);
+      border-bottom-right-radius: var(--results-body-radius);
     }
     td.col-test { text-align: var(--results-test-align); }
     td.col-test {
@@ -1343,6 +1365,10 @@ export function buildResultsReportHtml(input: {
       font-family: var(--results-dept-font-family);
       font-size: var(--results-dept-font-size);
       text-align: var(--results-dept-text-align);
+      border-radius: var(--results-dept-radius);
+    }
+    .regular-results-table .dept-row td {
+      border-radius: var(--results-dept-radius);
     }
     .regular-results-table .cat-row td {
       background: var(--results-cat-bg);
@@ -1353,6 +1379,10 @@ export function buildResultsReportHtml(input: {
       font-family: var(--results-cat-font-family);
       font-size: var(--results-cat-font-size);
       text-align: var(--results-cat-text-align);
+      border-radius: var(--results-cat-radius);
+    }
+    .regular-results-table .cat-row td {
+      border-radius: var(--results-cat-radius);
     }
     .regular-empty-state {
       background: #222;

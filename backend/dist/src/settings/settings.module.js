@@ -20,6 +20,7 @@ const user_department_assignment_entity_1 = require("../entities/user-department
 const department_entity_1 = require("../entities/department.entity");
 const lab_entity_1 = require("../entities/lab.entity");
 const shift_entity_1 = require("../entities/shift.entity");
+const report_theme_entity_1 = require("../entities/report-theme.entity");
 let SettingsModule = class SettingsModule {
 };
 exports.SettingsModule = SettingsModule;
@@ -36,6 +37,7 @@ exports.SettingsModule = SettingsModule = __decorate([
                 department_entity_1.Department,
                 lab_entity_1.Lab,
                 shift_entity_1.Shift,
+                report_theme_entity_1.ReportTheme,
             ]),
         ],
         providers: [settings_service_1.SettingsService],

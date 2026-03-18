@@ -41,6 +41,7 @@ export interface ReportResultsTableSectionStyle {
     textAlign: ReportTextAlign;
     paddingYpx: number;
     paddingXpx: number;
+    borderRadiusPx: number;
 }
 export interface ReportResultsTableFilledSectionStyle extends ReportResultsTableSectionStyle {
     backgroundColor: string;

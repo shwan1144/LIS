@@ -11,6 +11,7 @@ import { UserDepartmentAssignment } from '../entities/user-department-assignment
 import { Department } from '../entities/department.entity';
 import { Lab } from '../entities/lab.entity';
 import { Shift } from '../entities/shift.entity';
+import { ReportTheme } from '../entities/report-theme.entity';
 
 @Module({
   imports: [
@@ -24,6 +25,7 @@ import { Shift } from '../entities/shift.entity';
       Department,
       Lab,
       Shift,
+      ReportTheme,
     ]),
   ],
   providers: [SettingsService],

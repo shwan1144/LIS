@@ -183,4 +183,58 @@ export class SettingsController {
       'Lab user management moved to admin panel. Use admin endpoints.',
     );
   }
+
+  @Get('lab/themes')
+  @Roles(...LAB_ROLE_GROUPS.SETTINGS_LAB_READ)
+  async getReportThemes(@Req() req: RequestWithUser) {
+    const labId = req.user?.labId;
+    if (!labId) throw new Error('Lab ID not found in token');
+    return this.settingsService.getReportThemes(labId);
+  }
+
+  @Post('lab/themes')
+  @Roles(...LAB_ROLE_GROUPS.ADMIN)
+  async saveReportTheme(
+    @Req() req: RequestWithUser,
+    @Body()
+    body: {
+      name: string;
+      reportStyle: ReportStyleConfig;
+      reportBranding: {
+        bannerDataUrl?: string | null;
+        footerDataUrl?: string | null;
+        logoDataUrl?: string | null;
+        watermarkDataUrl?: string | null;
+      };
+      onlineResultWatermarkDataUrl: string | null;
+      onlineResultWatermarkText: string | null;
+    },
+  ) {
+    const labId = req.user?.labId;
+    if (!labId) throw new Error('Lab ID not found in token');
+    return this.settingsService.saveReportTheme(labId, body);
+  }
+
+  @Post('lab/themes/:id/apply')
+  @Roles(...LAB_ROLE_GROUPS.ADMIN)
+  async applyReportTheme(
+    @Req() req: RequestWithUser,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
+    const labId = req.user?.labId;
+    if (!labId) throw new Error('Lab ID not found in token');
+    return this.settingsService.applyReportTheme(labId, id);
+  }
+
+  @Delete('lab/themes/:id')
+  @Roles(...LAB_ROLE_GROUPS.ADMIN)
+  async deleteReportTheme(
+    @Req() req: RequestWithUser,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
+    const labId = req.user?.labId;
+    if (!labId) throw new Error('Lab ID not found in token');
+    await this.settingsService.deleteReportTheme(labId, id);
+    return { success: true };
+  }
 }

@@ -30,9 +30,11 @@ const user_department_assignment_entity_1 = require("../entities/user-department
 const user_lab_assignment_entity_1 = require("../entities/user-lab-assignment.entity");
 const user_shift_assignment_entity_1 = require("../entities/user-shift-assignment.entity");
 const user_entity_1 = require("../entities/user.entity");
+const report_theme_entity_1 = require("../entities/report-theme.entity");
 exports.DATABASE_ENTITIES = [
     admin_lab_portal_token_entity_1.AdminLabPortalToken,
     lab_entity_1.Lab,
+    report_theme_entity_1.ReportTheme,
     shift_entity_1.Shift,
     sub_lab_entity_1.SubLab,
     sub_lab_test_price_entity_1.SubLabTestPrice,

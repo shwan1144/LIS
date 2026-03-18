@@ -23,6 +23,7 @@ const user_department_assignment_entity_1 = require("../entities/user-department
 const department_entity_1 = require("../entities/department.entity");
 const lab_entity_1 = require("../entities/lab.entity");
 const shift_entity_1 = require("../entities/shift.entity");
+const report_theme_entity_1 = require("../entities/report-theme.entity");
 const password_util_1 = require("../auth/password.util");
 const report_style_config_1 = require("../reports/report-style.config");
 const report_design_fingerprint_util_1 = require("../reports/report-design-fingerprint.util");
@@ -37,7 +38,7 @@ const MAX_REFERRING_DOCTORS_COUNT = 500;
 const MAX_DASHBOARD_ANNOUNCEMENT_TEXT_LENGTH = 255;
 const UUID_V4_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 let SettingsService = class SettingsService {
-    constructor(userRepo, labAssignmentRepo, shiftAssignmentRepo, userDeptRepo, departmentRepo, labRepo, shiftRepo, reportsService) {
+    constructor(userRepo, labAssignmentRepo, shiftAssignmentRepo, userDeptRepo, departmentRepo, labRepo, shiftRepo, reportThemeRepo, reportsService) {
         this.userRepo = userRepo;
         this.labAssignmentRepo = labAssignmentRepo;
         this.shiftAssignmentRepo = shiftAssignmentRepo;
@@ -45,6 +46,7 @@ let SettingsService = class SettingsService {
         this.departmentRepo = departmentRepo;
         this.labRepo = labRepo;
         this.shiftRepo = shiftRepo;
+        this.reportThemeRepo = reportThemeRepo;
         this.reportsService = reportsService;
     }
     getRoles() {
@@ -210,6 +212,46 @@ let SettingsService = class SettingsService {
             }
         }
         return settings;
+    }
+    async getReportThemes(labId) {
+        return this.reportThemeRepo.find({
+            where: { labId },
+            order: { createdAt: 'DESC' },
+        });
+    }
+    async saveReportTheme(labId, data) {
+        const theme = this.reportThemeRepo.create({
+            labId,
+            name: data.name.trim(),
+            reportStyle: (0, report_style_config_1.validateAndNormalizeReportStyleConfig)(data.reportStyle, 'reportStyle'),
+            reportBranding: this.normalizePreviewReportBranding(data.reportBranding),
+            onlineResultWatermarkDataUrl: this.normalizeReportImageDataUrl(data.onlineResultWatermarkDataUrl, 'onlineResultWatermarkDataUrl'),
+            onlineResultWatermarkText: this.normalizeOnlineResultWatermarkText(data.onlineResultWatermarkText),
+        });
+        return this.reportThemeRepo.save(theme);
+    }
+    async applyReportTheme(labId, themeId) {
+        const theme = await this.reportThemeRepo.findOne({ where: { id: themeId, labId } });
+        if (!theme)
+            throw new common_1.NotFoundException('Theme not found');
+        const lab = await this.labRepo.findOne({ where: { id: labId } });
+        if (!lab)
+            throw new common_1.NotFoundException('Lab not found');
+        lab.reportStyle = theme.reportStyle;
+        lab.reportBannerDataUrl = theme.reportBranding.bannerDataUrl;
+        lab.reportFooterDataUrl = theme.reportBranding.footerDataUrl;
+        lab.reportLogoDataUrl = theme.reportBranding.logoDataUrl;
+        lab.reportWatermarkDataUrl = theme.reportBranding.watermarkDataUrl;
+        lab.onlineResultWatermarkDataUrl = theme.onlineResultWatermarkDataUrl;
+        lab.onlineResultWatermarkText = theme.onlineResultWatermarkText;
+        await this.labRepo.save(lab);
+        return this.getLabSettings(labId);
+    }
+    async deleteReportTheme(labId, themeId) {
+        const theme = await this.reportThemeRepo.findOne({ where: { id: themeId, labId } });
+        if (!theme)
+            throw new common_1.NotFoundException('Theme not found');
+        await this.reportThemeRepo.remove(theme);
     }
     async generateLabReportPreviewPdf(labId, payload) {
         const orderId = this.normalizeUuidV4(payload.orderId, 'orderId');
@@ -664,7 +706,9 @@ exports.SettingsService = SettingsService = __decorate([
     __param(4, (0, typeorm_1.InjectRepository)(department_entity_1.Department)),
     __param(5, (0, typeorm_1.InjectRepository)(lab_entity_1.Lab)),
     __param(6, (0, typeorm_1.InjectRepository)(shift_entity_1.Shift)),
+    __param(7, (0, typeorm_1.InjectRepository)(report_theme_entity_1.ReportTheme)),
     __metadata("design:paramtypes", [typeorm_2.Repository,
+        typeorm_2.Repository,
         typeorm_2.Repository,
         typeorm_2.Repository,
         typeorm_2.Repository,

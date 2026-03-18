@@ -23,6 +23,10 @@ import {
   previewLabReportPdf,
   searchOrdersHistory,
   updateLabSettings,
+  getReportThemes,
+  saveReportTheme,
+  applyReportTheme,
+  type ReportThemeDto,
   type OrderHistoryItemDto,
   type ReportColumnStyleDto,
   type ReportFontFamilyDto,
@@ -187,12 +191,12 @@ const RESULTS_COLUMN_CONTROLS: Array<{
   key: ResultsColumnKey;
   label: string;
 }> = [
-  { key: 'testColumn', label: 'Test Column' },
-  { key: 'resultColumn', label: 'Result Column' },
-  { key: 'unitColumn', label: 'Unit Column' },
-  { key: 'statusColumn', label: 'Status Column' },
-  { key: 'referenceColumn', label: 'Reference Column' },
-];
+    { key: 'testColumn', label: 'Test Column' },
+    { key: 'resultColumn', label: 'Result Column' },
+    { key: 'unitColumn', label: 'Unit Column' },
+    { key: 'statusColumn', label: 'Status Column' },
+    { key: 'referenceColumn', label: 'Reference Column' },
+  ];
 
 function resolvePreviewFontStack(fontFamily: ReportFontFamilyDto): string {
   return `${REPORT_FONT_STACKS[fontFamily]}, ${REPORT_ARABIC_FALLBACK_STACK}`;
@@ -273,6 +277,7 @@ function defaultReportStyle(): ReportStyleDto {
         textAlign: 'left',
         paddingYpx: 6,
         paddingXpx: 8,
+        borderRadiusPx: 0,
       },
       bodyStyle: {
         textColor: '#333333',
@@ -282,6 +287,7 @@ function defaultReportStyle(): ReportStyleDto {
         textAlign: 'left',
         paddingYpx: 6,
         paddingXpx: 8,
+        borderRadiusPx: 0,
       },
       rowStripeEnabled: false,
       rowStripeColor: '#F9FBFF',
@@ -298,6 +304,7 @@ function defaultReportStyle(): ReportStyleDto {
         textAlign: 'left',
         paddingYpx: 8,
         paddingXpx: 12,
+        borderRadiusPx: 0,
       },
       showCategoryRow: true,
       categoryRowStyle: {
@@ -309,6 +316,7 @@ function defaultReportStyle(): ReportStyleDto {
         textAlign: 'left',
         paddingYpx: 6,
         paddingXpx: 12,
+        borderRadiusPx: 0,
       },
       panelSectionStyle: {
         backgroundColor: '#F3F6FB',
@@ -707,6 +715,16 @@ function ResultsSectionStyleControlCard(props: {
             disabled={props.disabled}
           />
         </div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <Text>Radius</Text>
+          <InputNumber
+            min={0}
+            max={24}
+            value={props.style.borderRadiusPx}
+            onChange={(value) => props.onChange('borderRadiusPx', Number(value ?? 0))}
+            disabled={props.disabled}
+          />
+        </div>
       </Space>
     </Card>
   );
@@ -898,7 +916,21 @@ export function ReportDesignStudio() {
   const [cultureOnlyPreview, setCultureOnlyPreview] = useState(false);
   const [fullPreviewPdfUrl, setFullPreviewPdfUrl] = useState<string | null>(null);
   const [fullPreviewError, setFullPreviewError] = useState<string | null>(null);
+  const [themes, setThemes] = useState<ReportThemeDto[]>([]);
+  const [loadingThemes, setLoadingThemes] = useState(false);
   const orderSearchTimerRef = useRef<number | null>(null);
+
+  const fetchThemes = async () => {
+    setLoadingThemes(true);
+    try {
+      const data = await getReportThemes();
+      setThemes(data);
+    } catch (error) {
+      message.error('Failed to load report themes');
+    } finally {
+      setLoadingThemes(false);
+    }
+  };
 
   useEffect(() => {
     const load = async () => {
@@ -927,6 +959,7 @@ export function ReportDesignStudio() {
       }
     };
     void load();
+    void fetchThemes();
   }, []);
 
   useEffect(() => {
@@ -957,7 +990,7 @@ export function ReportDesignStudio() {
               orderNumber: order.orderNumber,
               registeredAt: order.registeredAt,
               testsCount: order.testsCount,
-              patientName: order.patient?.name ?? null,
+              patientName: order.patient?.fullName ?? null,
             })),
           );
         } catch {
@@ -1421,6 +1454,74 @@ export function ReportDesignStudio() {
     }
   };
 
+  const handleSaveAsTheme = () => {
+    let themeNameInput = '';
+    const modal = (
+      <Space direction="vertical" style={{ width: '100%' }}>
+        <Text>Give this design theme a name:</Text>
+        <Input
+          placeholder="Theme name (e.g. Elegant Blue, Compact Bordered...)"
+          autoFocus
+          onChange={(e) => themeNameInput = e.target.value}
+        />
+      </Space>
+    );
+
+    import('antd').then(({ Modal }) => {
+      Modal.confirm({
+        title: 'Save Design as Theme',
+        content: modal,
+        icon: null,
+        onOk: async () => {
+          const name = themeNameInput.trim();
+          if (!name) {
+            message.error('Theme name is required');
+            throw new Error('Name required');
+          }
+          try {
+            await saveReportTheme({
+              name,
+              reportStyle,
+              reportBranding: branding,
+              onlineResultWatermarkDataUrl,
+              onlineResultWatermarkText,
+            });
+            message.success(`Theme "${name}" saved!`);
+            void fetchThemes();
+          } catch (error) {
+            message.error(getErrorMessage(error) || 'Failed to save theme');
+          }
+        },
+      });
+    });
+  };
+
+  const handleApplyTheme = async (theme: ReportThemeDto) => {
+    try {
+      const data = await applyReportTheme(theme.id);
+      const nextBranding = data.reportBranding || emptyBranding();
+      const nextReportStyle = data.reportStyle || defaultReportStyle();
+      const nextWatermarkDataUrl = data.onlineResultWatermarkDataUrl || null;
+      const nextWatermarkText = data.onlineResultWatermarkText || '';
+
+      setBranding(nextBranding);
+      setReportStyle(cloneReportStyle(nextReportStyle));
+      setOnlineResultWatermarkDataUrl(nextWatermarkDataUrl);
+      setOnlineResultWatermarkText(nextWatermarkText);
+      setSavedSnapshot({
+        branding: nextBranding,
+        reportStyle: cloneReportStyle(nextReportStyle),
+        onlineResultWatermarkDataUrl: nextWatermarkDataUrl,
+        onlineResultWatermarkText: nextWatermarkText,
+        reportDesignFingerprint: data.reportDesignFingerprint,
+      });
+      message.success(`Applied theme "${theme.name}"`);
+    } catch (error) {
+      message.error(getErrorMessage(error) || 'Failed to apply theme');
+    }
+  };
+
+
   const previewHeaderCellStyle: CSSProperties = {
     border: `1px solid ${reportStyle.resultsTable.headerStyle.borderColor}`,
     padding: `${reportStyle.resultsTable.headerStyle.paddingYpx}px ${reportStyle.resultsTable.headerStyle.paddingXpx}px`,
@@ -1430,6 +1531,7 @@ export function ReportDesignStudio() {
     fontWeight: 700,
     fontFamily: resolvePreviewFontStack(reportStyle.resultsTable.headerStyle.fontFamily),
     textAlign: reportStyle.resultsTable.headerStyle.textAlign,
+    borderRadius: reportStyle.resultsTable.headerStyle.borderRadiusPx,
   };
   const previewBodyCellStyle: CSSProperties = {
     border: `1px solid ${reportStyle.resultsTable.bodyStyle.borderColor}`,
@@ -1438,6 +1540,7 @@ export function ReportDesignStudio() {
     fontSize: reportStyle.resultsTable.bodyStyle.fontSizePx,
     fontFamily: resolvePreviewFontStack(reportStyle.resultsTable.bodyStyle.fontFamily),
     textAlign: reportStyle.resultsTable.bodyStyle.textAlign,
+    borderRadius: reportStyle.resultsTable.bodyStyle.borderRadiusPx,
   };
   const previewPanelSectionCellStyle: CSSProperties = {
     padding: 0,
@@ -1589,7 +1692,7 @@ export function ReportDesignStudio() {
     status: reportStyle.resultsTable.statusColumn,
     reference: reportStyle.resultsTable.referenceColumn,
   } as const;
-  const getPreviewHeaderStyle = (column: keyof typeof previewColumnStyles, width: string): CSSProperties => ({
+  const getPreviewHeaderStyle = (_column: keyof typeof previewColumnStyles, width: string): CSSProperties => ({
     ...previewHeaderCellStyle,
     width,
   });
@@ -1615,14 +1718,14 @@ export function ReportDesignStudio() {
   const livePreviewPaperStyle: CSSProperties =
     livePreviewZoom === 'fit'
       ? {
-          width: '100%',
-          maxWidth: PREVIEW_PAPER_BASE_WIDTH_PX,
-          minHeight: previewPaperMinHeightPx,
-        }
+        width: '100%',
+        maxWidth: PREVIEW_PAPER_BASE_WIDTH_PX,
+        minHeight: previewPaperMinHeightPx,
+      }
       : {
-          width: Math.round(PREVIEW_PAPER_BASE_WIDTH_PX * previewPaperScale),
-          minHeight: previewPaperMinHeightPx,
-        };
+        width: Math.round(PREVIEW_PAPER_BASE_WIDTH_PX * previewPaperScale),
+        minHeight: previewPaperMinHeightPx,
+      };
   const scrollToDesignerSection = (sectionId: DesignerSectionId) => {
     const scroller = controlsScrollRef.current;
     const sectionNode = designerSectionRefs.current[sectionId];
@@ -1671,7 +1774,7 @@ export function ReportDesignStudio() {
           <div className="admin-report-design-preview-toolbar-group">
             <Text type="secondary">Zoom</Text>
             <Segmented
-              options={LIVE_PREVIEW_ZOOM_OPTIONS}
+              options={LIVE_PREVIEW_ZOOM_OPTIONS as any}
               value={livePreviewZoom}
               onChange={(value) =>
                 setLivePreviewZoom(
@@ -1784,7 +1887,8 @@ export function ReportDesignStudio() {
                   <table
                     style={{
                       width: '100%',
-                      borderCollapse: 'collapse',
+                      borderCollapse: 'separate',
+                      borderSpacing: 0,
                       tableLayout: 'fixed',
                       fontFamily: resolvePreviewFontStack(reportStyle.resultsTable.bodyStyle.fontFamily),
                     }}
@@ -1818,6 +1922,7 @@ export function ReportDesignStudio() {
                                 reportStyle.resultsTable.departmentRowStyle.fontFamily,
                               ),
                               fontWeight: 800,
+                              borderRadius: reportStyle.resultsTable.departmentRowStyle.borderRadiusPx,
                             }}
                           >
                             Chemistry
@@ -1839,6 +1944,7 @@ export function ReportDesignStudio() {
                                 reportStyle.resultsTable.categoryRowStyle.fontFamily,
                               ),
                               fontWeight: 700,
+                              borderRadius: reportStyle.resultsTable.categoryRowStyle.borderRadiusPx,
                             }}
                           >
                             Routine
@@ -2292,6 +2398,33 @@ export function ReportDesignStudio() {
             {hasChanges ? 'Unsaved changes' : 'All changes saved'}
           </Tag>
         </Space>
+        <Space style={{ marginLeft: 'auto' }}>
+          <Select
+            placeholder="Apply Theme"
+            style={{ width: 180 }}
+            loading={loadingThemes}
+            onChange={(id) => {
+              const theme = themes.find((t) => t.id === id);
+              if (theme) void handleApplyTheme(theme);
+            }}
+            options={themes.map((t) => ({ label: t.name, value: t.id }))}
+            allowClear
+          />
+          <Button
+            onClick={handleSaveAsTheme}
+            disabled={!canMutate}
+          >
+            Save as Theme
+          </Button>
+          <Button
+            type="primary"
+            onClick={() => void handleSave()}
+            loading={saving}
+            disabled={!canMutate}
+          >
+            Save current design
+          </Button>
+        </Space>
       </div>
 
       <Alert
@@ -2307,101 +2440,101 @@ export function ReportDesignStudio() {
       />
 
       <Tabs
-            className="admin-report-design-tabs"
-            defaultActiveKey="designer"
-            activeKey={activeTabKey}
-            onChange={setActiveTabKey}
-            items={[
-              {
-                key: 'branding-assets',
-                label: 'Branding Assets',
-                children: (
-                  <Row gutter={[16, 16]}>
-                    {IMAGE_SETTINGS.map((item) => {
-                      const currentImage = branding[item.key];
-                      return (
-                        <Col key={item.key} xs={24} lg={12}>
-                          <Card title={item.title} loading={loading} className="admin-report-design-image-card">
-                            <Space size={8} wrap style={{ marginBottom: 8 }}>
-                              <Tag color="blue">Recommended: {item.recommendedSize}</Tag>
-                              <Tag>Max: {formatMegabytes(item.maxBytes)} MB</Tag>
-                            </Space>
-                            <Text type="secondary" style={{ display: 'block', marginBottom: 12 }}>
-                              {item.note}
-                            </Text>
+        className="admin-report-design-tabs"
+        defaultActiveKey="designer"
+        activeKey={activeTabKey}
+        onChange={setActiveTabKey}
+        items={[
+          {
+            key: 'branding-assets',
+            label: 'Branding Assets',
+            children: (
+              <Row gutter={[16, 16]}>
+                {IMAGE_SETTINGS.map((item) => {
+                  const currentImage = branding[item.key];
+                  return (
+                    <Col key={item.key} xs={24} lg={12}>
+                      <Card title={item.title} loading={loading} className="admin-report-design-image-card">
+                        <Space size={8} wrap style={{ marginBottom: 8 }}>
+                          <Tag color="blue">Recommended: {item.recommendedSize}</Tag>
+                          <Tag>Max: {formatMegabytes(item.maxBytes)} MB</Tag>
+                        </Space>
+                        <Text type="secondary" style={{ display: 'block', marginBottom: 12 }}>
+                          {item.note}
+                        </Text>
 
-                            <div className="admin-report-design-image-preview">
-                              {currentImage ? (
-                                <img
-                                  src={currentImage}
-                                  alt={item.title}
-                                  style={{ maxWidth: '100%', maxHeight: 180, objectFit: 'contain' }}
-                                />
-                              ) : (
-                                <Text type="secondary">No image uploaded</Text>
-                              )}
-                            </div>
+                        <div className="admin-report-design-image-preview">
+                          {currentImage ? (
+                            <img
+                              src={currentImage}
+                              alt={item.title}
+                              style={{ maxWidth: '100%', maxHeight: 180, objectFit: 'contain' }}
+                            />
+                          ) : (
+                            <Text type="secondary">No image uploaded</Text>
+                          )}
+                        </div>
 
-                            <Space wrap>
-                              <input
-                                ref={(el) => {
-                                  fileInputRefs.current[item.key] = el;
-                                }}
-                                type="file"
-                                accept="image/png,image/jpeg,image/jpg,image/webp"
-                                onChange={(event) => void handleFileSelect(item.key, item.maxBytes, event)}
-                                style={{ display: 'none' }}
-                              />
-                              <Button
-                                loading={uploadingKey === item.key}
-                                onClick={() => fileInputRefs.current[item.key]?.click()}
-                                disabled={!canMutate}
-                              >
-                                {currentImage ? 'Replace image' : 'Upload image'}
-                              </Button>
-                              <Button
-                                danger
-                                onClick={() => setImage(item.key, null)}
-                                disabled={!currentImage || !canMutate}
-                              >
-                                Clear
-                              </Button>
-                            </Space>
-                          </Card>
-                        </Col>
-                      );
-                    })}
-                  </Row>
-                ),
-              },
-              {
-                key: 'designer',
-                label: 'Designer',
-                children: (
-                  <Row gutter={[0, 16]} className="admin-report-design-workspace">
-                    <Col xs={24} xl={10} className="admin-report-design-controls-pane">
-                      <Card title="Designer Controls" loading={loading} className="admin-report-design-style-controls">
-                        <div className="admin-report-design-controls-shell">
-                          <div className="admin-report-design-controls-nav">
-                            <div className="admin-report-design-section-nav">
-                              {DESIGNER_SECTION_OPTIONS.map((section) => (
-                                <button
-                                  key={section.id}
-                                  type="button"
-                                  className={
-                                    section.id === activeDesignerSection
-                                      ? 'admin-report-design-section-nav-chip is-active'
-                                      : 'admin-report-design-section-nav-chip'
-                                  }
-                                  onClick={() => scrollToDesignerSection(section.id)}
-                                >
-                                  {section.label}
-                                </button>
-                              ))}
-                            </div>
-                          </div>
-                          <div ref={controlsScrollRef} className="admin-report-design-controls-scroll">
-                            <Row gutter={[16, 16]}>
+                        <Space wrap>
+                          <input
+                            ref={(el) => {
+                              fileInputRefs.current[item.key] = el;
+                            }}
+                            type="file"
+                            accept="image/png,image/jpeg,image/jpg,image/webp"
+                            onChange={(event) => void handleFileSelect(item.key, item.maxBytes, event)}
+                            style={{ display: 'none' }}
+                          />
+                          <Button
+                            loading={uploadingKey === item.key}
+                            onClick={() => fileInputRefs.current[item.key]?.click()}
+                            disabled={!canMutate}
+                          >
+                            {currentImage ? 'Replace image' : 'Upload image'}
+                          </Button>
+                          <Button
+                            danger
+                            onClick={() => setImage(item.key, null)}
+                            disabled={!currentImage || !canMutate}
+                          >
+                            Clear
+                          </Button>
+                        </Space>
+                      </Card>
+                    </Col>
+                  );
+                })}
+              </Row>
+            ),
+          },
+          {
+            key: 'designer',
+            label: 'Designer',
+            children: (
+              <Row gutter={[0, 16]} className="admin-report-design-workspace">
+                <Col xs={24} xl={10} className="admin-report-design-controls-pane">
+                  <Card title="Designer Controls" loading={loading} className="admin-report-design-style-controls">
+                    <div className="admin-report-design-controls-shell">
+                      <div className="admin-report-design-controls-nav">
+                        <div className="admin-report-design-section-nav">
+                          {DESIGNER_SECTION_OPTIONS.map((section) => (
+                            <button
+                              key={section.id}
+                              type="button"
+                              className={
+                                section.id === activeDesignerSection
+                                  ? 'admin-report-design-section-nav-chip is-active'
+                                  : 'admin-report-design-section-nav-chip'
+                              }
+                              onClick={() => scrollToDesignerSection(section.id)}
+                            >
+                              {section.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                      <div ref={controlsScrollRef} className="admin-report-design-controls-scroll">
+                        <Row gutter={[16, 16]}>
                           <Col xs={24}>
                             <div
                               ref={(node) => {
@@ -2513,82 +2646,82 @@ export function ReportDesignStudio() {
                               className="admin-report-design-section-block admin-report-design-section-block--compact"
                             >
                               <SectionSummaryBar items={sectionSummaries['report-title']} />
-                            <Card size="small" title="Report Title" className="admin-report-design-compact-card">
-                              <Space direction="vertical" style={COMPACT_CONTROL_STACK_STYLE} size={12}>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
-                                  <Text>Title Text</Text>
-                                  <Input
-                                    style={{ width: 240 }}
-                                    value={reportStyle.reportTitle.text}
-                                    onChange={(event) => updateReportTitleStyle('text', event.target.value)}
+                              <Card size="small" title="Report Title" className="admin-report-design-compact-card">
+                                <Space direction="vertical" style={COMPACT_CONTROL_STACK_STYLE} size={12}>
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
+                                    <Text>Title Text</Text>
+                                    <Input
+                                      style={{ width: 240 }}
+                                      value={reportStyle.reportTitle.text}
+                                      onChange={(event) => updateReportTitleStyle('text', event.target.value)}
+                                      disabled={!canMutate}
+                                      maxLength={80}
+                                    />
+                                  </div>
+                                  <StyleColorControl
+                                    label="Title Color"
+                                    value={reportStyle.reportTitle.textColor}
                                     disabled={!canMutate}
-                                    maxLength={80}
+                                    onChange={(value) => updateReportTitleStyle('textColor', value)}
                                   />
-                                </div>
-                                <StyleColorControl
-                                  label="Title Color"
-                                  value={reportStyle.reportTitle.textColor}
-                                  disabled={!canMutate}
-                                  onChange={(value) => updateReportTitleStyle('textColor', value)}
-                                />
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                  <Text>Font Size</Text>
-                                  <InputNumber
-                                    min={14}
-                                    max={28}
-                                    value={reportStyle.reportTitle.fontSizePx}
-                                    onChange={(value) => updateReportTitleStyle('fontSizePx', Number(value ?? 20))}
-                                    disabled={!canMutate}
-                                  />
-                                </div>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                  <Text>Alignment</Text>
-                                  <Select
-                                    style={{ width: 120 }}
-                                    value={reportStyle.reportTitle.textAlign}
-                                    options={ALIGN_OPTIONS as unknown as { label: string; value: string }[]}
-                                    onChange={(value) => updateReportTitleStyle('textAlign', value)}
-                                    disabled={!canMutate}
-                                  />
-                                </div>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                  <Text>Bold</Text>
-                                  <Switch
-                                    checked={reportStyle.reportTitle.bold}
-                                    onChange={(value) => updateReportTitleStyle('bold', value)}
-                                    disabled={!canMutate}
-                                  />
-                                </div>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                  <Text>Underline</Text>
-                                  <Switch
-                                    checked={reportStyle.reportTitle.underline}
-                                    onChange={(value) => updateReportTitleStyle('underline', value)}
-                                    disabled={!canMutate}
-                                  />
-                                </div>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                  <Text>Padding Y</Text>
-                                  <InputNumber
-                                    min={0}
-                                    max={20}
-                                    value={reportStyle.reportTitle.paddingYpx}
-                                    onChange={(value) => updateReportTitleStyle('paddingYpx', Number(value ?? 0))}
-                                    disabled={!canMutate}
-                                  />
-                                </div>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                  <Text>Padding X</Text>
-                                  <InputNumber
-                                    min={0}
-                                    max={24}
-                                    value={reportStyle.reportTitle.paddingXpx}
-                                    onChange={(value) => updateReportTitleStyle('paddingXpx', Number(value ?? 0))}
-                                    disabled={!canMutate}
-                                  />
-                                </div>
-                              </Space>
-                            </Card>
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                    <Text>Font Size</Text>
+                                    <InputNumber
+                                      min={14}
+                                      max={28}
+                                      value={reportStyle.reportTitle.fontSizePx}
+                                      onChange={(value) => updateReportTitleStyle('fontSizePx', Number(value ?? 20))}
+                                      disabled={!canMutate}
+                                    />
+                                  </div>
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                    <Text>Alignment</Text>
+                                    <Select
+                                      style={{ width: 120 }}
+                                      value={reportStyle.reportTitle.textAlign}
+                                      options={ALIGN_OPTIONS as unknown as { label: string; value: string }[]}
+                                      onChange={(value) => updateReportTitleStyle('textAlign', value)}
+                                      disabled={!canMutate}
+                                    />
+                                  </div>
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                    <Text>Bold</Text>
+                                    <Switch
+                                      checked={reportStyle.reportTitle.bold}
+                                      onChange={(value) => updateReportTitleStyle('bold', value)}
+                                      disabled={!canMutate}
+                                    />
+                                  </div>
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                    <Text>Underline</Text>
+                                    <Switch
+                                      checked={reportStyle.reportTitle.underline}
+                                      onChange={(value) => updateReportTitleStyle('underline', value)}
+                                      disabled={!canMutate}
+                                    />
+                                  </div>
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                    <Text>Padding Y</Text>
+                                    <InputNumber
+                                      min={0}
+                                      max={20}
+                                      value={reportStyle.reportTitle.paddingYpx}
+                                      onChange={(value) => updateReportTitleStyle('paddingYpx', Number(value ?? 0))}
+                                      disabled={!canMutate}
+                                    />
+                                  </div>
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                    <Text>Padding X</Text>
+                                    <InputNumber
+                                      min={0}
+                                      max={24}
+                                      value={reportStyle.reportTitle.paddingXpx}
+                                      onChange={(value) => updateReportTitleStyle('paddingXpx', Number(value ?? 0))}
+                                      disabled={!canMutate}
+                                    />
+                                  </div>
+                                </Space>
+                              </Card>
                             </div>
                           </Col>
 
@@ -2600,70 +2733,70 @@ export function ReportDesignStudio() {
                               className="admin-report-design-section-block admin-report-design-section-block--compact"
                             >
                               <SectionSummaryBar items={sectionSummaries['page-layout']} />
-                            <Card size="small" title="Page Layout (mm)" className="admin-report-design-compact-card">
-                              <Space direction="vertical" style={COMPACT_CONTROL_STACK_STYLE} size={12}>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                  <Text>Page Margin Top</Text>
-                                  <InputNumber
-                                    min={0}
-                                    max={20}
-                                    value={reportStyle.pageLayout.pageMarginTopMm}
-                                    onChange={(value) =>
-                                      updatePageLayoutStyle('pageMarginTopMm', Number(value ?? 3))
-                                    }
-                                    disabled={!canMutate}
-                                  />
-                                </div>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                  <Text>Page Margin Right</Text>
-                                  <InputNumber
-                                    min={0}
-                                    max={20}
-                                    value={reportStyle.pageLayout.pageMarginRightMm}
-                                    onChange={(value) =>
-                                      updatePageLayoutStyle('pageMarginRightMm', Number(value ?? 3))
-                                    }
-                                    disabled={!canMutate}
-                                  />
-                                </div>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                  <Text>Page Margin Bottom</Text>
-                                  <InputNumber
-                                    min={0}
-                                    max={20}
-                                    value={reportStyle.pageLayout.pageMarginBottomMm}
-                                    onChange={(value) =>
-                                      updatePageLayoutStyle('pageMarginBottomMm', Number(value ?? 3))
-                                    }
-                                    disabled={!canMutate}
-                                  />
-                                </div>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                  <Text>Page Margin Left</Text>
-                                  <InputNumber
-                                    min={0}
-                                    max={20}
-                                    value={reportStyle.pageLayout.pageMarginLeftMm}
-                                    onChange={(value) =>
-                                      updatePageLayoutStyle('pageMarginLeftMm', Number(value ?? 3))
-                                    }
-                                    disabled={!canMutate}
-                                  />
-                                </div>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                  <Text>Content Margin X</Text>
-                                  <InputNumber
-                                    min={0}
-                                    max={20}
-                                    value={reportStyle.pageLayout.contentMarginXMm}
-                                    onChange={(value) =>
-                                      updatePageLayoutStyle('contentMarginXMm', Number(value ?? 3))
-                                    }
-                                    disabled={!canMutate}
-                                  />
-                                </div>
-                              </Space>
-                            </Card>
+                              <Card size="small" title="Page Layout (mm)" className="admin-report-design-compact-card">
+                                <Space direction="vertical" style={COMPACT_CONTROL_STACK_STYLE} size={12}>
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                    <Text>Page Margin Top</Text>
+                                    <InputNumber
+                                      min={0}
+                                      max={20}
+                                      value={reportStyle.pageLayout.pageMarginTopMm}
+                                      onChange={(value) =>
+                                        updatePageLayoutStyle('pageMarginTopMm', Number(value ?? 3))
+                                      }
+                                      disabled={!canMutate}
+                                    />
+                                  </div>
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                    <Text>Page Margin Right</Text>
+                                    <InputNumber
+                                      min={0}
+                                      max={20}
+                                      value={reportStyle.pageLayout.pageMarginRightMm}
+                                      onChange={(value) =>
+                                        updatePageLayoutStyle('pageMarginRightMm', Number(value ?? 3))
+                                      }
+                                      disabled={!canMutate}
+                                    />
+                                  </div>
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                    <Text>Page Margin Bottom</Text>
+                                    <InputNumber
+                                      min={0}
+                                      max={20}
+                                      value={reportStyle.pageLayout.pageMarginBottomMm}
+                                      onChange={(value) =>
+                                        updatePageLayoutStyle('pageMarginBottomMm', Number(value ?? 3))
+                                      }
+                                      disabled={!canMutate}
+                                    />
+                                  </div>
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                    <Text>Page Margin Left</Text>
+                                    <InputNumber
+                                      min={0}
+                                      max={20}
+                                      value={reportStyle.pageLayout.pageMarginLeftMm}
+                                      onChange={(value) =>
+                                        updatePageLayoutStyle('pageMarginLeftMm', Number(value ?? 3))
+                                      }
+                                      disabled={!canMutate}
+                                    />
+                                  </div>
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                    <Text>Content Margin X</Text>
+                                    <InputNumber
+                                      min={0}
+                                      max={20}
+                                      value={reportStyle.pageLayout.contentMarginXMm}
+                                      onChange={(value) =>
+                                        updatePageLayoutStyle('contentMarginXMm', Number(value ?? 3))
+                                      }
+                                      disabled={!canMutate}
+                                    />
+                                  </div>
+                                </Space>
+                              </Card>
                             </div>
                           </Col>
 
@@ -2675,225 +2808,225 @@ export function ReportDesignStudio() {
                               className="admin-report-design-section-block"
                             >
                               <SectionSummaryBar items={sectionSummaries['results-table']} />
-                            <Card size="small" title="Results Table">
-                              <Space direction="vertical" style={{ width: '100%' }} size={12}>
-                                <div className="admin-report-design-subgroup">
-                                  <Text strong className="admin-report-design-subgroup-title">
-                                    Core Styling
-                                  </Text>
-                                <Row gutter={[12, 12]}>
-                                  <Col xs={24}>
-                                    <ResultsSectionStyleControlCard
-                                      title="Header"
-                                      style={reportStyle.resultsTable.headerStyle}
-                                      includeBackground
-                                      disabled={!canMutate}
-                                      onChange={(key, value) =>
-                                        updateResultsSectionStyle(
-                                          'headerStyle',
-                                          key as keyof ReportStyleDto['resultsTable']['headerStyle'],
-                                          value as never,
-                                        )
-                                      }
-                                    />
-                                  </Col>
-                                  <Col xs={24}>
-                                    <ResultsSectionStyleControlCard
-                                      title="Main Result Rows"
-                                      style={reportStyle.resultsTable.bodyStyle}
-                                      disabled={!canMutate}
-                                      includeBackground={false}
-                                      onChange={(key, value) =>
-                                        updateResultsSectionStyle(
-                                          'bodyStyle',
-                                          key as keyof ReportStyleDto['resultsTable']['bodyStyle'],
-                                          value as never,
-                                        )
-                                      }
-                                    />
-                                  </Col>
-                                  <Col xs={24}>
-                                    <ResultsSectionStyleControlCard
-                                      title="Department Row"
-                                      style={reportStyle.resultsTable.departmentRowStyle}
-                                      includeBackground
-                                      disabled={!canMutate || !showDepartmentRow}
-                                      onChange={(key, value) =>
-                                        updateResultsSectionStyle(
-                                          'departmentRowStyle',
-                                          key as keyof ReportStyleDto['resultsTable']['departmentRowStyle'],
-                                          value as never,
-                                        )
-                                      }
-                                    />
-                                  </Col>
-                                  <Col xs={24}>
-                                    <ResultsSectionStyleControlCard
-                                      title="Category Row"
-                                      style={reportStyle.resultsTable.categoryRowStyle}
-                                      includeBackground
-                                      disabled={!canMutate || !showCategoryRow}
-                                      onChange={(key, value) =>
-                                        updateResultsSectionStyle(
-                                          'categoryRowStyle',
-                                          key as keyof ReportStyleDto['resultsTable']['categoryRowStyle'],
-                                          value as never,
-                                        )
-                                      }
-                                    />
-                                  </Col>
-                                  <Col xs={24}>
-                                    <PanelSectionStyleControlCard
-                                      title="Panel Section Header"
-                                      style={reportStyle.resultsTable.panelSectionStyle}
-                                      disabled={!canMutate}
-                                      onChange={(key, value) =>
-                                        updateResultsSectionStyle('panelSectionStyle', key, value)
-                                      }
-                                    />
-                                  </Col>
-                                </Row>
-                                </div>
-                                <div className="admin-report-design-subgroup">
-                                  <Row gutter={[12, 12]}>
-                                    <Col xs={24}>
-                                      <Card size="small" title="Display & Status" className="admin-report-design-compact-card">
-                                        <Space direction="vertical" style={COMPACT_CONTROL_STACK_STYLE} size={12}>
-                                          <StyleColorControl
-                                            label="Stripe Color"
-                                            value={reportStyle.resultsTable.rowStripeColor}
-                                            disabled={!canMutate}
-                                            onChange={(value) => updateResultsStyle('rowStripeColor', value)}
-                                          />
-                                          <StyleColorControl
-                                            label="Abnormal Row"
-                                            value={reportStyle.resultsTable.abnormalRowBackgroundColor}
-                                            disabled={!canMutate}
-                                            onChange={(value) => updateResultsStyle('abnormalRowBackgroundColor', value)}
-                                          />
-                                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                            <Text>Show Status Column</Text>
-                                            <Switch
-                                              checked={showStatusColumn}
-                                              onChange={(value) => updateResultsStyle('showStatusColumn', value)}
-                                              disabled={!canMutate}
-                                            />
-                                          </div>
-                                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                            <Text>Show Department Row</Text>
-                                            <Switch
-                                              checked={showDepartmentRow}
-                                              onChange={(value) => updateResultsStyle('showDepartmentRow', value)}
-                                              disabled={!canMutate}
-                                            />
-                                          </div>
-                                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                            <Text>Show Category Row</Text>
-                                            <Switch
-                                              checked={showCategoryRow}
-                                              onChange={(value) => updateResultsStyle('showCategoryRow', value)}
-                                              disabled={!canMutate}
-                                            />
-                                          </div>
-                                          <StyleColorControl
-                                            label="Status Normal"
-                                            value={reportStyle.resultsTable.statusNormalColor}
-                                            disabled={!canMutate || !showStatusColumn}
-                                            onChange={(value) => updateResultsStyle('statusNormalColor', value)}
-                                          />
-                                          <StyleColorControl
-                                            label="Status High"
-                                            value={reportStyle.resultsTable.statusHighColor}
-                                            disabled={!canMutate || !showStatusColumn}
-                                            onChange={(value) => updateResultsStyle('statusHighColor', value)}
-                                          />
-                                          <StyleColorControl
-                                            label="Status Low"
-                                            value={reportStyle.resultsTable.statusLowColor}
-                                            disabled={!canMutate || !showStatusColumn}
-                                            onChange={(value) => updateResultsStyle('statusLowColor', value)}
-                                          />
-                                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                            <Text>Enable Row Stripe</Text>
-                                            <Switch
-                                              checked={reportStyle.resultsTable.rowStripeEnabled}
-                                              onChange={(value) => updateResultsStyle('rowStripeEnabled', value)}
-                                              disabled={!canMutate}
-                                            />
-                                          </div>
-                                        </Space>
-                                      </Card>
-                                    </Col>
-                                    <Col xs={24}>
-                                      <Card size="small" title="Print Behavior" className="admin-report-design-compact-card">
-                                        <Space direction="vertical" style={COMPACT_CONTROL_STACK_STYLE} size={12}>
-                                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                            <Text>Single Dept Break</Text>
-                                            <Select
-                                              style={{ width: 140 }}
-                                              value={reportStyle.resultsTable.regularDepartmentBlockBreak}
-                                              options={BREAK_OPTIONS as unknown as { label: string; value: string }[]}
-                                              onChange={(value) => updateResultsStyle('regularDepartmentBlockBreak', value)}
-                                              disabled={!canMutate}
-                                            />
-                                          </div>
-                                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                            <Text>Single Row Break</Text>
-                                            <Select
-                                              style={{ width: 140 }}
-                                              value={reportStyle.resultsTable.regularRowBreak}
-                                              options={BREAK_OPTIONS as unknown as { label: string; value: string }[]}
-                                              onChange={(value) => updateResultsStyle('regularRowBreak', value)}
-                                              disabled={!canMutate}
-                                            />
-                                          </div>
-                                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                            <Text>Panel Table Break</Text>
-                                            <Select
-                                              style={{ width: 140 }}
-                                              value={reportStyle.resultsTable.panelTableBreak}
-                                              options={BREAK_OPTIONS as unknown as { label: string; value: string }[]}
-                                              onChange={(value) => updateResultsStyle('panelTableBreak', value)}
-                                              disabled={!canMutate}
-                                            />
-                                          </div>
-                                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                            <Text>Panel Row Break</Text>
-                                            <Select
-                                              style={{ width: 140 }}
-                                              value={reportStyle.resultsTable.panelRowBreak}
-                                              options={BREAK_OPTIONS as unknown as { label: string; value: string }[]}
-                                              onChange={(value) => updateResultsStyle('panelRowBreak', value)}
-                                              disabled={!canMutate}
-                                            />
-                                          </div>
-                                        </Space>
-                                      </Card>
-                                    </Col>
-                                  </Row>
-                                </div>
-                                <div className="admin-report-design-subgroup">
-                                  <Text strong style={{ display: 'block', marginBottom: 4 }}>
-                                    Column Overrides
-                                  </Text>
-                                  <Text type="secondary" style={{ display: 'block', marginBottom: 12 }}>
-                                    Set color, size, alignment, and bold for each report column separately. These affect body cells only.
-                                  </Text>
-                                  <Row gutter={[12, 12]}>
-                                    {RESULTS_COLUMN_CONTROLS.map((column) => (
-                                      <Col key={column.key} xs={24}>
-                                        <ColumnStyleControlCard
-                                          title={column.label}
-                                          style={reportStyle.resultsTable[column.key]}
-                                          disabled={!canMutate || (column.key === 'statusColumn' && !showStatusColumn)}
-                                          onChange={(key, value) => updateResultsColumnStyle(column.key, key, value)}
+                              <Card size="small" title="Results Table">
+                                <Space direction="vertical" style={{ width: '100%' }} size={12}>
+                                  <div className="admin-report-design-subgroup">
+                                    <Text strong className="admin-report-design-subgroup-title">
+                                      Core Styling
+                                    </Text>
+                                    <Row gutter={[12, 12]}>
+                                      <Col xs={24}>
+                                        <ResultsSectionStyleControlCard
+                                          title="Header"
+                                          style={reportStyle.resultsTable.headerStyle}
+                                          includeBackground
+                                          disabled={!canMutate}
+                                          onChange={(key, value) =>
+                                            updateResultsSectionStyle(
+                                              'headerStyle',
+                                              key as keyof ReportStyleDto['resultsTable']['headerStyle'],
+                                              value as never,
+                                            )
+                                          }
                                         />
                                       </Col>
-                                    ))}
-                                  </Row>
-                                </div>
-                              </Space>
-                            </Card>
+                                      <Col xs={24}>
+                                        <ResultsSectionStyleControlCard
+                                          title="Main Result Rows"
+                                          style={reportStyle.resultsTable.bodyStyle}
+                                          disabled={!canMutate}
+                                          includeBackground={false}
+                                          onChange={(key, value) =>
+                                            updateResultsSectionStyle(
+                                              'bodyStyle',
+                                              key as keyof ReportStyleDto['resultsTable']['bodyStyle'],
+                                              value as never,
+                                            )
+                                          }
+                                        />
+                                      </Col>
+                                      <Col xs={24}>
+                                        <ResultsSectionStyleControlCard
+                                          title="Department Row"
+                                          style={reportStyle.resultsTable.departmentRowStyle}
+                                          includeBackground
+                                          disabled={!canMutate || !showDepartmentRow}
+                                          onChange={(key, value) =>
+                                            updateResultsSectionStyle(
+                                              'departmentRowStyle',
+                                              key as keyof ReportStyleDto['resultsTable']['departmentRowStyle'],
+                                              value as never,
+                                            )
+                                          }
+                                        />
+                                      </Col>
+                                      <Col xs={24}>
+                                        <ResultsSectionStyleControlCard
+                                          title="Category Row"
+                                          style={reportStyle.resultsTable.categoryRowStyle}
+                                          includeBackground
+                                          disabled={!canMutate || !showCategoryRow}
+                                          onChange={(key, value) =>
+                                            updateResultsSectionStyle(
+                                              'categoryRowStyle',
+                                              key as keyof ReportStyleDto['resultsTable']['categoryRowStyle'],
+                                              value as never,
+                                            )
+                                          }
+                                        />
+                                      </Col>
+                                      <Col xs={24}>
+                                        <PanelSectionStyleControlCard
+                                          title="Panel Section Header"
+                                          style={reportStyle.resultsTable.panelSectionStyle}
+                                          disabled={!canMutate}
+                                          onChange={(key, value) =>
+                                            updateResultsSectionStyle('panelSectionStyle', key, value)
+                                          }
+                                        />
+                                      </Col>
+                                    </Row>
+                                  </div>
+                                  <div className="admin-report-design-subgroup">
+                                    <Row gutter={[12, 12]}>
+                                      <Col xs={24}>
+                                        <Card size="small" title="Display & Status" className="admin-report-design-compact-card">
+                                          <Space direction="vertical" style={COMPACT_CONTROL_STACK_STYLE} size={12}>
+                                            <StyleColorControl
+                                              label="Stripe Color"
+                                              value={reportStyle.resultsTable.rowStripeColor}
+                                              disabled={!canMutate}
+                                              onChange={(value) => updateResultsStyle('rowStripeColor', value)}
+                                            />
+                                            <StyleColorControl
+                                              label="Abnormal Row"
+                                              value={reportStyle.resultsTable.abnormalRowBackgroundColor}
+                                              disabled={!canMutate}
+                                              onChange={(value) => updateResultsStyle('abnormalRowBackgroundColor', value)}
+                                            />
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                              <Text>Show Status Column</Text>
+                                              <Switch
+                                                checked={showStatusColumn}
+                                                onChange={(value) => updateResultsStyle('showStatusColumn', value)}
+                                                disabled={!canMutate}
+                                              />
+                                            </div>
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                              <Text>Show Department Row</Text>
+                                              <Switch
+                                                checked={showDepartmentRow}
+                                                onChange={(value) => updateResultsStyle('showDepartmentRow', value)}
+                                                disabled={!canMutate}
+                                              />
+                                            </div>
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                              <Text>Show Category Row</Text>
+                                              <Switch
+                                                checked={showCategoryRow}
+                                                onChange={(value) => updateResultsStyle('showCategoryRow', value)}
+                                                disabled={!canMutate}
+                                              />
+                                            </div>
+                                            <StyleColorControl
+                                              label="Status Normal"
+                                              value={reportStyle.resultsTable.statusNormalColor}
+                                              disabled={!canMutate || !showStatusColumn}
+                                              onChange={(value) => updateResultsStyle('statusNormalColor', value)}
+                                            />
+                                            <StyleColorControl
+                                              label="Status High"
+                                              value={reportStyle.resultsTable.statusHighColor}
+                                              disabled={!canMutate || !showStatusColumn}
+                                              onChange={(value) => updateResultsStyle('statusHighColor', value)}
+                                            />
+                                            <StyleColorControl
+                                              label="Status Low"
+                                              value={reportStyle.resultsTable.statusLowColor}
+                                              disabled={!canMutate || !showStatusColumn}
+                                              onChange={(value) => updateResultsStyle('statusLowColor', value)}
+                                            />
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                              <Text>Enable Row Stripe</Text>
+                                              <Switch
+                                                checked={reportStyle.resultsTable.rowStripeEnabled}
+                                                onChange={(value) => updateResultsStyle('rowStripeEnabled', value)}
+                                                disabled={!canMutate}
+                                              />
+                                            </div>
+                                          </Space>
+                                        </Card>
+                                      </Col>
+                                      <Col xs={24}>
+                                        <Card size="small" title="Print Behavior" className="admin-report-design-compact-card">
+                                          <Space direction="vertical" style={COMPACT_CONTROL_STACK_STYLE} size={12}>
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                              <Text>Single Dept Break</Text>
+                                              <Select
+                                                style={{ width: 140 }}
+                                                value={reportStyle.resultsTable.regularDepartmentBlockBreak}
+                                                options={BREAK_OPTIONS as unknown as { label: string; value: string }[]}
+                                                onChange={(value) => updateResultsStyle('regularDepartmentBlockBreak', value)}
+                                                disabled={!canMutate}
+                                              />
+                                            </div>
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                              <Text>Single Row Break</Text>
+                                              <Select
+                                                style={{ width: 140 }}
+                                                value={reportStyle.resultsTable.regularRowBreak}
+                                                options={BREAK_OPTIONS as unknown as { label: string; value: string }[]}
+                                                onChange={(value) => updateResultsStyle('regularRowBreak', value)}
+                                                disabled={!canMutate}
+                                              />
+                                            </div>
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                              <Text>Panel Table Break</Text>
+                                              <Select
+                                                style={{ width: 140 }}
+                                                value={reportStyle.resultsTable.panelTableBreak}
+                                                options={BREAK_OPTIONS as unknown as { label: string; value: string }[]}
+                                                onChange={(value) => updateResultsStyle('panelTableBreak', value)}
+                                                disabled={!canMutate}
+                                              />
+                                            </div>
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                              <Text>Panel Row Break</Text>
+                                              <Select
+                                                style={{ width: 140 }}
+                                                value={reportStyle.resultsTable.panelRowBreak}
+                                                options={BREAK_OPTIONS as unknown as { label: string; value: string }[]}
+                                                onChange={(value) => updateResultsStyle('panelRowBreak', value)}
+                                                disabled={!canMutate}
+                                              />
+                                            </div>
+                                          </Space>
+                                        </Card>
+                                      </Col>
+                                    </Row>
+                                  </div>
+                                  <div className="admin-report-design-subgroup">
+                                    <Text strong style={{ display: 'block', marginBottom: 4 }}>
+                                      Column Overrides
+                                    </Text>
+                                    <Text type="secondary" style={{ display: 'block', marginBottom: 12 }}>
+                                      Set color, size, alignment, and bold for each report column separately. These affect body cells only.
+                                    </Text>
+                                    <Row gutter={[12, 12]}>
+                                      {RESULTS_COLUMN_CONTROLS.map((column) => (
+                                        <Col key={column.key} xs={24}>
+                                          <ColumnStyleControlCard
+                                            title={column.label}
+                                            style={reportStyle.resultsTable[column.key]}
+                                            disabled={!canMutate || (column.key === 'statusColumn' && !showStatusColumn)}
+                                            onChange={(key, value) => updateResultsColumnStyle(column.key, key, value)}
+                                          />
+                                        </Col>
+                                      ))}
+                                    </Row>
+                                  </div>
+                                </Space>
+                              </Card>
                             </div>
                           </Col>
 
@@ -2905,356 +3038,356 @@ export function ReportDesignStudio() {
                               className="admin-report-design-section-block admin-report-design-section-block--compact"
                             >
                               <SectionSummaryBar items={sectionSummaries['culture-section']} />
-                            <Card size="small" title="Culture Section (C&S)" className="admin-report-design-compact-card">
-                              <Space direction="vertical" style={COMPACT_CONTROL_STACK_STYLE} size={12}>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                  <Text>Font Family</Text>
-                                  <Select
-                                    style={{ width: 180 }}
-                                    value={reportStyle.cultureSection.fontFamily}
-                                    options={FONT_OPTIONS}
-                                    onChange={(value) => updateCultureStyle('fontFamily', value)}
+                              <Card size="small" title="Culture Section (C&S)" className="admin-report-design-compact-card">
+                                <Space direction="vertical" style={COMPACT_CONTROL_STACK_STYLE} size={12}>
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                    <Text>Font Family</Text>
+                                    <Select
+                                      style={{ width: 180 }}
+                                      value={reportStyle.cultureSection.fontFamily}
+                                      options={FONT_OPTIONS}
+                                      onChange={(value) => updateCultureStyle('fontFamily', value)}
+                                      disabled={!canMutate}
+                                    />
+                                  </div>
+                                  <StyleColorControl
+                                    label="Section Title Text"
+                                    value={reportStyle.cultureSection.sectionTitleColor}
                                     disabled={!canMutate}
+                                    onChange={(value) => updateCultureStyle('sectionTitleColor', value)}
                                   />
-                                </div>
-                                <StyleColorControl
-                                  label="Section Title Text"
-                                  value={reportStyle.cultureSection.sectionTitleColor}
-                                  disabled={!canMutate}
-                                  onChange={(value) => updateCultureStyle('sectionTitleColor', value)}
-                                />
-                                <StyleColorControl
-                                  label="Section Title Border"
-                                  value={reportStyle.cultureSection.sectionTitleBorderColor}
-                                  disabled={!canMutate}
-                                  onChange={(value) => updateCultureStyle('sectionTitleBorderColor', value)}
-                                />
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                  <Text>Title Alignment</Text>
-                                  <Select
-                                    style={{ width: 120 }}
-                                    value={reportStyle.cultureSection.sectionTitleAlign}
-                                    options={ALIGN_OPTIONS as unknown as { label: string; value: string }[]}
-                                    onChange={(value) => updateCultureStyle('sectionTitleAlign', value)}
+                                  <StyleColorControl
+                                    label="Section Title Border"
+                                    value={reportStyle.cultureSection.sectionTitleBorderColor}
                                     disabled={!canMutate}
+                                    onChange={(value) => updateCultureStyle('sectionTitleBorderColor', value)}
                                   />
-                                </div>
-                                <StyleColorControl
-                                  label="No Growth Background"
-                                  value={reportStyle.cultureSection.noGrowthBackgroundColor}
-                                  disabled={!canMutate}
-                                  onChange={(value) => updateCultureStyle('noGrowthBackgroundColor', value)}
-                                />
-                                <StyleColorControl
-                                  label="No Growth Border"
-                                  value={reportStyle.cultureSection.noGrowthBorderColor}
-                                  disabled={!canMutate}
-                                  onChange={(value) => updateCultureStyle('noGrowthBorderColor', value)}
-                                />
-                                <StyleColorControl
-                                  label="No Growth Text"
-                                  value={reportStyle.cultureSection.noGrowthTextColor}
-                                  disabled={!canMutate}
-                                  onChange={(value) => updateCultureStyle('noGrowthTextColor', value)}
-                                />
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                  <Text>No Growth Padding Y</Text>
-                                  <InputNumber
-                                    min={0}
-                                    max={20}
-                                    value={reportStyle.cultureSection.noGrowthPaddingYpx}
-                                    onChange={(value) =>
-                                      updateCultureStyle('noGrowthPaddingYpx', Number(value ?? 8))
-                                    }
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                    <Text>Title Alignment</Text>
+                                    <Select
+                                      style={{ width: 120 }}
+                                      value={reportStyle.cultureSection.sectionTitleAlign}
+                                      options={ALIGN_OPTIONS as unknown as { label: string; value: string }[]}
+                                      onChange={(value) => updateCultureStyle('sectionTitleAlign', value)}
+                                      disabled={!canMutate}
+                                    />
+                                  </div>
+                                  <StyleColorControl
+                                    label="No Growth Background"
+                                    value={reportStyle.cultureSection.noGrowthBackgroundColor}
                                     disabled={!canMutate}
+                                    onChange={(value) => updateCultureStyle('noGrowthBackgroundColor', value)}
                                   />
-                                </div>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                  <Text>No Growth Padding X</Text>
-                                  <InputNumber
-                                    min={0}
-                                    max={24}
-                                    value={reportStyle.cultureSection.noGrowthPaddingXpx}
-                                    onChange={(value) =>
-                                      updateCultureStyle('noGrowthPaddingXpx', Number(value ?? 10))
-                                    }
+                                  <StyleColorControl
+                                    label="No Growth Border"
+                                    value={reportStyle.cultureSection.noGrowthBorderColor}
                                     disabled={!canMutate}
+                                    onChange={(value) => updateCultureStyle('noGrowthBorderColor', value)}
                                   />
-                                </div>
-                                <StyleColorControl
-                                  label="Meta Text"
-                                  value={reportStyle.cultureSection.metaTextColor}
-                                  disabled={!canMutate}
-                                  onChange={(value) => updateCultureStyle('metaTextColor', value)}
-                                />
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                  <Text>Meta Alignment</Text>
-                                  <Select
-                                    style={{ width: 120 }}
-                                    value={reportStyle.cultureSection.metaTextAlign}
-                                    options={ALIGN_OPTIONS as unknown as { label: string; value: string }[]}
-                                    onChange={(value) => updateCultureStyle('metaTextAlign', value)}
+                                  <StyleColorControl
+                                    label="No Growth Text"
+                                    value={reportStyle.cultureSection.noGrowthTextColor}
                                     disabled={!canMutate}
+                                    onChange={(value) => updateCultureStyle('noGrowthTextColor', value)}
                                   />
-                                </div>
-                                <StyleColorControl
-                                  label="Comment Text"
-                                  value={reportStyle.cultureSection.commentTextColor}
-                                  disabled={!canMutate}
-                                  onChange={(value) => updateCultureStyle('commentTextColor', value)}
-                                />
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                  <Text>Comment Alignment</Text>
-                                  <Select
-                                    style={{ width: 120 }}
-                                    value={reportStyle.cultureSection.commentTextAlign}
-                                    options={ALIGN_OPTIONS as unknown as { label: string; value: string }[]}
-                                    onChange={(value) => updateCultureStyle('commentTextAlign', value)}
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                    <Text>No Growth Padding Y</Text>
+                                    <InputNumber
+                                      min={0}
+                                      max={20}
+                                      value={reportStyle.cultureSection.noGrowthPaddingYpx}
+                                      onChange={(value) =>
+                                        updateCultureStyle('noGrowthPaddingYpx', Number(value ?? 8))
+                                      }
+                                      disabled={!canMutate}
+                                    />
+                                  </div>
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                    <Text>No Growth Padding X</Text>
+                                    <InputNumber
+                                      min={0}
+                                      max={24}
+                                      value={reportStyle.cultureSection.noGrowthPaddingXpx}
+                                      onChange={(value) =>
+                                        updateCultureStyle('noGrowthPaddingXpx', Number(value ?? 10))
+                                      }
+                                      disabled={!canMutate}
+                                    />
+                                  </div>
+                                  <StyleColorControl
+                                    label="Meta Text"
+                                    value={reportStyle.cultureSection.metaTextColor}
                                     disabled={!canMutate}
+                                    onChange={(value) => updateCultureStyle('metaTextColor', value)}
                                   />
-                                </div>
-                                <StyleColorControl
-                                  label="Notes Text"
-                                  value={reportStyle.cultureSection.notesTextColor}
-                                  disabled={!canMutate}
-                                  onChange={(value) => updateCultureStyle('notesTextColor', value)}
-                                />
-                                <StyleColorControl
-                                  label="Notes Border"
-                                  value={reportStyle.cultureSection.notesBorderColor}
-                                  disabled={!canMutate}
-                                  onChange={(value) => updateCultureStyle('notesBorderColor', value)}
-                                />
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                  <Text>Notes Alignment</Text>
-                                  <Select
-                                    style={{ width: 120 }}
-                                    value={reportStyle.cultureSection.notesTextAlign}
-                                    options={ALIGN_OPTIONS as unknown as { label: string; value: string }[]}
-                                    onChange={(value) => updateCultureStyle('notesTextAlign', value)}
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                    <Text>Meta Alignment</Text>
+                                    <Select
+                                      style={{ width: 120 }}
+                                      value={reportStyle.cultureSection.metaTextAlign}
+                                      options={ALIGN_OPTIONS as unknown as { label: string; value: string }[]}
+                                      onChange={(value) => updateCultureStyle('metaTextAlign', value)}
+                                      disabled={!canMutate}
+                                    />
+                                  </div>
+                                  <StyleColorControl
+                                    label="Comment Text"
+                                    value={reportStyle.cultureSection.commentTextColor}
                                     disabled={!canMutate}
+                                    onChange={(value) => updateCultureStyle('commentTextColor', value)}
                                   />
-                                </div>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                  <Text>Notes Padding Y</Text>
-                                  <InputNumber
-                                    min={0}
-                                    max={20}
-                                    value={reportStyle.cultureSection.notesPaddingYpx}
-                                    onChange={(value) =>
-                                      updateCultureStyle('notesPaddingYpx', Number(value ?? 6))
-                                    }
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                    <Text>Comment Alignment</Text>
+                                    <Select
+                                      style={{ width: 120 }}
+                                      value={reportStyle.cultureSection.commentTextAlign}
+                                      options={ALIGN_OPTIONS as unknown as { label: string; value: string }[]}
+                                      onChange={(value) => updateCultureStyle('commentTextAlign', value)}
+                                      disabled={!canMutate}
+                                    />
+                                  </div>
+                                  <StyleColorControl
+                                    label="Notes Text"
+                                    value={reportStyle.cultureSection.notesTextColor}
                                     disabled={!canMutate}
+                                    onChange={(value) => updateCultureStyle('notesTextColor', value)}
                                   />
-                                </div>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                  <Text>Notes Padding X</Text>
-                                  <InputNumber
-                                    min={0}
-                                    max={24}
-                                    value={reportStyle.cultureSection.notesPaddingXpx}
-                                    onChange={(value) =>
-                                      updateCultureStyle('notesPaddingXpx', Number(value ?? 0))
-                                    }
+                                  <StyleColorControl
+                                    label="Notes Border"
+                                    value={reportStyle.cultureSection.notesBorderColor}
                                     disabled={!canMutate}
+                                    onChange={(value) => updateCultureStyle('notesBorderColor', value)}
                                   />
-                                </div>
-                                <StyleColorControl
-                                  label="AST Title Text"
-                                  value={reportStyle.cultureSection.astColumnTitleColor}
-                                  disabled={!canMutate}
-                                  onChange={(value) => updateCultureStyle('astColumnTitleColor', value)}
-                                />
-                                <StyleColorControl
-                                  label="AST Title Border"
-                                  value={reportStyle.cultureSection.astColumnTitleBorderColor}
-                                  disabled={!canMutate}
-                                  onChange={(value) => updateCultureStyle('astColumnTitleBorderColor', value)}
-                                />
-                                <StyleColorControl
-                                  label="AST Body Text"
-                                  value={reportStyle.cultureSection.astBodyTextColor}
-                                  disabled={!canMutate}
-                                  onChange={(value) => updateCultureStyle('astBodyTextColor', value)}
-                                />
-                                <StyleColorControl
-                                  label="AST Empty Text"
-                                  value={reportStyle.cultureSection.astEmptyTextColor}
-                                  disabled={!canMutate}
-                                  onChange={(value) => updateCultureStyle('astEmptyTextColor', value)}
-                                />
-                                <StyleColorControl
-                                  label="Sensitive Border"
-                                  value={reportStyle.cultureSection.astSensitiveBorderColor}
-                                  disabled={!canMutate}
-                                  onChange={(value) => updateCultureStyle('astSensitiveBorderColor', value)}
-                                />
-                                <StyleColorControl
-                                  label="Sensitive Background"
-                                  value={reportStyle.cultureSection.astSensitiveBackgroundColor}
-                                  disabled={!canMutate}
-                                  onChange={(value) => updateCultureStyle('astSensitiveBackgroundColor', value)}
-                                />
-                                <StyleColorControl
-                                  label="Intermediate Border"
-                                  value={reportStyle.cultureSection.astIntermediateBorderColor}
-                                  disabled={!canMutate}
-                                  onChange={(value) => updateCultureStyle('astIntermediateBorderColor', value)}
-                                />
-                                <StyleColorControl
-                                  label="Intermediate Background"
-                                  value={reportStyle.cultureSection.astIntermediateBackgroundColor}
-                                  disabled={!canMutate}
-                                  onChange={(value) => updateCultureStyle('astIntermediateBackgroundColor', value)}
-                                />
-                                <StyleColorControl
-                                  label="Resistance Border"
-                                  value={reportStyle.cultureSection.astResistanceBorderColor}
-                                  disabled={!canMutate}
-                                  onChange={(value) => updateCultureStyle('astResistanceBorderColor', value)}
-                                />
-                                <StyleColorControl
-                                  label="Resistance Background"
-                                  value={reportStyle.cultureSection.astResistanceBackgroundColor}
-                                  disabled={!canMutate}
-                                  onChange={(value) => updateCultureStyle('astResistanceBackgroundColor', value)}
-                                />
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                  <Text>AST Grid Gap</Text>
-                                  <InputNumber
-                                    min={2}
-                                    max={16}
-                                    value={reportStyle.cultureSection.astGridGapPx}
-                                    onChange={(value) => updateCultureStyle('astGridGapPx', Number(value ?? 6))}
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                    <Text>Notes Alignment</Text>
+                                    <Select
+                                      style={{ width: 120 }}
+                                      value={reportStyle.cultureSection.notesTextAlign}
+                                      options={ALIGN_OPTIONS as unknown as { label: string; value: string }[]}
+                                      onChange={(value) => updateCultureStyle('notesTextAlign', value)}
+                                      disabled={!canMutate}
+                                    />
+                                  </div>
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                    <Text>Notes Padding Y</Text>
+                                    <InputNumber
+                                      min={0}
+                                      max={20}
+                                      value={reportStyle.cultureSection.notesPaddingYpx}
+                                      onChange={(value) =>
+                                        updateCultureStyle('notesPaddingYpx', Number(value ?? 6))
+                                      }
+                                      disabled={!canMutate}
+                                    />
+                                  </div>
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                    <Text>Notes Padding X</Text>
+                                    <InputNumber
+                                      min={0}
+                                      max={24}
+                                      value={reportStyle.cultureSection.notesPaddingXpx}
+                                      onChange={(value) =>
+                                        updateCultureStyle('notesPaddingXpx', Number(value ?? 0))
+                                      }
+                                      disabled={!canMutate}
+                                    />
+                                  </div>
+                                  <StyleColorControl
+                                    label="AST Title Text"
+                                    value={reportStyle.cultureSection.astColumnTitleColor}
                                     disabled={!canMutate}
+                                    onChange={(value) => updateCultureStyle('astColumnTitleColor', value)}
                                   />
-                                </div>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                  <Text>AST Min Height</Text>
-                                  <InputNumber
-                                    min={120}
-                                    max={700}
-                                    value={reportStyle.cultureSection.astMinHeightPx}
-                                    onChange={(value) => updateCultureStyle('astMinHeightPx', Number(value ?? 430))}
+                                  <StyleColorControl
+                                    label="AST Title Border"
+                                    value={reportStyle.cultureSection.astColumnTitleBorderColor}
                                     disabled={!canMutate}
+                                    onChange={(value) => updateCultureStyle('astColumnTitleBorderColor', value)}
                                   />
-                                </div>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                  <Text>AST Column Radius</Text>
-                                  <InputNumber
-                                    min={0}
-                                    max={16}
-                                    value={reportStyle.cultureSection.astColumnBorderRadiusPx}
-                                    onChange={(value) => updateCultureStyle('astColumnBorderRadiusPx', Number(value ?? 6))}
+                                  <StyleColorControl
+                                    label="AST Body Text"
+                                    value={reportStyle.cultureSection.astBodyTextColor}
                                     disabled={!canMutate}
+                                    onChange={(value) => updateCultureStyle('astBodyTextColor', value)}
                                   />
-                                </div>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                  <Text>AST Column Padding</Text>
-                                  <InputNumber
-                                    min={2}
-                                    max={16}
-                                    value={reportStyle.cultureSection.astColumnPaddingPx}
-                                    onChange={(value) => updateCultureStyle('astColumnPaddingPx', Number(value ?? 7))}
+                                  <StyleColorControl
+                                    label="AST Empty Text"
+                                    value={reportStyle.cultureSection.astEmptyTextColor}
                                     disabled={!canMutate}
+                                    onChange={(value) => updateCultureStyle('astEmptyTextColor', value)}
                                   />
-                                </div>
-                              </Space>
-                            </Card>
+                                  <StyleColorControl
+                                    label="Sensitive Border"
+                                    value={reportStyle.cultureSection.astSensitiveBorderColor}
+                                    disabled={!canMutate}
+                                    onChange={(value) => updateCultureStyle('astSensitiveBorderColor', value)}
+                                  />
+                                  <StyleColorControl
+                                    label="Sensitive Background"
+                                    value={reportStyle.cultureSection.astSensitiveBackgroundColor}
+                                    disabled={!canMutate}
+                                    onChange={(value) => updateCultureStyle('astSensitiveBackgroundColor', value)}
+                                  />
+                                  <StyleColorControl
+                                    label="Intermediate Border"
+                                    value={reportStyle.cultureSection.astIntermediateBorderColor}
+                                    disabled={!canMutate}
+                                    onChange={(value) => updateCultureStyle('astIntermediateBorderColor', value)}
+                                  />
+                                  <StyleColorControl
+                                    label="Intermediate Background"
+                                    value={reportStyle.cultureSection.astIntermediateBackgroundColor}
+                                    disabled={!canMutate}
+                                    onChange={(value) => updateCultureStyle('astIntermediateBackgroundColor', value)}
+                                  />
+                                  <StyleColorControl
+                                    label="Resistance Border"
+                                    value={reportStyle.cultureSection.astResistanceBorderColor}
+                                    disabled={!canMutate}
+                                    onChange={(value) => updateCultureStyle('astResistanceBorderColor', value)}
+                                  />
+                                  <StyleColorControl
+                                    label="Resistance Background"
+                                    value={reportStyle.cultureSection.astResistanceBackgroundColor}
+                                    disabled={!canMutate}
+                                    onChange={(value) => updateCultureStyle('astResistanceBackgroundColor', value)}
+                                  />
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                    <Text>AST Grid Gap</Text>
+                                    <InputNumber
+                                      min={2}
+                                      max={16}
+                                      value={reportStyle.cultureSection.astGridGapPx}
+                                      onChange={(value) => updateCultureStyle('astGridGapPx', Number(value ?? 6))}
+                                      disabled={!canMutate}
+                                    />
+                                  </div>
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                    <Text>AST Min Height</Text>
+                                    <InputNumber
+                                      min={120}
+                                      max={700}
+                                      value={reportStyle.cultureSection.astMinHeightPx}
+                                      onChange={(value) => updateCultureStyle('astMinHeightPx', Number(value ?? 430))}
+                                      disabled={!canMutate}
+                                    />
+                                  </div>
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                    <Text>AST Column Radius</Text>
+                                    <InputNumber
+                                      min={0}
+                                      max={16}
+                                      value={reportStyle.cultureSection.astColumnBorderRadiusPx}
+                                      onChange={(value) => updateCultureStyle('astColumnBorderRadiusPx', Number(value ?? 6))}
+                                      disabled={!canMutate}
+                                    />
+                                  </div>
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                    <Text>AST Column Padding</Text>
+                                    <InputNumber
+                                      min={2}
+                                      max={16}
+                                      value={reportStyle.cultureSection.astColumnPaddingPx}
+                                      onChange={(value) => updateCultureStyle('astColumnPaddingPx', Number(value ?? 7))}
+                                      disabled={!canMutate}
+                                    />
+                                  </div>
+                                </Space>
+                              </Card>
                             </div>
                           </Col>
-                          </Row>
-                          </div>
-                        </div>
-                      </Card>
-                    </Col>
-                    <Col xs={24} xl={14} className="admin-report-design-preview-pane">
-                      <div className="admin-report-design-live-pane">
-                        <div ref={previewCardRef} className="admin-report-design-preview-anchor">
-                          <Card loading={loading} className="admin-report-design-preview-card">
-                            <Tabs
-                              activeKey={activePreviewPane}
-                              onChange={(value) => setActivePreviewPane(value as PreviewPaneTab)}
-                              className="admin-report-design-preview-tabs"
-                              items={[
-                                {
-                                  key: 'live-preview',
-                                  label: 'Live Preview',
-                                  children: livePreviewTabContent,
-                                },
-                                {
-                                  key: 'full-pdf-preview',
-                                  label: 'Full PDF Preview',
-                                  children: fullPreviewTabContent,
-                                },
-                              ]}
-                            />
-                          </Card>
-                        </div>
+                        </Row>
                       </div>
-                    </Col>
-                  </Row>
-                ),
-              },
-              {
-                key: 'online-watermark',
-                label: 'Online Result Watermark',
-                children: (
-                  <Card title="Online Result Watermark" loading={loading} className="admin-report-design-online-card">
-                    <Text type="secondary" style={{ display: 'block', marginBottom: 12 }}>
-                      Optional image/text watermark for patient online result page.
-                    </Text>
-                    <div className="admin-report-design-online-preview">
-                      {onlineResultWatermarkDataUrl ? (
-                        <img
-                          src={onlineResultWatermarkDataUrl}
-                          alt="Online result watermark"
-                          style={{ maxWidth: '100%', maxHeight: 220, objectFit: 'contain' }}
-                        />
-                      ) : (
-                        <Text type="secondary">No online watermark image uploaded</Text>
-                      )}
                     </div>
-                    <Space wrap style={{ marginBottom: 12 }}>
-                      <input
-                        ref={onlineWatermarkInputRef}
-                        type="file"
-                        accept="image/png,image/jpeg,image/jpg,image/webp"
-                        onChange={(event) => void handleOnlineWatermarkFileSelect(event)}
-                        style={{ display: 'none' }}
-                      />
-                      <Button
-                        loading={uploadingOnlineWatermark}
-                        onClick={() => onlineWatermarkInputRef.current?.click()}
-                        disabled={!canMutate}
-                      >
-                        {onlineResultWatermarkDataUrl ? 'Replace image' : 'Upload image'}
-                      </Button>
-                      <Button
-                        danger
-                        onClick={() => setOnlineResultWatermarkDataUrl(null)}
-                        disabled={!onlineResultWatermarkDataUrl || !canMutate}
-                      >
-                        Clear image
-                      </Button>
-                    </Space>
-                    <Text type="secondary" style={{ display: 'block', marginBottom: 8 }}>
-                      Optional text watermark:
-                    </Text>
-                    <Input
-                      value={onlineResultWatermarkText}
-                      onChange={(event) => setOnlineResultWatermarkText(event.target.value)}
-                      maxLength={120}
-                      showCount
-                      placeholder="ONLINE VERSION"
-                      allowClear
-                      disabled={!canMutate}
-                    />
                   </Card>
-                ),
-              },
-            ]}
-          />
+                </Col>
+                <Col xs={24} xl={14} className="admin-report-design-preview-pane">
+                  <div className="admin-report-design-live-pane">
+                    <div ref={previewCardRef} className="admin-report-design-preview-anchor">
+                      <Card loading={loading} className="admin-report-design-preview-card">
+                        <Tabs
+                          activeKey={activePreviewPane}
+                          onChange={(value) => setActivePreviewPane(value as PreviewPaneTab)}
+                          className="admin-report-design-preview-tabs"
+                          items={[
+                            {
+                              key: 'live-preview',
+                              label: 'Live Preview',
+                              children: livePreviewTabContent,
+                            },
+                            {
+                              key: 'full-pdf-preview',
+                              label: 'Full PDF Preview',
+                              children: fullPreviewTabContent,
+                            },
+                          ]}
+                        />
+                      </Card>
+                    </div>
+                  </div>
+                </Col>
+              </Row>
+            ),
+          },
+          {
+            key: 'online-watermark',
+            label: 'Online Result Watermark',
+            children: (
+              <Card title="Online Result Watermark" loading={loading} className="admin-report-design-online-card">
+                <Text type="secondary" style={{ display: 'block', marginBottom: 12 }}>
+                  Optional image/text watermark for patient online result page.
+                </Text>
+                <div className="admin-report-design-online-preview">
+                  {onlineResultWatermarkDataUrl ? (
+                    <img
+                      src={onlineResultWatermarkDataUrl}
+                      alt="Online result watermark"
+                      style={{ maxWidth: '100%', maxHeight: 220, objectFit: 'contain' }}
+                    />
+                  ) : (
+                    <Text type="secondary">No online watermark image uploaded</Text>
+                  )}
+                </div>
+                <Space wrap style={{ marginBottom: 12 }}>
+                  <input
+                    ref={onlineWatermarkInputRef}
+                    type="file"
+                    accept="image/png,image/jpeg,image/jpg,image/webp"
+                    onChange={(event) => void handleOnlineWatermarkFileSelect(event)}
+                    style={{ display: 'none' }}
+                  />
+                  <Button
+                    loading={uploadingOnlineWatermark}
+                    onClick={() => onlineWatermarkInputRef.current?.click()}
+                    disabled={!canMutate}
+                  >
+                    {onlineResultWatermarkDataUrl ? 'Replace image' : 'Upload image'}
+                  </Button>
+                  <Button
+                    danger
+                    onClick={() => setOnlineResultWatermarkDataUrl(null)}
+                    disabled={!onlineResultWatermarkDataUrl || !canMutate}
+                  >
+                    Clear image
+                  </Button>
+                </Space>
+                <Text type="secondary" style={{ display: 'block', marginBottom: 8 }}>
+                  Optional text watermark:
+                </Text>
+                <Input
+                  value={onlineResultWatermarkText}
+                  onChange={(event) => setOnlineResultWatermarkText(event.target.value)}
+                  maxLength={120}
+                  showCount
+                  placeholder="ONLINE VERSION"
+                  allowClear
+                  disabled={!canMutate}
+                />
+              </Card>
+            ),
+          },
+        ]}
+      />
 
       <div className="admin-report-design-action-bar">
         <Space wrap>

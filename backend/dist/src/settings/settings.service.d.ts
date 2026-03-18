@@ -6,6 +6,7 @@ import { UserDepartmentAssignment } from '../entities/user-department-assignment
 import { Department } from '../entities/department.entity';
 import { Lab } from '../entities/lab.entity';
 import { Shift } from '../entities/shift.entity';
+import { ReportTheme } from '../entities/report-theme.entity';
 import { type ReportStyleConfig } from '../reports/report-style.config';
 import { ReportsService } from '../reports/reports.service';
 type ReportBrandingUpdate = {
@@ -33,8 +34,9 @@ export declare class SettingsService {
     private readonly departmentRepo;
     private readonly labRepo;
     private readonly shiftRepo;
+    private readonly reportThemeRepo;
     private readonly reportsService;
-    constructor(userRepo: Repository<User>, labAssignmentRepo: Repository<UserLabAssignment>, shiftAssignmentRepo: Repository<UserShiftAssignment>, userDeptRepo: Repository<UserDepartmentAssignment>, departmentRepo: Repository<Department>, labRepo: Repository<Lab>, shiftRepo: Repository<Shift>, reportsService: ReportsService);
+    constructor(userRepo: Repository<User>, labAssignmentRepo: Repository<UserLabAssignment>, shiftAssignmentRepo: Repository<UserShiftAssignment>, userDeptRepo: Repository<UserDepartmentAssignment>, departmentRepo: Repository<Department>, labRepo: Repository<Lab>, shiftRepo: Repository<Shift>, reportThemeRepo: Repository<ReportTheme>, reportsService: ReportsService);
     getRoles(): string[];
     getLabSettings(labId: string): Promise<{
         id: string;
@@ -110,6 +112,46 @@ export declare class SettingsService {
         referringDoctors: string[];
         dashboardAnnouncementText: string | null;
     }>;
+    getReportThemes(labId: string): Promise<ReportTheme[]>;
+    saveReportTheme(labId: string, data: {
+        name: string;
+        reportStyle: ReportStyleConfig;
+        reportBranding: ReportBrandingUpdate;
+        onlineResultWatermarkDataUrl: string | null;
+        onlineResultWatermarkText: string | null;
+    }): Promise<ReportTheme>;
+    applyReportTheme(labId: string, themeId: string): Promise<{
+        id: string;
+        code: string;
+        name: string;
+        labelSequenceBy: string;
+        sequenceResetBy: string;
+        enableOnlineResults: boolean;
+        onlineResultWatermarkDataUrl: string | null;
+        onlineResultWatermarkText: string | null;
+        printing: {
+            mode: string;
+            receiptPrinterName: string | null;
+            labelsPrinterName: string | null;
+            reportPrinterName: string | null;
+        };
+        reportBranding: {
+            bannerDataUrl: string | null;
+            footerDataUrl: string | null;
+            logoDataUrl: string | null;
+            watermarkDataUrl: string | null;
+        };
+        reportStyle: ReportStyleConfig | null;
+        reportDesignFingerprint: string;
+        uiTestGroups: {
+            id: string;
+            name: string;
+            testIds: string[];
+        }[];
+        referringDoctors: string[];
+        dashboardAnnouncementText: string | null;
+    }>;
+    deleteReportTheme(labId: string, themeId: string): Promise<void>;
     generateLabReportPreviewPdf(labId: string, payload: {
         orderId: unknown;
         previewMode?: unknown;
