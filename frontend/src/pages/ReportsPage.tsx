@@ -1831,6 +1831,19 @@ export function ReportsPage() {
     }
   }, []);
 
+  const handlePrintResultDocument = useCallback(async (target: OrderTestDto) => {
+    if (!target.resultDocument) return;
+    setResultDocumentBusyTargetId(target.id);
+    try {
+      const blob = await downloadResultDocument(target.id);
+      await printResultsPdfInBrowser(blob);
+    } catch {
+      message.error('Failed to print result PDF');
+    } finally {
+      setResultDocumentBusyTargetId(null);
+    }
+  }, []);
+
   const handleUploadResultDocument = useCallback(async (target: OrderTestDto, file: File) => {
     if (!editResultContext) return;
     setResultDocumentBusyTargetId(target.id);
@@ -1923,6 +1936,8 @@ export function ReportsPage() {
 
     const rows = getOrderTestRows(order);
     const allTestsInOrder = (order.samples ?? []).flatMap((sample) => sample.orderTests ?? []);
+    const hasUploadedResultDocumentRows = rows.some((row) => Boolean(row.raw.resultDocument?.fileName));
+    const showResultActionsColumn = canAdminEditResults || hasUploadedResultDocumentRows;
 
     if (rows.length === 0) {
       return <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No tests found" />;
@@ -2061,26 +2076,82 @@ export function ReportsPage() {
         ),
         onCell: () => ({ style: compactCellStyle }),
       },
-      ...(canAdminEditResults
+      ...(showResultActionsColumn
         ? [
           {
             title: 'Actions',
             key: 'actions',
-            width: 90,
+            width: canAdminEditResults ? 280 : 220,
             align: 'right' as const,
-            render: (_: unknown, row: ExpandedOrderTestRow) => (
-              <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                <Button
-                  type="link"
-                  size="small"
-                  icon={<EditOutlined />}
-                  onClick={() => openEditResultModal(order, row.raw)}
-                  style={{ paddingInline: 4, fontSize: 11 }}
-                >
-                  Edit
-                </Button>
-              </div>
-            ),
+            render: (_: unknown, row: ExpandedOrderTestRow) => {
+              const hasResultDocument = Boolean(row.raw.resultDocument?.fileName);
+              const isBusy = resultDocumentBusyTargetId === row.raw.id;
+
+              if (!hasResultDocument && !canAdminEditResults) {
+                return (
+                  <Text type="secondary" style={{ fontSize: 10 }}>
+                    -
+                  </Text>
+                );
+              }
+
+              return (
+                <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                  <Space size={4} wrap style={{ justifyContent: 'flex-end' }}>
+                    {hasResultDocument ? (
+                      <>
+                        <Button
+                          type="link"
+                          size="small"
+                          icon={<FilePdfOutlined />}
+                          disabled={isBusy}
+                          onClick={() => {
+                            void handlePreviewResultDocument(row.raw);
+                          }}
+                          style={{ paddingInline: 4, fontSize: 11 }}
+                        >
+                          Preview
+                        </Button>
+                        <Button
+                          type="link"
+                          size="small"
+                          disabled={isBusy}
+                          onClick={() => {
+                            void handleDownloadResultDocument(row.raw);
+                          }}
+                          style={{ paddingInline: 4, fontSize: 11 }}
+                        >
+                          Download
+                        </Button>
+                        <Button
+                          type="link"
+                          size="small"
+                          icon={<PrinterOutlined />}
+                          disabled={isBusy}
+                          onClick={() => {
+                            void handlePrintResultDocument(row.raw);
+                          }}
+                          style={{ paddingInline: 4, fontSize: 11 }}
+                        >
+                          Print
+                        </Button>
+                      </>
+                    ) : null}
+                    {canAdminEditResults ? (
+                      <Button
+                        type="link"
+                        size="small"
+                        icon={<EditOutlined />}
+                        onClick={() => openEditResultModal(order, row.raw)}
+                        style={{ paddingInline: 4, fontSize: 11 }}
+                      >
+                        Edit
+                      </Button>
+                    ) : null}
+                  </Space>
+                </div>
+              );
+            },
             onCell: () => ({ style: compactCellStyle }),
           },
         ]

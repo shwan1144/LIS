@@ -308,7 +308,7 @@ export class PrintServer {
                     ? ['shell', 'sumatra']
                     : this.pdfPrintEngine === 'sumatra'
                         ? ['sumatra']
-                        : ['adobe', 'shell', 'sumatra'];
+                        : ['sumatra', 'adobe', 'shell'];
 
         let lastError: unknown;
         for (const engine of engines) {

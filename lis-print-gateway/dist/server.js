@@ -35,6 +35,7 @@ function parsePort(value) {
 class PrintServer {
     constructor(onEvent, version = 'unknown') {
         this.port = parsePort(process.env.PORT);
+        this.pdfPrintEngine = this.resolvePdfPrintEngine();
         this.startedAt = new Date().toISOString();
         this.tempSumatraPath = path_1.default.join(os_1.default.tmpdir(), SERVICE_NAME, SUMATRA_BINARY_NAME);
         this.server = null;
@@ -73,6 +74,7 @@ class PrintServer {
         });
         this.server.listen(this.port, () => {
             this.log(`Gateway listening on http://localhost:${this.port}`, 'success');
+            this.log(`PDF print engine preference: ${this.pdfPrintEngine}.`);
             void this.notifyStatus();
         });
     }
@@ -109,25 +111,191 @@ class PrintServer {
             if (fs_1.default.existsSync(this.tempSumatraPath)) {
                 options.sumatraPdfPath = this.tempSumatraPath;
             }
-            await (0, pdf_to_printer_1.print)(tempFilePath, options);
-            const durationMs = Date.now() - requestStartedAt;
-            this.log(`Printed ${jobName}${printerName ? ` on ${printerName}` : ''} in ${durationMs} ms (${pdfBuffer.length} bytes).`, 'success');
-            this.respondJson(res, 200, {
+            this.respondJson(res, 202, {
                 jobName,
                 printerName: printerName ?? null,
-                status: 'success',
+                status: 'accepted',
             });
-            void this.notifyStatus();
+            const acceptedMs = Date.now() - requestStartedAt;
+            this.log(`Accepted ${jobName}${printerName ? ` on ${printerName}` : ''} in ${acceptedMs} ms. Printer completion will continue in background.`);
+            void this.runQueuedPdfPrintJob({
+                jobName,
+                pdfSizeBytes: pdfBuffer.length,
+                printerName,
+                requestStartedAt,
+                tempDir,
+                tempFilePath,
+                options,
+            });
         }
         catch (error) {
             const message = error instanceof Error ? error.message : 'Print failed.';
             this.log(`Print failed: ${message}`, 'error');
-            throw new HttpError(500, message);
-        }
-        finally {
             setTimeout(() => {
                 fs_1.default.rmSync(tempDir, { force: true, recursive: true });
             }, 10000);
+            throw new HttpError(500, message);
+        }
+    }
+    async runQueuedPdfPrintJob(input) {
+        try {
+            const engineUsed = await this.printPdfWithPreferredEngine({
+                options: input.options,
+                pdfPath: input.tempFilePath,
+                printerName: input.printerName,
+            });
+            const durationMs = Date.now() - input.requestStartedAt;
+            this.log(`Printed ${input.jobName}${input.printerName ? ` on ${input.printerName}` : ''} in ${durationMs} ms (${input.pdfSizeBytes} bytes) via ${engineUsed}.`, 'success');
+        }
+        catch (error) {
+            const message = error instanceof Error ? error.message : 'Print failed.';
+            this.log(`Print failed for ${input.jobName}: ${message}`, 'error');
+        }
+        finally {
+            setTimeout(() => {
+                fs_1.default.rmSync(input.tempDir, { force: true, recursive: true });
+            }, 10000);
+            void this.notifyStatus();
+        }
+    }
+    resolvePdfPrintEngine() {
+        const raw = String(process.env.LIS_GATEWAY_PDF_PRINT_ENGINE
+            ?? process.env.PDF_PRINT_ENGINE
+            ?? 'auto')
+            .trim()
+            .toLowerCase();
+        if (raw === 'adobe' || raw === 'shell' || raw === 'sumatra') {
+            return raw;
+        }
+        return 'auto';
+    }
+    async printPdfWithPreferredEngine(input) {
+        const attempt = async (engine) => {
+            if (engine === 'adobe') {
+                if (!input.printerName) {
+                    throw new Error('Adobe Reader print requires an explicit printer name.');
+                }
+                await this.printPdfViaAdobeReader(input.pdfPath, input.printerName);
+                return engine;
+            }
+            if (engine === 'shell') {
+                await this.printPdfViaWindowsShell(input.pdfPath, input.printerName);
+                return engine;
+            }
+            await (0, pdf_to_printer_1.print)(input.pdfPath, input.options);
+            return engine;
+        };
+        const engines = this.pdfPrintEngine === 'adobe'
+            ? ['adobe', 'sumatra']
+            : this.pdfPrintEngine === 'shell'
+                ? ['shell', 'sumatra']
+                : this.pdfPrintEngine === 'sumatra'
+                    ? ['sumatra']
+                    : ['sumatra', 'adobe', 'shell'];
+        let lastError;
+        for (const engine of engines) {
+            try {
+                return await attempt(engine);
+            }
+            catch (error) {
+                lastError = error;
+                const message = this.getCommandErrorMessage(error, `PDF print failed via ${engine}.`);
+                this.log(`PDF print engine ${engine} failed${input.printerName ? ` for ${input.printerName}` : ''}: ${message}`, 'error');
+            }
+        }
+        throw lastError instanceof Error ? lastError : new Error('All PDF print engines failed.');
+    }
+    getPossibleAdobeReaderPaths() {
+        const programFiles = process.env.ProgramFiles ?? 'C:\\Program Files';
+        const programFilesX86 = process.env['ProgramFiles(x86)'] ?? 'C:\\Program Files (x86)';
+        return [
+            path_1.default.join(programFiles, 'Adobe', 'Acrobat DC', 'Acrobat', 'Acrobat.exe'),
+            path_1.default.join(programFiles, 'Adobe', 'Acrobat Reader DC', 'Reader', 'AcroRd32.exe'),
+            path_1.default.join(programFiles, 'Adobe', 'Acrobat Reader', 'Reader', 'AcroRd32.exe'),
+            path_1.default.join(programFilesX86, 'Adobe', 'Acrobat Reader DC', 'Reader', 'AcroRd32.exe'),
+            path_1.default.join(programFilesX86, 'Adobe', 'Acrobat Reader', 'Reader', 'AcroRd32.exe'),
+        ];
+    }
+    resolveAdobeReaderPath() {
+        for (const candidate of this.getPossibleAdobeReaderPaths()) {
+            if (fs_1.default.existsSync(candidate)) {
+                return candidate;
+            }
+        }
+        return null;
+    }
+    async getPrinterSpoolIdentity(printerName) {
+        const escapedPrinterName = printerName.replace(/'/g, "''");
+        const command = [
+            `$printer = Get-CimInstance Win32_Printer | Where-Object { $_.Name -eq '${escapedPrinterName}' } | Select-Object -First 1 Name, DriverName, PortName;`,
+            'if (-not $printer) { throw "Printer metadata not found." }',
+            '$printer | ConvertTo-Json -Compress',
+        ].join(' ');
+        try {
+            const { stdout } = await execFileAsync('Powershell.exe', ['-NoProfile', '-Command', command], { windowsHide: true });
+            const raw = stdout.trim();
+            if (!raw) {
+                throw new Error('Printer metadata command returned no data.');
+            }
+            const parsed = JSON.parse(raw);
+            const resolvedName = typeof parsed.Name === 'string' ? parsed.Name.trim() : '';
+            const driverName = typeof parsed.DriverName === 'string' ? parsed.DriverName.trim() : '';
+            const portName = typeof parsed.PortName === 'string' ? parsed.PortName.trim() : '';
+            if (!resolvedName || !driverName || !portName) {
+                throw new Error('Incomplete printer metadata returned from PowerShell.');
+            }
+            return {
+                driverName,
+                name: resolvedName,
+                portName,
+            };
+        }
+        catch (error) {
+            const message = this.getCommandErrorMessage(error, 'Failed to read printer metadata.');
+            throw new Error(message);
+        }
+    }
+    async printPdfViaAdobeReader(pdfPath, printerName) {
+        const adobeReaderPath = this.resolveAdobeReaderPath();
+        if (!adobeReaderPath) {
+            throw new Error('Adobe Reader executable was not found.');
+        }
+        const printer = await this.getPrinterSpoolIdentity(printerName);
+        try {
+            await execFileAsync(adobeReaderPath, ['/t', pdfPath, printer.name, printer.driverName, printer.portName], { windowsHide: true });
+        }
+        catch (error) {
+            const message = this.getCommandErrorMessage(error, 'Adobe Reader print command failed.');
+            throw new Error(message);
+        }
+    }
+    async printPdfViaWindowsShell(pdfPath, printerName) {
+        const escapedPdfPath = pdfPath.replace(/'/g, "''");
+        let command;
+        if (printerName) {
+            const printer = await this.getPrinterSpoolIdentity(printerName);
+            const escapedPrinterName = printer.name.replace(/'/g, "''");
+            const escapedDriverName = printer.driverName.replace(/'/g, "''");
+            const escapedPortName = printer.portName.replace(/'/g, "''");
+            command = [
+                `$process = Start-Process -FilePath '${escapedPdfPath}' -Verb PrintTo -ArgumentList @('${escapedPrinterName}', '${escapedDriverName}', '${escapedPortName}') -PassThru -WindowStyle Hidden;`,
+                '$process.WaitForExit();',
+                'if ($process.ExitCode -ne 0) { exit $process.ExitCode }',
+            ].join(' ');
+        }
+        else {
+            command = [
+                `$process = Start-Process -FilePath '${escapedPdfPath}' -Verb Print -PassThru -WindowStyle Hidden;`,
+                '$process.WaitForExit();',
+                'if ($process.ExitCode -ne 0) { exit $process.ExitCode }',
+            ].join(' ');
+        }
+        try {
+            await execFileAsync('Powershell.exe', ['-NoProfile', '-Command', command], { windowsHide: true });
+        }
+        catch (error) {
+            const message = this.getCommandErrorMessage(error, 'Windows shell PDF print failed.');
+            throw new Error(message);
         }
     }
     async handleRawPrintRequest(res, payload) {

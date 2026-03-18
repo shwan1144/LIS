@@ -1342,7 +1342,7 @@ export function VerificationPage() {
                                   void handlePreviewResultDocument(item);
                                 }}
                               >
-                                View PDF
+                                Preview PDF
                               </Button>
                               <Button
                                 size="small"

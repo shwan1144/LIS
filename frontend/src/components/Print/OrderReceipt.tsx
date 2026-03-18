@@ -42,7 +42,7 @@ export const OrderReceipt = forwardRef<HTMLDivElement, OrderReceiptProps>(
         {/* Header */}
         <div className="receipt-header">
           <h2 className="receipt-lab-name">{labName || order.lab?.name || 'Laboratory'}</h2>
-          <p className="receipt-subtitle">LIS System</p>
+          <p className="receipt-subtitle">MEDILIS System</p>
         </div>
 
         {/* QR Code */}
