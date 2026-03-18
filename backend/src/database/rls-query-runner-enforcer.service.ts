@@ -94,13 +94,8 @@ export class RlsQueryRunnerEnforcerService implements OnModuleInit {
 
     runner.release = async (): Promise<void> => {
       let pendingError: unknown = null;
-      try {
-        if (shouldResetRole) {
-          await this.rlsSessionService.resetRequestContextWithExecutor(rawExecutor);
-        }
-      } catch (error) {
-        pendingError = error;
-      }
+      // We defer resetting the role until AFTER the transaction is resolved
+      // to avoid 'current transaction is aborted' errors preventing rollback.
 
       try {
         if (ownsAutoTransaction && runner.isTransactionActive) {
@@ -124,7 +119,19 @@ export class RlsQueryRunnerEnforcerService implements OnModuleInit {
         if (!pendingError) {
           pendingError = error;
         }
-      } finally {
+      }
+
+      try {
+        if (shouldResetRole) {
+          await this.rlsSessionService.resetRequestContextWithExecutor(rawExecutor);
+        }
+      } catch (error) {
+        if (!pendingError) {
+          pendingError = error;
+        }
+      }
+
+      try {
         await originalRelease();
       }
 

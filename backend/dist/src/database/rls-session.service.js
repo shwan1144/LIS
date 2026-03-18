@@ -139,14 +139,6 @@ let RlsSessionService = RlsSessionService_1 = class RlsSessionService {
     async resetThenFinalizeRunner(runner, executeQuery, pendingError) {
         let error = pendingError;
         try {
-            await this.resetRequestContextWithExecutor(executeQuery);
-        }
-        catch (resetError) {
-            if (!error) {
-                error = resetError;
-            }
-        }
-        try {
             if (runner.isTransactionActive) {
                 await runner.rollbackTransaction();
             }
@@ -154,6 +146,14 @@ let RlsSessionService = RlsSessionService_1 = class RlsSessionService {
         catch (rollbackError) {
             if (!error) {
                 error = rollbackError;
+            }
+        }
+        try {
+            await this.resetRequestContextWithExecutor(executeQuery);
+        }
+        catch (resetError) {
+            if (!error) {
+                error = resetError;
             }
         }
         try {

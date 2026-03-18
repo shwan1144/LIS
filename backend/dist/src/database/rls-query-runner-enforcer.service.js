@@ -84,14 +84,6 @@ let RlsQueryRunnerEnforcerService = RlsQueryRunnerEnforcerService_1 = class RlsQ
         runner.release = async () => {
             let pendingError = null;
             try {
-                if (shouldResetRole) {
-                    await this.rlsSessionService.resetRequestContextWithExecutor(rawExecutor);
-                }
-            }
-            catch (error) {
-                pendingError = error;
-            }
-            try {
                 if (ownsAutoTransaction && runner.isTransactionActive) {
                     if (queryFailed) {
                         await runner.rollbackTransaction();
@@ -116,8 +108,20 @@ let RlsQueryRunnerEnforcerService = RlsQueryRunnerEnforcerService_1 = class RlsQ
                     pendingError = error;
                 }
             }
-            finally {
+            try {
+                if (shouldResetRole) {
+                    await this.rlsSessionService.resetRequestContextWithExecutor(rawExecutor);
+                }
+            }
+            catch (error) {
+                if (!pendingError) {
+                    pendingError = error;
+                }
+            }
+            try {
                 await originalRelease();
+            }
+            finally {
             }
             if (pendingError) {
                 throw pendingError;

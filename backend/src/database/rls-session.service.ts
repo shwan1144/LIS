@@ -175,20 +175,20 @@ export class RlsSessionService {
     let error = pendingError;
 
     try {
-      await this.resetRequestContextWithExecutor(executeQuery);
-    } catch (resetError) {
-      if (!error) {
-        error = resetError;
-      }
-    }
-
-    try {
       if (runner.isTransactionActive) {
         await runner.rollbackTransaction();
       }
     } catch (rollbackError) {
       if (!error) {
         error = rollbackError;
+      }
+    }
+
+    try {
+      await this.resetRequestContextWithExecutor(executeQuery);
+    } catch (resetError) {
+      if (!error) {
+        error = resetError;
       }
     }
 

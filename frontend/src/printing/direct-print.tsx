@@ -273,7 +273,12 @@ async function gatewayPrintRaw(params: {
   throw lastError ?? new Error('Gateway RAW print route not found.');
 }
 
-async function convertHtmlToPdf(element: HTMLElement): Promise<Blob> {
+async function convertHtmlToPdf(
+  element: HTMLElement,
+  options?: {
+    orientation?: 'portrait' | 'landscape';
+  },
+): Promise<Blob> {
   const canvas = await html2canvas(element, {
     scale: 2,
     useCORS: true,
@@ -282,7 +287,7 @@ async function convertHtmlToPdf(element: HTMLElement): Promise<Blob> {
   });
   const imgData = canvas.toDataURL('image/png');
   const pdf = new jsPDF({
-    orientation: canvas.width > canvas.height ? 'landscape' : 'portrait',
+    orientation: options?.orientation ?? (canvas.width > canvas.height ? 'landscape' : 'portrait'),
     unit: 'px',
     format: [canvas.width, canvas.height],
   });
@@ -427,12 +432,14 @@ function thresholdCanvasForThermalPrint(canvas: HTMLCanvasElement): void {
   context.putImageData(imageData, 0, 0);
 }
 
-async function renderAndConvertOffscreen(element: React.ReactElement): Promise<Blob> {
+async function renderReceiptToPdf(element: React.ReactElement): Promise<Blob> {
   const host = document.createElement('div');
   host.style.position = 'fixed';
   host.style.left = '-100000px';
   host.style.top = '0';
-  host.style.width = '800px';
+  host.style.display = 'inline-block';
+  host.style.width = 'max-content';
+  host.style.background = '#ffffff';
   host.className = 'print-container-offscreen';
   document.body.appendChild(host);
 
@@ -440,7 +447,13 @@ async function renderAndConvertOffscreen(element: React.ReactElement): Promise<B
   try {
     root.render(element);
     await waitForRenderAndEffects();
-    return await convertHtmlToPdf(host);
+
+    const receipt = host.querySelector<HTMLElement>('.print-receipt');
+    if (!receipt) {
+      throw new Error('Receipt content unavailable to print.');
+    }
+
+    return await convertHtmlToPdf(receipt, { orientation: 'portrait' });
   } finally {
     root.unmount();
     host.remove();
@@ -508,7 +521,9 @@ export async function directPrintReceipt(params: {
     labName: params.labName,
     order: params.order,
   });
-  await gatewayPrintPdf(blob, params.printerName, jobName);
+  await gatewayPrintPdf(blob, params.printerName, jobName, {
+    orientation: 'portrait',
+  });
 }
 
 export async function warmDirectReceiptPrintAssets(params: {
@@ -693,7 +708,7 @@ async function getCachedReceiptPdf(params: {
     return inFlight;
   }
 
-  const promise = renderAndConvertOffscreen(
+  const promise = renderReceiptToPdf(
     <div className="print-container">
       <style>{printCss}</style>
       <OrderReceipt order={params.order} labName={params.labName} />
