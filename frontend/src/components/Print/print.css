@@ -20,7 +20,7 @@
 
 .print-receipt {
   box-sizing: border-box;
-  width: var(--receipt-width, 74mm);
+  width: var(--receipt-width, 73mm);
   max-width: 100%;
   margin: 0 auto;
   padding: 1.2mm 1.3mm 1.7mm;
@@ -541,7 +541,7 @@
   .print-receipt {
     page: receipt;
     box-sizing: border-box;
-    width: var(--receipt-width, 74mm);
+    width: var(--receipt-width, 73mm);
     max-width: 100%;
     padding: 1.2mm 1.3mm 1.7mm;
     margin: 0;

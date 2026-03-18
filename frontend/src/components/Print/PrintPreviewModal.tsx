@@ -28,7 +28,14 @@ export function PrintPreviewModal({
 }: PrintPreviewModalProps) {
   const printRef = useRef<HTMLDivElement>(null);
   const printContainerStyle = type === 'receipt'
-    ? ({ '--receipt-width': '74mm' } as CSSProperties)
+    ? ({
+      '--receipt-width': '73mm',
+      background: '#ffffff',
+      boxSizing: 'border-box',
+      paddingLeft: '4mm',
+      paddingRight: '3mm',
+      width: '80mm',
+    } as CSSProperties)
     : undefined;
 
   const handlePrint = useReactToPrint({
@@ -62,7 +69,11 @@ export function PrintPreviewModal({
     >
       <div className="print-preview-container">
         <div className="print-preview-paper">
-          <div ref={printRef} className="print-container" style={printContainerStyle}>
+          <div
+            ref={printRef}
+            className={type === 'receipt' ? 'print-container print-container-receipt' : 'print-container'}
+            style={printContainerStyle}
+          >
             {type === 'receipt' ? (
               <OrderReceipt order={order} labName={labName} />
             ) : (

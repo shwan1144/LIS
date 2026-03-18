@@ -28,7 +28,7 @@ const GATEWAY_PRINT_TIMEOUT_MS = 20_000;
 const GATEWAY_PRINTER_CONFIG_CACHE_TTL_MS = 5 * 60_000;
 const RECEIPT_PDF_CACHE_TTL_MS = 5 * 60_000;
 const RECEIPT_DEFAULT_PAPER_WIDTH_MM = 80;
-const RECEIPT_DEFAULT_CONTENT_WIDTH_MM = 74;
+const RECEIPT_DEFAULT_CONTENT_WIDTH_MM = 73;
 const RECEIPT_DEFAULT_TARGET_DPI = 203;
 const RECEIPT_MAX_TARGET_DPI = 300;
 const RECEIPT_RENDER_MIN_SCALE = 2.5;
@@ -36,7 +36,8 @@ const RECEIPT_RENDER_MAX_SCALE = 5;
 const RECEIPT_THRESHOLD = 216;
 const RECEIPT_MIN_PAPER_WIDTH_MM = 58;
 const RECEIPT_MAX_PAPER_WIDTH_MM = 82;
-const RECEIPT_SAFE_HORIZONTAL_MARGIN_MM = 3;
+const RECEIPT_SAFE_LEFT_MARGIN_MM = 4;
+const RECEIPT_SAFE_RIGHT_MARGIN_MM = 3;
 const RECEIPT_MIN_CONTENT_WIDTH_MM = 52;
 const RECEIPT_MAX_CONTENT_WIDTH_MM = RECEIPT_DEFAULT_CONTENT_WIDTH_MM;
 const VIRTUAL_SAVE_PRINTER_KEYWORDS = [
@@ -96,6 +97,7 @@ type CachedReceiptPdfEntry = {
 
 type ReceiptRenderProfile = {
   contentWidthMm: number;
+  offsetXMm: number;
   pageWidthMm: number;
   targetDpi: number;
   thermalThreshold: number;
@@ -296,6 +298,7 @@ async function convertHtmlToPdf(
   element: HTMLElement,
   options?: {
     contentWidthMm?: number;
+    offsetXMm?: number;
     orientation?: 'portrait' | 'landscape';
     pageWidthMm?: number;
     targetDpi?: number;
@@ -348,7 +351,12 @@ async function convertHtmlToPdf(
       pageWidthMm,
     );
     const pageHeightMm = contentWidthMm * (canvas.height / Math.max(canvas.width, 1));
-    const offsetXmm = Math.max(0, (pageWidthMm - contentWidthMm) / 2);
+    const centeredOffsetMm = Math.max(0, (pageWidthMm - contentWidthMm) / 2);
+    const offsetXmm = clampNumber(
+      options?.offsetXMm ?? centeredOffsetMm,
+      0,
+      Math.max(0, pageWidthMm - contentWidthMm),
+    );
     const pdf = new jsPDF({
       orientation: options?.orientation ?? 'portrait',
       unit: 'mm',
@@ -537,13 +545,14 @@ async function renderReceiptToPdf(
     root.render(element);
     await waitForRenderAndEffects();
 
-    const receipt = host.querySelector<HTMLElement>('.print-receipt');
+    const receipt = host.querySelector<HTMLElement>('.print-container-receipt');
     if (!receipt) {
       throw new Error('Receipt content unavailable to print.');
     }
 
     return await convertHtmlToPdf(receipt, {
-      contentWidthMm: renderProfile.contentWidthMm,
+      contentWidthMm: renderProfile.pageWidthMm,
+      offsetXMm: 0,
       orientation: 'portrait',
       pageWidthMm: renderProfile.pageWidthMm,
       targetDpi: renderProfile.targetDpi,
@@ -860,8 +869,15 @@ async function getCachedReceiptPdf(params: {
 
   const promise = renderReceiptToPdf(
     <div
-      className="print-container"
-      style={{ '--receipt-width': `${renderProfile.contentWidthMm}mm` } as React.CSSProperties}
+      className="print-container print-container-receipt"
+      style={{
+        '--receipt-width': `${renderProfile.contentWidthMm}mm`,
+        background: '#ffffff',
+        boxSizing: 'border-box',
+        paddingLeft: `${renderProfile.offsetXMm}mm`,
+        paddingRight: `${Math.max(0, renderProfile.pageWidthMm - renderProfile.contentWidthMm - renderProfile.offsetXMm)}mm`,
+        width: `${renderProfile.pageWidthMm}mm`,
+      } as React.CSSProperties}
     >
       <style>{printCss}</style>
       <OrderReceipt order={params.order} labName={params.labName} />
@@ -896,9 +912,17 @@ function resolveReceiptRenderProfile(
     RECEIPT_MAX_PAPER_WIDTH_MM,
   );
   const contentWidthMm = clampNumber(
-    pageWidthMm - (RECEIPT_SAFE_HORIZONTAL_MARGIN_MM * 2),
+    Math.min(
+      RECEIPT_DEFAULT_CONTENT_WIDTH_MM,
+      pageWidthMm - RECEIPT_SAFE_LEFT_MARGIN_MM - RECEIPT_SAFE_RIGHT_MARGIN_MM,
+    ),
     RECEIPT_MIN_CONTENT_WIDTH_MM,
     Math.min(RECEIPT_MAX_CONTENT_WIDTH_MM, pageWidthMm),
+  );
+  const offsetXMm = clampNumber(
+    RECEIPT_SAFE_LEFT_MARGIN_MM,
+    0,
+    Math.max(0, pageWidthMm - contentWidthMm),
   );
   const targetDpi = clampNumber(
     Math.round(
@@ -912,6 +936,7 @@ function resolveReceiptRenderProfile(
 
   return {
     contentWidthMm,
+    offsetXMm,
     pageWidthMm,
     targetDpi,
     thermalThreshold: RECEIPT_THRESHOLD,
