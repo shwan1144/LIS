@@ -94,20 +94,25 @@ class PrintServer {
         }
         const requestStartedAt = Date.now();
         const body = payload;
+        const documentKind = this.normalizeDocumentKind(body.documentKind);
         const jobName = this.normalizeOptionalText(body.jobName, 'jobName') ?? 'LIS Print Job';
         const requestedPrinterName = this.normalizeOptionalText(body.printerName, 'printerName');
         const pdfBuffer = this.decodeBase64Pdf(body.pdfBase64);
         const printerName = await this.resolvePrinterName(requestedPrinterName);
         const tempDir = fs_1.default.mkdtempSync(path_1.default.join(os_1.default.tmpdir(), `${SERVICE_NAME}-`));
         const tempFilePath = path_1.default.join(tempDir, `${(0, crypto_1.randomUUID)()}.pdf`);
-        this.log(`Print request received for ${jobName}${printerName ? ` on ${printerName}` : ' on default printer'}.`);
+        const requestedPrintOptions = this.resolveRequestedPrintOptions(body.printOptions);
+        const driverOverridesSuppressed = documentKind === 'receipt';
+        this.log(`Print request received for ${jobName}${printerName ? ` on ${printerName}` : ' on default printer'} (documentKind=${documentKind}).`);
         try {
             fs_1.default.writeFileSync(tempFilePath, pdfBuffer);
             const options = {};
             if (printerName) {
                 options.printer = printerName;
             }
-            this.applyRequestedPrintOptions(body.printOptions, options);
+            if (!driverOverridesSuppressed) {
+                Object.assign(options, requestedPrintOptions);
+            }
             if (fs_1.default.existsSync(this.tempSumatraPath)) {
                 options.sumatraPdfPath = this.tempSumatraPath;
             }
@@ -117,8 +122,10 @@ class PrintServer {
                 status: 'accepted',
             });
             const acceptedMs = Date.now() - requestStartedAt;
-            this.log(`Accepted ${jobName}${printerName ? ` on ${printerName}` : ''} in ${acceptedMs} ms. Printer completion will continue in background.`);
+            this.log(`Accepted ${jobName}${printerName ? ` on ${printerName}` : ''} in ${acceptedMs} ms (documentKind=${documentKind}, driverOverridesSuppressed=${driverOverridesSuppressed ? 'yes' : 'no'}). Printer completion will continue in background.`);
             void this.runQueuedPdfPrintJob({
+                documentKind,
+                driverOverridesSuppressed,
                 jobName,
                 pdfSizeBytes: pdfBuffer.length,
                 printerName,
@@ -140,16 +147,17 @@ class PrintServer {
     async runQueuedPdfPrintJob(input) {
         try {
             const engineUsed = await this.printPdfWithPreferredEngine({
+                documentKind: input.documentKind,
                 options: input.options,
                 pdfPath: input.tempFilePath,
                 printerName: input.printerName,
             });
             const durationMs = Date.now() - input.requestStartedAt;
-            this.log(`Printed ${input.jobName}${input.printerName ? ` on ${input.printerName}` : ''} in ${durationMs} ms (${input.pdfSizeBytes} bytes) via ${engineUsed}.`, 'success');
+            this.log(`Printed ${input.jobName}${input.printerName ? ` on ${input.printerName}` : ''} in ${durationMs} ms (${input.pdfSizeBytes} bytes) via ${engineUsed} (documentKind=${input.documentKind}, driverOverridesSuppressed=${input.driverOverridesSuppressed ? 'yes' : 'no'}).`, 'success');
         }
         catch (error) {
             const message = error instanceof Error ? error.message : 'Print failed.';
-            this.log(`Print failed for ${input.jobName}: ${message}`, 'error');
+            this.log(`Print failed for ${input.jobName} (documentKind=${input.documentKind}): ${message}`, 'error');
         }
         finally {
             setTimeout(() => {
@@ -185,13 +193,15 @@ class PrintServer {
             await (0, pdf_to_printer_1.print)(input.pdfPath, input.options);
             return engine;
         };
-        const engines = this.pdfPrintEngine === 'adobe'
-            ? ['adobe', 'sumatra']
-            : this.pdfPrintEngine === 'shell'
-                ? ['shell', 'sumatra']
-                : this.pdfPrintEngine === 'sumatra'
-                    ? ['sumatra']
-                    : ['sumatra', 'adobe', 'shell'];
+        const engines = input.documentKind === 'receipt'
+            ? ['sumatra']
+            : this.pdfPrintEngine === 'adobe'
+                ? ['adobe', 'sumatra']
+                : this.pdfPrintEngine === 'shell'
+                    ? ['shell', 'sumatra']
+                    : this.pdfPrintEngine === 'sumatra'
+                        ? ['sumatra']
+                        : ['sumatra', 'adobe', 'shell'];
         let lastError;
         for (const engine of engines) {
             try {
@@ -200,7 +210,7 @@ class PrintServer {
             catch (error) {
                 lastError = error;
                 const message = this.getCommandErrorMessage(error, `PDF print failed via ${engine}.`);
-                this.log(`PDF print engine ${engine} failed${input.printerName ? ` for ${input.printerName}` : ''}: ${message}`, 'error');
+                this.log(`PDF print engine ${engine} failed${input.printerName ? ` for ${input.printerName}` : ''} (documentKind=${input.documentKind}): ${message}`, 'error');
             }
         }
         throw lastError instanceof Error ? lastError : new Error('All PDF print engines failed.');
@@ -669,9 +679,20 @@ class PrintServer {
     async notifyStatus() {
         this.onEvent({ data: await this.getStatusSnapshot(), type: 'status' });
     }
-    applyRequestedPrintOptions(value, options) {
+    normalizeDocumentKind(value) {
+        const documentKind = this.normalizeOptionalText(value, 'documentKind');
+        if (!documentKind) {
+            return 'unknown';
+        }
+        if (documentKind === 'receipt' || documentKind === 'label' || documentKind === 'report') {
+            return documentKind;
+        }
+        throw new HttpError(400, 'documentKind must be receipt, label, or report.');
+    }
+    resolveRequestedPrintOptions(value) {
+        const options = {};
         if (value == null) {
-            return;
+            return options;
         }
         if (typeof value !== 'object' || Array.isArray(value)) {
             throw new HttpError(400, 'printOptions must be an object.');
@@ -694,6 +715,7 @@ class PrintServer {
         if (paperSize) {
             options.paperSize = paperSize;
         }
+        return options;
     }
     async readJsonBody(req) {
         return new Promise((resolve, reject) => {

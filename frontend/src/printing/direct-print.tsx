@@ -54,10 +54,17 @@ const LABEL_RENDER_MAX_SCALE = 8;
 const LABEL_TARGET_DPI = 300;
 const LABEL_THRESHOLD = 208;
 
-type GatewayPrintOptions = {
+type GatewayDocumentKind = 'receipt' | 'label' | 'report';
+
+type GatewayDriverPrintOptions = {
   orientation?: 'portrait' | 'landscape';
   scale?: 'noscale' | 'shrink' | 'fit';
   paperSize?: string;
+};
+
+type GatewayPrintOptions = {
+  documentKind?: GatewayDocumentKind;
+  printOptions?: GatewayDriverPrintOptions;
 };
 
 type GatewayPrintersResponse = {
@@ -97,7 +104,6 @@ type CachedReceiptPdfEntry = {
 
 type ReceiptRenderProfile = {
   contentWidthMm: number;
-  offsetXMm: number;
   pageWidthMm: number;
   targetDpi: number;
   thermalThreshold: number;
@@ -242,16 +248,17 @@ async function gatewayPrintPdf(
   blob: Blob,
   printerName: string,
   jobName: string,
-  printOptions?: GatewayPrintOptions,
+  options?: GatewayPrintOptions,
 ): Promise<void> {
   const base64 = await blobToBase64(blob);
   await axios.post(
     `${GATEWAY_URL}/local/print`,
     {
+      documentKind: options?.documentKind,
       printerName,
       pdfBase64: base64,
       jobName,
-      printOptions,
+      printOptions: options?.printOptions,
     },
     { timeout: GATEWAY_PRINT_TIMEOUT_MS },
   );
@@ -298,7 +305,6 @@ async function convertHtmlToPdf(
   element: HTMLElement,
   options?: {
     contentWidthMm?: number;
-    offsetXMm?: number;
     orientation?: 'portrait' | 'landscape';
     pageWidthMm?: number;
     targetDpi?: number;
@@ -351,18 +357,12 @@ async function convertHtmlToPdf(
       pageWidthMm,
     );
     const pageHeightMm = contentWidthMm * (canvas.height / Math.max(canvas.width, 1));
-    const centeredOffsetMm = Math.max(0, (pageWidthMm - contentWidthMm) / 2);
-    const offsetXmm = clampNumber(
-      options?.offsetXMm ?? centeredOffsetMm,
-      0,
-      Math.max(0, pageWidthMm - contentWidthMm),
-    );
     const pdf = new jsPDF({
       orientation: options?.orientation ?? 'portrait',
       unit: 'mm',
       format: [pageWidthMm, pageHeightMm],
     });
-    pdf.addImage(imgData, 'PNG', offsetXmm, 0, contentWidthMm, pageHeightMm);
+    pdf.addImage(imgData, 'PNG', 0, 0, contentWidthMm, pageHeightMm);
     return pdf.output('blob');
   }
 
@@ -552,7 +552,6 @@ async function renderReceiptToPdf(
 
     return await convertHtmlToPdf(receipt, {
       contentWidthMm: renderProfile.pageWidthMm,
-      offsetXMm: 0,
       orientation: 'portrait',
       pageWidthMm: renderProfile.pageWidthMm,
       targetDpi: renderProfile.targetDpi,
@@ -638,14 +637,10 @@ export async function directPrintReceipt(params: {
 }): Promise<void> {
   const jobName = `Receipt-${params.order.orderNumber || params.order.id}`;
   let printerConfig: GatewayPrinterConfigResponse = {};
-  let paperSize: string | undefined;
 
   try {
     const configResult = await fetchGatewayPrinterConfigCached(params.printerName);
     printerConfig = configResult.config;
-    if (typeof printerConfig.paperSize === 'string' && printerConfig.paperSize.trim()) {
-      paperSize = printerConfig.paperSize.trim();
-    }
   } catch {
     // Receipt printing still falls back to the default thermal profile if config lookup fails.
   }
@@ -655,11 +650,7 @@ export async function directPrintReceipt(params: {
     order: params.order,
     printerConfig,
   });
-  await gatewayPrintPdf(blob, params.printerName, jobName, {
-    orientation: 'portrait',
-    paperSize,
-    scale: 'noscale',
-  });
+  await gatewayPrintPdf(blob, params.printerName, jobName, { documentKind: 'receipt' });
 }
 
 export async function warmDirectReceiptPrintAssets(params: {
@@ -777,9 +768,12 @@ export async function directPrintLabels(params: {
     );
     const dispatchResult = await measureAsync(() =>
       gatewayPrintPdf(pdfResult.result, params.printerName, jobName, {
-        orientation: 'portrait',
-        paperSize,
-        scale: 'noscale',
+        documentKind: 'label',
+        printOptions: {
+          orientation: 'portrait',
+          paperSize,
+          scale: 'noscale',
+        },
       }),
     );
     recordLabelPrintTelemetry({
@@ -874,8 +868,19 @@ async function getCachedReceiptPdf(params: {
         '--receipt-width': `${renderProfile.contentWidthMm}mm`,
         background: '#ffffff',
         boxSizing: 'border-box',
-        paddingLeft: `${renderProfile.offsetXMm}mm`,
-        paddingRight: `${Math.max(0, renderProfile.pageWidthMm - renderProfile.contentWidthMm - renderProfile.offsetXMm)}mm`,
+        paddingLeft: `${Math.min(
+          RECEIPT_SAFE_LEFT_MARGIN_MM,
+          Math.max(0, renderProfile.pageWidthMm - renderProfile.contentWidthMm),
+        )}mm`,
+        paddingRight: `${Math.max(
+          0,
+          renderProfile.pageWidthMm
+            - renderProfile.contentWidthMm
+            - Math.min(
+              RECEIPT_SAFE_LEFT_MARGIN_MM,
+              Math.max(0, renderProfile.pageWidthMm - renderProfile.contentWidthMm),
+            ),
+        )}mm`,
         width: `${renderProfile.pageWidthMm}mm`,
       } as React.CSSProperties}
     >
@@ -919,11 +924,6 @@ function resolveReceiptRenderProfile(
     RECEIPT_MIN_CONTENT_WIDTH_MM,
     Math.min(RECEIPT_MAX_CONTENT_WIDTH_MM, pageWidthMm),
   );
-  const offsetXMm = clampNumber(
-    RECEIPT_SAFE_LEFT_MARGIN_MM,
-    0,
-    Math.max(0, pageWidthMm - contentWidthMm),
-  );
   const targetDpi = clampNumber(
     Math.round(
       toPositiveNumber(printerConfig?.resolutionXDpi)
@@ -936,7 +936,6 @@ function resolveReceiptRenderProfile(
 
   return {
     contentWidthMm,
-    offsetXMm,
     pageWidthMm,
     targetDpi,
     thermalThreshold: RECEIPT_THRESHOLD,
@@ -961,7 +960,9 @@ export async function directPrintReportPdf(params: {
   printerName: string;
 }): Promise<void> {
   const jobName = `Report-${params.orderId}`;
-  await gatewayPrintPdf(params.blob, params.printerName, jobName);
+  await gatewayPrintPdf(params.blob, params.printerName, jobName, {
+    documentKind: 'report',
+  });
 }
 
 export async function checkDirectPrintConnection(printerName?: string): Promise<void> {
