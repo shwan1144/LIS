@@ -31,6 +31,7 @@ export interface OrderListQueryParams {
     patientId?: string;
     shiftId?: string;
     sourceSubLabId?: string;
+    departmentId?: string;
     startDate?: string;
     endDate?: string;
     dateFilterTimeZone?: string;

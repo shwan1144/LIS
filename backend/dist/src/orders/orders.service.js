@@ -1449,6 +1449,18 @@ let OrdersService = OrdersService_1 = class OrdersService {
                 sourceSubLabId: params.sourceSubLabId,
             });
         }
+        if (params.departmentId) {
+            qb.andWhere(`EXISTS (
+          SELECT 1
+          FROM samples s
+          INNER JOIN order_tests ot ON ot."sampleId" = s.id
+          INNER JOIN tests t ON t.id = ot."testId"
+          WHERE s."orderId" = "order"."id"
+            AND t."departmentId" = :departmentId
+        )`, {
+                departmentId: params.departmentId,
+            });
+        }
         if (params.search?.trim()) {
             const term = `%${params.search.trim()}%`;
             const exactSearch = params.search.trim();

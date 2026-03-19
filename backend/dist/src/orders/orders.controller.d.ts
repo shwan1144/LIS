@@ -23,7 +23,7 @@ export declare class OrdersController {
     private readonly logger;
     constructor(ordersService: OrdersService);
     create(req: RequestWithUser, dto: CreateOrderDto, view?: CreateOrderView): Promise<import("../entities/order.entity").Order | import("./dto/create-order-response.dto").CreateOrderSummaryDto>;
-    findAll(req: RequestWithUser, page?: string, size?: string, search?: string, status?: string, patientId?: string, shiftId?: string, sourceSubLabId?: string, startDate?: string, endDate?: string, dateFilterTimeZone?: string): Promise<{
+    findAll(req: RequestWithUser, page?: string, size?: string, search?: string, status?: string, patientId?: string, shiftId?: string, sourceSubLabId?: string, departmentId?: string, startDate?: string, endDate?: string, dateFilterTimeZone?: string): Promise<{
         items: import("../entities/order.entity").Order[];
         total: number;
         page: number;
@@ -52,7 +52,7 @@ export declare class OrdersController {
     }): Promise<{
         ok: boolean;
     }>;
-    findHistory(req: RequestWithUser, page?: string, size?: string, search?: string, status?: string, patientId?: string, shiftId?: string, sourceSubLabId?: string, startDate?: string, endDate?: string, dateFilterTimeZone?: string, resultStatus?: OrderResultStatus): Promise<{
+    findHistory(req: RequestWithUser, page?: string, size?: string, search?: string, status?: string, patientId?: string, shiftId?: string, sourceSubLabId?: string, departmentId?: string, startDate?: string, endDate?: string, dateFilterTimeZone?: string, resultStatus?: OrderResultStatus): Promise<{
         items: import("./orders.service").OrderHistoryItem[];
         total: number;
         page: number;

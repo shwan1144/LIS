@@ -38,9 +38,11 @@ import {
   downloadTestResultsPDF,
   enterResult,
   getAntibiotics,
+  getDepartments,
   getReportActionFlags,
   getLabSettings,
   getOrder,
+  getSubLabs,
   getWorklistStats,
   logReportAction,
   removeResultDocument,
@@ -48,14 +50,16 @@ import {
   uploadResultDocument,
   updateOrderPayment,
   type AntibioticDto,
+  type DepartmentDto,
   type DownloadTestResultsPdfProfilingHeaders,
   type LabSettingsDto,
-  type ReportActionFlagsDto,
-  type ReportActionKind,
+  type OrderDto,
   type OrderHistoryItemDto,
   type OrderResultStatus,
-  type OrderDto,
   type OrderTestDto,
+  type ReportActionFlagsDto,
+  type ReportActionKind,
+  type SubLabListItemDto,
   type TestParameterDefinition,
   type WorklistStats,
 } from '../api/client';
@@ -89,6 +93,8 @@ const REPORT_DESIGN_FINGERPRINT_STALE_MS = 60 * 1000;
 const REPORT_BROWSER_PRINT_LOAD_TIMEOUT_MS = 15 * 1000;
 const REPORT_BROWSER_PRINT_FALLBACK_CLEANUP_MS = 5 * 60 * 1000;
 const REPORT_PRINT_PROFILE_MAX_ENTRIES = 100;
+const REPORT_ALL_DEPARTMENTS_FILTER = '__all_departments__';
+const REPORT_ALL_SUB_LABS_FILTER = '__all_sub_labs__';
 
 type EditResultMode = 'SINGLE' | 'PANEL';
 type ReportStatusFilter = 'ALL' | 'PENDING' | 'COMPLETED' | 'VERIFIED' | 'REJECTED';
@@ -264,11 +270,11 @@ const REPORT_PRINT_WARMUP_DELAY_MS = 800;
 
 const RESULT_FLAG_META: Record<string, { color: string }> = {
   N: { color: 'green' },
-  H: { color: 'orange' },
-  L: { color: 'blue' },
+  H: { color: 'red' },
+  L: { color: 'red' },
   POS: { color: 'red' },
   NEG: { color: 'green' },
-  ABN: { color: 'purple' },
+  ABN: { color: 'red' },
 };
 
 function cleanPhoneNumber(phone: string): string {
@@ -839,6 +845,48 @@ function getOrderTestRows(order: OrderDto): ExpandedOrderTestRow[] {
   return rows;
 }
 
+function getOrderTestRowsForDepartment(
+  order: OrderDto,
+  departmentId: string | null,
+): ExpandedOrderTestRow[] {
+  if (!departmentId) {
+    return getOrderTestRows(order);
+  }
+
+  const rows: ExpandedOrderTestRow[] = [];
+  const allTestsInOrder = (order.samples ?? []).flatMap((sample) => sample.orderTests ?? []);
+
+  const matchesDepartment = (orderTest: OrderTestDto) =>
+    orderTest.departmentId === departmentId ||
+    allTestsInOrder.some(
+      (candidate) =>
+        candidate.parentOrderTestId === orderTest.id && candidate.departmentId === departmentId,
+    );
+
+  for (const sample of order.samples ?? []) {
+    const sampleLabel = sample.barcode || sample.id.substring(0, 8);
+    for (const orderTest of sample.orderTests ?? []) {
+      if (orderTest.parentOrderTestId || !matchesDepartment(orderTest)) {
+        continue;
+      }
+      rows.push({
+        key: orderTest.id,
+        sampleLabel,
+        testCode: orderTest.test?.code || '-',
+        testName: orderTest.test?.name || '-',
+        resultPreview: formatOrderTestResultPreview(orderTest, allTestsInOrder),
+        unitPreview: orderTest.test?.unit?.trim() ?? '',
+        status: orderTest.status,
+        flag: orderTest.flag,
+        verifiedAt: orderTest.verifiedAt,
+        raw: orderTest,
+      });
+    }
+  }
+
+  return rows;
+}
+
 export function ReportsPage() {
   const { lab } = useAuth();
   const screens = useBreakpoint();
@@ -862,8 +910,12 @@ export function ReportsPage() {
     dayjs().startOf('day'),
     dayjs().endOf('day'),
   ]);
+  const [departments, setDepartments] = useState<DepartmentDto[]>([]);
+  const [subLabs, setSubLabs] = useState<SubLabListItemDto[]>([]);
   const [searchText, setSearchText] = useState('');
   const [statusFilter, setStatusFilter] = useState<ReportStatusFilter>('ALL');
+  const [departmentFilter, setDepartmentFilter] = useState(REPORT_ALL_DEPARTMENTS_FILTER);
+  const [subLabFilter, setSubLabFilter] = useState(REPORT_ALL_SUB_LABS_FILTER);
   const [downloading, setDownloading] = useState<string | null>(null);
   const ordersPageSize = 25;
 
@@ -908,6 +960,8 @@ export function ReportsPage() {
 
   const canAdminEditResults =
     currentUserRole === 'LAB_ADMIN' || currentUserRole === 'SUPER_ADMIN';
+  const selectedDepartmentId =
+    departmentFilter === REPORT_ALL_DEPARTMENTS_FILTER ? null : departmentFilter;
 
   const canReleaseResults = (order: OrderHistoryItemDto): boolean => {
     const availability = getResultAvailability(order);
@@ -1009,13 +1063,17 @@ export function ReportsPage() {
     [orderDetailsCache, orderDetailsLoadingIds],
   );
 
-  const loadOrders = async (
-    pageOverride?: number,
-    statusFilterOverride?: ReportStatusFilter,
-  ) => {
+  const loadOrders = async (options?: {
+    page?: number;
+    statusFilter?: ReportStatusFilter;
+    departmentFilter?: string;
+    subLabFilter?: string;
+  }) => {
     if (!dateRange[0] || !dateRange[1]) return;
-    const targetPage = pageOverride ?? ordersPage;
-    const effectiveStatusFilter = statusFilterOverride ?? statusFilter;
+    const targetPage = options?.page ?? ordersPage;
+    const effectiveStatusFilter = options?.statusFilter ?? statusFilter;
+    const effectiveDepartmentFilter = options?.departmentFilter ?? departmentFilter;
+    const effectiveSubLabFilter = options?.subLabFilter ?? subLabFilter;
 
     setLoading(true);
     try {
@@ -1029,6 +1087,14 @@ export function ReportsPage() {
           resultStatus: effectiveStatusFilter === 'ALL'
             ? undefined
             : REPORT_STATUS_TO_RESULT_STATUS[effectiveStatusFilter],
+          departmentId:
+            effectiveDepartmentFilter === REPORT_ALL_DEPARTMENTS_FILTER
+              ? undefined
+              : effectiveDepartmentFilter,
+          sourceSubLabId:
+            effectiveSubLabFilter === REPORT_ALL_SUB_LABS_FILTER
+              ? undefined
+              : effectiveSubLabFilter,
         }),
         getWorklistStats().catch(() => null),
       ]);
@@ -1053,7 +1119,7 @@ export function ReportsPage() {
   };
 
   useEffect(() => {
-    void loadOrders(1);
+    void loadOrders({ page: 1 });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -1061,6 +1127,26 @@ export function ReportsPage() {
     void getAntibiotics(true)
       .then(setAntibiotics)
       .catch(() => setAntibiotics([]));
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    void Promise.all([
+      getDepartments().catch(() => null),
+      getSubLabs().catch(() => null),
+    ]).then(([departmentRows, subLabRows]) => {
+      if (cancelled) return;
+      setDepartments(departmentRows ?? []);
+      setSubLabs(subLabRows ?? []);
+      if (departmentRows === null || subLabRows === null) {
+        message.warning('Failed to load some report filters');
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {
@@ -2049,28 +2135,29 @@ export function ReportsPage() {
       );
     }
 
-    const rows = getOrderTestRows(order);
+    const rows = getOrderTestRowsForDepartment(order, selectedDepartmentId);
     const allTestsInOrder = (order.samples ?? []).flatMap((sample) => sample.orderTests ?? []);
     const hasUploadedResultDocumentRows = rows.some((row) => Boolean(row.raw.resultDocument?.fileName));
     const showResultActionsColumn = canAdminEditResults || hasUploadedResultDocumentRows;
 
     if (rows.length === 0) {
-      return <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="No tests found" />;
+      return (
+        <Empty
+          image={Empty.PRESENTED_IMAGE_SIMPLE}
+          description={
+            selectedDepartmentId
+              ? 'No tests found for the selected department'
+              : 'No tests found'
+          }
+        />
+      );
     }
 
     const columns = [
       {
-        title: 'Sample',
-        dataIndex: 'sampleLabel',
-        key: 'sample',
-        width: 100,
-        render: (value: string) => <Text style={{ fontSize: 12 }}>{value}</Text>,
-        onCell: () => ({ style: compactCellStyle }),
-      },
-      {
         title: 'Test',
         key: 'test',
-        width: 220,
+        width: 260,
         render: (_: unknown, row: ExpandedOrderTestRow) => (
           <div>
             <Text strong style={{ fontSize: 12 }}>
@@ -2089,7 +2176,7 @@ export function ReportsPage() {
         title: 'Result',
         dataIndex: 'resultPreview',
         key: 'result',
-        width: 180,
+        width: 210,
         render: (value: string, row: ExpandedOrderTestRow) => (
           <div>
             {isEtaLoadingStatus(row.status) ? (
@@ -2149,14 +2236,14 @@ export function ReportsPage() {
         title: 'Unit',
         dataIndex: 'unitPreview',
         key: 'unit',
-        width: 90,
+        width: 100,
         render: (value: string) => <Text style={{ fontSize: 12 }}>{value}</Text>,
         onCell: () => ({ style: compactCellStyle }),
       },
       {
         title: 'Flag',
         key: 'flag',
-        width: 100,
+        width: 110,
         render: (_: unknown, row: ExpandedOrderTestRow) => {
           const normalizedFlag = normalizeResultFlag(row.flag);
           const flagLabel = getResultFlagLabel(row.flag);
@@ -2178,7 +2265,7 @@ export function ReportsPage() {
       {
         title: 'Status',
         key: 'status',
-        width: 110,
+        width: 120,
         render: (_: unknown, row: ExpandedOrderTestRow) => (
           <Tag
             color={ORDER_TEST_STATUS_COLORS[row.status] || 'default'}
@@ -2332,9 +2419,14 @@ export function ReportsPage() {
     };
 
     const withTick = (label: string, done: boolean, color?: string) => (
-      <span className="reports-order-action-label">
-        <span>{label}</span>
-        {done ? <CheckOutlined style={{ color: color ?? '#52c41a', fontSize: 11 }} /> : null}
+      <span className="reports-order-action-content">
+        <span className="reports-order-action-text">{label}</span>
+        {done ? (
+          <CheckOutlined
+            className="reports-order-action-tick"
+            style={{ color: color ?? '#52c41a', fontSize: 11 }}
+          />
+        ) : null}
       </span>
     );
 
@@ -2523,7 +2615,7 @@ export function ReportsPage() {
     {
       title: 'Actions',
       key: 'actions',
-      width: isCompactActions ? 80 : 392,
+      width: isCompactActions ? 80 : 468,
       render: (_: unknown, record: OrderHistoryItemDto) => (
         <div className="reports-order-actions-cell">
           {renderOrderActions(record)}
@@ -2649,21 +2741,22 @@ export function ReportsPage() {
           display: grid;
           grid-template-columns: repeat(4, minmax(0, 1fr));
           align-items: center;
-          gap: 6px;
-          width: min(100%, 380px);
+          gap: 8px;
+          width: min(100%, 452px);
           margin-left: auto;
         }
         .reports-order-action-btn.ant-btn.ant-btn-link {
           display: inline-flex;
           align-items: center;
-          justify-content: center;
+          justify-content: flex-start;
           width: 100%;
           min-width: 0;
-          height: 32px;
+          height: 34px;
           margin: 0;
-          padding-inline: 10px;
+          padding-inline: 12px;
           border: 1px solid transparent;
           border-radius: 999px;
+          overflow: hidden;
           white-space: nowrap;
         }
         .reports-order-action-btn.ant-btn.ant-btn-link:not(:disabled):hover,
@@ -2672,16 +2765,25 @@ export function ReportsPage() {
         }
         .reports-order-action-btn.ant-btn.ant-btn-link > .anticon,
         .reports-order-action-btn.ant-btn.ant-btn-link .ant-btn-loading-icon {
+          flex: 0 0 auto;
           font-size: 13px;
-          margin-inline-end: 6px;
+          margin-inline-end: 8px;
         }
-        .reports-order-action-label {
+        .reports-order-action-content {
           display: inline-flex;
           align-items: center;
-          justify-content: center;
-          gap: 5px;
+          gap: 6px;
           min-width: 0;
+          max-width: 100%;
+        }
+        .reports-order-action-text {
+          min-width: 0;
+          overflow: hidden;
+          text-overflow: ellipsis;
           white-space: nowrap;
+        }
+        .reports-order-action-tick {
+          flex: 0 0 auto;
         }
         .preferred-action--muted {
           border-color: rgba(0, 0, 0, 0.18) !important;
@@ -3314,7 +3416,7 @@ export function ReportsPage() {
               value={searchText}
               onChange={(event) => setSearchText(event.target.value)}
               onPressEnter={() => {
-                void loadOrders(1);
+                void loadOrders({ page: 1 });
               }}
               style={{ width: 260 }}
             />
@@ -3324,11 +3426,11 @@ export function ReportsPage() {
               onChange={(value) => {
                 const nextStatusFilter = value as ReportStatusFilter;
                 setStatusFilter(nextStatusFilter);
-                void loadOrders(1, nextStatusFilter);
+                void loadOrders({ page: 1, statusFilter: nextStatusFilter });
               }}
               placeholder="Status"
               allowClear={false}
-              style={{ width: 260 }}
+              style={{ width: 220 }}
               options={[
                 { value: 'ALL', label: 'All statuses' },
                 { value: 'PENDING', label: 'Pending' },
@@ -3338,11 +3440,53 @@ export function ReportsPage() {
               ]}
             />
 
+            <Select
+              value={departmentFilter}
+              onChange={(value) => {
+                const nextDepartmentFilter = String(value);
+                setDepartmentFilter(nextDepartmentFilter);
+                void loadOrders({ page: 1, departmentFilter: nextDepartmentFilter });
+              }}
+              placeholder="Department"
+              allowClear={false}
+              showSearch
+              optionFilterProp="label"
+              style={{ width: 220 }}
+              options={[
+                { value: REPORT_ALL_DEPARTMENTS_FILTER, label: 'All departments' },
+                ...departments.map((department) => ({
+                  value: department.id,
+                  label: department.name || department.code || department.id,
+                })),
+              ]}
+            />
+
+            <Select
+              value={subLabFilter}
+              onChange={(value) => {
+                const nextSubLabFilter = String(value);
+                setSubLabFilter(nextSubLabFilter);
+                void loadOrders({ page: 1, subLabFilter: nextSubLabFilter });
+              }}
+              placeholder="Sub-lab"
+              allowClear={false}
+              showSearch
+              optionFilterProp="label"
+              style={{ width: 220 }}
+              options={[
+                { value: REPORT_ALL_SUB_LABS_FILTER, label: 'All sub-labs' },
+                ...subLabs.map((subLab) => ({
+                  value: subLab.id,
+                  label: subLab.isActive ? subLab.name : `${subLab.name} (Inactive)`,
+                })),
+              ]}
+            />
+
             <Button
               type="primary"
               icon={<SearchOutlined />}
               onClick={() => {
-                void loadOrders(1);
+                void loadOrders({ page: 1 });
               }}
               loading={loading}
             >
@@ -3379,14 +3523,14 @@ export function ReportsPage() {
                   }
                 },
               }}
-              scroll={{ x: 1260 }}
+              scroll={{ x: 1360 }}
               pagination={{
                 current: ordersPage,
                 pageSize: ordersPageSize,
                 total: ordersTotal,
                 showSizeChanger: false,
                 onChange: (nextPage) => {
-                  void loadOrders(nextPage);
+                  void loadOrders({ page: nextPage });
                 },
               }}
             />

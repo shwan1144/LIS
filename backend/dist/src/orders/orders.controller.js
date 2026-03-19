@@ -54,7 +54,7 @@ let OrdersController = OrdersController_1 = class OrdersController {
             }));
         }
     }
-    async findAll(req, page, size, search, status, patientId, shiftId, sourceSubLabId, startDate, endDate, dateFilterTimeZone) {
+    async findAll(req, page, size, search, status, patientId, shiftId, sourceSubLabId, departmentId, startDate, endDate, dateFilterTimeZone) {
         const labId = req.user?.labId;
         if (!labId) {
             throw new Error('Lab ID not found in token');
@@ -67,6 +67,7 @@ let OrdersController = OrdersController_1 = class OrdersController {
             patientId,
             shiftId,
             sourceSubLabId,
+            departmentId,
             startDate,
             endDate,
             dateFilterTimeZone,
@@ -111,7 +112,7 @@ let OrdersController = OrdersController_1 = class OrdersController {
         await this.ordersService.saveWorklist(labId, body.shiftId ?? null, items);
         return { ok: true };
     }
-    async findHistory(req, page, size, search, status, patientId, shiftId, sourceSubLabId, startDate, endDate, dateFilterTimeZone, resultStatus) {
+    async findHistory(req, page, size, search, status, patientId, shiftId, sourceSubLabId, departmentId, startDate, endDate, dateFilterTimeZone, resultStatus) {
         const labId = req.user?.labId;
         if (!labId) {
             throw new Error('Lab ID not found in token');
@@ -124,6 +125,7 @@ let OrdersController = OrdersController_1 = class OrdersController {
             patientId,
             shiftId,
             sourceSubLabId,
+            departmentId,
             startDate,
             endDate,
             dateFilterTimeZone,
@@ -212,11 +214,12 @@ __decorate([
     __param(5, (0, common_1.Query)('patientId')),
     __param(6, (0, common_1.Query)('shiftId')),
     __param(7, (0, common_1.Query)('sourceSubLabId')),
-    __param(8, (0, common_1.Query)('startDate')),
-    __param(9, (0, common_1.Query)('endDate')),
-    __param(10, (0, common_1.Query)('dateFilterTimeZone')),
+    __param(8, (0, common_1.Query)('departmentId')),
+    __param(9, (0, common_1.Query)('startDate')),
+    __param(10, (0, common_1.Query)('endDate')),
+    __param(11, (0, common_1.Query)('dateFilterTimeZone')),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [Object, String, String, String, String, String, String, String, String, String, String]),
+    __metadata("design:paramtypes", [Object, String, String, String, String, String, String, String, String, String, String, String]),
     __metadata("design:returntype", Promise)
 ], OrdersController.prototype, "findAll", null);
 __decorate([
@@ -276,12 +279,13 @@ __decorate([
     __param(5, (0, common_1.Query)('patientId')),
     __param(6, (0, common_1.Query)('shiftId')),
     __param(7, (0, common_1.Query)('sourceSubLabId')),
-    __param(8, (0, common_1.Query)('startDate')),
-    __param(9, (0, common_1.Query)('endDate')),
-    __param(10, (0, common_1.Query)('dateFilterTimeZone')),
-    __param(11, (0, common_1.Query)('resultStatus', new common_1.ParseEnumPipe(create_order_response_dto_1.OrderResultStatus, { optional: true }))),
+    __param(8, (0, common_1.Query)('departmentId')),
+    __param(9, (0, common_1.Query)('startDate')),
+    __param(10, (0, common_1.Query)('endDate')),
+    __param(11, (0, common_1.Query)('dateFilterTimeZone')),
+    __param(12, (0, common_1.Query)('resultStatus', new common_1.ParseEnumPipe(create_order_response_dto_1.OrderResultStatus, { optional: true }))),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [Object, String, String, String, String, String, String, String, String, String, String, String]),
+    __metadata("design:paramtypes", [Object, String, String, String, String, String, String, String, String, String, String, String, String]),
     __metadata("design:returntype", Promise)
 ], OrdersController.prototype, "findHistory", null);
 __decorate([

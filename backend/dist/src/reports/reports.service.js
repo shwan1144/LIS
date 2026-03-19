@@ -1113,6 +1113,101 @@ let ReportsService = ReportsService_1 = class ReportsService {
             .sort((a, b) => sortKey(a).localeCompare(sortKey(b)));
         return { regularTests, panelParents, panelChildrenByParent };
     }
+    getPublicResultDepartmentName(orderTest) {
+        const test = orderTest.test;
+        return (test?.department?.name ||
+            'General Department');
+    }
+    getPublicExpectedCompletionMinutes(orderTest, fallbackChildren = []) {
+        const test = orderTest.test;
+        const rawExpectedCompletionMinutes = Number(test?.expectedCompletionMinutes ?? 0);
+        if (Number.isFinite(rawExpectedCompletionMinutes) && rawExpectedCompletionMinutes > 0) {
+            return Math.round(rawExpectedCompletionMinutes);
+        }
+        const maxChildExpected = fallbackChildren.reduce((max, child) => {
+            const childExpected = Number(child.test?.expectedCompletionMinutes ?? 0);
+            if (!Number.isFinite(childExpected) || childExpected <= 0) {
+                return max;
+            }
+            return Math.max(max, Math.round(childExpected));
+        }, 0);
+        return maxChildExpected > 0 ? maxChildExpected : null;
+    }
+    buildPublicResultTestItem(orderTest, overrides = {}) {
+        const test = orderTest.test;
+        const formattedValue = formatResultValue(orderTest);
+        const resultValue = formattedValue === 'Pending' ? null : formattedValue;
+        return {
+            orderTestId: orderTest.id,
+            testCode: test?.code || '-',
+            testName: test?.name || 'Unknown test',
+            departmentName: this.getPublicResultDepartmentName(orderTest),
+            expectedCompletionMinutes: this.getPublicExpectedCompletionMinutes(orderTest),
+            status: orderTest.status,
+            isVerified: orderTest.status === order_test_entity_1.OrderTestStatus.VERIFIED,
+            hasResult: resultValue !== null,
+            resultValue,
+            unit: test?.unit || null,
+            verifiedAt: orderTest.verifiedAt ? orderTest.verifiedAt.toISOString() : null,
+            resultEntryType: String(test?.resultEntryType ?? 'NUMERIC'),
+            resultDocument: this.mapResultDocumentSummary(orderTest),
+            ...overrides,
+        };
+    }
+    resolveCollapsedPublicPanelStatus(panelItems) {
+        if (panelItems.length === 0) {
+            return order_test_entity_1.OrderTestStatus.PENDING;
+        }
+        if (panelItems.every((item) => item.status === order_test_entity_1.OrderTestStatus.VERIFIED)) {
+            return order_test_entity_1.OrderTestStatus.VERIFIED;
+        }
+        if (panelItems.some((item) => item.status === order_test_entity_1.OrderTestStatus.REJECTED)) {
+            return order_test_entity_1.OrderTestStatus.REJECTED;
+        }
+        if (panelItems.some((item) => item.status === order_test_entity_1.OrderTestStatus.IN_PROGRESS ||
+            item.status === order_test_entity_1.OrderTestStatus.COMPLETED ||
+            item.status === order_test_entity_1.OrderTestStatus.VERIFIED)) {
+            return order_test_entity_1.OrderTestStatus.IN_PROGRESS;
+        }
+        return order_test_entity_1.OrderTestStatus.PENDING;
+    }
+    buildPublicResultDisplayTests(reportableOrderTests) {
+        const { regularTests, panelParents, panelChildrenByParent } = this.classifyOrderTestsForReport(reportableOrderTests);
+        const regularItems = regularTests.map((orderTest) => this.buildPublicResultTestItem(orderTest));
+        const panelItems = panelParents.map((panelParent) => {
+            const panelChildren = panelChildrenByParent.get(panelParent.id) ?? [];
+            const panelMembers = [panelParent, ...panelChildren];
+            const panelStatus = this.resolveCollapsedPublicPanelStatus(panelMembers);
+            const latestVerifiedAt = panelMembers
+                .map((item) => (item.verifiedAt ? new Date(item.verifiedAt) : null))
+                .filter((value) => value !== null)
+                .sort((a, b) => b.getTime() - a.getTime())[0] ?? null;
+            const hasResult = panelMembers.some((item) => {
+                if (item.resultDocumentFileName) {
+                    return true;
+                }
+                return formatResultValue(item) !== 'Pending';
+            });
+            return this.buildPublicResultTestItem(panelParent, {
+                expectedCompletionMinutes: this.getPublicExpectedCompletionMinutes(panelParent, panelChildren),
+                status: panelStatus,
+                isVerified: panelStatus === order_test_entity_1.OrderTestStatus.VERIFIED,
+                hasResult,
+                resultValue: null,
+                verifiedAt: latestVerifiedAt ? latestVerifiedAt.toISOString() : null,
+                resultDocument: null,
+            });
+        });
+        return [...regularItems, ...panelItems].sort((a, b) => {
+            const dept = a.departmentName.localeCompare(b.departmentName);
+            if (dept !== 0)
+                return dept;
+            const code = a.testCode.localeCompare(b.testCode);
+            if (code !== 0)
+                return code;
+            return a.testName.localeCompare(b.testName);
+        });
+    }
     isOrderTestResultEntered(orderTest, childOrderTestParentIds) {
         const test = orderTest.test;
         if (!test)
@@ -1211,45 +1306,11 @@ let ReportsService = ReportsService_1 = class ReportsService {
         const ready = order.paymentStatus === 'paid' &&
             reportableOrderTests.length > 0 &&
             verifiedTests.length === reportableOrderTests.length;
-        const progressPercent = reportableOrderTests.length > 0
-            ? Math.round((verifiedTests.length / reportableOrderTests.length) * 100)
+        const tests = this.buildPublicResultDisplayTests(reportableOrderTests);
+        const verifiedDisplayCount = tests.filter((test) => test.isVerified).length;
+        const progressPercent = tests.length > 0
+            ? Math.round((verifiedDisplayCount / tests.length) * 100)
             : 0;
-        const tests = reportableOrderTests
-            .map((ot) => {
-            const test = ot.test;
-            const departmentName = test?.department?.name ||
-                'General Department';
-            const rawExpectedCompletionMinutes = Number(test?.expectedCompletionMinutes ?? 0);
-            const expectedCompletionMinutes = Number.isFinite(rawExpectedCompletionMinutes) && rawExpectedCompletionMinutes > 0
-                ? Math.round(rawExpectedCompletionMinutes)
-                : null;
-            const formattedValue = formatResultValue(ot);
-            const resultValue = formattedValue === 'Pending' ? null : formattedValue;
-            return {
-                orderTestId: ot.id,
-                testCode: test?.code || '-',
-                testName: test?.name || 'Unknown test',
-                departmentName,
-                expectedCompletionMinutes,
-                status: ot.status,
-                isVerified: ot.status === 'VERIFIED',
-                hasResult: resultValue !== null,
-                resultValue,
-                unit: test?.unit || null,
-                verifiedAt: ot.verifiedAt ? ot.verifiedAt.toISOString() : null,
-                resultEntryType: String(test?.resultEntryType ?? 'NUMERIC'),
-                resultDocument: this.mapResultDocumentSummary(ot),
-            };
-        })
-            .sort((a, b) => {
-            const dept = a.departmentName.localeCompare(b.departmentName);
-            if (dept !== 0)
-                return dept;
-            const code = a.testCode.localeCompare(b.testCode);
-            if (code !== 0)
-                return code;
-            return a.testName.localeCompare(b.testName);
-        });
         return {
             orderId: order.id,
             orderNumber: order.orderNumber || order.id.substring(0, 8),
@@ -1259,8 +1320,8 @@ let ReportsService = ReportsService_1 = class ReportsService {
             onlineResultWatermarkText: order.lab?.onlineResultWatermarkText ?? null,
             registeredAt: order.registeredAt.toISOString(),
             paymentStatus: order.paymentStatus || 'unpaid',
-            reportableCount: reportableOrderTests.length,
-            verifiedCount: verifiedTests.length,
+            reportableCount: tests.length,
+            verifiedCount: verifiedDisplayCount,
             progressPercent,
             ready,
             verifiedAt: latestVerifiedAt ? latestVerifiedAt.toISOString() : null,

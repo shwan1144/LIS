@@ -132,6 +132,11 @@ export declare class ReportsService implements OnModuleInit, OnModuleDestroy {
     private applyFallbackPageBranding;
     private getReportableOrderTests;
     private classifyOrderTestsForReport;
+    private getPublicResultDepartmentName;
+    private getPublicExpectedCompletionMinutes;
+    private buildPublicResultTestItem;
+    private resolveCollapsedPublicPanelStatus;
+    private buildPublicResultDisplayTests;
     private isOrderTestResultEntered;
     private assertAllResultsEnteredForReport;
     private assertAllResultsVerifiedForReport;

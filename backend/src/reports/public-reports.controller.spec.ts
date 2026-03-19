@@ -55,6 +55,8 @@ function createStatus(overrides: Partial<PublicResultStatus> = {}): PublicResult
         resultValue: null,
         unit: null,
         verifiedAt: null,
+        resultEntryType: 'NUMERIC',
+        resultDocument: null,
       },
     ],
     ...overrides,

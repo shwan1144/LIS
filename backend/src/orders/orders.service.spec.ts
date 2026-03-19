@@ -33,6 +33,18 @@ function createService(overrides?: {
   );
 }
 
+function createQueryBuilderMock() {
+  return {
+    leftJoinAndSelect: jest.fn().mockReturnThis(),
+    where: jest.fn().mockReturnThis(),
+    andWhere: jest.fn().mockReturnThis(),
+    orderBy: jest.fn().mockReturnThis(),
+    skip: jest.fn().mockReturnThis(),
+    take: jest.fn().mockReturnThis(),
+    getManyAndCount: jest.fn().mockResolvedValue([[], 0]),
+  };
+}
+
 function createOrderTest(
   status: OrderTestStatus,
   type: TestType = TestType.SINGLE,
@@ -528,5 +540,61 @@ describe('OrdersService panel removal access and cancellation', () => {
       ),
     ).rejects.toThrow('Cancelled order cannot be edited');
     expect(update).not.toHaveBeenCalled();
+  });
+});
+
+describe('OrdersService order query filters', () => {
+  it('applies departmentId filtering to list queries', async () => {
+    const qb = createQueryBuilderMock();
+    const service = createService({
+      orderRepo: {
+        createQueryBuilder: jest.fn().mockReturnValue(qb),
+      },
+    });
+    jest
+      .spyOn(service as any, 'enrichOrdersWithProgress')
+      .mockImplementation(async () => undefined);
+
+    await service.findAll('lab-1', {
+      page: 1,
+      size: 25,
+      departmentId: 'department-1',
+    });
+
+    expect(qb.andWhere.mock.calls).toEqual(
+      expect.arrayContaining([
+        [
+          expect.stringContaining('t."departmentId" = :departmentId'),
+          { departmentId: 'department-1' },
+        ],
+      ]),
+    );
+  });
+
+  it('applies departmentId filtering to history queries', async () => {
+    const qb = createQueryBuilderMock();
+    const service = createService({
+      orderRepo: {
+        createQueryBuilder: jest.fn().mockReturnValue(qb),
+      },
+    });
+    jest
+      .spyOn(service as any, 'enrichOrdersWithProgress')
+      .mockImplementation(async () => undefined);
+
+    await service.findHistory('lab-1', {
+      page: 1,
+      size: 25,
+      departmentId: 'department-2',
+    });
+
+    expect(qb.andWhere.mock.calls).toEqual(
+      expect.arrayContaining([
+        [
+          expect.stringContaining('t."departmentId" = :departmentId'),
+          { departmentId: 'department-2' },
+        ],
+      ]),
+    );
   });
 });
