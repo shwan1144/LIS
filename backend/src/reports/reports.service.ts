@@ -14,7 +14,7 @@ const QRCode = require('qrcode') as {
     options?: { errorCorrectionLevel?: string; margin?: number; width?: number },
   ): Promise<string>;
 };
-import { Order } from '../entities/order.entity';
+import { Order, OrderStatus } from '../entities/order.entity';
 import {
   OrderTest,
   OrderTestStatus,
@@ -115,6 +115,7 @@ type ResultsPdfPerformanceMetrics = {
 type GenerateTestResultsPdfOptions = {
   bypassPaymentCheck?: boolean;
   bypassResultCompletionCheck?: boolean;
+  bypassCancelledOrderCheck?: boolean;
   disableCache?: boolean;
   cultureOnly?: boolean;
   correlationId?: string | null;
@@ -1682,6 +1683,7 @@ export class ReportsService implements OnModuleInit, OnModuleDestroy {
   async getPublicResultStatus(orderId: string): Promise<PublicResultStatus> {
     const { order, reportableOrderTests, verifiedTests, latestVerifiedAt } =
       await this.loadOrderResultsSnapshot(orderId);
+    this.assertOrderCanReleaseResults(order);
 
     if (order.lab?.enableOnlineResults === false) {
       throw new ForbiddenException('Online results are disabled by laboratory settings.');
@@ -1718,6 +1720,7 @@ export class ReportsService implements OnModuleInit, OnModuleDestroy {
 
   async generatePublicTestResultsPDF(orderId: string): Promise<Buffer> {
     const { order, reportableOrderTests, verifiedTests } = await this.loadOrderResultsSnapshot(orderId);
+    this.assertOrderCanReleaseResults(order);
     if (order.lab?.enableOnlineResults === false) {
       throw new ForbiddenException('Online results are disabled by laboratory settings.');
     }
@@ -1736,6 +1739,7 @@ export class ReportsService implements OnModuleInit, OnModuleDestroy {
     orderTestId: string,
   ): Promise<{ buffer: Buffer; fileName: string; mimeType: string }> {
     const { order, reportableOrderTests, verifiedTests } = await this.loadOrderResultsSnapshot(orderId);
+    this.assertOrderCanReleaseResults(order);
     if (order.lab?.enableOnlineResults === false) {
       throw new ForbiddenException('Online results are disabled by laboratory settings.');
     }
@@ -1770,6 +1774,7 @@ export class ReportsService implements OnModuleInit, OnModuleDestroy {
     return this.generateTestResultsPDF(input.orderId, input.labId, {
       bypassPaymentCheck: true,
       bypassResultCompletionCheck: true,
+      bypassCancelledOrderCheck: true,
       disableCache: true,
       cultureOnly: input.previewMode === 'culture_only',
       reportDesignOverride: {
@@ -2036,6 +2041,7 @@ export class ReportsService implements OnModuleInit, OnModuleDestroy {
     const snapshotMs = Date.now() - snapshotStartMs;
     const bypassPaymentCheck = !!options?.bypassPaymentCheck;
     const bypassResultCompletionCheck = !!options?.bypassResultCompletionCheck;
+    const bypassCancelledOrderCheck = !!options?.bypassCancelledOrderCheck;
     const disableCache = !!options?.disableCache;
     const cultureOnly = !!options?.cultureOnly;
     const orderForRender = this.applyReportDesignOverride(order, options?.reportDesignOverride);
@@ -2053,6 +2059,10 @@ export class ReportsService implements OnModuleInit, OnModuleDestroy {
     const renderedVerifiedTests = cultureOnly
       ? verifiedTests.filter((ot) => renderedOrderTests.some((candidate) => candidate.id === ot.id))
       : verifiedTests;
+
+    if (!bypassCancelledOrderCheck) {
+      this.assertOrderCanReleaseResults(order);
+    }
 
     if (!bypassResultCompletionCheck) {
       this.assertAllResultsEnteredForReport(reportableOrderTests);
@@ -2982,5 +2992,11 @@ export class ReportsService implements OnModuleInit, OnModuleDestroy {
 
       doc.end();
     });
+  }
+
+  private assertOrderCanReleaseResults(order: Pick<Order, 'status'>): void {
+    if (order.status === OrderStatus.CANCELLED) {
+      throw new ForbiddenException('Cancelled orders cannot release results.');
+    }
   }
 }

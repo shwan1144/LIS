@@ -1302,6 +1302,7 @@ let ReportsService = ReportsService_1 = class ReportsService {
     }
     async getPublicResultStatus(orderId) {
         const { order, reportableOrderTests, verifiedTests, latestVerifiedAt } = await this.loadOrderResultsSnapshot(orderId);
+        this.assertOrderCanReleaseResults(order);
         if (order.lab?.enableOnlineResults === false) {
             throw new common_1.ForbiddenException('Online results are disabled by laboratory settings.');
         }
@@ -1332,6 +1333,7 @@ let ReportsService = ReportsService_1 = class ReportsService {
     }
     async generatePublicTestResultsPDF(orderId) {
         const { order, reportableOrderTests, verifiedTests } = await this.loadOrderResultsSnapshot(orderId);
+        this.assertOrderCanReleaseResults(order);
         if (order.lab?.enableOnlineResults === false) {
             throw new common_1.ForbiddenException('Online results are disabled by laboratory settings.');
         }
@@ -1345,6 +1347,7 @@ let ReportsService = ReportsService_1 = class ReportsService {
     }
     async getPublicResultDocument(orderId, orderTestId) {
         const { order, reportableOrderTests, verifiedTests } = await this.loadOrderResultsSnapshot(orderId);
+        this.assertOrderCanReleaseResults(order);
         if (order.lab?.enableOnlineResults === false) {
             throw new common_1.ForbiddenException('Online results are disabled by laboratory settings.');
         }
@@ -1368,6 +1371,7 @@ let ReportsService = ReportsService_1 = class ReportsService {
         return this.generateTestResultsPDF(input.orderId, input.labId, {
             bypassPaymentCheck: true,
             bypassResultCompletionCheck: true,
+            bypassCancelledOrderCheck: true,
             disableCache: true,
             cultureOnly: input.previewMode === 'culture_only',
             reportDesignOverride: {
@@ -1566,6 +1570,7 @@ let ReportsService = ReportsService_1 = class ReportsService {
         const snapshotMs = Date.now() - snapshotStartMs;
         const bypassPaymentCheck = !!options?.bypassPaymentCheck;
         const bypassResultCompletionCheck = !!options?.bypassResultCompletionCheck;
+        const bypassCancelledOrderCheck = !!options?.bypassCancelledOrderCheck;
         const disableCache = !!options?.disableCache;
         const cultureOnly = !!options?.cultureOnly;
         const orderForRender = this.applyReportDesignOverride(order, options?.reportDesignOverride);
@@ -1578,6 +1583,9 @@ let ReportsService = ReportsService_1 = class ReportsService {
         const renderedVerifiedTests = cultureOnly
             ? verifiedTests.filter((ot) => renderedOrderTests.some((candidate) => candidate.id === ot.id))
             : verifiedTests;
+        if (!bypassCancelledOrderCheck) {
+            this.assertOrderCanReleaseResults(order);
+        }
         if (!bypassResultCompletionCheck) {
             this.assertAllResultsEnteredForReport(reportableOrderTests);
             this.assertAllResultsVerifiedForReport(reportableOrderTests, verifiedTests);
@@ -2329,6 +2337,11 @@ let ReportsService = ReportsService_1 = class ReportsService {
             }
             doc.end();
         });
+    }
+    assertOrderCanReleaseResults(order) {
+        if (order.status === order_entity_1.OrderStatus.CANCELLED) {
+            throw new common_1.ForbiddenException('Cancelled orders cannot release results.');
+        }
     }
 };
 exports.ReportsService = ReportsService;

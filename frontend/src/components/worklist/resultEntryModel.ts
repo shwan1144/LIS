@@ -20,10 +20,12 @@ export interface ResultEntrySection {
 function buildRowModel(
   item: WorklistItem,
   canAdminEditVerified: boolean,
+  readOnlyAll: boolean,
 ): ResultEntryRowModel {
   return {
     target: item,
     isReadOnly:
+      readOnlyAll ||
       item.testType === 'PANEL' ||
       (item.status === 'VERIFIED' && !canAdminEditVerified),
     isCultureEntry: item.resultEntryType === 'CULTURE_SENSITIVITY',
@@ -35,6 +37,7 @@ export function buildResultEntrySections(
   group: WorklistOrderGroupSummary | null,
   orderedItems: WorklistItem[],
   canAdminEditVerified: boolean,
+  readOnlyAll = false,
 ): ResultEntrySection[] {
   if (!group || orderedItems.length === 0) {
     return [];
@@ -47,7 +50,7 @@ export function buildResultEntrySections(
       ) ?? null;
     const rows = orderedItems
       .filter((item) => item.id !== panelRoot?.id)
-      .map((item) => buildRowModel(item, canAdminEditVerified));
+      .map((item) => buildRowModel(item, canAdminEditVerified, readOnlyAll));
 
     return [
       {
@@ -61,7 +64,7 @@ export function buildResultEntrySections(
     ];
   }
 
-  const rows = orderedItems.map((item) => buildRowModel(item, canAdminEditVerified));
+  const rows = orderedItems.map((item) => buildRowModel(item, canAdminEditVerified, readOnlyAll));
   const title = group.groupKind === 'culture' ? 'Culture Tests' : 'Single Tests';
   const subtitle = `${rows.length} test${rows.length === 1 ? '' : 's'}`;
 

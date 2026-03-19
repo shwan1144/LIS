@@ -22,6 +22,7 @@ const roles_decorator_1 = require("../auth/roles.decorator");
 const order_test_entity_1 = require("../entities/order-test.entity");
 const lab_actor_context_1 = require("../types/lab-actor-context");
 const lab_role_matrix_1 = require("../auth/lab-role-matrix");
+const order_entity_1 = require("../entities/order.entity");
 let WorklistController = class WorklistController {
     constructor(worklistService) {
         this.worklistService = worklistService;
@@ -51,7 +52,7 @@ let WorklistController = class WorklistController {
             view: selectedView,
         }, actor.userId ?? undefined);
     }
-    async getWorklistOrders(req, search, date, departmentId, page, size, mode, entryStatus, verificationStatus) {
+    async getWorklistOrders(req, search, date, departmentId, page, size, mode, entryStatus, verificationStatus, orderStatus) {
         const labId = req.user?.labId;
         const actor = (0, lab_actor_context_1.buildLabActorContext)(req.user);
         const selectedMode = mode ?? worklist_service_1.WorklistOrderMode.ENTRY;
@@ -71,6 +72,7 @@ let WorklistController = class WorklistController {
             mode: selectedMode,
             entryStatus,
             verificationStatus,
+            orderStatus,
         }, actor.userId ?? undefined);
     }
     async getWorklistOrderTests(req, orderId, departmentId, mode) {
@@ -208,8 +210,9 @@ __decorate([
     __param(6, (0, common_1.Query)('mode', new common_1.ParseEnumPipe(worklist_service_1.WorklistOrderMode, { optional: true }))),
     __param(7, (0, common_1.Query)('entryStatus', new common_1.ParseEnumPipe(worklist_service_1.WorklistEntryStatus, { optional: true }))),
     __param(8, (0, common_1.Query)('verificationStatus', new common_1.ParseEnumPipe(worklist_service_1.WorklistVerificationStatus, { optional: true }))),
+    __param(9, (0, common_1.Query)('orderStatus', new common_1.ParseEnumPipe(order_entity_1.OrderStatus, { optional: true }))),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [Object, String, String, String, String, String, String, String, String]),
+    __metadata("design:paramtypes", [Object, String, String, String, String, String, String, String, String, String]),
     __metadata("design:returntype", Promise)
 ], WorklistController.prototype, "getWorklistOrders", null);
 __decorate([

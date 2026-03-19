@@ -302,10 +302,12 @@ export function VerificationPage() {
     setRejectReason('');
     reviewForm.resetFields();
   }, [reviewForm]);
+  const isCancelledReviewOrder = reviewOrder?.orderStatus === 'CANCELLED';
 
   const loadRows = useCallback(async () => {
     setLoading(true);
     try {
+      const cancelledOnly = verificationStatusFilter === 'cancelled';
       const result = await getWorklistOrders({
         mode: 'verify',
         search: search.trim() || undefined,
@@ -313,7 +315,8 @@ export function VerificationPage() {
         departmentId: departmentId || undefined,
         page,
         size,
-        verificationStatus: verificationStatusFilter,
+        verificationStatus: cancelledOnly ? undefined : verificationStatusFilter,
+        orderStatus: cancelledOnly ? 'CANCELLED' : undefined,
       });
       setRows(result.items ?? []);
       setTotal(Number(result.total ?? 0));
@@ -556,6 +559,10 @@ export function VerificationPage() {
 
   const verifyIds = useCallback(
     async (ids: string[], emptyMessage: string, closeOnSuccess: boolean) => {
+      if (reviewOrder?.orderStatus === 'CANCELLED') {
+        message.warning('Cancelled orders are read-only');
+        return;
+      }
       if (ids.length === 0) {
         message.warning(emptyMessage);
         return;
@@ -574,10 +581,14 @@ export function VerificationPage() {
         setWorking(false);
       }
     },
-    [refreshReviewAfterMutation],
+    [refreshReviewAfterMutation, reviewOrder?.orderStatus],
   );
 
   const openRejectDialog = (ids: string[], closeOnSuccess: boolean) => {
+    if (reviewOrder?.orderStatus === 'CANCELLED') {
+      message.warning('Cancelled orders are read-only');
+      return;
+    }
     const uniqueIds = Array.from(new Set(ids));
     if (uniqueIds.length === 0) {
       message.warning('No completed results to reject');
@@ -591,6 +602,10 @@ export function VerificationPage() {
   };
 
   const runReject = async () => {
+    if (reviewOrder?.orderStatus === 'CANCELLED') {
+      message.warning('Cancelled orders are read-only');
+      return;
+    }
     if (!rejectContext || rejectContext.ids.length === 0 || !rejectReason.trim()) return;
     setWorking(true);
     try {
@@ -650,6 +665,11 @@ export function VerificationPage() {
       width: 350,
       render: (_: unknown, record) => (
         <Space size={[4, 4]} wrap>
+          {record.orderStatus === 'CANCELLED' ? (
+            <Tag color="error" style={{ margin: 0 }}>
+              Canceled
+            </Tag>
+          ) : null}
           <Tag style={{ margin: 0 }}>{record.progressTotalRoot} tests</Tag>
           {record.progressPending > 0 && <Tag style={{ margin: 0 }}>Pending {record.progressPending}</Tag>}
           {record.progressCompleted > 0 && (
@@ -696,6 +716,7 @@ export function VerificationPage() {
       width: 130,
       render: (_: unknown, record) => {
         const expanded = expandedOrderKeys.includes(record.orderId);
+        const isCancelledOrder = record.orderStatus === 'CANCELLED';
         return (
           <Button
             size="small"
@@ -705,7 +726,7 @@ export function VerificationPage() {
               handleExpandRow(!expanded, record);
             }}
           >
-            {expanded ? 'Hide groups' : 'Groups'}
+            {expanded ? 'Hide' : isCancelledOrder ? 'View' : 'Groups'}
           </Button>
         );
       },
@@ -733,13 +754,18 @@ export function VerificationPage() {
       );
     }
 
-    const visibleGroups = cached.groups.filter((group) => group.isFullyEntered);
+    const isCancelledOrder = record.orderStatus === 'CANCELLED';
+    const visibleGroups = isCancelledOrder
+      ? cached.groups
+      : cached.groups.filter((group) => group.isFullyEntered);
     const hiddenPendingPanelMessage = buildHiddenWorklistReviewMessage(cached.groups);
     if (visibleGroups.length === 0) {
       return (
         <div style={{ padding: '6px 8px' }}>
           <Text type="secondary">
-            {hiddenPendingPanelMessage
+            {isCancelledOrder
+              ? 'No tests are available for this cancelled order in the current filter.'
+              : hiddenPendingPanelMessage
               ? `No fully entered groups available for verification. ${hiddenPendingPanelMessage}`
               : 'No fully entered groups available for verification'}
           </Text>
@@ -750,7 +776,7 @@ export function VerificationPage() {
     return (
       <div className="verification-group-shell">
         <div className="verification-group-shell-title">Review groups</div>
-        {hiddenPendingPanelMessage ? (
+        {!isCancelledOrder && hiddenPendingPanelMessage ? (
           <div style={{ marginBottom: 6 }}>
             <Text type="secondary" style={{ fontSize: 12 }}>
               {hiddenPendingPanelMessage}
@@ -824,7 +850,7 @@ export function VerificationPage() {
                     openGroup();
                   }}
                 >
-                  Review
+                  {isCancelledOrder ? 'View' : 'Review'}
                 </Button>
               </div>
             );
@@ -836,6 +862,10 @@ export function VerificationPage() {
 
   const handlePreviewResultDocument = useCallback(async (item: WorklistItem) => {
     if (!item.resultDocument) return;
+    if (reviewOrder?.orderStatus === 'CANCELLED') {
+      message.warning('Cancelled orders cannot release results');
+      return;
+    }
     setResultDocumentBusyTargetId(item.id);
     try {
       const blob = await downloadResultDocument(item.id);
@@ -845,10 +875,14 @@ export function VerificationPage() {
     } finally {
       setResultDocumentBusyTargetId((current) => (current === item.id ? null : current));
     }
-  }, []);
+  }, [reviewOrder?.orderStatus]);
 
   const handleDownloadResultDocument = useCallback(async (item: WorklistItem) => {
     if (!item.resultDocument) return;
+    if (reviewOrder?.orderStatus === 'CANCELLED') {
+      message.warning('Cancelled orders cannot release results');
+      return;
+    }
     setResultDocumentBusyTargetId(item.id);
     try {
       const blob = await downloadResultDocument(item.id, { download: true });
@@ -858,7 +892,7 @@ export function VerificationPage() {
     } finally {
       setResultDocumentBusyTargetId((current) => (current === item.id ? null : current));
     }
-  }, []);
+  }, [reviewOrder?.orderStatus]);
 
   return (
     <div>
@@ -1068,6 +1102,7 @@ export function VerificationPage() {
                 options={[
                   { label: 'Unverified', value: 'unverified' },
                   { label: 'Verified', value: 'verified' },
+                  { label: 'Canceled', value: 'cancelled' },
                 ]}
                 onChange={(value) => {
                   setVerificationStatusFilter(value as VerificationRowStatusFilter);
@@ -1140,6 +1175,11 @@ export function VerificationPage() {
                 {reviewOrder.orderNumber}
               </Tag>
             )}
+            {reviewOrder?.orderStatus === 'CANCELLED' ? (
+              <Tag color="error" style={{ margin: 0 }}>
+                Canceled
+              </Tag>
+            ) : null}
             {reviewGroup && (
               <Tag color="purple" style={{ margin: 0 }}>
                 {reviewGroup.label}
@@ -1185,6 +1225,11 @@ export function VerificationPage() {
                 <Text type="secondary" style={{ fontSize: 12 }}>
                   Order #{reviewOrder.orderNumber} | {dayjs(reviewOrder.registeredAt).format('YYYY-MM-DD HH:mm')}
                 </Text>
+                {isCancelledReviewOrder ? (
+                  <Text type="danger" style={{ fontSize: 12 }}>
+                    Cancelled orders are read-only and cannot be verified, rejected, printed, or downloaded.
+                  </Text>
+                ) : null}
               </Space>
             </div>
 
@@ -1193,7 +1238,7 @@ export function VerificationPage() {
                 type="primary"
                 icon={<CheckCircleOutlined />}
                 loading={working}
-                disabled={completedIdsInModal.length === 0}
+                disabled={isCancelledReviewOrder || completedIdsInModal.length === 0}
                 style={{
                   backgroundColor: '#16a34a',
                   borderColor: '#16a34a',
@@ -1214,14 +1259,14 @@ export function VerificationPage() {
                 danger
                 icon={<CloseCircleOutlined />}
                 loading={working}
-                disabled={completedIdsInModal.length === 0}
+                disabled={isCancelledReviewOrder || completedIdsInModal.length === 0}
                 onClick={() => openRejectDialog(completedIdsInModal, true)}
               >
                 Reject All
               </Button>
             </div>
 
-            {reviewGroup.groupKind === 'single' && (
+            {reviewGroup.groupKind === 'single' && !isCancelledReviewOrder && (
               <Text type="secondary" className="verification-review-note">
                 Per-test Verify/Reject is available for single tests and keeps this modal open.
               </Text>
@@ -1253,6 +1298,7 @@ export function VerificationPage() {
                   item.resultEntryType === 'CULTURE_SENSITIVITY';
                 const hasPdfDocument = Boolean(item.resultDocument?.fileName);
                 const perRowActionEnabled =
+                  !isCancelledReviewOrder &&
                   reviewGroup.groupKind === 'single' &&
                   item.testType !== 'PANEL' &&
                   item.status === 'COMPLETED';
@@ -1332,7 +1378,7 @@ export function VerificationPage() {
                                 ? 'Culture details'
                                 : formatResult(item)}
                           </Text>
-                          {hasPdfDocument ? (
+                          {hasPdfDocument && !isCancelledReviewOrder ? (
                             <Space size={4} wrap style={{ justifyContent: 'center' }}>
                               <Button
                                 size="small"

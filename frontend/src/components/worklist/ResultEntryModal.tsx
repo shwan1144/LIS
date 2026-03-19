@@ -144,6 +144,8 @@ interface ResultEntryModalProps {
   loadingAllTests: boolean;
   saveDisabled: boolean;
   saveBlockedReason?: string | null;
+  readOnlyMode: boolean;
+  readOnlyReason?: string | null;
   attentionCount: number;
   dirtyCount: number;
   submittableCount: number;
@@ -180,6 +182,8 @@ export function ResultEntryModal({
   loadingAllTests,
   saveDisabled,
   saveBlockedReason,
+  readOnlyMode,
+  readOnlyReason,
   attentionCount,
   dirtyCount,
   submittableCount,
@@ -270,17 +274,19 @@ export function ResultEntryModal({
         return;
       }
       event.preventDefault();
-      if (!saveDisabled && !submitting) {
+      if (!readOnlyMode && !saveDisabled && !submitting) {
         onSubmit();
       }
     };
 
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [onSubmit, open, saveDisabled, submitting]);
+  }, [onSubmit, open, readOnlyMode, saveDisabled, submitting]);
 
   const footerCopy =
-    saveBlockedReason
+    readOnlyReason
+      ? readOnlyReason
+      : saveBlockedReason
       ? saveBlockedReason
       : submittableCount > 0
         ? `${submittableCount} row${submittableCount === 1 ? '' : 's'} ready to save`
@@ -297,7 +303,7 @@ export function ResultEntryModal({
       title={
         <div className="result-entry-modal__title">
           <div className="result-entry-modal__title-copy">
-            <Title level={4}>Enter Result</Title>
+            <Title level={4}>{readOnlyMode ? 'View Results' : 'Enter Result'}</Title>
           </div>
         </div>
       }
@@ -317,16 +323,18 @@ export function ResultEntryModal({
           </div>
           <Space>
             <Button onClick={onCancel} disabled={submitting}>
-              Cancel
+              {readOnlyMode ? 'Close' : 'Cancel'}
             </Button>
-            <Button
-              type="primary"
-              loading={submitting}
-              disabled={saveDisabled}
-              onClick={onSubmit}
-            >
-              Save
-            </Button>
+            {!readOnlyMode ? (
+              <Button
+                type="primary"
+                loading={submitting}
+                disabled={saveDisabled}
+                onClick={onSubmit}
+              >
+                Save
+              </Button>
+            ) : null}
           </Space>
         </div>
       }
@@ -361,6 +369,11 @@ export function ResultEntryModal({
               </span>
             </div>
             <div className="result-entry-modal__summary-tags" style={{ gridColumn: '1 / -1' }}>
+              {order.orderStatus === 'CANCELLED' ? (
+                <Tag color="error" style={{ margin: 0 }}>
+                  Canceled
+                </Tag>
+              ) : null}
               <Tag color="blue" style={{ margin: 0 }}>
                 {group.testsCount} tests
               </Tag>
@@ -383,13 +396,30 @@ export function ResultEntryModal({
             </div>
           </div>
 
+          {readOnlyMode ? (
+            <div className="result-entry-modal__notice">
+              <div className="result-entry-modal__notice-copy">
+                <div>
+                  <Text strong>Cancelled orders are read-only.</Text>
+                  <Paragraph type="secondary" style={{ margin: '4px 0 0' }}>
+                    Results can be inspected, but they cannot be edited, verified, printed, or downloaded.
+                  </Paragraph>
+                </div>
+              </div>
+            </div>
+          ) : null}
+
           {showLoadAllTestsHint ? (
             <div className="result-entry-modal__notice">
               <div className="result-entry-modal__notice-copy">
                 <div>
-                  <Text strong>No editable tests in this department view.</Text>
+                  <Text strong>
+                    {readOnlyMode ? 'Some tests are hidden by the current department filter.' : 'No editable tests in this department view.'}
+                  </Text>
                   <Paragraph type="secondary" style={{ margin: '4px 0 0' }}>
-                    Load the full order if this group belongs to another department.
+                    {readOnlyMode
+                      ? 'Load the full order if you need to inspect tests from another department.'
+                      : 'Load the full order if this group belongs to another department.'}
                   </Paragraph>
                 </div>
                 <Button loading={loadingAllTests} onClick={onLoadAllTests}>
@@ -519,7 +549,7 @@ export function ResultEntryModal({
                                       </Text>
                                     )}
                                     <Space wrap>
-                                      {!row.isReadOnly ? (
+                                      {!row.isReadOnly && !readOnlyMode ? (
                                         <Button
                                           size="small"
                                           loading={isDocumentBusy}
@@ -528,7 +558,7 @@ export function ResultEntryModal({
                                           {target.resultDocument ? 'Replace PDF' : 'Upload PDF'}
                                         </Button>
                                       ) : null}
-                                      {target.resultDocument ? (
+                                      {target.resultDocument && !readOnlyMode ? (
                                         <>
                                           <Button
                                             size="small"

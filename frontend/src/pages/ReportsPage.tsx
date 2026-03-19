@@ -98,7 +98,7 @@ const REPORT_ALL_DEPARTMENTS_FILTER = '__all_departments__';
 const REPORT_ALL_SUB_LABS_FILTER = '__all_sub_labs__';
 
 type EditResultMode = 'SINGLE' | 'PANEL';
-type ReportStatusFilter = 'ALL' | 'PENDING' | 'COMPLETED' | 'VERIFIED' | 'REJECTED';
+type ReportStatusFilter = 'ALL' | 'PENDING' | 'COMPLETED' | 'VERIFIED' | 'REJECTED' | 'CANCELLED';
 type ReportActionFlagField = 'pdf' | 'print' | 'whatsapp' | 'viber';
 type ResultsPdfCacheEntry = {
   blob: Blob;
@@ -201,7 +201,7 @@ declare global {
   }
 }
 
-const REPORT_STATUS_TO_RESULT_STATUS: Record<Exclude<ReportStatusFilter, 'ALL'>, OrderResultStatus> = {
+const REPORT_STATUS_TO_RESULT_STATUS: Record<Exclude<ReportStatusFilter, 'ALL' | 'CANCELLED'>, OrderResultStatus> = {
   PENDING: 'PENDING',
   COMPLETED: 'COMPLETED',
   VERIFIED: 'VERIFIED',
@@ -218,6 +218,7 @@ const ACTION_FLAG_FIELD_MAP: Record<ReportActionKind, ReportActionFlagField> = {
 type EditResultContext = {
   editMode: EditResultMode;
   orderId: string;
+  orderStatus: OrderDto['status'];
   orderTestId: string;
   orderNumber: string;
   patientName: string;
@@ -797,6 +798,16 @@ function getResultAvailability(
   return { ready, completed, total };
 }
 
+function isCancelledOrder(
+  order:
+    | Pick<OrderHistoryItemDto, 'status'>
+    | Pick<OrderDto, 'status'>
+    | null
+    | undefined,
+): boolean {
+  return order?.status === 'CANCELLED';
+}
+
 function extractApiErrorMessage(error: unknown): string | null {
   if (!error || typeof error !== 'object' || !('response' in error)) {
     return null;
@@ -978,7 +989,7 @@ export function ReportsPage() {
 
   const canReleaseResults = (order: OrderHistoryItemDto): boolean => {
     const availability = getResultAvailability(order);
-    return availability.ready && order.paymentStatus === 'paid';
+    return !isCancelledOrder(order) && availability.ready && order.paymentStatus === 'paid';
   };
 
   const markActionFlag = useCallback((orderId: string, action: ReportActionKind) => {
@@ -1097,9 +1108,11 @@ export function ReportsPage() {
           startDate: dateRange[0].format('YYYY-MM-DD'),
           endDate: dateRange[1].format('YYYY-MM-DD'),
           search: searchText.trim() || undefined,
-          resultStatus: effectiveStatusFilter === 'ALL'
-            ? undefined
-            : REPORT_STATUS_TO_RESULT_STATUS[effectiveStatusFilter],
+          status: effectiveStatusFilter === 'CANCELLED' ? 'CANCELLED' : undefined,
+          resultStatus:
+            effectiveStatusFilter === 'ALL' || effectiveStatusFilter === 'CANCELLED'
+              ? undefined
+              : REPORT_STATUS_TO_RESULT_STATUS[effectiveStatusFilter],
           departmentId:
             effectiveDepartmentFilter === REPORT_ALL_DEPARTMENTS_FILTER
               ? undefined
@@ -1449,6 +1462,10 @@ export function ReportsPage() {
     options?: { skipPaymentCheck?: boolean },
   ) => {
     const summaryOrder = order ?? getOrderSummaryById(orderId) ?? undefined;
+    if (summaryOrder && isCancelledOrder(summaryOrder)) {
+      message.warning('Cancelled orders cannot release results');
+      return;
+    }
     const skipPaymentCheck = options?.skipPaymentCheck === true;
     if (!skipPaymentCheck && summaryOrder && !canReleaseResults(summaryOrder)) {
       setPaymentModalOrder(summaryOrder);
@@ -1473,7 +1490,7 @@ export function ReportsPage() {
         (error as { response?: { status?: number } }).response?.status === 403;
       const backendMessage = await extractApiErrorMessageAsync(error);
 
-      if (is403 && summaryOrder) {
+      if (is403 && summaryOrder && !isCancelledOrder(summaryOrder)) {
         setPaymentModalOrder(summaryOrder);
         setPaymentModalPendingAction(
           () => () => handleDownloadResults(orderId, summaryOrder, { skipPaymentCheck: true }),
@@ -1493,6 +1510,10 @@ export function ReportsPage() {
     options?: { skipPaymentCheck?: boolean },
   ) => {
     const summaryOrder = (order ?? getOrderSummaryById(orderId) ?? undefined) as OrderHistoryItemDto | undefined;
+    if (summaryOrder && isCancelledOrder(summaryOrder)) {
+      message.warning('Cancelled orders cannot release results');
+      return;
+    }
     const resultsFilename = buildResultsPdfFilename(summaryOrder, orderId);
     const skipPaymentCheck = options?.skipPaymentCheck === true;
     if (!skipPaymentCheck && summaryOrder && !canReleaseResults(summaryOrder)) {
@@ -1595,7 +1616,7 @@ export function ReportsPage() {
         (error as { response?: { status?: number } }).response?.status === 403;
       const backendMessage = await extractApiErrorMessageAsync(error);
 
-      if (is403 && summaryOrder) {
+      if (is403 && summaryOrder && !isCancelledOrder(summaryOrder)) {
         setPaymentModalOrder(summaryOrder);
         setPaymentModalPendingAction(
           () => () => handlePrintResults(orderId, summaryOrder, { skipPaymentCheck: true }),
@@ -1718,6 +1739,10 @@ export function ReportsPage() {
     order: OrderHistoryItemDto,
     options?: { skipPaymentCheck?: boolean },
   ) => {
+    if (isCancelledOrder(order)) {
+      message.warning('Cancelled orders cannot release results');
+      return;
+    }
     if (!options?.skipPaymentCheck && !canReleaseResults(order)) {
       setPaymentModalOrder(order);
       setPaymentModalPendingAction(
@@ -1750,6 +1775,10 @@ export function ReportsPage() {
     order: OrderHistoryItemDto,
     options?: { skipPaymentCheck?: boolean },
   ) => {
+    if (isCancelledOrder(order)) {
+      message.warning('Cancelled orders cannot release results');
+      return;
+    }
     if (!options?.skipPaymentCheck && !canReleaseResults(order)) {
       setPaymentModalOrder(order);
       setPaymentModalPendingAction(
@@ -1788,6 +1817,10 @@ export function ReportsPage() {
   );
 
   const openEditResultModal = (order: OrderDto, orderTest: OrderTestDto) => {
+    if (isCancelledOrder(order)) {
+      message.warning('Cancelled orders are read-only');
+      return;
+    }
     const isPanel = orderTest.test?.type === 'PANEL';
     const allTests = (order.samples ?? []).flatMap((s) => s.orderTests ?? []);
     const panelChildren = allTests.filter((ot) => ot.parentOrderTestId === orderTest.id);
@@ -1809,6 +1842,7 @@ export function ReportsPage() {
     setEditResultContext({
       editMode: isPanel ? 'PANEL' : 'SINGLE',
       orderId: order.id,
+      orderStatus: order.status,
       orderTestId: orderTest.id,
       orderNumber: order.orderNumber || order.id.substring(0, 8),
       patientName: order.patient?.fullName || '-',
@@ -1920,6 +1954,10 @@ export function ReportsPage() {
 
   const handleEditResultSave = async (allValues: any) => {
     if (!editResultContext) return;
+    if (editResultContext.orderStatus === 'CANCELLED') {
+      message.warning('Cancelled orders are read-only');
+      return;
+    }
 
     const targets = editResultContext.targetItems;
     setSavingResult(true);
@@ -2021,6 +2059,10 @@ export function ReportsPage() {
 
   const handlePreviewResultDocument = useCallback(async (target: OrderTestDto) => {
     if (!target.resultDocument) return;
+    if (editResultContext?.orderStatus === 'CANCELLED') {
+      message.warning('Cancelled orders cannot release results');
+      return;
+    }
     setResultDocumentBusyTargetId(target.id);
     try {
       const blob = await downloadResultDocument(target.id);
@@ -2030,10 +2072,14 @@ export function ReportsPage() {
     } finally {
       setResultDocumentBusyTargetId(null);
     }
-  }, []);
+  }, [editResultContext?.orderStatus]);
 
   const handleDownloadResultDocument = useCallback(async (target: OrderTestDto) => {
     if (!target.resultDocument) return;
+    if (editResultContext?.orderStatus === 'CANCELLED') {
+      message.warning('Cancelled orders cannot release results');
+      return;
+    }
     setResultDocumentBusyTargetId(target.id);
     try {
       const blob = await downloadResultDocument(target.id, { download: true });
@@ -2043,10 +2089,14 @@ export function ReportsPage() {
     } finally {
       setResultDocumentBusyTargetId(null);
     }
-  }, []);
+  }, [editResultContext?.orderStatus]);
 
   const handlePrintResultDocument = useCallback(async (target: OrderTestDto) => {
     if (!target.resultDocument) return;
+    if (editResultContext?.orderStatus === 'CANCELLED') {
+      message.warning('Cancelled orders cannot release results');
+      return;
+    }
     setResultDocumentBusyTargetId(target.id);
     try {
       const blob = await downloadResultDocument(target.id);
@@ -2056,10 +2106,14 @@ export function ReportsPage() {
     } finally {
       setResultDocumentBusyTargetId(null);
     }
-  }, []);
+  }, [editResultContext?.orderStatus]);
 
   const handleUploadResultDocument = useCallback(async (target: OrderTestDto, file: File) => {
     if (!editResultContext) return;
+    if (editResultContext.orderStatus === 'CANCELLED') {
+      message.warning('Cancelled orders are read-only');
+      return;
+    }
     setResultDocumentBusyTargetId(target.id);
     try {
       await uploadResultDocument(target.id, file, {
@@ -2091,6 +2145,10 @@ export function ReportsPage() {
 
   const handleRemoveResultDocument = useCallback(async (target: OrderTestDto) => {
     if (!editResultContext) return;
+    if (editResultContext.orderStatus === 'CANCELLED') {
+      message.warning('Cancelled orders are read-only');
+      return;
+    }
     setResultDocumentBusyTargetId(target.id);
     try {
       await removeResultDocument(target.id, {
@@ -2308,6 +2366,13 @@ export function ReportsPage() {
             width: canAdminEditResults ? 280 : 220,
             align: 'right' as const,
             render: (_: unknown, row: ExpandedOrderTestRow) => {
+              if (order.status === 'CANCELLED') {
+                return (
+                  <Text type="secondary" style={{ fontSize: 10 }}>
+                    Canceled
+                  </Text>
+                );
+              }
               const hasResultDocument = Boolean(row.raw.resultDocument?.fileName);
               const isBusy = resultDocumentBusyTargetId === row.raw.id;
 
@@ -2400,10 +2465,12 @@ export function ReportsPage() {
 
   const renderOrderActions = (record: OrderHistoryItemDto) => {
     const hasPhone = !!record.patient?.phone;
+    const cancelled = isCancelledOrder(record);
     const availability = getResultAvailability(record);
     const reportReady = availability.ready;
     const paid = record.paymentStatus === 'paid';
     const notReadyTooltip = reportReady ? null : 'Not all test results are entered and verified';
+    const cancelledTooltip = cancelled ? 'Cancelled orders cannot release results' : null;
     const paymentTooltip = !paid ? 'Payment required to release results' : null;
     const flags = actionFlagsByOrderId[record.id];
     const pdfDone = Boolean(flags?.pdf);
@@ -2448,40 +2515,40 @@ export function ReportsPage() {
         key: 'results',
         label: withTick('PDF', pdfDone),
         icon: <FilePdfOutlined />,
-        disabled: !reportReady,
+        disabled: cancelled || !reportReady,
         onClick: () => handleDownloadResults(record.id, record),
       },
       {
         key: 'print',
         label: (
-          <span className={preferredClassName(printPreferred, !reportReady)}>
+          <span className={preferredClassName(printPreferred, cancelled || !reportReady)}>
             {withTick('Print', printDone)}
           </span>
         ),
         icon: <PrinterOutlined />,
-        disabled: !reportReady,
+        disabled: cancelled || !reportReady,
         onClick: () => handlePrintResults(record.id, record),
       },
       {
         key: 'wa',
         label: (
-          <span className={preferredClassName(whatsappPreferred, !hasPhone || !reportReady)}>
+          <span className={preferredClassName(whatsappPreferred, cancelled || !hasPhone || !reportReady)}>
             {withTick('WhatsApp', whatsappDone, '#25D366')}
           </span>
         ),
         icon: <WhatsAppOutlined />,
-        disabled: !hasPhone || !reportReady,
+        disabled: cancelled || !hasPhone || !reportReady,
         onClick: () => handleSendWhatsApp(record),
       },
       {
         key: 'viber',
         label: (
-          <span className={preferredClassName(viberPreferred, !hasPhone || !reportReady)}>
+          <span className={preferredClassName(viberPreferred, cancelled || !hasPhone || !reportReady)}>
             {withTick('Viber', viberDone, '#7360F2')}
           </span>
         ),
         icon: <MessageOutlined />,
-        disabled: !hasPhone || !reportReady,
+        disabled: cancelled || !hasPhone || !reportReady,
         onClick: () => handleSendViber(record),
       },
     ];
@@ -2501,26 +2568,26 @@ export function ReportsPage() {
         className="reports-order-actions"
         onClick={(event) => event.stopPropagation()}
       >
-        <Tooltip title={!reportReady ? notReadyTooltip : paymentTooltip || 'Download results PDF'}>
+        <Tooltip title={cancelledTooltip || (!reportReady ? notReadyTooltip : paymentTooltip || 'Download results PDF')}>
           <Button
             type="link"
             size="small"
             icon={<FilePdfOutlined />}
             className="reports-order-action-btn"
-            disabled={!reportReady}
+            disabled={cancelled || !reportReady}
             loading={downloading === `results-${record.id}`}
             onClick={() => handleDownloadResults(record.id, record)}
           >
             {withTick('PDF', pdfDone)}
           </Button>
         </Tooltip>
-        <Tooltip title={!reportReady ? notReadyTooltip : paymentTooltip || 'Print results'}>
+        <Tooltip title={cancelledTooltip || (!reportReady ? notReadyTooltip : paymentTooltip || 'Print results')}>
           <Button
             type="link"
             size="small"
             icon={<PrinterOutlined />}
-            className={actionButtonClassName(printPreferred, !reportReady)}
-            disabled={!reportReady}
+            className={actionButtonClassName(printPreferred, cancelled || !reportReady)}
+            disabled={cancelled || !reportReady}
             loading={downloading === `print-${record.id}`}
             onClick={() => handlePrintResults(record.id, record)}
           >
@@ -2528,31 +2595,37 @@ export function ReportsPage() {
           </Button>
         </Tooltip>
         <Tooltip
-          title={!reportReady ? notReadyTooltip : !hasPhone ? 'No phone number' : paymentTooltip || 'Send via WhatsApp'}
+          title={
+            cancelledTooltip ||
+            (!reportReady ? notReadyTooltip : !hasPhone ? 'No phone number' : paymentTooltip || 'Send via WhatsApp')
+          }
         >
           <Button
             type="link"
             size="small"
             icon={<WhatsAppOutlined />}
-            className={actionButtonClassName(whatsappPreferred, !hasPhone || !reportReady)}
-            disabled={!hasPhone || !reportReady}
+            className={actionButtonClassName(whatsappPreferred, cancelled || !hasPhone || !reportReady)}
+            disabled={cancelled || !hasPhone || !reportReady}
             onClick={() => handleSendWhatsApp(record)}
-            style={{ color: hasPhone && reportReady ? '#25D366' : undefined }}
+            style={{ color: !cancelled && hasPhone && reportReady ? '#25D366' : undefined }}
           >
             {withTick('WhatsApp', whatsappDone, '#25D366')}
           </Button>
         </Tooltip>
         <Tooltip
-          title={!reportReady ? notReadyTooltip : !hasPhone ? 'No phone number' : paymentTooltip || 'Send via Viber'}
+          title={
+            cancelledTooltip ||
+            (!reportReady ? notReadyTooltip : !hasPhone ? 'No phone number' : paymentTooltip || 'Send via Viber')
+          }
         >
           <Button
             type="link"
             size="small"
             icon={<MessageOutlined />}
-            className={actionButtonClassName(viberPreferred, !hasPhone || !reportReady)}
-            disabled={!hasPhone || !reportReady}
+            className={actionButtonClassName(viberPreferred, cancelled || !hasPhone || !reportReady)}
+            disabled={cancelled || !hasPhone || !reportReady}
             onClick={() => handleSendViber(record)}
-            style={{ color: hasPhone && reportReady ? '#7360F2' : undefined }}
+            style={{ color: !cancelled && hasPhone && reportReady ? '#7360F2' : undefined }}
           >
             {withTick('Viber', viberDone, '#7360F2')}
           </Button>
@@ -3452,6 +3525,7 @@ export function ReportsPage() {
                 { value: 'COMPLETED', label: 'Completed' },
                 { value: 'VERIFIED', label: 'Verified' },
                 { value: 'REJECTED', label: 'Rejected' },
+                { value: 'CANCELLED', label: 'Canceled' },
               ]}
             />
 

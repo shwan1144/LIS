@@ -77,6 +77,7 @@ type ResultsPdfPerformanceMetrics = {
 type GenerateTestResultsPdfOptions = {
     bypassPaymentCheck?: boolean;
     bypassResultCompletionCheck?: boolean;
+    bypassCancelledOrderCheck?: boolean;
     disableCache?: boolean;
     cultureOnly?: boolean;
     correlationId?: string | null;
@@ -160,5 +161,6 @@ export declare class ReportsService implements OnModuleInit, OnModuleDestroy {
     syncReportToS3(orderId: string, labId: string): Promise<string | null>;
     generateTestResultsPDFWithProfile(orderId: string, labId: string, options?: GenerateTestResultsPdfOptions): Promise<GenerateTestResultsPdfResult>;
     private renderTestResultsFallbackPDF;
+    private assertOrderCanReleaseResults;
 }
 export {};

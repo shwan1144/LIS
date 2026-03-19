@@ -34,6 +34,7 @@ import {
   assertWorklistViewAllowed,
   LAB_ROLE_GROUPS,
 } from '../auth/lab-role-matrix';
+import { OrderStatus } from '../entities/order.entity';
 import type { Response } from 'express';
 
 interface RequestWithUser {
@@ -123,6 +124,8 @@ export class WorklistController {
       new ParseEnumPipe(WorklistVerificationStatus, { optional: true }),
     )
     verificationStatus?: WorklistVerificationStatus,
+    @Query('orderStatus', new ParseEnumPipe(OrderStatus, { optional: true }))
+    orderStatus?: OrderStatus,
   ) {
     const labId = req.user?.labId;
     const actor = buildLabActorContext(req.user);
@@ -146,6 +149,7 @@ export class WorklistController {
         mode: selectedMode,
         entryStatus,
         verificationStatus,
+        orderStatus,
       },
       actor.userId ?? undefined,
     );

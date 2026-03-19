@@ -2,6 +2,7 @@ import {
   Injectable,
   NotFoundException,
   BadRequestException,
+  ForbiddenException,
   Logger,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -124,6 +125,7 @@ export enum WorklistVerificationStatus {
 export interface WorklistOrderSummaryItem {
   orderId: string;
   orderNumber: string;
+  orderStatus: OrderStatus;
   registeredAt: Date;
   patientName: string;
   patientSex: string | null;
@@ -142,6 +144,7 @@ export interface WorklistOrderSummaryItem {
 export interface WorklistOrderTestsPayload {
   orderId: string;
   orderNumber: string;
+  orderStatus: OrderStatus;
   registeredAt: Date;
   patientName: string;
   patientSex: string | null;
@@ -541,6 +544,7 @@ export class WorklistService {
       mode?: WorklistOrderMode;
       entryStatus?: WorklistEntryStatus;
       verificationStatus?: WorklistVerificationStatus;
+      orderStatus?: OrderStatus;
     },
     userId?: string,
   ): Promise<{
@@ -579,6 +583,16 @@ export class WorklistService {
         .where('order.labId = :labId', { labId })
         .andWhere('ot."parentOrderTestId" IS NULL');
 
+      if (params.orderStatus === OrderStatus.CANCELLED) {
+        summaryQb.andWhere('order.status = :cancelledOrderStatus', {
+          cancelledOrderStatus: OrderStatus.CANCELLED,
+        });
+      } else {
+        summaryQb.andWhere('order.status != :cancelledOrderStatus', {
+          cancelledOrderStatus: OrderStatus.CANCELLED,
+        });
+      }
+
       if (allowedDepartmentIds && allowedDepartmentIds.length > 0) {
         summaryQb.andWhere('test.departmentId IN (:...allowedDepartmentIds)', {
           allowedDepartmentIds,
@@ -610,6 +624,7 @@ export class WorklistService {
       summaryQb
         .select('order.id', 'orderId')
         .addSelect('order.orderNumber', 'orderNumber')
+        .addSelect('order.status', 'orderStatus')
         .addSelect('order.registeredAt', 'registeredAt')
         .addSelect('patient.fullName', 'patientName')
         .addSelect('patient.sex', 'patientSex')
@@ -641,6 +656,7 @@ export class WorklistService {
         )
         .groupBy('order.id')
         .addGroupBy('order.orderNumber')
+        .addGroupBy('order.status')
         .addGroupBy('order.registeredAt')
         .addGroupBy('patient.fullName')
         .addGroupBy('patient.sex')
@@ -657,32 +673,34 @@ export class WorklistService {
       const verifiedRootCountSql = `SUM(CASE WHEN ot.status = :verifiedStatus THEN 1 ELSE 0 END)`;
       const rejectedRootCountSql = `SUM(CASE WHEN ot.status = :rejectedStatus THEN 1 ELSE 0 END)`;
       const totalRootCountSql = 'COUNT(ot.id)';
-      if (mode === WorklistOrderMode.VERIFY) {
-        if (params.verificationStatus === WorklistVerificationStatus.UNVERIFIED) {
-          summaryQb
-            .having(`${pendingRootCountSql} = 0`)
-            .andHaving(`${verifiedRootCountSql} < ${totalRootCountSql}`);
-        } else if (params.verificationStatus === WorklistVerificationStatus.VERIFIED) {
-          summaryQb
-            .having(`${totalRootCountSql} > 0`)
-            .andHaving(`${verifiedRootCountSql} = ${totalRootCountSql}`);
+      if (params.orderStatus !== OrderStatus.CANCELLED) {
+        if (mode === WorklistOrderMode.VERIFY) {
+          if (params.verificationStatus === WorklistVerificationStatus.UNVERIFIED) {
+            summaryQb
+              .having(`${pendingRootCountSql} = 0`)
+              .andHaving(`${verifiedRootCountSql} < ${totalRootCountSql}`);
+          } else if (params.verificationStatus === WorklistVerificationStatus.VERIFIED) {
+            summaryQb
+              .having(`${totalRootCountSql} > 0`)
+              .andHaving(`${verifiedRootCountSql} = ${totalRootCountSql}`);
+          } else {
+            summaryQb.having(
+              `SUM(CASE WHEN ot.status = :completedStatus THEN 1 ELSE 0 END) > 0`,
+            );
+          }
         } else {
           summaryQb.having(
-            `SUM(CASE WHEN ot.status = :completedStatus THEN 1 ELSE 0 END) > 0`,
+            `SUM(CASE WHEN ot.status <> :verifiedStatus THEN 1 ELSE 0 END) > 0`,
           );
-        }
-      } else {
-        summaryQb.having(
-          `SUM(CASE WHEN ot.status <> :verifiedStatus THEN 1 ELSE 0 END) > 0`,
-        );
-        if (params.entryStatus === WorklistEntryStatus.PENDING) {
-          summaryQb.andHaving(
-            `(${pendingRootCountSql} > 0 OR ${rejectedRootCountSql} > 0)`,
-          );
-        } else if (params.entryStatus === WorklistEntryStatus.COMPLETED) {
-          summaryQb
-            .andHaving(`${pendingRootCountSql} = 0`)
-            .andHaving(`${rejectedRootCountSql} = 0`);
+          if (params.entryStatus === WorklistEntryStatus.PENDING) {
+            summaryQb.andHaving(
+              `(${pendingRootCountSql} > 0 OR ${rejectedRootCountSql} > 0)`,
+            );
+          } else if (params.entryStatus === WorklistEntryStatus.COMPLETED) {
+            summaryQb
+              .andHaving(`${pendingRootCountSql} = 0`)
+              .andHaving(`${rejectedRootCountSql} = 0`);
+          }
         }
       }
 
@@ -704,6 +722,7 @@ export class WorklistService {
         .getRawMany<{
           orderId: string;
           orderNumber: string | null;
+          orderStatus: OrderStatus;
           registeredAt: Date;
           patientName: string | null;
           patientSex: string | null;
@@ -724,9 +743,12 @@ export class WorklistService {
         const progressVerified = Number.parseInt(row.progressVerified, 10) || 0;
         const progressRejected = Number.parseInt(row.progressRejected, 10) || 0;
         const notVerifiedCount = Number.parseInt(row.notVerifiedCount, 10) || 0;
+        const orderStatus = row.orderStatus ?? OrderStatus.REGISTERED;
+        const isCancelledOrder = orderStatus === OrderStatus.CANCELLED;
         return {
           orderId: row.orderId,
           orderNumber: row.orderNumber || row.orderId.substring(0, 8),
+          orderStatus,
           registeredAt: new Date(row.registeredAt),
           patientName: row.patientName ?? '-',
           patientSex: row.patientSex ?? null,
@@ -738,8 +760,8 @@ export class WorklistService {
           progressVerified,
           progressRejected,
           firstRejectedReason: row.firstRejectedReason ?? null,
-          hasEnterable: notVerifiedCount > 0,
-          hasVerifiable: progressCompleted > 0,
+          hasEnterable: !isCancelledOrder && notVerifiedCount > 0,
+          hasVerifiable: !isCancelledOrder && progressCompleted > 0,
         } satisfies WorklistOrderSummaryItem;
       });
       itemsCount = items.length;
@@ -768,6 +790,7 @@ export class WorklistService {
               hasSearch: Boolean(params.search?.trim()),
               date: params.date ?? null,
               departmentId: params.departmentId ?? null,
+              orderStatus: params.orderStatus ?? null,
               entryStatus:
                 mode === WorklistOrderMode.ENTRY ? params.entryStatus ?? null : null,
               verificationStatus:
@@ -912,6 +935,7 @@ export class WorklistService {
       return {
         orderId: order.id,
         orderNumber: order.orderNumber ?? order.id.substring(0, 8),
+        orderStatus: order.status,
         registeredAt: order.registeredAt,
         patientName: order.patient?.fullName ?? '-',
         patientSex: order.patient?.sex ?? null,
@@ -1108,6 +1132,7 @@ export class WorklistService {
     if (orderTest.sample.order.labId !== labId) {
       throw new NotFoundException('Order test not found');
     }
+    this.assertOrderAllowsResultMutation(orderTest.sample.order);
 
     const forceEditVerified = data.forceEditVerified === true;
     const canForceEditVerified =
@@ -1342,6 +1367,9 @@ export class WorklistService {
       if (!orderTest || orderTest.sample.order.labId !== labId) {
         continue;
       }
+      if (orderTest.sample.order.status === OrderStatus.CANCELLED) {
+        continue;
+      }
 
       const forceEditVerified = data.forceEditVerified === true;
       const canForceEditVerified =
@@ -1540,6 +1568,7 @@ export class WorklistService {
     if (orderTest.sample.order.labId !== labId) {
       throw new NotFoundException('Order test not found');
     }
+    this.assertOrderAllowsResultMutation(orderTest.sample.order);
 
     if (orderTest.status === OrderTestStatus.VERIFIED) {
       throw new BadRequestException('Result is already verified');
@@ -1623,6 +1652,7 @@ export class WorklistService {
     for (const ot of orderTests) {
       if (
         ot.sample.order.labId !== labId ||
+        ot.sample.order.status === OrderStatus.CANCELLED ||
         ot.status === OrderTestStatus.VERIFIED ||
         ot.status === OrderTestStatus.REJECTED ||
         ot.status === OrderTestStatus.PENDING ||
@@ -1704,6 +1734,7 @@ export class WorklistService {
     if (orderTest.sample.order.labId !== labId) {
       throw new NotFoundException('Order test not found');
     }
+    this.assertOrderAllowsResultMutation(orderTest.sample.order);
 
     if (orderTest.status === OrderTestStatus.VERIFIED) {
       throw new BadRequestException('Cannot reject a verified result');
@@ -1770,6 +1801,7 @@ export class WorklistService {
     if (!orderTest || orderTest.sample.order.labId !== labId) {
       throw new NotFoundException('Order test not found');
     }
+    this.assertOrderAllowsResultMutation(orderTest.sample.order);
 
     if (orderTest.test.type !== TestType.SINGLE) {
       throw new BadRequestException('Result documents are only supported for single tests');
@@ -1875,6 +1907,7 @@ export class WorklistService {
     if (!orderTest || orderTest.sample.order.labId !== labId) {
       throw new NotFoundException('Order test not found');
     }
+    this.assertOrderAllowsResultMutation(orderTest.sample.order);
 
     const resultEntryType = this.normalizeResultEntryType(orderTest.test.resultEntryType);
     if (resultEntryType !== 'PDF_UPLOAD') {
@@ -1947,6 +1980,7 @@ export class WorklistService {
     if (!orderTest || orderTest.sample.order.labId !== labId) {
       throw new NotFoundException('Order test not found');
     }
+    this.assertOrderAllowsResultRelease(orderTest.sample.order);
 
     const buffer = await this.resultDocumentsService.readDocument(
       orderTest.resultDocumentStorageKey,
@@ -2871,6 +2905,18 @@ export class WorklistService {
     if (order.status !== nextStatus) {
       order.status = nextStatus;
       await this.orderRepo.save(order);
+    }
+  }
+
+  private assertOrderAllowsResultMutation(order: Pick<Order, 'status'>): void {
+    if (order.status === OrderStatus.CANCELLED) {
+      throw new BadRequestException('Cancelled orders are read-only.');
+    }
+  }
+
+  private assertOrderAllowsResultRelease(order: Pick<Order, 'status'>): void {
+    if (order.status === OrderStatus.CANCELLED) {
+      throw new ForbiddenException('Cancelled orders cannot release results.');
     }
   }
 }

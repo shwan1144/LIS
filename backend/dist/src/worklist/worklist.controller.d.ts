@@ -1,5 +1,6 @@
 import { WorklistEntryStatus, WorklistOrderMode, WorklistService, WorklistVerificationStatus, WorklistView } from './worklist.service';
 import { CultureResultPayload } from '../entities/order-test.entity';
+import { OrderStatus } from '../entities/order.entity';
 import type { Response } from 'express';
 interface RequestWithUser {
     user: {
@@ -23,7 +24,7 @@ export declare class WorklistController {
         items: import("./worklist.service").WorklistItem[];
         total: number;
     }>;
-    getWorklistOrders(req: RequestWithUser, search?: string, date?: string, departmentId?: string, page?: string, size?: string, mode?: WorklistOrderMode, entryStatus?: WorklistEntryStatus, verificationStatus?: WorklistVerificationStatus): Promise<{
+    getWorklistOrders(req: RequestWithUser, search?: string, date?: string, departmentId?: string, page?: string, size?: string, mode?: WorklistOrderMode, entryStatus?: WorklistEntryStatus, verificationStatus?: WorklistVerificationStatus, orderStatus?: OrderStatus): Promise<{
         items: import("./worklist.service").WorklistOrderSummaryItem[];
         total: number;
         page: number;

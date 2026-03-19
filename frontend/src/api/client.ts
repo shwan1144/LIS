@@ -2300,12 +2300,13 @@ export interface WorklistResult {
 }
 
 export type WorklistOrderMode = 'entry' | 'verify';
-export type WorklistEntryStatusFilter = 'pending' | 'completed';
-export type VerificationRowStatusFilter = 'unverified' | 'verified';
+export type WorklistEntryStatusFilter = 'pending' | 'completed' | 'cancelled';
+export type VerificationRowStatusFilter = 'unverified' | 'verified' | 'cancelled';
 
 export interface WorklistOrderSummaryDto {
   orderId: string;
   orderNumber: string;
+  orderStatus: OrderStatus;
   registeredAt: string;
   patientName: string;
   patientSex: string | null;
@@ -2332,6 +2333,7 @@ export interface WorklistOrderSummaryResult {
 export interface WorklistOrderModalDto {
   orderId: string;
   orderNumber: string;
+  orderStatus: OrderStatus;
   registeredAt: string;
   patientName: string;
   patientSex: string | null;
@@ -2381,6 +2383,7 @@ export async function getWorklistOrders(params: {
   mode?: WorklistOrderMode;
   entryStatus?: WorklistEntryStatusFilter;
   verificationStatus?: VerificationRowStatusFilter;
+  orderStatus?: OrderStatus;
 }): Promise<WorklistOrderSummaryResult> {
   const queryParams: Record<string, string> = {};
   if (params.search) queryParams.search = params.search;
@@ -2391,6 +2394,7 @@ export async function getWorklistOrders(params: {
   if (params.mode) queryParams.mode = params.mode;
   if (params.entryStatus) queryParams.entryStatus = params.entryStatus;
   if (params.verificationStatus) queryParams.verificationStatus = params.verificationStatus;
+  if (params.orderStatus) queryParams.orderStatus = params.orderStatus;
 
   const res = await api.get<WorklistOrderSummaryResult>('/worklist/orders', {
     params: queryParams,

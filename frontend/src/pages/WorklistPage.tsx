@@ -585,11 +585,13 @@ export function WorklistPage() {
   const loadRows = useCallback(async () => {
     setLoading(true);
     try {
+      const cancelledOnly = entryStatusFilter === 'cancelled';
       const result = await getWorklistOrders({
         mode: 'entry',
         search: search.trim() || undefined,
         date: dateFilter?.format('YYYY-MM-DD'),
-        entryStatus: entryStatusFilter,
+        entryStatus: cancelledOnly ? undefined : entryStatusFilter,
+        orderStatus: cancelledOnly ? 'CANCELLED' : undefined,
         departmentId: departmentId || undefined,
         page,
         size,
@@ -685,19 +687,27 @@ export function WorklistPage() {
     () => sortModalItems(modalGroup?.items ?? []),
     [modalGroup],
   );
+  const isCancelledModalOrder = modalOrder?.orderStatus === 'CANCELLED';
 
   const resultEntrySections = useMemo(
-    () => buildResultEntrySections(modalGroup, orderedModalItems, canAdminEditVerified),
-    [canAdminEditVerified, modalGroup, orderedModalItems],
+    () =>
+      buildResultEntrySections(
+        modalGroup,
+        orderedModalItems,
+        canAdminEditVerified,
+        isCancelledModalOrder,
+      ),
+    [canAdminEditVerified, isCancelledModalOrder, modalGroup, orderedModalItems],
   );
 
   const isEditableTarget = useCallback(
     (item: WorklistItem) => {
+      if (isCancelledModalOrder) return false;
       if (item.testType === 'PANEL') return false;
       if (item.status === 'VERIFIED' && !canAdminEditVerified) return false;
       return true;
     },
-    [canAdminEditVerified],
+    [canAdminEditVerified, isCancelledModalOrder],
   );
 
   const editableTargets = useMemo(
@@ -955,6 +965,10 @@ export function WorklistPage() {
 
   const handlePreviewResultDocument = useCallback(async (target: WorklistItem) => {
     if (!target.resultDocument) return;
+    if (modalOrder?.orderStatus === 'CANCELLED') {
+      message.warning('Cancelled orders cannot release results');
+      return;
+    }
     setResultDocumentBusyTargetId(target.id);
     try {
       const blob = await downloadResultDocument(target.id);
@@ -964,10 +978,14 @@ export function WorklistPage() {
     } finally {
       setResultDocumentBusyTargetId(null);
     }
-  }, []);
+  }, [modalOrder?.orderStatus]);
 
   const handleDownloadResultDocument = useCallback(async (target: WorklistItem) => {
     if (!target.resultDocument) return;
+    if (modalOrder?.orderStatus === 'CANCELLED') {
+      message.warning('Cancelled orders cannot release results');
+      return;
+    }
     setResultDocumentBusyTargetId(target.id);
     try {
       const blob = await downloadResultDocument(target.id, { download: true });
@@ -977,10 +995,14 @@ export function WorklistPage() {
     } finally {
       setResultDocumentBusyTargetId(null);
     }
-  }, []);
+  }, [modalOrder?.orderStatus]);
 
   const handleUploadResultDocument = useCallback(async (target: WorklistItem, file: File) => {
     if (!modalOrder || !modalGroup) return;
+    if (modalOrder.orderStatus === 'CANCELLED') {
+      message.warning('Cancelled orders are read-only');
+      return;
+    }
     setResultDocumentBusyTargetId(target.id);
     try {
       await uploadResultDocument(target.id, file, {
@@ -1007,6 +1029,10 @@ export function WorklistPage() {
 
   const handleRemoveResultDocument = useCallback(async (target: WorklistItem) => {
     if (!modalOrder || !modalGroup) return;
+    if (modalOrder.orderStatus === 'CANCELLED') {
+      message.warning('Cancelled orders are read-only');
+      return;
+    }
     setResultDocumentBusyTargetId(target.id);
     try {
       await removeResultDocument(target.id, {
@@ -1064,6 +1090,10 @@ export function WorklistPage() {
 
   const handleSubmitResult = async (values: Record<string, any>) => {
     if (!modalOrder) return;
+    if (modalOrder.orderStatus === 'CANCELLED') {
+      message.warning('Cancelled orders are read-only');
+      return;
+    }
     if (editableTargets.length === 0) {
       const hasVerifiedTargets = orderedModalItems.some(
         (item) => item.testType !== 'PANEL' && item.status === 'VERIFIED',
@@ -1217,6 +1247,11 @@ export function WorklistPage() {
       width: 350,
       render: (_: unknown, record) => (
         <Space size={[4, 4]} wrap>
+          {record.orderStatus === 'CANCELLED' ? (
+            <Tag color="error" style={{ margin: 0 }}>
+              Canceled
+            </Tag>
+          ) : null}
           <Tag style={{ margin: 0 }}>
             {record.progressTotalRoot} tests
           </Tag>
@@ -1274,6 +1309,7 @@ export function WorklistPage() {
       width: 130,
       render: (_: unknown, record) => {
         const expanded = expandedOrderKeys.includes(record.orderId);
+        const isCancelledOrder = record.orderStatus === 'CANCELLED';
         return (
           <Button
             size="small"
@@ -1283,7 +1319,7 @@ export function WorklistPage() {
               handleExpandRow(!expanded, record);
             }}
           >
-            {expanded ? 'Hide groups' : 'Groups'}
+            {expanded ? 'Hide' : isCancelledOrder ? 'View' : 'Groups'}
           </Button>
         );
       },
@@ -1325,6 +1361,7 @@ export function WorklistPage() {
         <div className="worklist-group-list">
           {cached.groups.map((group) => {
             const isEmptyPanel = group.groupKind === 'panel' && group.testsCount === 0;
+            const isCancelledOrder = record.orderStatus === 'CANCELLED';
             const groupStateClass = isEmptyPanel || (group.groupKind === 'panel' && group.isFullyEntered)
               ? ''
               : group.isFullyEntered
@@ -1398,7 +1435,7 @@ export function WorklistPage() {
                     openGroup();
                   }}
                 >
-                  Edit
+                  {isCancelledOrder ? 'View' : 'Edit'}
                 </Button>
               </div>
             );
@@ -1588,6 +1625,7 @@ export function WorklistPage() {
                 options={[
                   { value: 'pending', label: 'Pending' },
                   { value: 'completed', label: 'Completed' },
+                  { value: 'cancelled', label: 'Canceled' },
                 ]}
               />
               <Select
@@ -1672,6 +1710,14 @@ export function WorklistPage() {
         showLoadAllTestsHint={showLoadAllTestsHint}
         loadingAllTests={loadingAllTests}
         saveDisabled={saveDisabled}
+        saveBlockedReason={isCancelledModalOrder ? 'Cancelled orders are read-only.' : null}
+        readOnlyMode={isCancelledModalOrder}
+        readOnlyReason={
+          isCancelledModalOrder
+            ? 'Cancelled orders are read-only and cannot be edited or released.'
+            : null
+        }
+        attentionCount={0}
         dirtyCount={dirtySubmissionCount}
         submittableCount={submittableCandidates.length}
         hasTouchedChanges={hasTouchedChanges}

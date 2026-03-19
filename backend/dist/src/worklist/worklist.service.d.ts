@@ -1,6 +1,6 @@
 import { Repository } from 'typeorm';
 import { CultureResultPayload, OrderTest, OrderTestResultDocumentSummary, OrderTestStatus, ResultFlag } from '../entities/order-test.entity';
-import { Order } from '../entities/order.entity';
+import { Order, OrderStatus } from '../entities/order.entity';
 import { Test } from '../entities/test.entity';
 import { Antibiotic } from '../entities/antibiotic.entity';
 import { Lab } from '../entities/lab.entity';
@@ -83,6 +83,7 @@ export declare enum WorklistVerificationStatus {
 export interface WorklistOrderSummaryItem {
     orderId: string;
     orderNumber: string;
+    orderStatus: OrderStatus;
     registeredAt: Date;
     patientName: string;
     patientSex: string | null;
@@ -100,6 +101,7 @@ export interface WorklistOrderSummaryItem {
 export interface WorklistOrderTestsPayload {
     orderId: string;
     orderNumber: string;
+    orderStatus: OrderStatus;
     registeredAt: Date;
     patientName: string;
     patientSex: string | null;
@@ -152,6 +154,7 @@ export declare class WorklistService {
         mode?: WorklistOrderMode;
         entryStatus?: WorklistEntryStatus;
         verificationStatus?: WorklistVerificationStatus;
+        orderStatus?: OrderStatus;
     }, userId?: string): Promise<{
         items: WorklistOrderSummaryItem[];
         total: number;
@@ -235,5 +238,7 @@ export declare class WorklistService {
     private getLabTimeZone;
     private getDateRangeOrThrow;
     private syncOrderStatus;
+    private assertOrderAllowsResultMutation;
+    private assertOrderAllowsResultRelease;
 }
 export {};
