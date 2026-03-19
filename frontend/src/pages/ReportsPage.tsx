@@ -621,11 +621,14 @@ function downloadBlob(blob: Blob, fileName: string): void {
 
 function formatOrderTestResultPreview(orderTest: OrderTestDto, allTests: OrderTestDto[] = []): string {
   if (orderTest.test?.type === 'PANEL') {
-    const childPreviewLines = getPanelChildResultPreviewLines(orderTest, allTests);
-    if (childPreviewLines.length > 0) {
-      return childPreviewLines.join(', ');
-    }
-    return 'No child tests';
+    const children = allTests.filter((t) => t.parentOrderTestId === orderTest.id);
+    const total = children.length;
+    const completed = children.filter(
+      (t) => t.status === 'COMPLETED' || t.status === 'VERIFIED',
+    ).length;
+    if (total === 0) return 'No tests';
+    const percent = Math.round((completed / total) * 100);
+    return `${completed}/${total} done (${percent}%)`;
   }
 
   const cultureSummary = formatCultureResultSummary(orderTest.cultureResult);
@@ -674,37 +677,8 @@ function toValidTimestamp(input?: string | null): number | null {
   return Number.isFinite(ms) ? ms : null;
 }
 
-function compareOrderTests(a: OrderTestDto, b: OrderTestDto): number {
-  const aPanelOrder = a.panelSortOrder ?? Number.MAX_SAFE_INTEGER;
-  const bPanelOrder = b.panelSortOrder ?? Number.MAX_SAFE_INTEGER;
-  if (aPanelOrder !== bPanelOrder) return aPanelOrder - bPanelOrder;
-
-  const aSortOrder = a.sortOrder ?? Number.MAX_SAFE_INTEGER;
-  const bSortOrder = b.sortOrder ?? Number.MAX_SAFE_INTEGER;
-  if (aSortOrder !== bSortOrder) return aSortOrder - bSortOrder;
-
-  const aLabel = a.test?.name?.trim() || a.test?.code?.trim() || a.id;
-  const bLabel = b.test?.name?.trim() || b.test?.code?.trim() || b.id;
-  return aLabel.localeCompare(bLabel);
-}
-
 function getPanelChildren(parent: OrderTestDto, allTests: OrderTestDto[]): OrderTestDto[] {
-  return allTests
-    .filter((test) => test.parentOrderTestId === parent.id)
-    .sort(compareOrderTests);
-}
-
-function getPanelChildResultPreviewLines(
-  parent: OrderTestDto,
-  allTests: OrderTestDto[],
-): string[] {
-  return getPanelChildren(parent, allTests).map((child) => {
-    const childName = child.test?.name?.trim() || child.test?.code?.trim() || 'Unnamed child test';
-    const childResultPreview = formatOrderTestResultPreview(child, allTests);
-    return childResultPreview && childResultPreview !== '-'
-      ? `${childName}: ${childResultPreview}`
-      : childName;
-  });
+  return allTests.filter((test) => test.parentOrderTestId === parent.id);
 }
 
 function resolveExpectedMinutes(row: ExpandedOrderTestRow, allTests: OrderTestDto[]): number | null {
@@ -1807,7 +1781,7 @@ export function ReportsPage() {
   const openEditResultModal = (order: OrderDto, orderTest: OrderTestDto) => {
     const isPanel = orderTest.test?.type === 'PANEL';
     const allTests = (order.samples ?? []).flatMap((s) => s.orderTests ?? []);
-    const panelChildren = getPanelChildren(orderTest, allTests);
+    const panelChildren = allTests.filter((ot) => ot.parentOrderTestId === orderTest.id);
     const sameSampleTests = allTests.filter(
       (ot) =>
         ot.sampleId === orderTest.sampleId &&
@@ -2207,103 +2181,59 @@ export function ReportsPage() {
         dataIndex: 'resultPreview',
         key: 'result',
         width: 210,
-        render: (value: string, row: ExpandedOrderTestRow) => {
-          const panelChildResultLines =
-            row.raw.test?.type === 'PANEL'
-              ? getPanelChildResultPreviewLines(row.raw, allTestsInOrder)
-              : [];
+        render: (value: string, row: ExpandedOrderTestRow) => (
+          <div>
+            {isEtaLoadingStatus(row.status) ? (
+              (() => {
+                const eta = computeEta({
+                  startMs: getStartTime(order),
+                  expectedMinutes: resolveExpectedMinutes(row, allTestsInOrder),
+                  nowMs,
+                  finishMs: getFinishTime(row, allTestsInOrder),
+                });
+                const panelChildProgress = getPanelChildProgress(row, allTestsInOrder);
 
-          return (
-            <div>
-              {isEtaLoadingStatus(row.status) ? (
-                (() => {
-                  const eta = computeEta({
-                    startMs: getStartTime(order),
-                    expectedMinutes: resolveExpectedMinutes(row, allTestsInOrder),
-                    nowMs,
-                    finishMs: getFinishTime(row, allTestsInOrder),
-                  });
-                  const panelChildProgress = getPanelChildProgress(row, allTestsInOrder);
-
-                  if (!eta) {
-                    return (
-                      <div className="reports-eta-cell">
-                        <Text className="reports-eta-label">In progress</Text>
-                        {panelChildProgress && (
-                          <Text type="secondary" className="reports-eta-child-progress">
-                            {panelChildProgress}
-                          </Text>
-                        )}
-                        {panelChildResultLines.length > 0 && (
-                          <div className="reports-panel-child-preview reports-panel-child-preview--muted">
-                            {panelChildResultLines.map((line, index) => (
-                              <Text
-                                key={`${row.key}-panel-child-${index}`}
-                                type="secondary"
-                                className="reports-panel-child-preview-line"
-                              >
-                                {line}
-                              </Text>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  }
-
+                if (!eta) {
                   return (
                     <div className="reports-eta-cell">
-                      <Text className={`reports-eta-label ${eta.isOverdue ? 'overdue' : ''}`}>
-                        {eta.isOverdue ? `Overdue by ${eta.overdueMinutes}m` : `${eta.remainingMinutes}m left`}
-                      </Text>
-                      <Progress
-                        percent={eta.percent}
-                        size="small"
-                        showInfo={false}
-                        status={eta.isOverdue ? 'exception' : 'active'}
-                      />
-                      <div className="reports-eta-meta">
-                        <Text type="secondary">ETA {dayjs(eta.dueAtMs).format('HH:mm')}</Text>
-                        <Text type="secondary">{resolveExpectedMinutes(row, allTestsInOrder)}m target</Text>
-                      </div>
+                      <Text className="reports-eta-label">In progress</Text>
                       {panelChildProgress && (
                         <Text type="secondary" className="reports-eta-child-progress">
                           {panelChildProgress}
                         </Text>
                       )}
-                      {panelChildResultLines.length > 0 && (
-                        <div className="reports-panel-child-preview reports-panel-child-preview--muted">
-                          {panelChildResultLines.map((line, index) => (
-                            <Text
-                              key={`${row.key}-panel-child-${index}`}
-                              type="secondary"
-                              className="reports-panel-child-preview-line"
-                            >
-                              {line}
-                            </Text>
-                          ))}
-                        </div>
-                      )}
                     </div>
                   );
-                })()
-              ) : panelChildResultLines.length > 0 ? (
-                <div className="reports-panel-child-preview">
-                  {panelChildResultLines.map((line, index) => (
-                    <Text
-                      key={`${row.key}-panel-child-${index}`}
-                      className="reports-panel-child-preview-line"
-                    >
-                      {line}
+                }
+
+                return (
+                  <div className="reports-eta-cell">
+                    <Text className={`reports-eta-label ${eta.isOverdue ? 'overdue' : ''}`}>
+                      {eta.isOverdue ? `Overdue by ${eta.overdueMinutes}m` : `${eta.remainingMinutes}m left`}
                     </Text>
-                  ))}
-                </div>
-              ) : (
-                <Text style={{ fontSize: 12 }}>{value}</Text>
-              )}
-            </div>
-          );
-        },
+                    <Progress
+                      percent={eta.percent}
+                      size="small"
+                      showInfo={false}
+                      status={eta.isOverdue ? 'exception' : 'active'}
+                    />
+                    <div className="reports-eta-meta">
+                      <Text type="secondary">ETA {dayjs(eta.dueAtMs).format('HH:mm')}</Text>
+                      <Text type="secondary">{resolveExpectedMinutes(row, allTestsInOrder)}m target</Text>
+                    </div>
+                    {panelChildProgress && (
+                      <Text type="secondary" className="reports-eta-child-progress">
+                        {panelChildProgress}
+                      </Text>
+                    )}
+                  </div>
+                );
+              })()
+            ) : (
+              <Text style={{ fontSize: 12 }}>{value}</Text>
+            )}
+          </div>
+        ),
         onCell: () => ({ style: compactCellStyle }),
       },
       {
@@ -2910,22 +2840,6 @@ export function ReportsPage() {
           font-size: 10px;
           line-height: 1.2;
           margin: 0;
-        }
-        .reports-panel-child-preview {
-          display: flex;
-          flex-direction: column;
-          gap: 2px;
-          margin-top: 2px;
-        }
-        .reports-panel-child-preview-line.ant-typography {
-          margin: 0;
-          font-size: 11px;
-          line-height: 1.3;
-          white-space: normal;
-          word-break: break-word;
-        }
-        .reports-panel-child-preview--muted .reports-panel-child-preview-line.ant-typography {
-          font-size: 10px;
         }
         .panel-entry-modal .ant-modal {
           max-width: calc(100vw - 32px) !important;

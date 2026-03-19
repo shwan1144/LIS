@@ -287,6 +287,45 @@ describe('buildResultsReportHtml panel page isolation', () => {
     expect(panelChunk).toContain('Hemoglobin');
   });
 
+  it('prefers full test names over abbreviations for regular rows and panel child rows', () => {
+    const order = createOrder();
+    const regular = createOrderTest('regular-full-name', {
+      name: 'Alanine Aminotransferase',
+      code: 'ALT',
+      abbreviation: 'ALT',
+      resultValue: 32,
+      unit: 'U/L',
+    });
+    const panelParent = createOrderTest('panel-full-name-parent', {
+      name: 'CBC Panel',
+      code: 'CBC',
+      type: TestType.PANEL,
+    });
+    const panelChild = createOrderTest('panel-full-name-child', {
+      name: 'Mean Corpuscular Hemoglobin',
+      code: 'MCH',
+      abbreviation: 'MCH',
+      parentOrderTestId: panelParent.id,
+      resultValue: 29.5,
+      unit: 'pg',
+    });
+
+    const html = buildResultsReportHtml({
+      order,
+      orderTests: [regular, panelParent, panelChild],
+      reportableCount: 3,
+      verifiedCount: 3,
+      verifiers: ['Verifier'],
+      latestVerifiedAt: new Date('2026-02-26T11:00:00.000Z'),
+      comments: [],
+    });
+
+    expect(html).toContain('>Alanine Aminotransferase</td>');
+    expect(html).toContain('>Mean Corpuscular Hemoglobin</td>');
+    expect(html).not.toContain('>ALT</td>');
+    expect(html).not.toContain('>MCH</td>');
+  });
+
   it('renders one dedicated panel page per panel parent and comments once at the end', () => {
     const order = createOrder();
     const cbcPanel = createOrderTest('panel-cbc', {
@@ -442,7 +481,7 @@ describe('buildResultsReportHtml panel page isolation', () => {
     expect(html).not.toContain('class="dept-row"');
     expect(html).not.toContain('class="cat-row"');
     expect(html).toContain('TSH');
-    expect(html).toContain('UREA');
+    expect(html).toContain('Urea');
     expect(countMatches(html, 'class="regular-dept-block"')).toBe(2);
   });
 

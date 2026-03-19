@@ -240,6 +240,15 @@ function getDeptName(test: any): string {
   );
 }
 
+function getTestDisplayName(test: any, fallback = '-'): string {
+  const name = String(test?.name ?? '').trim();
+  if (name) return name;
+  const abbreviation = String(test?.abbreviation ?? '').trim();
+  if (abbreviation) return abbreviation;
+  const code = String(test?.code ?? '').trim();
+  return code || fallback;
+}
+
 function getDirection(order: Order, orderTests: OrderTest[], comments: string[]): 'ltr' | 'rtl' {
   const fields = [
     order.lab?.name,
@@ -526,7 +535,7 @@ export function buildResultsReportHtml(input: {
   for (let i = 0; i < panelParents.length; i++) {
     const ot = panelParents[i];
     const t: any = ot.test;
-    const testName = t?.name || t?.code || 'Examination';
+    const testName = getTestDisplayName(t, 'Examination');
     const kids = panelChildrenByParent.get(ot.id) || [];
     const params = Array.isArray(t?.parameterDefinitions) ? t.parameterDefinitions : [];
     const resultParams = ot.resultParameters && typeof ot.resultParameters === 'object' ? ot.resultParameters : {};
@@ -595,7 +604,7 @@ export function buildResultsReportHtml(input: {
               : '';
           currentSection = reportSection;
           return `${sectionHeaderHtml}<tr class="${abnormal ? 'abnormal' : ''}">
-            <td class="col-test" style="width:${regularTableWidths.test};">${escapeHtml(ct?.abbreviation || ct?.name || '-')}</td>
+            <td class="col-test" style="width:${regularTableWidths.test};">${escapeHtml(getTestDisplayName(ct))}</td>
             <td class="col-result nowrap" style="width:${regularTableWidths.result};">${escapeHtml(formatResultValue(child))}</td>
             <td class="col-unit nowrap" style="width:${regularTableWidths.unit};">${escapeHtml(ct?.unit || '-')}</td>
             ${showStatusColumn ? `<td class="col-status ${statusClass}" style="width:${regularTableWidths.status};">${escapeHtml(statusText)}</td>` : ''}
@@ -643,7 +652,7 @@ export function buildResultsReportHtml(input: {
   }> = [];
   for (const ot of cultureRegularTests) {
     const test = ot.test as any;
-    const testName = test?.name || test?.code || 'Culture & Sensitivity';
+    const testName = getTestDisplayName(test, 'Culture & Sensitivity');
     const cultureResult =
       ot.cultureResult && typeof ot.cultureResult === 'object'
         ? (ot.cultureResult as any)
@@ -832,7 +841,7 @@ export function buildResultsReportHtml(input: {
               ? (flag.startsWith('H') ? 'status-high' : 'status-low')
               : 'status-normal';
             return `<tr class="${abnormal ? 'abnormal' : ''}">
-            <td class="col-test" style="width:${regularTableWidths.test};">${escapeHtml(t?.abbreviation || t?.name || '-')}</td>
+            <td class="col-test" style="width:${regularTableWidths.test};">${escapeHtml(getTestDisplayName(t))}</td>
             <td class="col-result nowrap" style="width:${regularTableWidths.result};">${escapeHtml(formatResultValue(ot))}</td>
             <td class="col-unit nowrap" style="width:${regularTableWidths.unit};">${escapeHtml(t?.unit || '-')}</td>
             ${showStatusColumn ? `<td class="col-status ${statusClass}" style="width:${regularTableWidths.status};">${escapeHtml(statusText)}</td>` : ''}
