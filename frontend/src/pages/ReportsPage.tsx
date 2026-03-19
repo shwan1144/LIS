@@ -856,11 +856,15 @@ function getOrderTestRowsForDepartment(
   const rows: ExpandedOrderTestRow[] = [];
   const allTestsInOrder = (order.samples ?? []).flatMap((sample) => sample.orderTests ?? []);
 
+  const getDepartmentId = (orderTest: OrderTestDto) =>
+    orderTest.departmentId ?? orderTest.test?.departmentId ?? null;
+
   const matchesDepartment = (orderTest: OrderTestDto) =>
-    orderTest.departmentId === departmentId ||
+    getDepartmentId(orderTest) === departmentId ||
     allTestsInOrder.some(
       (candidate) =>
-        candidate.parentOrderTestId === orderTest.id && candidate.departmentId === departmentId,
+        candidate.parentOrderTestId === orderTest.id &&
+        getDepartmentId(candidate) === departmentId,
     );
 
   for (const sample of order.samples ?? []) {
@@ -2738,19 +2742,21 @@ export function ReportsPage() {
           justify-content: flex-end;
         }
         .reports-order-actions {
-          display: grid;
-          grid-template-columns: repeat(4, minmax(0, 1fr));
+          display: flex;
+          flex-wrap: nowrap;
           align-items: center;
+          justify-content: flex-end;
           gap: 8px;
-          width: min(100%, 452px);
+          width: 100%;
           margin-left: auto;
         }
         .reports-order-action-btn.ant-btn.ant-btn-link {
           display: inline-flex;
+          flex: 0 0 auto;
           align-items: center;
           justify-content: flex-start;
-          width: 100%;
-          min-width: 0;
+          width: auto;
+          min-width: fit-content;
           height: 34px;
           margin: 0;
           padding-inline: 12px;
