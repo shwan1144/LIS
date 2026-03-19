@@ -235,6 +235,7 @@ let SubLabsService = class SubLabsService {
             throw new common_1.ForbiddenException('PDF access is available only for panel orders');
         }
         return this.reportsService.generateTestResultsPDF(orderId, labId, {
+            bypassPaymentCheck: true,
             reportDesignOverride: {
                 reportBranding: {
                     bannerDataUrl: null,

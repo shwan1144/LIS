@@ -306,6 +306,7 @@ export class SubLabsService {
     }
 
     return this.reportsService.generateTestResultsPDF(orderId, labId, {
+      bypassPaymentCheck: true,
       reportDesignOverride: {
         reportBranding: {
           bannerDataUrl: null,

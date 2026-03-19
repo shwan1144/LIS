@@ -286,6 +286,7 @@ describe('SubLabsService', () => {
         'order-1',
         'lab-1',
         {
+          bypassPaymentCheck: true,
           reportDesignOverride: {
             reportBranding: {
               bannerDataUrl: null,
@@ -293,6 +294,54 @@ describe('SubLabsService', () => {
             },
           },
         },
+      );
+    });
+
+    it('allows ready unpaid panel orders for the authenticated sub-lab', async () => {
+      const { service, ordersService, reportsService } = createPortalServiceContext();
+      const order = createPortalOrder(
+        [createPortalOrderTest(OrderTestStatus.VERIFIED, TestType.PANEL)],
+        { paymentStatus: 'unpaid' },
+      );
+      const pdf = Buffer.from('unpaid-panel-pdf');
+
+      ordersService.findOne.mockResolvedValue(order);
+      reportsService.generateTestResultsPDF.mockResolvedValue(pdf);
+
+      await expect(
+        service.generatePortalResultsPdf('lab-1', 'sub-1', 'order-1'),
+      ).resolves.toBe(pdf);
+
+      expect(reportsService.generateTestResultsPDF).toHaveBeenCalledWith(
+        'order-1',
+        'lab-1',
+        expect.objectContaining({
+          bypassPaymentCheck: true,
+        }),
+      );
+    });
+
+    it('allows ready partially paid panel orders for the authenticated sub-lab', async () => {
+      const { service, ordersService, reportsService } = createPortalServiceContext();
+      const order = createPortalOrder(
+        [createPortalOrderTest(OrderTestStatus.VERIFIED, TestType.PANEL)],
+        { paymentStatus: 'partial' },
+      );
+      const pdf = Buffer.from('partial-panel-pdf');
+
+      ordersService.findOne.mockResolvedValue(order);
+      reportsService.generateTestResultsPDF.mockResolvedValue(pdf);
+
+      await expect(
+        service.generatePortalResultsPdf('lab-1', 'sub-1', 'order-1'),
+      ).resolves.toBe(pdf);
+
+      expect(reportsService.generateTestResultsPDF).toHaveBeenCalledWith(
+        'order-1',
+        'lab-1',
+        expect.objectContaining({
+          bypassPaymentCheck: true,
+        }),
       );
     });
 

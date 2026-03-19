@@ -117,4 +117,28 @@ describe('CreateTestDto numeric coercion', () => {
     expect(abbreviationError?.constraints).toBeDefined();
     expect(abbreviationError?.constraints?.minLength).toBeDefined();
   });
+
+  it('accepts panel unit visibility and parameter-specific units', () => {
+    const dto = plainToInstance(CreateTestDto, {
+      ...basePayload,
+      type: 'PANEL',
+      showPanelUnitColumnInReport: false,
+      parameterDefinitions: [
+        {
+          code: 'color',
+          label: 'Color',
+          type: 'select',
+          unit: '/HPF',
+          options: ['yellow', 'red'],
+          normalOptions: ['yellow'],
+        },
+      ],
+    });
+
+    const errors = validateSync(dto);
+
+    expect(errors).toHaveLength(0);
+    expect(dto.showPanelUnitColumnInReport).toBe(false);
+    expect(dto.parameterDefinitions?.[0].unit).toBe('/HPF');
+  });
 });

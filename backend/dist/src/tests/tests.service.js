@@ -77,6 +77,9 @@ let TestsService = class TestsService {
             ? dto.allowCustomResultText ?? false
             : false;
         const allowPanelSaveWithChildDefaults = dto.allowPanelSaveWithChildDefaults ?? false;
+        const showPanelUnitColumnInReport = (dto.type || test_entity_1.TestType.SINGLE) === test_entity_1.TestType.PANEL
+            ? dto.showPanelUnitColumnInReport ?? true
+            : true;
         const cultureConfig = this.normalizeCultureConfig(dto.cultureConfig, resultEntryType);
         this.validateResultEntryConfig(resultEntryType, resultTextOptions, allowCustomResultText, allowPanelSaveWithChildDefaults, cultureConfig, dto.type || test_entity_1.TestType.SINGLE);
         const test = this.testRepo.create({
@@ -100,11 +103,12 @@ let TestsService = class TestsService {
             resultTextOptions,
             allowCustomResultText,
             allowPanelSaveWithChildDefaults,
+            showPanelUnitColumnInReport,
             cultureConfig,
             numericAgeRanges: this.normalizeNumericAgeRanges(dto.numericAgeRanges),
             description: dto.description?.trim() || null,
             childTestIds: dto.childTestIds?.trim() || null,
-            parameterDefinitions: dto.parameterDefinitions ?? null,
+            parameterDefinitions: this.normalizeParameterDefinitions(dto.parameterDefinitions),
             departmentId: dto.departmentId ?? null,
             category: dto.category?.trim() || null,
             isActive: dto.isActive ?? true,
@@ -171,7 +175,7 @@ let TestsService = class TestsService {
         if (dto.childTestIds !== undefined)
             test.childTestIds = dto.childTestIds?.trim() || null;
         if (dto.parameterDefinitions !== undefined)
-            test.parameterDefinitions = dto.parameterDefinitions ?? null;
+            test.parameterDefinitions = this.normalizeParameterDefinitions(dto.parameterDefinitions);
         if (dto.departmentId !== undefined) {
             await this.ensureDepartmentBelongsToLab(dto.departmentId ?? null, labId);
             test.departmentId = dto.departmentId ?? null;
@@ -200,6 +204,11 @@ let TestsService = class TestsService {
         const nextAllowPanelSaveWithChildDefaults = dto.allowPanelSaveWithChildDefaults !== undefined
             ? dto.allowPanelSaveWithChildDefaults
             : (test.allowPanelSaveWithChildDefaults ?? false);
+        const nextShowPanelUnitColumnInReport = (test.type ?? previousType) === test_entity_1.TestType.PANEL
+            ? (dto.showPanelUnitColumnInReport !== undefined
+                ? dto.showPanelUnitColumnInReport
+                : (test.showPanelUnitColumnInReport ?? true))
+            : true;
         const nextCultureConfig = dto.cultureConfig !== undefined
             ? this.normalizeCultureConfig(dto.cultureConfig, nextResultEntryType)
             : this.normalizeCultureConfig(test.cultureConfig, nextResultEntryType);
@@ -208,6 +217,7 @@ let TestsService = class TestsService {
         test.resultTextOptions = nextResultTextOptions;
         test.allowCustomResultText = nextAllowCustomResultText;
         test.allowPanelSaveWithChildDefaults = nextAllowPanelSaveWithChildDefaults;
+        test.showPanelUnitColumnInReport = nextShowPanelUnitColumnInReport;
         test.cultureConfig = nextCultureConfig;
         const saved = await this.testRepo.save(test);
         await this.syncPanelComponentsForTest(saved, dto, labId);
@@ -336,6 +346,49 @@ let TestsService = class TestsService {
             micUnit: micUnitRaw.length > 0 ? micUnitRaw : null,
         };
     }
+    normalizeParameterDefinitions(definitions) {
+        if (!definitions || !Array.isArray(definitions))
+            return null;
+        const seen = new Set();
+        const normalized = [];
+        for (const definition of definitions) {
+            const code = String(definition?.code ?? '').trim();
+            const label = String(definition?.label ?? '').trim();
+            if (!code || !label)
+                continue;
+            const dedupeKey = code.toLowerCase();
+            if (seen.has(dedupeKey))
+                continue;
+            seen.add(dedupeKey);
+            const type = definition?.type === 'select' ? 'select' : 'text';
+            const options = type === 'select'
+                ? (definition?.options ?? [])
+                    .map((option) => String(option ?? '').trim())
+                    .filter(Boolean)
+                : undefined;
+            const normalOptions = type === 'select'
+                ? (definition?.normalOptions ?? [])
+                    .map((option) => String(option ?? '').trim())
+                    .filter(Boolean)
+                : undefined;
+            const defaultValue = typeof definition?.defaultValue === 'string' && definition.defaultValue.trim().length > 0
+                ? definition.defaultValue.trim()
+                : undefined;
+            const unit = typeof definition?.unit === 'string' && definition.unit.trim().length > 0
+                ? definition.unit.trim()
+                : null;
+            normalized.push({
+                code,
+                label,
+                type,
+                options: options?.length ? options : undefined,
+                normalOptions: normalOptions?.length ? normalOptions : undefined,
+                defaultValue,
+                unit,
+            });
+        }
+        return normalized.length ? normalized : null;
+    }
     normalizeResultTextOptions(options) {
         if (!options || !Array.isArray(options))
             return null;
@@ -388,9 +441,11 @@ let TestsService = class TestsService {
                 flag: (0, order_test_flag_util_1.normalizeOrderTestFlag)(option.flag ?? null),
                 isDefault: Boolean(option.isDefault),
             })) ?? null,
+            parameterDefinitions: this.normalizeParameterDefinitions(test.parameterDefinitions) ?? null,
             cultureConfig: test.cultureConfig && typeof test.cultureConfig === 'object'
                 ? this.normalizeCultureConfig(test.cultureConfig, (test.resultEntryType ?? 'NUMERIC'))
                 : null,
+            showPanelUnitColumnInReport: Boolean(test.showPanelUnitColumnInReport ?? true),
         });
     }
     validateResultEntryConfig(resultEntryType, resultTextOptions, allowCustomResultText, allowPanelSaveWithChildDefaults, cultureConfig, testType) {

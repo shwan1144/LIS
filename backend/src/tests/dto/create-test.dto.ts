@@ -54,6 +54,11 @@ export class TestParameterDefinitionDto {
   @IsString()
   @MaxLength(255)
   defaultValue?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(32)
+  unit?: string | null;
 }
 
 export class TestNumericAgeRangeDto {
@@ -251,6 +256,10 @@ export class CreateTestDto {
   @IsBoolean()
   @IsOptional()
   allowPanelSaveWithChildDefaults?: boolean;
+
+  @IsBoolean()
+  @IsOptional()
+  showPanelUnitColumnInReport?: boolean;
 
   @IsOptional()
   @ValidateNested()

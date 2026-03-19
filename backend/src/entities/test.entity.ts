@@ -23,6 +23,8 @@ export interface TestParameterDefinition {
   normalOptions?: string[];
   /** Default value when entering result (e.g. 'nil' for Crystal to save time). */
   defaultValue?: string;
+  /** Optional parameter-specific unit for parameter-style panels such as GUE/GSE. */
+  unit?: string | null;
 }
 
 export type NumericAgeRangeSex = 'ANY' | 'M' | 'F';
@@ -169,6 +171,10 @@ export class Test {
   /** Allow a panel to be finalized by saving configured child default entries. */
   @Column({ type: 'boolean', default: false })
   allowPanelSaveWithChildDefaults: boolean;
+
+  /** Controls whether printed/PDF panel tables show the Unit column. */
+  @Column({ type: 'boolean', default: true })
+  showPanelUnitColumnInReport: boolean;
 
   /** Configuration used for CULTURE_SENSITIVITY entry mode. */
   @Column({ type: 'jsonb', nullable: true })

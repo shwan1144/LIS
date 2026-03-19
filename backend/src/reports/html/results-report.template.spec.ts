@@ -52,13 +52,14 @@ function createOrderTest(
     resultText?: string | null;
     resultValue?: number | null;
     resultParameters?: Record<string, string> | null;
-    parameterDefinitions?: Array<{ code: string; label: string; normalOptions?: string[] }>;
+    parameterDefinitions?: Array<{ code: string; label: string; normalOptions?: string[]; unit?: string | null }>;
     category?: string | null;
     departmentName?: string | null;
     sortOrder?: number;
     resultEntryType?: string | null;
     cultureResult?: unknown;
     flag?: string | null;
+    showPanelUnitColumnInReport?: boolean;
   },
 ): OrderTest {
   return {
@@ -77,6 +78,7 @@ function createOrderTest(
       resultEntryType: options.resultEntryType ?? 'NUMERIC',
       unit: options.unit ?? null,
       parameterDefinitions: options.parameterDefinitions ?? [],
+      showPanelUnitColumnInReport: options.showPanelUnitColumnInReport ?? true,
       category: options.category ?? null,
       normalText: null,
       normalMin: null,
@@ -587,6 +589,9 @@ describe('buildResultsReportHtml panel page isolation', () => {
       code: 'GUE',
       type: TestType.PANEL,
       resultParameters: { color: 'yellow' },
+      parameterDefinitions: [
+        { code: 'color', label: 'Color', normalOptions: ['yellow'], unit: '/HPF' },
+      ],
     });
 
     const html = buildResultsReportHtml({
@@ -600,14 +605,103 @@ describe('buildResultsReportHtml panel page isolation', () => {
     });
 
     const parameterHeaderRow =
-      '<tr><th class="col-test" style="width:38%;">Test</th><th class="col-result" style="width:22%;">Result</th><th class="col-reference" style="width:40%;">Reference Value</th></tr>';
+      '<tr><th class="col-test" style="width:33.44%;">Test</th><th class="col-result" style="width:19.36%;">Result</th><th class="col-unit" style="width:12%;">Unit</th><th class="col-reference" style="width:35.2%;">Reference Value</th></tr>';
 
     expect(countMatches(html, parameterHeaderRow)).toBe(2);
     expect(html).not.toContain('<th class="col-status" style="width:10%;">Status</th>');
-    expect(html).toContain('<tr><td colspan="3">No parameters</td></tr>');
-    expect(html).toContain('<td class="col-test" style="width:38%;">color</td>');
-    expect(html).toContain('<td class="col-result" style="width:22%;">yellow</td>');
-    expect(html).toContain('<td class="col-reference reference-value" style="width:40%;">-</td>');
+    expect(html).toContain('<tr><td colspan="4">No parameters</td></tr>');
+    expect(html).toContain('<td class="col-test" style="width:33.44%;">Color</td>');
+    expect(html).toContain('<td class="col-result" style="width:19.36%;">yellow</td>');
+    expect(html).toContain('<td class="col-unit nowrap" style="width:12%;">/HPF</td>');
+    expect(html).toContain('<td class="col-reference reference-value" style="width:35.2%;">yellow</td>');
+  });
+
+  it('hides the Unit column for regular panel child tables when the panel toggle is off', () => {
+    const order = createOrder({
+      lab: {
+        ...createOrder().lab,
+        reportStyle: {
+          ...DEFAULT_REPORT_STYLE_V1,
+          resultsTable: {
+            ...DEFAULT_REPORT_STYLE_V1.resultsTable,
+            showStatusColumn: false,
+          },
+        },
+      } as Order['lab'],
+    });
+    const panelParent = createOrderTest('panel-cbc-no-unit', {
+      name: 'CBC Panel',
+      code: 'CBC',
+      type: TestType.PANEL,
+      showPanelUnitColumnInReport: false,
+    });
+    const panelChild = createOrderTest('panel-cbc-no-unit-child', {
+      name: 'Hemoglobin',
+      code: 'HGB',
+      parentOrderTestId: panelParent.id,
+      resultValue: 13.4,
+      unit: 'g/dL',
+    });
+
+    const html = buildResultsReportHtml({
+      order,
+      orderTests: [panelParent, panelChild],
+      reportableCount: 2,
+      verifiedCount: 2,
+      verifiers: ['Verifier'],
+      latestVerifiedAt: new Date('2026-02-26T11:00:00.000Z'),
+      comments: [],
+    });
+
+    const panelHeaderRow =
+      '<tr><th class="col-test" style="width:38.636%;">Test</th><th class="col-result" style="width:15.909%;">Result</th><th class="col-reference" style="width:45.455%;">Reference Value</th></tr>';
+
+    expect(countMatches(html, panelHeaderRow)).toBe(1);
+    expect(html).not.toContain('<th class="col-unit"');
+    expect(html).not.toContain('<td class="col-unit nowrap"');
+    expect(html).toContain('<td class="col-reference reference-value" style="width:45.455%;">-</td>');
+  });
+
+  it('hides the Unit column for parameter-style panel tables when the panel toggle is off', () => {
+    const order = createOrder({
+      lab: {
+        ...createOrder().lab,
+        reportStyle: {
+          ...DEFAULT_REPORT_STYLE_V1,
+          resultsTable: {
+            ...DEFAULT_REPORT_STYLE_V1.resultsTable,
+            showStatusColumn: false,
+          },
+        },
+      } as Order['lab'],
+    });
+    const panel = createOrderTest('panel-gue-no-unit', {
+      name: 'GUE Panel',
+      code: 'GUE',
+      type: TestType.PANEL,
+      showPanelUnitColumnInReport: false,
+      resultParameters: { color: 'yellow' },
+      parameterDefinitions: [
+        { code: 'color', label: 'Color', normalOptions: ['yellow'], unit: '/HPF' },
+      ],
+    });
+
+    const html = buildResultsReportHtml({
+      order,
+      orderTests: [panel],
+      reportableCount: 1,
+      verifiedCount: 1,
+      verifiers: ['Verifier'],
+      latestVerifiedAt: new Date('2026-02-26T11:00:00.000Z'),
+      comments: [],
+    });
+
+    const parameterHeaderRow =
+      '<tr><th class="col-test" style="width:38%;">Test</th><th class="col-result" style="width:22%;">Result</th><th class="col-reference" style="width:40%;">Reference Value</th></tr>';
+
+    expect(countMatches(html, parameterHeaderRow)).toBe(1);
+    expect(html).not.toContain('<th class="col-unit"');
+    expect(html).not.toContain('/HPF</td>');
   });
 
   it('renders culture susceptibility isolates in four S/I/R/R columns with duplicate Resistance headers', () => {
@@ -1083,7 +1177,7 @@ describe('buildResultsReportHtml panel page isolation', () => {
 
     expect(html).toContain('class="patient-info has-order-qr"');
     expect(html).toContain('class="patient-info-qr-image" src="data:image/png;base64,abc123" alt="Order QR Code"');
-    expect(html).toContain('class="patient-info-qr-caption">Order QR</div>');
+    expect(html).toContain('<div class="patient-info-qr"><img class="patient-info-qr-image"');
   });
 
   it('renders patient info as a fixed 3-row table layout', () => {

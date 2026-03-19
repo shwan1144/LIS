@@ -9,6 +9,7 @@ export declare class TestParameterDefinitionDto {
     options?: string[];
     normalOptions?: string[];
     defaultValue?: string;
+    unit?: string | null;
 }
 export declare class TestNumericAgeRangeDto {
     sex: 'ANY' | 'M' | 'F';
@@ -58,6 +59,7 @@ export declare class CreateTestDto {
     panelComponentTestIds?: string[] | null;
     allowCustomResultText?: boolean;
     allowPanelSaveWithChildDefaults?: boolean;
+    showPanelUnitColumnInReport?: boolean;
     cultureConfig?: TestCultureConfigDto | null;
     cultureAntibioticIds?: string[] | null;
     numericAgeRanges?: TestNumericAgeRangeDto[];

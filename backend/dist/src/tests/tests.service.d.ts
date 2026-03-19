@@ -47,6 +47,7 @@ export declare class TestsService {
     private toNullableRawText;
     private normalizeResultEntryType;
     private normalizeCultureConfig;
+    private normalizeParameterDefinitions;
     private normalizeResultTextOptions;
     private normalizeResultFlag;
     private normalizeTestForOutput;

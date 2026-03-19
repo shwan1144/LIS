@@ -106,6 +106,11 @@ const AGE_UNIT_OPTIONS: { label: string; value: TestNumericAgeUnit }[] = [
   { label: 'Years', value: 'YEAR' },
 ];
 
+const PARAMETER_ENTRY_TYPES: Array<{ label: string; value: TestParameterDefinition['type'] }> = [
+  { label: 'Select', value: 'select' },
+  { label: 'Text', value: 'text' },
+];
+
 
 function parseFiniteNumber(value: unknown): number | null {
   if (value === null || value === undefined || value === '') {
@@ -825,6 +830,7 @@ export function TestsPage() {
         resultEntryType: fullTest.resultEntryType ?? 'NUMERIC',
         allowCustomResultText: Boolean(fullTest.allowCustomResultText),
         allowPanelSaveWithChildDefaults: Boolean(fullTest.allowPanelSaveWithChildDefaults),
+        showPanelUnitColumnInReport: Boolean(fullTest.showPanelUnitColumnInReport ?? true),
         resultTextOptions: (fullTest.resultTextOptions ?? []).map((option) => ({
           value: option.value,
           flag: option.flag ?? undefined,
@@ -841,6 +847,7 @@ export function TestsPage() {
           options: p.options?.length ? p.options.join(', ') : '',
           normalOptions: p.normalOptions ?? [],
           defaultValue: p.defaultValue ?? undefined,
+          unit: p.unit ?? undefined,
         })),
         panelComponents: [...(fullTest.panelComponents ?? [])].sort((a, b) => a.sortOrder - b.sortOrder),
         cultureAntibioticIds: fullTest.cultureAntibioticIds ?? [],
@@ -865,6 +872,7 @@ export function TestsPage() {
         resultEntryType: 'NUMERIC',
         allowCustomResultText: false,
         allowPanelSaveWithChildDefaults: false,
+        showPanelUnitColumnInReport: true,
         resultTextOptions: [],
         cultureConfig: {
           interpretationOptions: ['S', 'I', 'R'],
@@ -991,11 +999,13 @@ export function TestsPage() {
         options?: string;
         normalOptions?: string[];
         defaultValue?: string;
+        unit?: string;
       }[];
       numericAgeRanges?: TestNumericAgeRange[];
       resultEntryType?: TestResultEntryType;
       allowCustomResultText?: boolean;
       allowPanelSaveWithChildDefaults?: boolean;
+      showPanelUnitColumnInReport?: boolean;
       cultureConfig?: TestCultureConfig | null;
       resultTextOptions?: {
         value: string;
@@ -1019,6 +1029,7 @@ export function TestsPage() {
           : undefined,
         normalOptions: Array.isArray(p.normalOptions) && p.normalOptions.length > 0 ? p.normalOptions : undefined,
         defaultValue: p.defaultValue?.trim() || undefined,
+        unit: p.unit?.trim() || null,
       }))
       : null;
     const categoryValue = Array.isArray(values.category) ? values.category[0] : values.category;
@@ -1110,6 +1121,8 @@ export function TestsPage() {
         isPanel || isPdfUpload ? false : Boolean(values.allowCustomResultText),
       allowPanelSaveWithChildDefaults:
         isPanel ? Boolean(values.allowPanelSaveWithChildDefaults) : false,
+      showPanelUnitColumnInReport:
+        isPanel ? Boolean(values.showPanelUnitColumnInReport ?? true) : true,
       cultureConfig: isPanel || isPdfUpload ? null : normalizedCultureConfig,
       cultureAntibioticIds: isPanel
         ? null
@@ -2111,6 +2124,156 @@ export function TestsPage() {
                   >
                     <Switch />
                   </Form.Item>
+                  <Form.Item
+                    name="showPanelUnitColumnInReport"
+                    label="Show Unit Column In Printed Report"
+                    valuePropName="checked"
+                    extra="Controls only this panel's printed/PDF Unit column. When disabled, the remaining visible panel columns expand to use the freed space."
+                    style={{ marginBottom: 12 }}
+                  >
+                    <Switch />
+                  </Form.Item>
+                  <Form.List name="parameterDefinitions">
+                    {(fields, { add, remove }) => (
+                      <div style={{ marginBottom: 12 }}>
+                        <Text strong style={{ display: 'block', marginBottom: 6 }}>
+                          Panel parameters
+                        </Text>
+                        <Text type="secondary" style={{ display: 'block', marginBottom: 10 }}>
+                          Optional for parameter-style panels such as GUE/GSE. If this panel has parameters,
+                          the printed report uses the parameter table for this panel.
+                        </Text>
+                        {fields.map(({ key, name, ...restField }) => (
+                          <div
+                            key={key}
+                            style={{
+                              border: panelCardStyle.border,
+                              borderRadius: 8,
+                              padding: 10,
+                              marginBottom: 10,
+                              background: panelCardStyle.background,
+                            }}
+                          >
+                            <Row gutter={12} align="bottom">
+                              <Col span={5}>
+                                <Form.Item
+                                  {...restField}
+                                  name={[name, 'code']}
+                                  label="Code"
+                                  rules={[{ required: true, message: 'Required' }]}
+                                >
+                                  <Input placeholder="e.g., color" />
+                                </Form.Item>
+                              </Col>
+                              <Col span={6}>
+                                <Form.Item
+                                  {...restField}
+                                  name={[name, 'label']}
+                                  label="Label"
+                                  rules={[{ required: true, message: 'Required' }]}
+                                >
+                                  <Input placeholder="e.g., Color" />
+                                </Form.Item>
+                              </Col>
+                              <Col span={4}>
+                                <Form.Item
+                                  {...restField}
+                                  name={[name, 'type']}
+                                  label="Type"
+                                  rules={[{ required: true, message: 'Required' }]}
+                                  initialValue="select"
+                                >
+                                  <Select options={PARAMETER_ENTRY_TYPES} />
+                                </Form.Item>
+                              </Col>
+                              <Col span={4}>
+                                <Form.Item {...restField} name={[name, 'unit']} label="Unit">
+                                  <Input placeholder="Optional" />
+                                </Form.Item>
+                              </Col>
+                              <Col span={4}>
+                                <Form.Item {...restField} name={[name, 'defaultValue']} label="Default value">
+                                  <Input placeholder="Optional" />
+                                </Form.Item>
+                              </Col>
+                              <Col span={1}>
+                                <Button
+                                  danger
+                                  type="text"
+                                  onClick={() => remove(name)}
+                                  style={{ marginBottom: 8 }}
+                                >
+                                  Remove
+                                </Button>
+                              </Col>
+                            </Row>
+
+                            <Form.Item
+                              noStyle
+                              shouldUpdate={(prev, curr) =>
+                                prev?.parameterDefinitions?.[name]?.type !== curr?.parameterDefinitions?.[name]?.type
+                              }
+                            >
+                              {() => {
+                                const definitionType =
+                                  form.getFieldValue(['parameterDefinitions', name, 'type']) ?? 'select';
+                                if (definitionType !== 'select') {
+                                  return null;
+                                }
+
+                                return (
+                                  <Row gutter={12}>
+                                    <Col span={12}>
+                                      <Form.Item
+                                        {...restField}
+                                        name={[name, 'options']}
+                                        label="Options"
+                                        extra="Comma-separated values."
+                                      >
+                                        <Input placeholder="e.g., yellow, red, dark" />
+                                      </Form.Item>
+                                    </Col>
+                                    <Col span={12}>
+                                      <Form.Item
+                                        {...restField}
+                                        name={[name, 'normalOptions']}
+                                        label="Normal options"
+                                      >
+                                        <Select
+                                          mode="tags"
+                                          tokenSeparators={[',']}
+                                          placeholder="e.g., yellow"
+                                        />
+                                      </Form.Item>
+                                    </Col>
+                                  </Row>
+                                );
+                              }}
+                            </Form.Item>
+                          </div>
+                        ))}
+
+                        <Button
+                          type="dashed"
+                          block
+                          icon={<PlusOutlined />}
+                          onClick={() =>
+                            add({
+                              code: '',
+                              label: '',
+                              type: 'select',
+                              options: '',
+                              normalOptions: [],
+                              defaultValue: undefined,
+                              unit: undefined,
+                            })
+                          }
+                        >
+                          Add parameter
+                        </Button>
+                      </div>
+                    )}
+                  </Form.List>
                   <Form.Item name="description" label="Description" style={{ marginBottom: 0 }}>
                     <Input.TextArea rows={3} placeholder="Optional description or notes" />
                   </Form.Item>

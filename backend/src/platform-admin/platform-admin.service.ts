@@ -2378,6 +2378,9 @@ export class PlatformAdminService {
       resultTextOptions: this.cloneTransferredResultTextOptions(sourceTest.resultTextOptions),
       allowCustomResultText: Boolean(sourceTest.allowCustomResultText),
       allowPanelSaveWithChildDefaults: Boolean(sourceTest.allowPanelSaveWithChildDefaults),
+      showPanelUnitColumnInReport: sourceTest.type === TestType.PANEL
+        ? Boolean(sourceTest.showPanelUnitColumnInReport ?? true)
+        : true,
       cultureConfig: this.cloneTransferredCultureConfig(sourceTest.cultureConfig),
       numericAgeRanges: this.cloneTransferredNumericAgeRanges(sourceTest.numericAgeRanges),
       description: this.toNullableTrimmedText(sourceTest.description),
@@ -2571,6 +2574,7 @@ export class PlatformAdminService {
               .filter((option): option is string => Boolean(option))
           : undefined;
       const defaultValue = this.toNullableTrimmedText(definition.defaultValue);
+      const unit = this.toNullableTrimmedText(definition.unit);
 
       normalized.push({
         code,
@@ -2579,6 +2583,7 @@ export class PlatformAdminService {
         options: options?.length ? options : undefined,
         normalOptions: normalOptions?.length ? normalOptions : undefined,
         defaultValue: defaultValue ?? undefined,
+        unit,
       });
     }
 

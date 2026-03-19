@@ -9,6 +9,7 @@ export interface TestParameterDefinition {
     options?: string[];
     normalOptions?: string[];
     defaultValue?: string;
+    unit?: string | null;
 }
 export type NumericAgeRangeSex = 'ANY' | 'M' | 'F';
 export type NumericAgeRangeUnit = 'DAY' | 'MONTH' | 'YEAR';
@@ -73,6 +74,7 @@ export declare class Test {
     resultTextOptions: TestResultTextOption[] | null;
     allowCustomResultText: boolean;
     allowPanelSaveWithChildDefaults: boolean;
+    showPanelUnitColumnInReport: boolean;
     cultureConfig: TestCultureConfig | null;
     numericAgeRanges: TestNumericAgeRange[] | null;
     description: string | null;

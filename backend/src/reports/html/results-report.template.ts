@@ -33,6 +33,54 @@ function formatDateTime(value: Date | string | null | undefined): string {
   return d.toLocaleString();
 }
 
+type ResultsColumnKey = 'test' | 'result' | 'unit' | 'status' | 'reference';
+type ColumnWeightMap = Record<ResultsColumnKey, number>;
+type TableWidthMap = Partial<Record<ResultsColumnKey, string>>;
+
+function formatWidthPercent(value: number): string {
+  const rounded = Math.round(value * 1000) / 1000;
+  const normalized = Number.isInteger(rounded) ? rounded.toFixed(0) : String(rounded);
+  return `${normalized}%`;
+}
+
+function resolveVisibleTableWidths(
+  baseWeights: ColumnWeightMap,
+  options: { showUnitColumn: boolean; showStatusColumn: boolean },
+): TableWidthMap {
+  const visibleEntries: Array<[ResultsColumnKey, number]> = [
+    ['test', baseWeights.test],
+    ['result', baseWeights.result],
+    ...(options.showUnitColumn ? [['unit', baseWeights.unit] as [ResultsColumnKey, number]] : []),
+    ...(options.showStatusColumn ? [['status', baseWeights.status] as [ResultsColumnKey, number]] : []),
+    ['reference', baseWeights.reference],
+  ];
+  const visibleTotal = visibleEntries.reduce((sum, [, weight]) => sum + weight, 0) || 1;
+  return Object.fromEntries(
+    visibleEntries.map(([key, weight]) => [key, formatWidthPercent((weight / visibleTotal) * 100)]),
+  ) as TableWidthMap;
+}
+
+function buildPanelTableLayout(
+  baseWeights: ColumnWeightMap,
+  options: { showUnitColumn: boolean; showStatusColumn: boolean },
+): {
+  widths: TableWidthMap;
+  visibleColumnCount: number;
+  colGroupHtml: string;
+  headerCellsHtml: string;
+} {
+  const widths = resolveVisibleTableWidths(baseWeights, options);
+  const colGroupHtml = `<colgroup><col style="width:${widths.test};" /><col style="width:${widths.result};" />${options.showUnitColumn ? `<col style="width:${widths.unit};" />` : ''}${options.showStatusColumn ? `<col style="width:${widths.status};" />` : ''}<col style="width:${widths.reference};" /></colgroup>`;
+  const headerCellsHtml = `<th class="col-test" style="width:${widths.test};">Test</th><th class="col-result" style="width:${widths.result};">Result</th>${options.showUnitColumn ? `<th class="col-unit" style="width:${widths.unit};">Unit</th>` : ''}${options.showStatusColumn ? `<th class="col-status" style="width:${widths.status};">Status</th>` : ''}<th class="col-reference" style="width:${widths.reference};">Reference Value</th>`;
+  return {
+    widths,
+    visibleColumnCount:
+      3 + (options.showUnitColumn ? 1 : 0) + (options.showStatusColumn ? 1 : 0),
+    colGroupHtml,
+    headerCellsHtml,
+  };
+}
+
 function containsArabicScript(text: string): boolean {
   return /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/.test(text);
 }
@@ -322,7 +370,6 @@ export function buildResultsReportHtml(input: {
   const reportTitleText = reportStyle.reportTitle.text.trim() || 'Laboratory Report';
   const showStatusColumn = reportStyle.resultsTable.showStatusColumn;
   const regularVisibleColumnCount = showStatusColumn ? 5 : 4;
-  const parameterVisibleColumnCount = showStatusColumn ? 4 : 3;
   const regularTableWidths = {
     test: showStatusColumn ? '32%' : '34%',
     result: showStatusColumn ? '12%' : '14%',
@@ -330,16 +377,14 @@ export function buildResultsReportHtml(input: {
     status: '10%',
     reference: showStatusColumn ? '36%' : '40%',
   } as const;
-  const parameterTableWidths = {
-    test: showStatusColumn ? '34%' : '38%',
-    result: showStatusColumn ? '20%' : '22%',
-    status: '10%',
-    reference: showStatusColumn ? '36%' : '40%',
-  } as const;
+  const panelChildBaseWeights: ColumnWeightMap = showStatusColumn
+    ? { test: 32, result: 12, unit: 10, status: 10, reference: 36 }
+    : { test: 34, result: 14, unit: 12, status: 0, reference: 40 };
+  const parameterPanelBaseWeights: ColumnWeightMap = showStatusColumn
+    ? { test: 30.6, result: 18, unit: 10, status: 9, reference: 32.4 }
+    : { test: 33.44, result: 19.36, unit: 12, status: 0, reference: 35.2 };
   const regularColGroupHtml = `<colgroup><col style="width:${regularTableWidths.test};" /><col style="width:${regularTableWidths.result};" /><col style="width:${regularTableWidths.unit};" />${showStatusColumn ? `<col style="width:${regularTableWidths.status};" />` : ''}<col style="width:${regularTableWidths.reference};" /></colgroup>`;
-  const parameterColGroupHtml = `<colgroup><col style="width:${parameterTableWidths.test};" /><col style="width:${parameterTableWidths.result};" />${showStatusColumn ? `<col style="width:${parameterTableWidths.status};" />` : ''}<col style="width:${parameterTableWidths.reference};" /></colgroup>`;
   const regularHeaderCellsHtml = `<th class="col-test" style="width:${regularTableWidths.test};">Test</th><th class="col-result" style="width:${regularTableWidths.result};">Result</th><th class="col-unit" style="width:${regularTableWidths.unit};">Unit</th>${showStatusColumn ? `<th class="col-status" style="width:${regularTableWidths.status};">Status</th>` : ''}<th class="col-reference" style="width:${regularTableWidths.reference};">Reference Value</th>`;
-  const parameterHeaderCellsHtml = `<th class="col-test" style="width:${parameterTableWidths.test};">Test</th><th class="col-result" style="width:${parameterTableWidths.result};">Result</th>${showStatusColumn ? `<th class="col-status" style="width:${parameterTableWidths.status};">Status</th>` : ''}<th class="col-reference" style="width:${parameterTableWidths.reference};">Reference Value</th>`;
   const pageMarginTopMm = reportStyle.pageLayout.pageMarginTopMm;
   const pageMarginRightMm = reportStyle.pageLayout.pageMarginRightMm;
   const pageMarginBottomMm = reportStyle.pageLayout.pageMarginBottomMm;
@@ -539,9 +584,19 @@ export function buildResultsReportHtml(input: {
     const kids = panelChildrenByParent.get(ot.id) || [];
     const params = Array.isArray(t?.parameterDefinitions) ? t.parameterDefinitions : [];
     const resultParams = ot.resultParameters && typeof ot.resultParameters === 'object' ? ot.resultParameters : {};
+    const showPanelUnitColumn = Boolean(t?.showPanelUnitColumnInReport ?? true);
 
     let contentRows = '';
     let isParamTable = params.length > 0 || Object.keys(resultParams).length > 0;
+    const panelLayout = isParamTable
+      ? buildPanelTableLayout(parameterPanelBaseWeights, {
+        showUnitColumn: showPanelUnitColumn,
+        showStatusColumn,
+      })
+      : buildPanelTableLayout(panelChildBaseWeights, {
+        showUnitColumn: showPanelUnitColumn,
+        showStatusColumn,
+      });
 
     if (isParamTable) {
       contentRows = params
@@ -567,10 +622,11 @@ export function buildResultsReportHtml(input: {
           }
           const rowClass = isAbnormalParam ? ' class="abnormal"' : '';
           return `<tr${rowClass}>
-            <td class="col-test" style="width:${parameterTableWidths.test};">${escapeHtml(p?.label || p?.code || '')}</td>
-            <td class="col-result" style="width:${parameterTableWidths.result};">${valueCell}</td>
-            ${showStatusColumn ? `<td class="col-status ${statusClass}" style="width:${parameterTableWidths.status};">${escapeHtml(statusText)}</td>` : ''}
-            <td class="col-reference reference-value" style="width:${parameterTableWidths.reference};">${escapeHtml(referenceValue)}</td>
+            <td class="col-test" style="width:${panelLayout.widths.test};">${escapeHtml(p?.label || p?.code || '')}</td>
+            <td class="col-result" style="width:${panelLayout.widths.result};">${valueCell}</td>
+            ${showPanelUnitColumn ? `<td class="col-unit nowrap" style="width:${panelLayout.widths.unit};">${escapeHtml(String(p?.unit ?? '').trim() || '-')}</td>` : ''}
+            ${showStatusColumn ? `<td class="col-status ${statusClass}" style="width:${panelLayout.widths.status};">${escapeHtml(statusText)}</td>` : ''}
+            <td class="col-reference reference-value" style="width:${panelLayout.widths.reference};">${escapeHtml(referenceValue)}</td>
           </tr>`;
         })
         .join('');
@@ -578,15 +634,16 @@ export function buildResultsReportHtml(input: {
         contentRows = Object.entries(resultParams)
           .filter(([, v]) => v != null && String(v).trim() !== '')
           .map(([k, v]) => `<tr>
-            <td class="col-test" style="width:${parameterTableWidths.test};">${escapeHtml(k)}</td>
-            <td class="col-result" style="width:${parameterTableWidths.result};">${escapeHtml(String(v))}</td>
-            ${showStatusColumn ? `<td class="col-status" style="width:${parameterTableWidths.status};">-</td>` : ''}
-            <td class="col-reference reference-value" style="width:${parameterTableWidths.reference};">-</td>
+            <td class="col-test" style="width:${panelLayout.widths.test};">${escapeHtml(k)}</td>
+            <td class="col-result" style="width:${panelLayout.widths.result};">${escapeHtml(String(v))}</td>
+            ${showPanelUnitColumn ? `<td class="col-unit nowrap" style="width:${panelLayout.widths.unit};">-</td>` : ''}
+            ${showStatusColumn ? `<td class="col-status" style="width:${panelLayout.widths.status};">-</td>` : ''}
+            <td class="col-reference reference-value" style="width:${panelLayout.widths.reference};">-</td>
           </tr>`)
           .join('');
       }
       if (!contentRows) {
-        contentRows = `<tr><td colspan="${parameterVisibleColumnCount}">No parameters</td></tr>`;
+        contentRows = `<tr><td colspan="${panelLayout.visibleColumnCount}">No parameters</td></tr>`;
       }
     } else if (kids.length > 0) {
       let currentSection: string | null = null;
@@ -600,34 +657,34 @@ export function buildResultsReportHtml(input: {
           const reportSection = getPanelReportSection(child);
           const sectionHeaderHtml =
             reportSection && reportSection !== currentSection
-              ? `<tr class="panel-section-row"><td class="panel-section-cell" colspan="${regularVisibleColumnCount}"><div class="panel-section-label">${escapeHtml(reportSection)}</div></td></tr>`
+              ? `<tr class="panel-section-row"><td class="panel-section-cell" colspan="${panelLayout.visibleColumnCount}"><div class="panel-section-label">${escapeHtml(reportSection)}</div></td></tr>`
               : '';
           currentSection = reportSection;
           return `${sectionHeaderHtml}<tr class="${abnormal ? 'abnormal' : ''}">
-            <td class="col-test" style="width:${regularTableWidths.test};">${escapeHtml(getTestDisplayName(ct))}</td>
-            <td class="col-result nowrap" style="width:${regularTableWidths.result};">${escapeHtml(formatResultValue(child))}</td>
-            <td class="col-unit nowrap" style="width:${regularTableWidths.unit};">${escapeHtml(ct?.unit || '-')}</td>
-            ${showStatusColumn ? `<td class="col-status ${statusClass}" style="width:${regularTableWidths.status};">${escapeHtml(statusText)}</td>` : ''}
-            <td class="col-reference reference-value" style="width:${regularTableWidths.reference};">${escapeHtml(formatRange(child, order.patient?.sex ?? null, ageForRanges))}</td>
+            <td class="col-test" style="width:${panelLayout.widths.test};">${escapeHtml(getTestDisplayName(ct))}</td>
+            <td class="col-result nowrap" style="width:${panelLayout.widths.result};">${escapeHtml(formatResultValue(child))}</td>
+            ${showPanelUnitColumn ? `<td class="col-unit nowrap" style="width:${panelLayout.widths.unit};">${escapeHtml(ct?.unit || '-')}</td>` : ''}
+            ${showStatusColumn ? `<td class="col-status ${statusClass}" style="width:${panelLayout.widths.status};">${escapeHtml(statusText)}</td>` : ''}
+            <td class="col-reference reference-value" style="width:${panelLayout.widths.reference};">${escapeHtml(formatRange(child, order.patient?.sex ?? null, ageForRanges))}</td>
           </tr>`;
         })
         .join('');
     } else {
-      contentRows = `<tr><td colspan="${isParamTable ? parameterVisibleColumnCount : regularVisibleColumnCount}">No data</td></tr>`;
+      contentRows = `<tr><td colspan="${panelLayout.visibleColumnCount}">No data</td></tr>`;
     }
 
     panelPageSections.push(`
       <table class="page-table ${isParamTable ? 'gue-gse-table' : 'panel-results-table'}">
-        ${isParamTable ? parameterColGroupHtml : regularColGroupHtml}
+        ${panelLayout.colGroupHtml}
         <thead>
-          <tr><td class="page-header-cell" colspan="${isParamTable ? parameterVisibleColumnCount : regularVisibleColumnCount}"><div class="page-header-space"></div></td></tr>
-          <tr><td class="panel-title-cell" colspan="${isParamTable ? parameterVisibleColumnCount : regularVisibleColumnCount}"><div class="panel-page-title">${escapeHtml(testName)}</div></td></tr>
-          <tr>${isParamTable ? parameterHeaderCellsHtml : regularHeaderCellsHtml}</tr>
+          <tr><td class="page-header-cell" colspan="${panelLayout.visibleColumnCount}"><div class="page-header-space"></div></td></tr>
+          <tr><td class="panel-title-cell" colspan="${panelLayout.visibleColumnCount}"><div class="panel-page-title">${escapeHtml(testName)}</div></td></tr>
+          <tr>${panelLayout.headerCellsHtml}</tr>
         </thead>
         <tbody>
           ${contentRows}
         </tbody>
-        <tfoot><tr><td class="page-footer-cell" colspan="${isParamTable ? parameterVisibleColumnCount : regularVisibleColumnCount}"><div class="page-footer-space"></div></td></tr></tfoot>
+        <tfoot><tr><td class="page-footer-cell" colspan="${panelLayout.visibleColumnCount}"><div class="page-footer-space"></div></td></tr></tfoot>
       </table>`);
   }
 

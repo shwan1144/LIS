@@ -1894,6 +1894,8 @@ export interface TestParameterDefinition {
   normalOptions?: string[];
   /** Default value when entering result (e.g. nil for Crystal). */
   defaultValue?: string;
+  /** Optional parameter-specific unit for parameter-style panels such as GUE/GSE. */
+  unit?: string | null;
 }
 
 export interface TestNumericAgeRange {
@@ -1999,6 +2001,7 @@ export interface TestDto {
   resultTextOptions: TestResultTextOption[] | null;
   allowCustomResultText: boolean;
   allowPanelSaveWithChildDefaults: boolean;
+  showPanelUnitColumnInReport: boolean;
   cultureConfig: TestCultureConfig | null;
   cultureAntibioticIds?: string[];
   panelComponents?: TestPanelComponent[];
@@ -2036,6 +2039,7 @@ export interface CreateTestDto {
   resultTextOptions?: TestResultTextOption[] | null;
   allowCustomResultText?: boolean;
   allowPanelSaveWithChildDefaults?: boolean;
+  showPanelUnitColumnInReport?: boolean;
   cultureConfig?: TestCultureConfig | null;
   cultureAntibioticIds?: string[] | null;
   panelComponents?: TestPanelComponent[] | null;

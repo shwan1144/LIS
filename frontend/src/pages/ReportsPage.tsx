@@ -63,6 +63,7 @@ import {
   type TestParameterDefinition,
   type WorklistStats,
 } from '../api/client';
+import { canAccessAction } from '../auth/lab-role-policy';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { CultureSensitivityEditor } from '../components/CultureSensitivityEditor';
@@ -681,6 +682,26 @@ function getPanelChildren(parent: OrderTestDto, allTests: OrderTestDto[]): Order
   return allTests.filter((test) => test.parentOrderTestId === parent.id);
 }
 
+function resolveDisplayVerifiedAt(orderTest: OrderTestDto, allTests: OrderTestDto[]): string | null {
+  if (orderTest.test?.type !== 'PANEL') {
+    return orderTest.verifiedAt ?? null;
+  }
+
+  let latestChildVerifiedAt: string | null = null;
+  let latestChildVerifiedMs: number | null = null;
+
+  for (const child of getPanelChildren(orderTest, allTests)) {
+    const childVerifiedMs = toValidTimestamp(child.verifiedAt);
+    if (childVerifiedMs === null) continue;
+    if (latestChildVerifiedMs === null || childVerifiedMs > latestChildVerifiedMs) {
+      latestChildVerifiedMs = childVerifiedMs;
+      latestChildVerifiedAt = child.verifiedAt ?? null;
+    }
+  }
+
+  return latestChildVerifiedAt ?? orderTest.verifiedAt ?? null;
+}
+
 function resolveExpectedMinutes(row: ExpandedOrderTestRow, allTests: OrderTestDto[]): number | null {
   const ownExpected = row.raw.test?.expectedCompletionMinutes ?? null;
   if (row.raw.test?.type !== 'PANEL') {
@@ -837,7 +858,7 @@ function getOrderTestRows(order: OrderDto): ExpandedOrderTestRow[] {
         unitPreview: orderTest.test?.unit?.trim() ?? '',
         status: orderTest.status,
         flag: orderTest.flag,
-        verifiedAt: orderTest.verifiedAt,
+        verifiedAt: resolveDisplayVerifiedAt(orderTest, allTestsInOrder),
         raw: orderTest,
       });
     }
@@ -882,7 +903,7 @@ function getOrderTestRowsForDepartment(
         unitPreview: orderTest.test?.unit?.trim() ?? '',
         status: orderTest.status,
         flag: orderTest.flag,
-        verifiedAt: orderTest.verifiedAt,
+        verifiedAt: resolveDisplayVerifiedAt(orderTest, allTestsInOrder),
         raw: orderTest,
       });
     }
@@ -892,7 +913,7 @@ function getOrderTestRowsForDepartment(
 }
 
 export function ReportsPage() {
-  const { lab } = useAuth();
+  const { lab, user } = useAuth();
   const screens = useBreakpoint();
   const isCompactActions = !screens.lg;
   const isDark = useTheme().theme === 'dark';
@@ -951,19 +972,7 @@ export function ReportsPage() {
   );
   const compactCellStyle = { paddingTop: 6, paddingBottom: 6, fontSize: 12 };
 
-  const currentUserRole = useMemo(() => {
-    try {
-      const raw = localStorage.getItem('user');
-      if (!raw) return null;
-      const parsed = JSON.parse(raw) as { role?: string };
-      return parsed.role ?? null;
-    } catch {
-      return null;
-    }
-  }, []);
-
-  const canAdminEditResults =
-    currentUserRole === 'LAB_ADMIN' || currentUserRole === 'SUPER_ADMIN';
+  const canAdminEditResults = canAccessAction(user?.role, 'reports.edit_results');
   const selectedDepartmentId =
     departmentFilter === REPORT_ALL_DEPARTMENTS_FILTER ? null : departmentFilter;
 

@@ -32,9 +32,11 @@ const test_entity_1 = require("../entities/test.entity");
 const test_component_entity_1 = require("../entities/test-component.entity");
 const results_report_template_1 = require("./html/results-report.template");
 const report_design_fingerprint_util_1 = require("./report-design-fingerprint.util");
+const report_style_config_1 = require("./report-style.config");
 const normal_range_util_1 = require("../tests/normal-range.util");
 const patient_age_util_1 = require("../patients/patient-age.util");
 const order_test_result_util_1 = require("../order-tests/order-test-result.util");
+const order_test_flag_util_1 = require("../order-tests/order-test-flag.util");
 const result_documents_service_1 = require("../result-documents/result-documents.service");
 const file_storage_service_1 = require("../storage/file-storage.service");
 const REPORT_BANNER_WIDTH = 2480;
@@ -1742,6 +1744,8 @@ let ReportsService = ReportsService_1 = class ReportsService {
         const patientAgeForRanges = (0, patient_age_util_1.getPatientAgeSnapshot)(patient?.dateOfBirth ?? null, order.registeredAt);
         const patientAgeDisplay = (0, patient_age_util_1.formatPatientAgeDisplay)(patient?.dateOfBirth ?? null, order.registeredAt);
         const labBranding = order.lab;
+        const reportStyle = (0, report_style_config_1.resolveReportStyleConfig)(labBranding?.reportStyle);
+        const showStatusColumn = reportStyle.resultsTable.showStatusColumn;
         const bannerImage = this.decodeImageDataUrl(labBranding?.reportBannerDataUrl);
         const footerImage = this.decodeImageDataUrl(labBranding?.reportFooterDataUrl);
         const logoImage = this.decodeImageDataUrl(labBranding?.reportLogoDataUrl);
@@ -1865,6 +1869,133 @@ let ReportsService = ReportsService_1 = class ReportsService {
                     unit: t?.unit || '-',
                     reference: t ? getNormalRange(t, patient?.sex ?? null, patientAgeForRanges) : '-',
                     extraParams: formatResultParameters(ot.resultParameters),
+                });
+            };
+            const flagToStatus = (flag) => {
+                if (flag === 'H')
+                    return 'High';
+                if (flag === 'L')
+                    return 'Low';
+                if (flag === 'N')
+                    return 'Normal';
+                if (flag === 'POS')
+                    return 'Positive';
+                if (flag === 'NEG')
+                    return 'Negative';
+                if (flag === 'ABN')
+                    return 'Abnormal';
+                return '-';
+            };
+            const buildPanelFallbackLayout = (options) => {
+                const baseWeights = options.isParameterTable
+                    ? (showStatusColumn
+                        ? { test: 30.6, result: 18, unit: 10, status: 9, reference: 32.4 }
+                        : { test: 33.44, result: 19.36, unit: 12, status: 0, reference: 35.2 })
+                    : (showStatusColumn
+                        ? { test: 32, result: 12, unit: 10, status: 10, reference: 36 }
+                        : { test: 34, result: 14, unit: 12, status: 0, reference: 40 });
+                const visibleColumns = [
+                    'test',
+                    'result',
+                    ...(options.showUnitColumn ? ['unit'] : []),
+                    ...(showStatusColumn ? ['status'] : []),
+                    'reference',
+                ];
+                const totalWeight = visibleColumns.reduce((sum, key) => sum + baseWeights[key], 0) || 1;
+                const resolvedWidths = {
+                    test: 0,
+                    result: 0,
+                    unit: 0,
+                    status: 0,
+                    reference: 0,
+                };
+                let assigned = 0;
+                visibleColumns.forEach((column, index) => {
+                    if (index === visibleColumns.length - 1) {
+                        resolvedWidths[column] = usableWidth - assigned;
+                        return;
+                    }
+                    const width = Math.round((usableWidth * baseWeights[column]) / totalWeight);
+                    resolvedWidths[column] = width;
+                    assigned += width;
+                });
+                return {
+                    widths: resolvedWidths,
+                    showUnitColumn: options.showUnitColumn,
+                    showStatusColumn,
+                    tableWidth: usableWidth,
+                };
+            };
+            const drawPanelTableHeader = (layout) => {
+                let cursorX = leftX;
+                doc.font('Helvetica-Bold').fontSize(10).fillColor('#111827');
+                doc.text('Test', cursorX, doc.y, { width: layout.widths.test });
+                cursorX += layout.widths.test;
+                doc.text('Result', cursorX, doc.y, { width: layout.widths.result });
+                cursorX += layout.widths.result;
+                if (layout.showUnitColumn) {
+                    doc.text('Unit', cursorX, doc.y, { width: layout.widths.unit });
+                    cursorX += layout.widths.unit;
+                }
+                if (layout.showStatusColumn) {
+                    doc.text('Status', cursorX, doc.y, { width: layout.widths.status });
+                    cursorX += layout.widths.status;
+                }
+                doc.text('Reference', cursorX, doc.y, { width: layout.widths.reference });
+                doc.moveDown(0.6);
+                doc
+                    .strokeColor('#CBD5E1')
+                    .lineWidth(1)
+                    .moveTo(leftX, doc.y)
+                    .lineTo(leftX + layout.tableWidth, doc.y)
+                    .stroke();
+                doc.moveDown(0.5);
+            };
+            const drawPanelResultRow = (layout, row) => {
+                ensureSpace(doc, 28, () => drawPanelTableHeader(layout));
+                const rowY = doc.y;
+                let cursorX = leftX;
+                doc.font('Helvetica').fontSize(9).fillColor('#111827');
+                doc.text(row.testLabel, cursorX, rowY, { width: layout.widths.test });
+                cursorX += layout.widths.test;
+                doc.text(row.result, cursorX, rowY, { width: layout.widths.result });
+                cursorX += layout.widths.result;
+                const heightCandidates = [
+                    doc.heightOfString(row.testLabel, { width: layout.widths.test }) + rowY,
+                    doc.heightOfString(row.result, { width: layout.widths.result }) + rowY,
+                ];
+                if (layout.showUnitColumn) {
+                    const unitText = row.unit ?? '-';
+                    doc.text(unitText, cursorX, rowY, { width: layout.widths.unit });
+                    heightCandidates.push(doc.heightOfString(unitText, { width: layout.widths.unit }) + rowY);
+                    cursorX += layout.widths.unit;
+                }
+                if (layout.showStatusColumn) {
+                    const statusText = row.status ?? '-';
+                    doc.text(statusText, cursorX, rowY, { width: layout.widths.status });
+                    heightCandidates.push(doc.heightOfString(statusText, { width: layout.widths.status }) + rowY);
+                    cursorX += layout.widths.status;
+                }
+                doc.text(row.reference, cursorX, rowY, { width: layout.widths.reference });
+                heightCandidates.push(doc.heightOfString(row.reference, { width: layout.widths.reference }) + rowY);
+                const bottomY = Math.max(doc.y, ...heightCandidates);
+                doc
+                    .strokeColor('#E2E8F0')
+                    .lineWidth(0.8)
+                    .moveTo(leftX, bottomY + 4)
+                    .lineTo(leftX + layout.tableWidth, bottomY + 4)
+                    .stroke();
+                doc.y = bottomY + 8;
+            };
+            const drawPanelOrderTestRow = (layout, ot) => {
+                const t = ot.test;
+                const flag = (0, order_test_flag_util_1.normalizeOrderTestFlag)(ot.flag ?? null) ?? String(ot.flag ?? '').trim().toUpperCase();
+                drawPanelResultRow(layout, {
+                    testLabel: t?.name || 'Unknown test',
+                    result: formatResultValue(ot),
+                    unit: t?.unit || '-',
+                    status: flagToStatus(flag),
+                    reference: t ? getNormalRange(t, patient?.sex ?? null, patientAgeForRanges) : '-',
                 });
             };
             const cultureColumnGap = 6;
@@ -2122,13 +2253,18 @@ let ReportsService = ReportsService_1 = class ReportsService {
                 const panelTitle = panelTest?.name || panelTest?.code || `Panel ${panelIndex + 1}`;
                 doc.font('Helvetica-Bold').fontSize(14).fillColor('#111827').text(panelTitle);
                 doc.moveDown(0.4);
-                drawTableHeader();
                 const panelChildren = panelChildrenByParent.get(panelParent.id) ?? [];
                 const panelResultParams = panelParent.resultParameters ?? {};
                 const parameterDefinitions = Array.isArray(panelTest?.parameterDefinitions)
                     ? panelTest.parameterDefinitions
                     : [];
-                if (parameterDefinitions.length > 0 || Object.keys(panelResultParams).length > 0) {
+                const isParameterTable = parameterDefinitions.length > 0 || Object.keys(panelResultParams).length > 0;
+                const panelLayout = buildPanelFallbackLayout({
+                    isParameterTable,
+                    showUnitColumn: Boolean(panelTest?.showPanelUnitColumnInReport ?? true),
+                });
+                drawPanelTableHeader(panelLayout);
+                if (isParameterTable) {
                     const renderedCodes = new Set();
                     for (const def of parameterDefinitions) {
                         const code = (def?.code ?? '').trim();
@@ -2139,34 +2275,43 @@ let ReportsService = ReportsService_1 = class ReportsService {
                         const reference = Array.isArray(def?.normalOptions) && def.normalOptions.length > 0
                             ? def.normalOptions.join(', ')
                             : '-';
-                        drawResultRow({
+                        let status = '-';
+                        if (normalizedValue !== '-' &&
+                            Array.isArray(def?.normalOptions) &&
+                            def.normalOptions.length > 0) {
+                            status = def.normalOptions.includes(normalizedValue) ? 'Normal' : 'Abnormal';
+                        }
+                        drawPanelResultRow(panelLayout, {
                             testLabel: def?.label || code || 'Parameter',
                             result: normalizedValue,
-                            unit: '-',
+                            unit: String(def?.unit ?? '').trim() || '-',
+                            status,
                             reference,
                         });
                     }
                     for (const [code, value] of Object.entries(panelResultParams)) {
                         if (renderedCodes.has(code))
                             continue;
-                        drawResultRow({
+                        drawPanelResultRow(panelLayout, {
                             testLabel: code,
                             result: value != null && String(value).trim() ? String(value).trim() : '-',
                             unit: '-',
+                            status: '-',
                             reference: '-',
                         });
                     }
                 }
                 else if (panelChildren.length > 0) {
                     for (const child of panelChildren) {
-                        drawOrderTestRow(child);
+                        drawPanelOrderTestRow(panelLayout, child);
                     }
                 }
                 else {
-                    drawResultRow({
+                    drawPanelResultRow(panelLayout, {
                         testLabel: 'No data',
                         result: '-',
                         unit: '-',
+                        status: '-',
                         reference: '-',
                     });
                 }

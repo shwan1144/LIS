@@ -124,6 +124,10 @@ export class TestsService {
         : false;
     const allowPanelSaveWithChildDefaults =
       dto.allowPanelSaveWithChildDefaults ?? false;
+    const showPanelUnitColumnInReport =
+      (dto.type || TestType.SINGLE) === TestType.PANEL
+        ? dto.showPanelUnitColumnInReport ?? true
+        : true;
     const cultureConfig = this.normalizeCultureConfig(dto.cultureConfig, resultEntryType);
     this.validateResultEntryConfig(
       resultEntryType,
@@ -155,11 +159,12 @@ export class TestsService {
       resultTextOptions,
       allowCustomResultText,
       allowPanelSaveWithChildDefaults,
+      showPanelUnitColumnInReport,
       cultureConfig,
       numericAgeRanges: this.normalizeNumericAgeRanges(dto.numericAgeRanges),
       description: dto.description?.trim() || null,
       childTestIds: dto.childTestIds?.trim() || null,
-      parameterDefinitions: (dto.parameterDefinitions as TestParameterDefinition[]) ?? null,
+      parameterDefinitions: this.normalizeParameterDefinitions(dto.parameterDefinitions),
       departmentId: dto.departmentId ?? null,
       category: dto.category?.trim() || null,
       isActive: dto.isActive ?? true,
@@ -218,7 +223,7 @@ export class TestsService {
     if (dto.description !== undefined) test.description = dto.description?.trim() || null;
     if (dto.childTestIds !== undefined) test.childTestIds = dto.childTestIds?.trim() || null;
     if (dto.parameterDefinitions !== undefined)
-      test.parameterDefinitions = (dto.parameterDefinitions as TestParameterDefinition[]) ?? null;
+      test.parameterDefinitions = this.normalizeParameterDefinitions(dto.parameterDefinitions);
     if (dto.departmentId !== undefined) {
       await this.ensureDepartmentBelongsToLab(dto.departmentId ?? null, labId);
       test.departmentId = dto.departmentId ?? null;
@@ -248,6 +253,12 @@ export class TestsService {
       dto.allowPanelSaveWithChildDefaults !== undefined
         ? dto.allowPanelSaveWithChildDefaults
         : (test.allowPanelSaveWithChildDefaults ?? false);
+    const nextShowPanelUnitColumnInReport =
+      (test.type ?? previousType) === TestType.PANEL
+        ? (dto.showPanelUnitColumnInReport !== undefined
+          ? dto.showPanelUnitColumnInReport
+          : (test.showPanelUnitColumnInReport ?? true))
+        : true;
     const nextCultureConfig =
       dto.cultureConfig !== undefined
         ? this.normalizeCultureConfig(dto.cultureConfig, nextResultEntryType)
@@ -266,6 +277,7 @@ export class TestsService {
     test.resultTextOptions = nextResultTextOptions;
     test.allowCustomResultText = nextAllowCustomResultText;
     test.allowPanelSaveWithChildDefaults = nextAllowPanelSaveWithChildDefaults;
+    test.showPanelUnitColumnInReport = nextShowPanelUnitColumnInReport;
     test.cultureConfig = nextCultureConfig;
 
     const saved = await this.testRepo.save(test);
@@ -438,6 +450,59 @@ export class TestsService {
     };
   }
 
+  private normalizeParameterDefinitions(
+    definitions: CreateTestDto['parameterDefinitions'] | undefined | null,
+  ): TestParameterDefinition[] | null {
+    if (!definitions || !Array.isArray(definitions)) return null;
+
+    const seen = new Set<string>();
+    const normalized: TestParameterDefinition[] = [];
+
+    for (const definition of definitions) {
+      const code = String(definition?.code ?? '').trim();
+      const label = String(definition?.label ?? '').trim();
+      if (!code || !label) continue;
+
+      const dedupeKey = code.toLowerCase();
+      if (seen.has(dedupeKey)) continue;
+      seen.add(dedupeKey);
+
+      const type = definition?.type === 'select' ? 'select' : 'text';
+      const options =
+        type === 'select'
+          ? (definition?.options ?? [])
+              .map((option) => String(option ?? '').trim())
+              .filter(Boolean)
+          : undefined;
+      const normalOptions =
+        type === 'select'
+          ? (definition?.normalOptions ?? [])
+              .map((option) => String(option ?? '').trim())
+              .filter(Boolean)
+          : undefined;
+      const defaultValue =
+        typeof definition?.defaultValue === 'string' && definition.defaultValue.trim().length > 0
+          ? definition.defaultValue.trim()
+          : undefined;
+      const unit =
+        typeof definition?.unit === 'string' && definition.unit.trim().length > 0
+          ? definition.unit.trim()
+          : null;
+
+      normalized.push({
+        code,
+        label,
+        type,
+        options: options?.length ? options : undefined,
+        normalOptions: normalOptions?.length ? normalOptions : undefined,
+        defaultValue,
+        unit,
+      });
+    }
+
+    return normalized.length ? normalized : null;
+  }
+
   private normalizeResultTextOptions(
     options: CreateTestDto['resultTextOptions'] | undefined | null,
   ): TestResultTextOption[] | null {
@@ -501,6 +566,8 @@ export class TestsService {
           flag: normalizeOrderTestFlag(option.flag ?? null),
           isDefault: Boolean(option.isDefault),
         })) ?? null,
+      parameterDefinitions:
+        this.normalizeParameterDefinitions(test.parameterDefinitions as CreateTestDto['parameterDefinitions']) ?? null,
       cultureConfig:
         test.cultureConfig && typeof test.cultureConfig === 'object'
           ? this.normalizeCultureConfig(
@@ -508,6 +575,7 @@ export class TestsService {
               (test.resultEntryType ?? 'NUMERIC') as TestResultEntryType,
             )
           : null,
+      showPanelUnitColumnInReport: Boolean(test.showPanelUnitColumnInReport ?? true),
     });
   }
 

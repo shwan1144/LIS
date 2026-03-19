@@ -191,6 +191,47 @@ function downloadBlob(blob: Blob, fileName: string): void {
   URL.revokeObjectURL(objectUrl);
 }
 
+function extractApiErrorMessage(error: unknown): string | null {
+  if (!error || typeof error !== 'object' || !('response' in error)) {
+    return null;
+  }
+  const response = (error as { response?: { data?: { message?: string | string[] } } }).response;
+  const rawMessage = response?.data?.message;
+  if (Array.isArray(rawMessage)) {
+    return rawMessage.filter((entry) => typeof entry === 'string').join(', ') || null;
+  }
+  return typeof rawMessage === 'string' && rawMessage.trim().length > 0 ? rawMessage : null;
+}
+
+async function extractApiErrorMessageAsync(error: unknown): Promise<string | null> {
+  const direct = extractApiErrorMessage(error);
+  if (direct) return direct;
+  if (!error || typeof error !== 'object' || !('response' in error)) {
+    return null;
+  }
+
+  const response = (
+    error as { response?: { data?: unknown } }
+  ).response;
+  const payload = response?.data;
+  if (!(payload instanceof Blob)) {
+    return null;
+  }
+
+  try {
+    const text = await payload.text();
+    const parsed = JSON.parse(text) as { message?: string | string[] };
+    if (Array.isArray(parsed.message)) {
+      return parsed.message.filter((entry) => typeof entry === 'string').join(', ') || null;
+    }
+    return typeof parsed.message === 'string' && parsed.message.trim().length > 0
+      ? parsed.message
+      : null;
+  } catch {
+    return null;
+  }
+}
+
 export function SubLabOrdersPage() {
   const screens = useBreakpoint();
   const isMobile = !screens.md;
@@ -295,8 +336,9 @@ export function SubLabOrdersPage() {
     try {
       const blob = await downloadSubLabTestResultsPDF(order.id);
       downloadBlob(blob, `results-${order.orderNumber || order.id.slice(0, 8)}.pdf`);
-    } catch {
-      message.error('Failed to download PDF');
+    } catch (error) {
+      const backendMessage = await extractApiErrorMessageAsync(error);
+      message.error(backendMessage || 'Failed to download PDF');
     } finally {
       setDownloadingPdfOrderId((current) => (current === order.id ? null : current));
     }
