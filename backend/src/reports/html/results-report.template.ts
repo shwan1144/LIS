@@ -490,7 +490,7 @@ export function buildResultsReportHtml(input: {
         </table>
       </div>
       ${hasOrderQr
-      ? `<div class="patient-info-qr"><img class="patient-info-qr-image" ${orderQrUrlAttr} alt="Order QR Code" /><div class="patient-info-qr-caption">Order QR</div></div>`
+      ? `<div class="patient-info-qr"><img class="patient-info-qr-image" ${orderQrUrlAttr} alt="Order QR Code" /></div>`
       : ''}
     </div>
     <div class="report-title">${escapeHtml(reportTitleText)}</div>
