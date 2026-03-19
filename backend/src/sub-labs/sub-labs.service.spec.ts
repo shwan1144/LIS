@@ -1,10 +1,153 @@
+import { ForbiddenException, NotFoundException } from '@nestjs/common';
 import type { EntityManager, Repository } from 'typeorm';
 import { SubLabsService } from './sub-labs.service';
 import { SubLab } from '../entities/sub-lab.entity';
 import { SubLabTestPrice } from '../entities/sub-lab-test-price.entity';
 import { User } from '../entities/user.entity';
-import { Test } from '../entities/test.entity';
-import { Order } from '../entities/order.entity';
+import { Test, TestType } from '../entities/test.entity';
+import { Order, OrderStatus, PatientType } from '../entities/order.entity';
+import { OrderTest, OrderTestStatus } from '../entities/order-test.entity';
+import { OrderDetailView } from '../orders/dto/create-order-response.dto';
+
+function createPortalOrderTest(
+  status: OrderTestStatus,
+  type: TestType,
+  overrides?: Partial<OrderTest>,
+): OrderTest {
+  return {
+    id: overrides?.id ?? `${type}-${status}`,
+    labId: 'lab-1',
+    sampleId: 'sample-1',
+    testId: 'test-1',
+    parentOrderTestId: overrides?.parentOrderTestId ?? null,
+    status,
+    price: null,
+    resultValue: null,
+    resultText: null,
+    resultParameters: null,
+    cultureResult: null,
+    flag: null,
+    resultedAt: null,
+    resultedBy: null,
+    verifiedAt: null,
+    verifiedBy: null,
+    rejectionReason: null,
+    comments: null,
+    resultDocumentStorageKey: null,
+    resultDocumentFileName: null,
+    resultDocumentMimeType: null,
+    resultDocumentSizeBytes: null,
+    resultDocumentUploadedAt: null,
+    resultDocumentUploadedBy: null,
+    panelSortOrder: null,
+    createdAt: new Date('2026-03-17T00:00:00.000Z'),
+    updatedAt: new Date('2026-03-17T00:00:00.000Z'),
+    sample: null as never,
+    lab: null,
+    test: {
+      id: 'test-1',
+      labId: 'lab-1',
+      code: 'TEST',
+      name: 'Test',
+      type,
+    } as Test,
+    parentOrderTest: null,
+    childOrderTests: [],
+    ...overrides,
+  } as OrderTest;
+}
+
+function createPortalOrder(
+  rootTests: OrderTest[],
+  overrides?: Partial<Order>,
+): Order {
+  return {
+    id: overrides?.id ?? 'order-1',
+    patientId: 'patient-1',
+    labId: 'lab-1',
+    shiftId: null,
+    sourceSubLabId: overrides?.sourceSubLabId ?? 'sub-1',
+    orderNumber: '26031001',
+    status: overrides?.status ?? OrderStatus.COMPLETED,
+    patientType: overrides?.patientType ?? PatientType.WALK_IN,
+    notes: null,
+    totalAmount: 0,
+    discountPercent: 0,
+    finalAmount: 0,
+    paymentStatus: 'paid',
+    paidAmount: 0,
+    registeredAt: new Date('2026-03-17T00:00:00.000Z'),
+    deliveryMethods: [],
+    reportS3Key: null,
+    reportGeneratedAt: null,
+    createdAt: new Date('2026-03-17T00:00:00.000Z'),
+    updatedAt: new Date('2026-03-17T00:00:00.000Z'),
+    patient: null as never,
+    lab: null as never,
+    shift: null,
+    sourceSubLab: null,
+    samples: [
+      {
+        id: 'sample-1',
+        labId: 'lab-1',
+        orderId: 'order-1',
+        sampleId: null,
+        tubeType: null,
+        barcode: null,
+        sequenceNumber: null,
+        qrCode: null,
+        collectedAt: null,
+        notes: null,
+        createdAt: new Date('2026-03-17T00:00:00.000Z'),
+        updatedAt: new Date('2026-03-17T00:00:00.000Z'),
+        order: null as never,
+        lab: null,
+        orderTests: rootTests,
+      },
+    ] as Order['samples'],
+    ...overrides,
+  } as Order;
+}
+
+function createPortalServiceContext() {
+  const subLabRepo = {
+    findOne: jest.fn().mockResolvedValue({
+      id: 'sub-1',
+      labId: 'lab-1',
+      name: 'Portal',
+      isActive: true,
+    } as SubLab),
+    manager: {
+      transaction: jest.fn(),
+    },
+  } as unknown as Repository<SubLab>;
+
+  const ordersService = {
+    findOne: jest.fn(),
+    findHistory: jest.fn(),
+  };
+  const reportsService = {
+    generateTestResultsPDF: jest.fn(),
+  };
+
+  const service = new SubLabsService(
+    subLabRepo,
+    {} as Repository<SubLabTestPrice>,
+    {} as Repository<User>,
+    {} as Repository<Test>,
+    {} as Repository<Order>,
+    ordersService as never,
+    reportsService as never,
+    {} as never,
+  );
+
+  return {
+    service,
+    subLabRepo,
+    ordersService,
+    reportsService,
+  };
+}
 
 describe('SubLabsService', () => {
   it('creates a sub-lab and returns its detail from the same transaction manager', async () => {
@@ -117,5 +260,83 @@ describe('SubLabsService', () => {
       where: { id: 'sub-1', labId: 'lab-1' },
     });
     expect(priceDelete).toHaveBeenCalledWith({ subLabId: 'sub-1' });
+  });
+
+  describe('generatePortalResultsPdf', () => {
+    it('allows ready panel orders for the authenticated sub-lab and removes only banner/footer branding', async () => {
+      const { service, ordersService, reportsService } = createPortalServiceContext();
+      const order = createPortalOrder([
+        createPortalOrderTest(OrderTestStatus.VERIFIED, TestType.PANEL),
+      ]);
+      const pdf = Buffer.from('panel-pdf');
+
+      ordersService.findOne.mockResolvedValue(order);
+      reportsService.generateTestResultsPDF.mockResolvedValue(pdf);
+
+      await expect(
+        service.generatePortalResultsPdf('lab-1', 'sub-1', 'order-1'),
+      ).resolves.toBe(pdf);
+
+      expect(ordersService.findOne).toHaveBeenCalledWith(
+        'order-1',
+        'lab-1',
+        OrderDetailView.FULL,
+      );
+      expect(reportsService.generateTestResultsPDF).toHaveBeenCalledWith(
+        'order-1',
+        'lab-1',
+        {
+          reportDesignOverride: {
+            reportBranding: {
+              bannerDataUrl: null,
+              footerDataUrl: null,
+            },
+          },
+        },
+      );
+    });
+
+    it('blocks orders that are not report-ready', async () => {
+      const { service, ordersService, reportsService } = createPortalServiceContext();
+      ordersService.findOne.mockResolvedValue(
+        createPortalOrder([
+          createPortalOrderTest(OrderTestStatus.COMPLETED, TestType.PANEL),
+        ]),
+      );
+
+      await expect(
+        service.generatePortalResultsPdf('lab-1', 'sub-1', 'order-1'),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+      expect(reportsService.generateTestResultsPDF).not.toHaveBeenCalled();
+    });
+
+    it('blocks ready orders that do not have a root panel test', async () => {
+      const { service, ordersService, reportsService } = createPortalServiceContext();
+      ordersService.findOne.mockResolvedValue(
+        createPortalOrder([
+          createPortalOrderTest(OrderTestStatus.VERIFIED, TestType.SINGLE),
+        ]),
+      );
+
+      await expect(
+        service.generatePortalResultsPdf('lab-1', 'sub-1', 'order-1'),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+      expect(reportsService.generateTestResultsPDF).not.toHaveBeenCalled();
+    });
+
+    it('hides orders that belong to another sub-lab', async () => {
+      const { service, ordersService, reportsService } = createPortalServiceContext();
+      ordersService.findOne.mockResolvedValue(
+        createPortalOrder(
+          [createPortalOrderTest(OrderTestStatus.VERIFIED, TestType.PANEL)],
+          { sourceSubLabId: 'sub-2' },
+        ),
+      );
+
+      await expect(
+        service.generatePortalResultsPdf('lab-1', 'sub-1', 'order-1'),
+      ).rejects.toBeInstanceOf(NotFoundException);
+      expect(reportsService.generateTestResultsPDF).not.toHaveBeenCalled();
+    });
   });
 });

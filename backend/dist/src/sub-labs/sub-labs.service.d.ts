@@ -101,7 +101,7 @@ export declare class SubLabsService {
     }>;
     getPortalOrderDetail(labId: string, subLabId: string, orderId: string): Promise<Order>;
     getPortalStatistics(labId: string, subLabId: string, startDate: Date, endDate: Date): Promise<import("../dashboard/dashboard.service").StatisticsDto>;
-    generatePortalResultsPdf(labId: string, subLabId: string, orderId: string): Promise<void>;
+    generatePortalResultsPdf(labId: string, subLabId: string, orderId: string): Promise<Buffer<ArrayBufferLike>>;
     private requireActiveSubLab;
     private getForLabWithManager;
     private upsertSubLabUser;
@@ -111,4 +111,5 @@ export declare class SubLabsService {
     private buildPortalResultSummary;
     private formatPortalOrderTestSummary;
     private stripPortalResults;
+    private hasRootPanelTest;
 }

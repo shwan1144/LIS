@@ -9,7 +9,7 @@ import { EntityManager, Repository } from 'typeorm';
 import { SubLab } from '../entities/sub-lab.entity';
 import { SubLabTestPrice } from '../entities/sub-lab-test-price.entity';
 import { User } from '../entities/user.entity';
-import { Test } from '../entities/test.entity';
+import { Test, TestType } from '../entities/test.entity';
 import { Order, OrderStatus } from '../entities/order.entity';
 import { OrderTest, OrderTestStatus } from '../entities/order-test.entity';
 import { hashPassword } from '../auth/password.util';
@@ -289,7 +289,30 @@ export class SubLabsService {
   }
 
   async generatePortalResultsPdf(labId: string, subLabId: string, orderId: string) {
-    throw new ForbiddenException('PDF access is disabled for sub-lab portal');
+    await this.requireActiveSubLab(labId, subLabId);
+
+    const order = await this.ordersService.findOne(orderId, labId, OrderDetailView.FULL);
+    if (order.sourceSubLabId !== subLabId) {
+      throw new NotFoundException('Order not found');
+    }
+
+    const progress = this.calculatePortalProgress(order.samples ?? []);
+    if (!progress.reportReady) {
+      throw new ForbiddenException('Results are not ready yet');
+    }
+
+    if (!this.hasRootPanelTest(order.samples ?? [])) {
+      throw new ForbiddenException('PDF access is available only for panel orders');
+    }
+
+    return this.reportsService.generateTestResultsPDF(orderId, labId, {
+      reportDesignOverride: {
+        reportBranding: {
+          bannerDataUrl: null,
+          footerDataUrl: null,
+        },
+      },
+    });
   }
 
   private async requireActiveSubLab(labId: string, subLabId: string): Promise<SubLab> {
@@ -526,5 +549,11 @@ export class SubLabsService {
         orderTest.comments = null;
       }
     }
+  }
+
+  private hasRootPanelTest(samples: Array<{ orderTests?: OrderTest[] }>): boolean {
+    return samples
+      .flatMap((sample) => sample.orderTests ?? [])
+      .some((orderTest) => !orderTest.parentOrderTestId && orderTest.test?.type === TestType.PANEL);
   }
 }

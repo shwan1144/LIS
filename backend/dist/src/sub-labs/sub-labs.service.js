@@ -222,7 +222,26 @@ let SubLabsService = class SubLabsService {
         });
     }
     async generatePortalResultsPdf(labId, subLabId, orderId) {
-        throw new common_1.ForbiddenException('PDF access is disabled for sub-lab portal');
+        await this.requireActiveSubLab(labId, subLabId);
+        const order = await this.ordersService.findOne(orderId, labId, create_order_response_dto_1.OrderDetailView.FULL);
+        if (order.sourceSubLabId !== subLabId) {
+            throw new common_1.NotFoundException('Order not found');
+        }
+        const progress = this.calculatePortalProgress(order.samples ?? []);
+        if (!progress.reportReady) {
+            throw new common_1.ForbiddenException('Results are not ready yet');
+        }
+        if (!this.hasRootPanelTest(order.samples ?? [])) {
+            throw new common_1.ForbiddenException('PDF access is available only for panel orders');
+        }
+        return this.reportsService.generateTestResultsPDF(orderId, labId, {
+            reportDesignOverride: {
+                reportBranding: {
+                    bannerDataUrl: null,
+                    footerDataUrl: null,
+                },
+            },
+        });
     }
     async requireActiveSubLab(labId, subLabId) {
         const subLab = await this.subLabRepo.findOne({
@@ -411,6 +430,11 @@ let SubLabsService = class SubLabsService {
                 orderTest.comments = null;
             }
         }
+    }
+    hasRootPanelTest(samples) {
+        return samples
+            .flatMap((sample) => sample.orderTests ?? [])
+            .some((orderTest) => !orderTest.parentOrderTestId && orderTest.test?.type === test_entity_1.TestType.PANEL);
     }
 };
 exports.SubLabsService = SubLabsService;
