@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, ForbiddenException, BadRequestException, InternalServerErrorException, Logger, type OnModuleDestroy, type OnModuleInit } from '@nestjs/common';
+import { Injectable, NotFoundException, ForbiddenException, BadRequestException, InternalServerErrorException, ConflictException, Logger, type OnModuleDestroy, type OnModuleInit } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In } from 'typeorm';
 import { readFileSync, existsSync } from 'fs';
@@ -28,6 +28,10 @@ import { AuditAction, AuditLog } from '../entities/audit-log.entity';
 import { TestType, type Test } from '../entities/test.entity';
 import { TestComponent } from '../entities/test-component.entity';
 import { buildResultsReportHtml } from './html/results-report.template';
+import {
+  injectResultsReportPrintPreparationScript,
+  prepareResultsReportDocumentForPrint,
+} from './html/results-report-print-prep';
 import { buildReportDesignFingerprint } from './report-design-fingerprint.util';
 import type { ReportStyleConfig } from './report-style.config';
 import { resolveReportStyleConfig } from './report-style.config';
@@ -129,6 +133,23 @@ type GenerateTestResultsPdfOptions = {
 type GenerateTestResultsPdfResult = {
   pdf: Buffer;
   performance: ResultsPdfPerformanceMetrics;
+};
+
+type GenerateTestResultsHtmlOptions = Pick<
+  GenerateTestResultsPdfOptions,
+  | 'bypassPaymentCheck'
+  | 'bypassResultCompletionCheck'
+  | 'bypassCancelledOrderCheck'
+  | 'reportDesignOverride'
+>;
+
+type ResultsReportHtmlDocumentResult = {
+  html: string;
+  verifiers: string[];
+  comments: string[];
+  verifierLookupMs: number;
+  assetsMs: number;
+  htmlMs: number;
 };
 
 type PanelSectionLookup = {
@@ -594,322 +615,7 @@ export class ReportsService implements OnModuleInit, OnModuleDestroy {
         // ignore emulate failures and continue with defaults
       }
 
-      await page.evaluate(async () => {
-        const fontReady = (document as any).fonts?.ready;
-        if (fontReady) {
-          try {
-            await fontReady;
-          } catch {
-            // ignore font loading failures
-          }
-        }
-        const images = Array.from(document.images || []);
-        await Promise.all(
-          images
-            .filter((img) => !img.complete)
-            .map(
-              (img) =>
-                new Promise<void>((resolve) => {
-                  const done = () => {
-                    img.removeEventListener('load', done);
-                    img.removeEventListener('error', done);
-                    resolve();
-                  };
-                  img.addEventListener('load', done);
-                  img.addEventListener('error', done);
-                }),
-            ),
-        );
-      });
-
-      await page.evaluate(() => {
-        const createMmProbe = () => {
-          const probe = document.createElement('div');
-          probe.style.position = 'absolute';
-          probe.style.visibility = 'hidden';
-          probe.style.height = '100mm';
-          probe.style.width = '1mm';
-          document.body.appendChild(probe);
-          const pxPerMm = probe.getBoundingClientRect().height / 100;
-          probe.remove();
-          return pxPerMm || 3.78;
-        };
-        const pxPerMm = createMmProbe();
-        const toMm = (px: number) => (pxPerMm > 0 ? px / pxPerMm : px);
-        const header = document.querySelector('.report-header') as any;
-        if (header) {
-          const prevHeight = header.style.height;
-          const prevMinHeight = header.style.minHeight;
-          header.style.height = 'auto';
-          header.style.minHeight = '0';
-          const headerRect = header.getBoundingClientRect();
-          let contentBottom = headerRect.top;
-          const title = header.querySelector('.report-title') as HTMLElement | null;
-          if (title) {
-            const rect = title.getBoundingClientRect();
-            let marginBottom = 0;
-            try {
-              const style = window.getComputedStyle(title);
-              marginBottom = parseFloat(style.marginBottom || '0') || 0;
-            } catch {
-              marginBottom = 0;
-            }
-            contentBottom = rect.bottom + marginBottom;
-          } else {
-            const headerChildren = Array.from(header.children || []);
-            for (const child of headerChildren) {
-              const rect = (child as HTMLElement).getBoundingClientRect();
-              if (rect.bottom > contentBottom) {
-                contentBottom = rect.bottom;
-              }
-            }
-            const lastChild = header.lastElementChild as HTMLElement | null;
-            if (lastChild) {
-              try {
-                const style = window.getComputedStyle(lastChild);
-                const marginBottom = parseFloat(style.marginBottom || '0') || 0;
-                if (marginBottom > 0) {
-                  contentBottom += marginBottom;
-                }
-              } catch {
-                // ignore
-              }
-            }
-          }
-          const measuredHeight =
-            contentBottom > headerRect.top
-              ? contentBottom - headerRect.top + 4
-              : Math.max(header.scrollHeight, headerRect.height);
-          let cloneHeight = 0;
-          try {
-            const clone = header.cloneNode(true) as HTMLElement;
-            clone.style.position = 'static';
-            clone.style.visibility = 'hidden';
-            clone.style.height = 'auto';
-            clone.style.minHeight = '0';
-            clone.style.maxHeight = 'none';
-            clone.style.overflow = 'visible';
-            clone.style.pointerEvents = 'none';
-            clone.style.top = 'auto';
-            clone.style.left = 'auto';
-            clone.style.right = 'auto';
-            clone.style.zIndex = '-1';
-            document.body.prepend(clone);
-            cloneHeight = clone.getBoundingClientRect().height || 0;
-            clone.remove();
-          } catch {
-            cloneHeight = 0;
-          }
-          const finalHeight = Math.max(measuredHeight, cloneHeight);
-          if (finalHeight > 0) {
-            const roundedMm = Math.ceil(toMm(finalHeight) * 10) / 10;
-            document.body.style.setProperty('--header-reserved-height', `${roundedMm}mm`);
-          }
-          header.style.height = prevHeight;
-          header.style.minHeight = prevMinHeight;
-        }
-        const footer = document.querySelector('.report-footer') as any;
-        if (footer) {
-          const prevHeight = footer.style.height;
-          const prevMinHeight = footer.style.minHeight;
-          footer.style.height = 'auto';
-          footer.style.minHeight = '0';
-          const footerRect = footer.getBoundingClientRect();
-          const footerStyle = window.getComputedStyle(footer);
-          const footerPaddingBottom =
-            parseFloat(footerStyle.paddingBottom || '0') || 0;
-          let contentBottom = footerRect.top;
-          const footerChildren = Array.from(footer.children || []);
-          for (const child of footerChildren) {
-            const rect = (child as HTMLElement).getBoundingClientRect();
-            if (rect.bottom > contentBottom) {
-              contentBottom = rect.bottom;
-            }
-          }
-          const measuredHeight =
-            contentBottom > footerRect.top
-              ? contentBottom - footerRect.top + footerPaddingBottom
-              : Math.max(footer.scrollHeight, footerRect.height);
-          if (measuredHeight > 0) {
-            const roundedMm = Math.ceil(toMm(measuredHeight) * 10) / 10;
-            document.body.style.setProperty('--footer-height', `${roundedMm}mm`);
-          }
-          footer.style.height = prevHeight;
-          footer.style.minHeight = prevMinHeight;
-        }
-      });
-
-      await page.evaluate(() => {
-        const table = document.querySelector('table.regular-results-table') as HTMLTableElement | null;
-        if (!table) return;
-
-        const sourcePage = table.closest('.page') as HTMLElement | null;
-        const sourceContent = table.closest('.content') as HTMLElement | null;
-        if (!sourcePage || !sourceContent) return;
-
-        const tableHead = table.querySelector('thead');
-        const tableFoot = table.querySelector('tfoot');
-        const tableColGroup = table.querySelector('colgroup');
-        if (!tableHead || !tableFoot) return;
-
-        const pageComments = sourceContent.querySelector('.comments') as HTMLElement | null;
-        const headerSpace = table.querySelector('thead .page-header-space') as HTMLElement | null;
-        const footerSpace = table.querySelector('tfoot .page-footer-space') as HTMLElement | null;
-        const headerRows = Array.from(table.querySelectorAll('thead tr')) as HTMLElement[];
-        const columnHeaderRow = headerRows[headerRows.length - 1] ?? null;
-        const bodyStyle = window.getComputedStyle(document.body);
-
-        const createMmProbe = () => {
-          const probe = document.createElement('div');
-          probe.style.position = 'absolute';
-          probe.style.visibility = 'hidden';
-          probe.style.height = '100mm';
-          probe.style.width = '1mm';
-          document.body.appendChild(probe);
-          const pxPerMm = probe.getBoundingClientRect().height / 100;
-          probe.remove();
-          return pxPerMm || 3.78;
-        };
-
-        const pxPerMm = createMmProbe();
-        const pageHeightPx = Math.max(1, 297 * pxPerMm);
-        const marginTopPx =
-          (parseFloat(bodyStyle.getPropertyValue('--page-margin-top') || '0') || 0) * pxPerMm;
-        const marginBottomPx =
-          (parseFloat(bodyStyle.getPropertyValue('--page-margin-bottom') || '0') || 0) * pxPerMm;
-        const printableHeightPx = Math.max(1, pageHeightPx - marginTopPx - marginBottomPx);
-        const headerSpaceHeight = headerSpace?.getBoundingClientRect().height || 0;
-        const footerSpaceHeight = footerSpace?.getBoundingClientRect().height || 0;
-        const columnHeaderHeight = columnHeaderRow?.getBoundingClientRect().height || 0;
-        const paginationSafetyPx = Math.ceil(pxPerMm * 2);
-        const availableBodyHeight = Math.max(
-          24,
-          printableHeightPx -
-            headerSpaceHeight -
-            footerSpaceHeight -
-            columnHeaderHeight -
-            paginationSafetyPx,
-        );
-
-        const rows = Array.from(table.querySelectorAll('tbody tr')).filter(
-          (row) => row.getAttribute('data-repeat') !== '1',
-        ) as HTMLElement[];
-        if (rows.length === 0) return;
-
-        type PageChunk = { rows: HTMLElement[]; comments: boolean };
-        type RepeatContext = {
-          row: HTMLElement | null;
-          height: number;
-        };
-
-        const chunks: PageChunk[] = [];
-        let currentRows: HTMLElement[] = [];
-        let currentHeight = 0;
-        let lastDept: RepeatContext = { row: null, height: 0 };
-        let lastCat: RepeatContext = { row: null, height: 0 };
-
-        const cloneRepeatRow = (row: HTMLElement | null) => {
-          if (!row) return null;
-          const clone = row.cloneNode(true) as HTMLElement;
-          clone.setAttribute('data-repeat', '1');
-          return clone;
-        };
-
-        const pushChunk = () => {
-          if (currentRows.length === 0) return;
-          chunks.push({ rows: currentRows, comments: false });
-          currentRows = [];
-          currentHeight = 0;
-        };
-
-        for (const row of rows) {
-          const rowHeight = Math.ceil(row.getBoundingClientRect().height || 0);
-          const isDeptRow = row.classList.contains('dept-row');
-          const isCatRow = row.classList.contains('cat-row');
-
-          if (currentRows.length > 0 && currentHeight + rowHeight > availableBodyHeight) {
-            pushChunk();
-
-            if (!isDeptRow && !isCatRow) {
-              if (lastDept.row) {
-                const deptClone = cloneRepeatRow(lastDept.row);
-                if (deptClone) {
-                  currentRows.push(deptClone);
-                  currentHeight += lastDept.height;
-                }
-              }
-              if (lastCat.row) {
-                const catClone = cloneRepeatRow(lastCat.row);
-                if (catClone) {
-                  currentRows.push(catClone);
-                  currentHeight += lastCat.height;
-                }
-              }
-            } else if (isCatRow && lastDept.row) {
-              const deptClone = cloneRepeatRow(lastDept.row);
-              if (deptClone) {
-                currentRows.push(deptClone);
-                currentHeight += lastDept.height;
-              }
-            }
-          }
-
-          currentRows.push(row.cloneNode(true) as HTMLElement);
-          currentHeight += rowHeight;
-
-          if (isDeptRow) {
-            lastDept = { row, height: rowHeight };
-            lastCat = { row: null, height: 0 };
-          } else if (isCatRow) {
-            lastCat = { row, height: rowHeight };
-          }
-        }
-
-        pushChunk();
-        if (chunks.length === 0) return;
-        chunks[chunks.length - 1].comments = Boolean(pageComments);
-
-        const createPage = (chunk: PageChunk) => {
-          const pageEl = document.createElement('div');
-          pageEl.className = 'page regular-results-page';
-
-          const contentEl = document.createElement('div');
-          contentEl.className = 'content';
-
-          const nextTable = document.createElement('table');
-          nextTable.className = table.className;
-          if (tableColGroup) {
-            nextTable.appendChild(tableColGroup.cloneNode(true));
-          }
-          nextTable.appendChild(tableHead.cloneNode(true));
-
-          const tbody = document.createElement('tbody');
-          tbody.className = 'regular-dept-block';
-          for (const row of chunk.rows) {
-            tbody.appendChild(row);
-          }
-          nextTable.appendChild(tbody);
-          nextTable.appendChild(tableFoot.cloneNode(true));
-
-          contentEl.appendChild(nextTable);
-          if (chunk.comments && pageComments) {
-            contentEl.appendChild(pageComments.cloneNode(true));
-          }
-
-          pageEl.appendChild(contentEl);
-          return pageEl;
-        };
-
-        const parent = sourcePage.parentElement;
-        if (!parent) return;
-
-        const newPages = chunks.map((chunk) => createPage(chunk));
-        parent.insertBefore(newPages[0], sourcePage);
-        for (let i = 1; i < newPages.length; i += 1) {
-          parent.insertBefore(newPages[i], sourcePage);
-        }
-        sourcePage.remove();
-      });
+      await page.evaluate(prepareResultsReportDocumentForPrint);
 
       const pdf = await page.pdf({
         format: 'A4',
@@ -2007,6 +1713,95 @@ export class ReportsService implements OnModuleInit, OnModuleDestroy {
     });
   }
 
+  private async buildResultsReportHtmlDocument(input: {
+    order: Order;
+    orderTests: OrderTest[];
+    verifiedTests: OrderTest[];
+    latestVerifiedAt: Date | null;
+  }): Promise<ResultsReportHtmlDocumentResult> {
+    const verifierLookupStartMs = Date.now();
+    const verifierIds = [
+      ...new Set(
+        input.orderTests
+          .map((ot) => ot.verifiedBy)
+          .filter((id): id is string => Boolean(id)),
+      ),
+    ];
+    const verifiers =
+      verifierIds.length === 0
+        ? []
+        : await this.userRepo.find({
+            where: verifierIds.map((id) => ({ id })),
+          });
+    const verifierLookupMs = Date.now() - verifierLookupStartMs;
+    const verifierNameMap = new Map(
+      verifiers.map((u) => [u.id, u.fullName || u.username || u.id.substring(0, 8)]),
+    );
+
+    const verifierNames = [
+      ...new Set(
+        input.verifiedTests
+          .map((ot) => (ot.verifiedBy ? verifierNameMap.get(ot.verifiedBy) || ot.verifiedBy : null))
+          .filter((name): name is string => Boolean(name)),
+      ),
+    ];
+    const comments = [
+      ...new Set(
+        input.orderTests
+          .map((ot) => ot.comments?.trim())
+          .filter((value): value is string => Boolean(value)),
+      ),
+    ];
+
+    const assetsStartMs = Date.now();
+    let kurdishFontBase64: string | undefined;
+    const kurdishFontPath = resolveReadablePath([
+      join(__dirname, 'fonts', 'NotoNaskhArabic-Regular.ttf'),
+      join(process.cwd(), 'dist', 'src', 'reports', 'fonts', 'NotoNaskhArabic-Regular.ttf'),
+      join(process.cwd(), 'src', 'reports', 'fonts', 'NotoNaskhArabic-Regular.ttf'),
+    ]);
+    if (kurdishFontPath) {
+      try {
+        if (!ReportsService.cachedFont || ReportsService.cachedFont.path !== kurdishFontPath) {
+          const fontBuf = readFileSync(kurdishFontPath);
+          ReportsService.cachedFont = {
+            path: kurdishFontPath,
+            base64: `data:font/ttf;base64,${fontBuf.toString('base64')}`,
+          };
+        }
+        kurdishFontBase64 = ReportsService.cachedFont.base64;
+      } catch {
+        // ignore
+      }
+    }
+    const assetsMs = Date.now() - assetsStartMs;
+
+    const orderQrDataUrl = await this.generateOrderQrDataUrl(input.order);
+
+    const htmlStartMs = Date.now();
+    const html = buildResultsReportHtml({
+      order: input.order,
+      orderTests: input.orderTests,
+      verifiedCount: input.verifiedTests.length,
+      reportableCount: input.orderTests.length,
+      verifiers: verifierNames,
+      latestVerifiedAt: input.latestVerifiedAt ?? null,
+      comments,
+      kurdishFontBase64,
+      orderQrDataUrl,
+    });
+    const htmlMs = Date.now() - htmlStartMs;
+
+    return {
+      html,
+      verifiers: verifierNames,
+      comments,
+      verifierLookupMs,
+      assetsMs,
+      htmlMs,
+    };
+  }
+
   async generateTestResultsPDF(
     orderId: string,
     labId: string,
@@ -2014,6 +1809,55 @@ export class ReportsService implements OnModuleInit, OnModuleDestroy {
   ): Promise<Buffer> {
     const result = await this.generateTestResultsPDFWithProfile(orderId, labId, options);
     return result.pdf;
+  }
+
+  async generateTestResultsPrintHtml(
+    orderId: string,
+    labId: string,
+    options?: GenerateTestResultsHtmlOptions,
+  ): Promise<string> {
+    const { order, reportableOrderTests, verifiedTests, latestVerifiedAt } =
+      await this.loadOrderResultsSnapshot(orderId, labId);
+    const bypassPaymentCheck = !!options?.bypassPaymentCheck;
+    const bypassResultCompletionCheck = !!options?.bypassResultCompletionCheck;
+    const bypassCancelledOrderCheck = !!options?.bypassCancelledOrderCheck;
+    const orderForRender = this.applyReportDesignOverride(order, options?.reportDesignOverride);
+    const panelSectionLookup = await this.loadPanelSectionLookup(reportableOrderTests);
+    const renderedOrderTestsWithSections = this.attachPanelSectionMetadata(
+      reportableOrderTests,
+      panelSectionLookup.byPanelAndChildTest,
+    );
+
+    if (!bypassCancelledOrderCheck) {
+      this.assertOrderCanReleaseResults(order);
+    }
+
+    if (!bypassResultCompletionCheck) {
+      this.assertAllResultsEnteredForReport(reportableOrderTests);
+      this.assertAllResultsVerifiedForReport(reportableOrderTests, verifiedTests);
+    }
+
+    if (!bypassPaymentCheck && order.paymentStatus !== 'paid') {
+      throw new ForbiddenException(
+        'Order is unpaid or partially paid. Complete payment to download or print results.',
+      );
+    }
+
+    if (this.getPdfReportAttachments(renderedOrderTestsWithSections).length > 0) {
+      throw new ConflictException({
+        code: 'REPORT_HTML_PRINT_REQUIRES_PDF',
+        message:
+          'This report includes attached PDF result pages. Standard PDF print is required so attachments are included.',
+      });
+    }
+
+    const { html } = await this.buildResultsReportHtmlDocument({
+      order: orderForRender,
+      orderTests: renderedOrderTestsWithSections,
+      verifiedTests,
+      latestVerifiedAt: latestVerifiedAt ?? null,
+    });
+    return injectResultsReportPrintPreparationScript(html);
   }
 
   /**
@@ -2224,81 +2068,19 @@ export class ReportsService implements OnModuleInit, OnModuleDestroy {
     }
 
     const generatePdf = async () => {
-      const verifierLookupStartMs = Date.now();
-      const verifierIds = [
-        ...new Set(
-          renderedOrderTestsWithSections
-            .map((ot) => ot.verifiedBy)
-            .filter((id): id is string => Boolean(id)),
-        ),
-      ];
-      const verifiers =
-        verifierIds.length === 0
-          ? []
-          : await this.userRepo.find({
-            where: verifierIds.map((id) => ({ id })),
-          });
-      verifierLookupMs = Date.now() - verifierLookupStartMs;
-      const verifierNameMap = new Map(
-        verifiers.map((u) => [u.id, u.fullName || u.username || u.id.substring(0, 8)]),
-      );
-
-      const verifierNames = [
-        ...new Set(
-          renderedVerifiedTests
-            .map((ot) => (ot.verifiedBy ? verifierNameMap.get(ot.verifiedBy) || ot.verifiedBy : null))
-            .filter((name): name is string => Boolean(name)),
-        ),
-      ];
-      const comments = [
-        ...new Set(
-          renderedOrderTestsWithSections
-            .map((ot) => ot.comments?.trim())
-            .filter((value): value is string => Boolean(value)),
-        ),
-      ];
-
-      // Optimization: font files are immutable at runtime - serve from
-      // in-memory cache after the first read to avoid repeated disk I/O.
-      const assetsStartMs = Date.now();
-      let kurdishFontBase64: string | undefined;
-      const kurdishFontPath = resolveReadablePath([
-        join(__dirname, 'fonts', 'NotoNaskhArabic-Regular.ttf'),
-        join(process.cwd(), 'dist', 'src', 'reports', 'fonts', 'NotoNaskhArabic-Regular.ttf'),
-        join(process.cwd(), 'src', 'reports', 'fonts', 'NotoNaskhArabic-Regular.ttf'),
-      ]);
-      if (kurdishFontPath) {
-        try {
-          if (!ReportsService.cachedFont || ReportsService.cachedFont.path !== kurdishFontPath) {
-            const fontBuf = readFileSync(kurdishFontPath);
-            ReportsService.cachedFont = { path: kurdishFontPath, base64: `data:font/ttf;base64,${fontBuf.toString('base64')}` };
-          }
-          kurdishFontBase64 = ReportsService.cachedFont.base64;
-        } catch {
-          // ignore
-        }
-      }
-      assetsMs = Date.now() - assetsStartMs;
-
-      const orderQrDataUrl = await this.generateOrderQrDataUrl(orderForRender);
-
-      const htmlStartMs = Date.now();
-      const html = buildResultsReportHtml({
+      const htmlDocument = await this.buildResultsReportHtmlDocument({
         order: orderForRender,
         orderTests: renderedOrderTestsWithSections,
-        verifiedCount: renderedVerifiedTests.length,
-        reportableCount: renderedOrderTestsWithSections.length,
-        verifiers: verifierNames,
+        verifiedTests: renderedVerifiedTests,
         latestVerifiedAt: latestVerifiedAt ?? null,
-        comments,
-        kurdishFontBase64,
-        orderQrDataUrl,
       });
-      htmlMs = Date.now() - htmlStartMs;
+      verifierLookupMs = htmlDocument.verifierLookupMs;
+      assetsMs = htmlDocument.assetsMs;
+      htmlMs = htmlDocument.htmlMs;
 
       try {
         const renderStartMs = Date.now();
-        const pdf = await this.renderPdfFromHtml(html);
+        const pdf = await this.renderPdfFromHtml(htmlDocument.html);
         renderMs = Date.now() - renderStartMs;
         return pdf;
       } catch (error) {
@@ -2313,9 +2095,9 @@ export class ReportsService implements OnModuleInit, OnModuleDestroy {
         const fallbackPdf = await this.renderTestResultsFallbackPDF({
           order: orderForRender,
           orderTests: renderedOrderTestsWithSections,
-          verifiers: verifierNames,
+          verifiers: htmlDocument.verifiers,
           latestVerifiedAt: latestVerifiedAt ?? null,
-          comments,
+          comments: htmlDocument.comments,
         });
         fallbackMs = Date.now() - fallbackStartMs;
         return fallbackPdf;

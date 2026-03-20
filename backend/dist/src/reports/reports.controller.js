@@ -46,6 +46,16 @@ let ReportsController = class ReportsController {
         this.reportsService = reportsService;
         this.auditService = auditService;
     }
+    buildHttpExceptionPayload(error) {
+        const response = error.getResponse();
+        if (typeof response === 'string') {
+            return { message: response };
+        }
+        if (response && typeof response === 'object') {
+            return response;
+        }
+        return { message: error.message };
+    }
     setResultsPdfProfilingHeaders(res, performance) {
         if (performance.correlationId) {
             res.setHeader('x-report-print-attempt-id', performance.correlationId);
@@ -183,6 +193,50 @@ let ReportsController = class ReportsController {
             });
         }
     }
+    async getTestResultsPrintHtml(req, orderId, res) {
+        const labId = req.user?.labId;
+        const actor = (0, lab_actor_context_1.buildLabActorContext)(req.user);
+        if (!labId) {
+            return res.status(401).json({ message: 'Lab ID not found in token' });
+        }
+        try {
+            const correlationId = readSingleHeaderValue(req.headers['x-report-print-attempt-id']);
+            const html = await this.reportsService.generateTestResultsPrintHtml(orderId, labId);
+            const impersonationAudit = actor.isImpersonation && actor.platformUserId
+                ? {
+                    impersonation: {
+                        active: true,
+                        platformUserId: actor.platformUserId,
+                    },
+                }
+                : {};
+            await this.auditService.log({
+                actorType: actor.actorType,
+                actorId: actor.actorId,
+                labId,
+                userId: actor.userId,
+                action: audit_log_entity_1.AuditAction.REPORT_GENERATE,
+                entityType: 'order',
+                entityId: orderId,
+                description: `Generated test results HTML print document for order ${orderId}`,
+                newValues: impersonationAudit,
+            });
+            if (correlationId) {
+                res.setHeader('x-report-print-attempt-id', correlationId);
+            }
+            res.setHeader('Content-Type', 'text/html; charset=utf-8');
+            return res.send(html);
+        }
+        catch (error) {
+            if (error instanceof common_1.HttpException) {
+                return res.status(error.getStatus()).json(this.buildHttpExceptionPayload(error));
+            }
+            if (error instanceof Error && error.message.includes('not found')) {
+                return res.status(404).json({ message: error.message });
+            }
+            return res.status(500).json({ message: 'Failed to generate printable HTML report' });
+        }
+    }
     async logReportDelivery(req, orderId, body, res) {
         const labId = req.user?.labId;
         if (!labId) {
@@ -262,6 +316,15 @@ __decorate([
     __metadata("design:paramtypes", [Object, String, Object]),
     __metadata("design:returntype", Promise)
 ], ReportsController.prototype, "getTestResultsPDF", null);
+__decorate([
+    (0, common_1.Get)('orders/:id/print-html'),
+    __param(0, (0, common_1.Req)()),
+    __param(1, (0, common_1.Param)('id', common_1.ParseUUIDPipe)),
+    __param(2, (0, common_1.Res)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object, String, Object]),
+    __metadata("design:returntype", Promise)
+], ReportsController.prototype, "getTestResultsPrintHtml", null);
 __decorate([
     (0, common_1.Post)('orders/:id/delivery-log'),
     __param(0, (0, common_1.Req)()),

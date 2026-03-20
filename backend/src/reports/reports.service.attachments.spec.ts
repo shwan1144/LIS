@@ -334,4 +334,57 @@ describe('ReportsService uploaded result PDF attachments', () => {
       'Uploaded result PDF "broken-result.pdf" for test PDF-INV is invalid and could not be appended.',
     );
   });
+
+  it('returns printable HTML when the report has no attached PDF result pages', async () => {
+    const { service } = createService();
+    const basePdf = await createPdf([[150, 150]]);
+    const reportableOrderTests = [
+      buildOrderTest({
+        id: 'ot-html',
+        resultValue: 8.3,
+        test: buildTest({
+          code: 'HTML',
+          name: 'HTML Printable Result',
+          resultEntryType: 'NUMERIC',
+        }),
+      }),
+    ];
+
+    mockReportGeneration(service, reportableOrderTests, basePdf);
+
+    const html = await service.generateTestResultsPrintHtml('order-1', 'lab-1');
+
+    expect(html).toContain('<!DOCTYPE html>');
+    expect(html).toContain('__lisResultsPrintReady');
+    expect(html).toContain('HTML Printable Result');
+  });
+
+  it('requires the standard PDF flow when uploaded result PDF pages are attached', async () => {
+    const { service } = createService();
+    const basePdf = await createPdf([[160, 160]]);
+    const reportableOrderTests = [
+      buildOrderTest({
+        id: 'ot-html-pdf',
+        resultValue: null,
+        resultDocumentStorageKey: 'doc-key-html',
+        resultDocumentFileName: 'attached-result.pdf',
+        resultDocumentMimeType: 'application/pdf',
+        test: buildTest({
+          code: 'PDF-HTML',
+          name: 'PDF Attachment Result',
+          resultEntryType: 'PDF_UPLOAD',
+        }),
+      }),
+    ];
+
+    mockReportGeneration(service, reportableOrderTests, basePdf);
+
+    await expect(
+      service.generateTestResultsPrintHtml('order-1', 'lab-1'),
+    ).rejects.toMatchObject({
+      response: {
+        code: 'REPORT_HTML_PRINT_REQUIRES_PDF',
+      },
+    });
+  });
 });

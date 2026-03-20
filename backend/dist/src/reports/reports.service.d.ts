@@ -90,6 +90,7 @@ type GenerateTestResultsPdfResult = {
     pdf: Buffer;
     performance: ResultsPdfPerformanceMetrics;
 };
+type GenerateTestResultsHtmlOptions = Pick<GenerateTestResultsPdfOptions, 'bypassPaymentCheck' | 'bypassResultCompletionCheck' | 'bypassCancelledOrderCheck' | 'reportDesignOverride'>;
 export declare class ReportsService implements OnModuleInit, OnModuleDestroy {
     private readonly orderRepo;
     private readonly orderTestRepo;
@@ -159,7 +160,9 @@ export declare class ReportsService implements OnModuleInit, OnModuleDestroy {
         reportStyle: ReportStyleConfig;
     }): Promise<Buffer>;
     generateOrderReceiptPDF(orderId: string, labId: string): Promise<Buffer>;
+    private buildResultsReportHtmlDocument;
     generateTestResultsPDF(orderId: string, labId: string, options?: GenerateTestResultsPdfOptions): Promise<Buffer>;
+    generateTestResultsPrintHtml(orderId: string, labId: string, options?: GenerateTestResultsHtmlOptions): Promise<string>;
     syncReportToS3(orderId: string, labId: string): Promise<string | null>;
     generateTestResultsPDFWithProfile(orderId: string, labId: string, options?: GenerateTestResultsPdfOptions): Promise<GenerateTestResultsPdfResult>;
     private renderTestResultsFallbackPDF;

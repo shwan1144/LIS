@@ -29,12 +29,14 @@ import {
   MoreOutlined,
   PrinterOutlined,
   SearchOutlined,
+  ThunderboltOutlined,
   UserOutlined,
   WhatsAppOutlined,
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import {
   downloadResultDocument,
+  downloadTestResultsHtml,
   downloadTestResultsPDF,
   enterResult,
   getAntibiotics,
@@ -96,6 +98,8 @@ const REPORT_BROWSER_PRINT_FALLBACK_CLEANUP_MS = 5 * 60 * 1000;
 const REPORT_PRINT_PROFILE_MAX_ENTRIES = 100;
 const REPORT_ALL_DEPARTMENTS_FILTER = '__all_departments__';
 const REPORT_ALL_SUB_LABS_FILTER = '__all_sub_labs__';
+const RESULTS_HTML_PRINT_READY_FLAG = '__lisResultsPrintReady';
+const RESULTS_HTML_PRINT_ERROR_FLAG = '__lisResultsPrintError';
 
 type EditResultMode = 'SINGLE' | 'PANEL';
 type ReportStatusFilter = 'ALL' | 'PENDING' | 'COMPLETED' | 'VERIFIED' | 'REJECTED' | 'CANCELLED';
@@ -116,6 +120,15 @@ type ResultsPdfFetchResult = {
   profilingHeaders: DownloadTestResultsPdfProfilingHeaders | null;
   fingerprintWaitMs: number | null;
   settingsRequestShared: boolean;
+};
+
+type ResultsHtmlFetchResult = {
+  html: string;
+  source: 'network';
+  fetchStartedAtMs: number | null;
+  fetchCompletedAtMs: number;
+  correlationId: string | null;
+  payloadSizeBytes: number;
 };
 
 type LabSettingsLoadResult = {
@@ -155,6 +168,8 @@ type ParsedReportPdfProfiling = {
   inFlightJoin: boolean | null;
 };
 
+type ReportPrintDocumentKind = 'pdf' | 'html';
+
 type ReportPrintProfileRecord = {
   attemptId: string;
   createdAt: string;
@@ -162,8 +177,9 @@ type ReportPrintProfileRecord = {
   orderNumber: string | null;
   patientName: string | null;
   attemptNumber: number;
-  configuredMode: 'browser' | 'direct_gateway';
-  resultPath: 'browser' | 'direct_gateway' | 'download_fallback' | 'failed';
+  documentKind: ReportPrintDocumentKind;
+  configuredMode: 'browser' | 'direct_gateway' | 'fast_html';
+  resultPath: 'browser' | 'direct_gateway' | 'download_fallback' | 'failed' | 'fast_html' | 'pdf_fallback';
   success: boolean;
   fetchSource: 'frontend-cache' | 'network';
   frontendInFlightJoin: boolean;
@@ -171,13 +187,13 @@ type ReportPrintProfileRecord = {
   backendCacheHit: boolean | null;
   backendInFlightJoin: boolean | null;
   backendFallbackUsed: boolean | null;
-  pdfSizeBytes: number | null;
+  payloadSizeBytes: number | null;
   clickToFetchStartMs: number | null;
   fetchDurationMs: number | null;
   settingsLoadMs: number | null;
   fingerprintWaitMs: number | null;
   settingsRequestShared: boolean | null;
-  clickToBlobReadyMs: number | null;
+  clickToDocumentReadyMs: number | null;
   backendTotalMs: number | null;
   backendSnapshotMs: number | null;
   backendVerifierLookupMs: number | null;
@@ -355,6 +371,25 @@ function createReportPrintAttemptId(): string {
   return `print-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
+function isDesktopChromiumBrowser(): boolean {
+  if (typeof navigator === 'undefined') {
+    return false;
+  }
+
+  const uaData = navigator.userAgentData;
+  const uaBrands = Array.isArray(uaData?.brands)
+    ? uaData.brands.map((brand) => brand.brand.toLowerCase())
+    : [];
+  const hasChromiumBrand = uaBrands.some((brand) =>
+    brand.includes('chromium') || brand.includes('google chrome') || brand.includes('microsoft edge'),
+  );
+  const ua = navigator.userAgent || '';
+  const isChromiumUa = /\b(?:Chrome|Chromium|Edg)\//.test(ua) && !/\b(?:OPR|Opera)\//.test(ua);
+  const isMobile = uaData?.mobile ?? /Android|iPhone|iPad|iPod|Mobile/i.test(ua);
+
+  return !isMobile && (hasChromiumBrand || isChromiumUa);
+}
+
 function classifyReportPrintBottleneck(profile: Omit<ReportPrintProfileRecord, 'classification'>): string {
   const backendMs = profile.backendTotalMs ?? 0;
   const transportMs =
@@ -363,8 +398,8 @@ function classifyReportPrintBottleneck(profile: Omit<ReportPrintProfileRecord, '
       : 0;
   const fingerprintWaitMs = profile.fingerprintWaitMs ?? 0;
   const previewMs =
-    profile.clickToPrintInvokeMs != null && profile.clickToBlobReadyMs != null
-      ? Math.max(0, profile.clickToPrintInvokeMs - profile.clickToBlobReadyMs)
+    profile.clickToPrintInvokeMs != null && profile.clickToDocumentReadyMs != null
+      ? Math.max(0, profile.clickToPrintInvokeMs - profile.clickToDocumentReadyMs)
       : 0;
   const gatewayMs = profile.directPrintDurationMs ?? 0;
   const dominant = Math.max(backendMs, transportMs, previewMs, gatewayMs, fingerprintWaitMs);
@@ -399,20 +434,22 @@ function summarizeReportPrintProfile(profile: ReportPrintProfileRecord): Record<
     attemptId: profile.attemptId,
     orderNumber: profile.orderNumber,
     attemptNumber: profile.attemptNumber,
+    documentKind: profile.documentKind,
     configuredMode: profile.configuredMode,
     resultPath: profile.resultPath,
     fetchSource: profile.fetchSource,
     frontendInFlightJoin: profile.frontendInFlightJoin,
     backendCacheHit: profile.backendCacheHit,
     backendInFlightJoin: profile.backendInFlightJoin,
-    pdfKB: profile.pdfSizeBytes != null ? Number((profile.pdfSizeBytes / 1024).toFixed(1)) : null,
+    payloadKB:
+      profile.payloadSizeBytes != null ? Number((profile.payloadSizeBytes / 1024).toFixed(1)) : null,
     clickToFetchStartMs: profile.clickToFetchStartMs,
     fetchDurationMs: profile.fetchDurationMs,
     settingsLoadMs: profile.settingsLoadMs,
     fingerprintWaitMs: profile.fingerprintWaitMs,
     settingsRequestShared: profile.settingsRequestShared,
     backendTotalMs: profile.backendTotalMs,
-    clickToBlobReadyMs: profile.clickToBlobReadyMs,
+    clickToDocumentReadyMs: profile.clickToDocumentReadyMs,
     clickToPreviewReadyMs: profile.clickToPreviewReadyMs,
     clickToPrintInvokeMs: profile.clickToPrintInvokeMs,
     directPrintDurationMs: profile.directPrintDurationMs,
@@ -524,6 +561,138 @@ function printResultsPdfInBrowser(
     }, REPORT_BROWSER_PRINT_LOAD_TIMEOUT_MS);
 
     iframe.src = url;
+    document.body.appendChild(iframe);
+  });
+}
+
+function cleanupResultsHtmlPrintFrame(iframe: HTMLIFrameElement): void {
+  try {
+    iframe.remove();
+  } catch {
+    // ignore cleanup failures
+  }
+}
+
+function printResultsHtmlInBrowser(
+  html: string,
+  instrumentation?: BrowserPrintInstrumentation,
+): Promise<void> {
+  return new Promise<void>((resolve, reject) => {
+    const iframe = document.createElement('iframe');
+    let settled = false;
+    let printStarted = false;
+    let loadTimeoutId: number | null = null;
+    let cleanupTimeoutId: number | null = null;
+    let readyPollId: number | null = null;
+
+    const scheduleCleanup = (delayMs: number) => {
+      if (cleanupTimeoutId !== null) {
+        window.clearTimeout(cleanupTimeoutId);
+      }
+      cleanupTimeoutId = window.setTimeout(() => {
+        cleanupResultsHtmlPrintFrame(iframe);
+      }, delayMs);
+    };
+
+    const settle = (error?: Error) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      if (loadTimeoutId !== null) {
+        window.clearTimeout(loadTimeoutId);
+      }
+      if (readyPollId !== null) {
+        window.clearInterval(readyPollId);
+      }
+      if (error) {
+        if (cleanupTimeoutId !== null) {
+          window.clearTimeout(cleanupTimeoutId);
+        }
+        cleanupResultsHtmlPrintFrame(iframe);
+        reject(error);
+        return;
+      }
+      resolve();
+    };
+
+    iframe.setAttribute('aria-hidden', 'true');
+    iframe.style.position = 'fixed';
+    iframe.style.left = '-10000px';
+    iframe.style.top = '0';
+    iframe.style.width = '210mm';
+    iframe.style.height = '297mm';
+    iframe.style.border = '0';
+    iframe.style.opacity = '0';
+    iframe.style.pointerEvents = 'none';
+
+    iframe.onload = () => {
+      const targetWindow = iframe.contentWindow as
+        | (Window & {
+            [RESULTS_HTML_PRINT_READY_FLAG]?: boolean;
+            [RESULTS_HTML_PRINT_ERROR_FLAG]?: string | null;
+          })
+        | null;
+      if (!targetWindow) {
+        settle(new Error('Fast Print is unavailable in this browser.'));
+        return;
+      }
+
+      const checkReady = () => {
+        if (settled || printStarted) {
+          return;
+        }
+
+        const preparationError = targetWindow[RESULTS_HTML_PRINT_ERROR_FLAG];
+        if (typeof preparationError === 'string' && preparationError.trim()) {
+          settle(new Error(preparationError));
+          return;
+        }
+
+        if (targetWindow[RESULTS_HTML_PRINT_READY_FLAG] !== true) {
+          return;
+        }
+
+        printStarted = true;
+        if (readyPollId !== null) {
+          window.clearInterval(readyPollId);
+          readyPollId = null;
+        }
+        instrumentation?.onFrameLoaded?.();
+
+        const handleAfterPrint = () => {
+          scheduleCleanup(250);
+        };
+
+        targetWindow.addEventListener('afterprint', handleAfterPrint, { once: true });
+
+        window.setTimeout(() => {
+          try {
+            targetWindow.focus();
+            instrumentation?.onPrintInvoked?.();
+            targetWindow.print();
+            scheduleCleanup(REPORT_BROWSER_PRINT_FALLBACK_CLEANUP_MS);
+            settle();
+          } catch {
+            targetWindow.removeEventListener('afterprint', handleAfterPrint);
+            settle(new Error('Fast Print could not be started.'));
+          }
+        }, 250);
+      };
+
+      readyPollId = window.setInterval(checkReady, 50);
+      checkReady();
+    };
+
+    iframe.onerror = () => {
+      settle(new Error('Failed to load the report into Fast Print.'));
+    };
+
+    loadTimeoutId = window.setTimeout(() => {
+      settle(new Error('Timed out while preparing the report for Fast Print.'));
+    }, REPORT_BROWSER_PRINT_LOAD_TIMEOUT_MS);
+
+    iframe.srcdoc = html;
     document.body.appendChild(iframe);
   });
 }
@@ -808,23 +977,67 @@ function isCancelledOrder(
   return order?.status === 'CANCELLED';
 }
 
-function extractApiErrorMessage(error: unknown): string | null {
+type ApiErrorDetails = {
+  message: string | null;
+  code: string | null;
+};
+
+function parseApiErrorDetails(payload: unknown): ApiErrorDetails {
+  if (typeof payload === 'string') {
+    const trimmed = payload.trim();
+    if (!trimmed) {
+      return { message: null, code: null };
+    }
+    try {
+      return parseApiErrorDetails(JSON.parse(trimmed));
+    } catch {
+      return { message: trimmed, code: null };
+    }
+  }
+
+  if (!payload || typeof payload !== 'object') {
+    return { message: null, code: null };
+  }
+
+  const rawMessage = (payload as { message?: string | string[] }).message;
+  const rawCode = (payload as { code?: unknown }).code;
+  const message = Array.isArray(rawMessage)
+    ? rawMessage.filter((entry) => typeof entry === 'string').join(', ') || null
+    : typeof rawMessage === 'string' && rawMessage.trim().length > 0
+      ? rawMessage
+      : null;
+  const code =
+    typeof rawCode === 'string' && rawCode.trim().length > 0
+      ? rawCode.trim()
+      : null;
+
+  return { message, code };
+}
+
+function extractApiErrorDetails(error: unknown): ApiErrorDetails {
   if (!error || typeof error !== 'object' || !('response' in error)) {
-    return null;
+    return { message: null, code: null };
   }
-  const response = (error as { response?: { data?: { message?: string | string[] } } }).response;
-  const rawMessage = response?.data?.message;
-  if (Array.isArray(rawMessage)) {
-    return rawMessage.filter((entry) => typeof entry === 'string').join(', ') || null;
-  }
-  return typeof rawMessage === 'string' && rawMessage.trim().length > 0 ? rawMessage : null;
+  const response = (error as { response?: { data?: unknown } }).response;
+  return parseApiErrorDetails(response?.data);
+}
+
+function extractApiErrorMessage(error: unknown): string | null {
+  return extractApiErrorDetails(error).message;
 }
 
 async function extractApiErrorMessageAsync(error: unknown): Promise<string | null> {
-  const direct = extractApiErrorMessage(error);
-  if (direct) return direct;
+  const details = await extractApiErrorDetailsAsync(error);
+  return details.message;
+}
+
+async function extractApiErrorDetailsAsync(error: unknown): Promise<ApiErrorDetails> {
+  const direct = extractApiErrorDetails(error);
+  if (direct.message || direct.code) {
+    return direct;
+  }
   if (!error || typeof error !== 'object' || !('response' in error)) {
-    return null;
+    return { message: null, code: null };
   }
 
   const response = (
@@ -832,20 +1045,14 @@ async function extractApiErrorMessageAsync(error: unknown): Promise<string | nul
   ).response;
   const payload = response?.data;
   if (!(payload instanceof Blob)) {
-    return null;
+    return { message: null, code: null };
   }
 
   try {
     const text = await payload.text();
-    const parsed = JSON.parse(text) as { message?: string | string[] };
-    if (Array.isArray(parsed.message)) {
-      return parsed.message.filter((entry) => typeof entry === 'string').join(', ') || null;
-    }
-    return typeof parsed.message === 'string' && parsed.message.trim().length > 0
-      ? parsed.message
-      : null;
+    return parseApiErrorDetails(text);
   } catch {
-    return null;
+    return { message: null, code: null };
   }
 }
 
@@ -927,6 +1134,7 @@ export function ReportsPage() {
   const { lab, user } = useAuth();
   const screens = useBreakpoint();
   const isCompactActions = !screens.lg;
+  const supportsFastHtmlPrint = Boolean(screens.lg) && isDesktopChromiumBrowser();
   const isDark = useTheme().theme === 'dark';
 
   const [loading, setLoading] = useState(false);
@@ -1406,6 +1614,25 @@ export function ReportsPage() {
     return result.blob;
   }, [getResultsPdfBlobDetailed]);
 
+  const getResultsHtmlDetailed = useCallback(async (
+    orderId: string,
+    options?: { correlationId?: string },
+  ): Promise<ResultsHtmlFetchResult> => {
+    const fetchStartedAtMs = Date.now();
+    const { html, correlationId } = await downloadTestResultsHtml(orderId, options);
+    const fetchCompletedAtMs = Date.now();
+    const payloadSizeBytes = new TextEncoder().encode(html).length;
+
+    return {
+      html,
+      source: 'network',
+      fetchStartedAtMs,
+      fetchCompletedAtMs,
+      correlationId: correlationId?.trim() || null,
+      payloadSizeBytes,
+    };
+  }, []);
+
   useEffect(() => {
     if (orders.length === 0) {
       return;
@@ -1508,11 +1735,11 @@ export function ReportsPage() {
     orderId: string,
     order?: OrderHistoryItemDto,
     options?: { skipPaymentCheck?: boolean },
-  ) => {
+  ): Promise<boolean> => {
     const summaryOrder = (order ?? getOrderSummaryById(orderId) ?? undefined) as OrderHistoryItemDto | undefined;
     if (summaryOrder && isCancelledOrder(summaryOrder)) {
       message.warning('Cancelled orders cannot release results');
-      return;
+      return false;
     }
     const resultsFilename = buildResultsPdfFilename(summaryOrder, orderId);
     const skipPaymentCheck = options?.skipPaymentCheck === true;
@@ -1522,7 +1749,7 @@ export function ReportsPage() {
         () => () => handlePrintResults(orderId, summaryOrder, { skipPaymentCheck: true }),
       );
       setPaymentModalOpen(true);
-      return;
+      return false;
     }
 
     const attemptStartedAtMs = Date.now();
@@ -1534,12 +1761,13 @@ export function ReportsPage() {
     let fetchResult: ResultsPdfFetchResult | null = null;
     let backendProfile: ParsedReportPdfProfiling | null = null;
     let settingsLoadMs: number | null = null;
-    let clickToBlobReadyMs: number | null = null;
+    let clickToDocumentReadyMs: number | null = null;
     let previewReadyAtMs: number | null = null;
     let printInvokedAtMs: number | null = null;
     let directPrintStartedAtMs: number | null = null;
     let directPrintCompletedAtMs: number | null = null;
     let failureMessage: string | null = null;
+    let printSucceeded = false;
 
     setDownloading(`print-${orderId}`);
     try {
@@ -1559,7 +1787,7 @@ export function ReportsPage() {
       fetchResult = nextFetchResult;
       const settings = settingsLoad.settings;
       backendProfile = parseReportPdfProfilingHeaders(fetchResult.profilingHeaders);
-      clickToBlobReadyMs = fetchResult.fetchCompletedAtMs - attemptStartedAtMs;
+      clickToDocumentReadyMs = fetchResult.fetchCompletedAtMs - attemptStartedAtMs;
       try {
         const printerName = settings?.printing?.reportPrinterName?.trim();
         const mode = settings?.printing?.mode;
@@ -1579,9 +1807,10 @@ export function ReportsPage() {
               });
               directPrintCompletedAtMs = Date.now();
               resultPath = 'direct_gateway';
+              printSucceeded = true;
               message.success(`Report sent to ${printerName}`);
               void trackReportAction(orderId, 'PRINT');
-              return;
+              return true;
             } catch (error) {
               directPrintCompletedAtMs = Date.now();
               message.warning(`${getDirectPrintErrorMessage(error)} Falling back to browser print.`);
@@ -1607,6 +1836,7 @@ export function ReportsPage() {
         resultPath = 'download_fallback';
         message.warning('Browser print could not be started, so the report was downloaded instead.');
       }
+      printSucceeded = true;
       void trackReportAction(orderId, 'PRINT');
     } catch (error: unknown) {
       const is403 =
@@ -1637,9 +1867,10 @@ export function ReportsPage() {
           orderNumber: summaryOrder?.orderNumber ?? null,
           patientName: summaryOrder?.patient?.fullName ?? null,
           attemptNumber,
+          documentKind: 'pdf' as const,
           configuredMode,
           resultPath,
-          success: resultPath !== 'failed',
+          success: printSucceeded || resultPath !== 'failed',
           fetchSource: fetchResult.source,
           frontendInFlightJoin: fetchResult.inFlightJoin,
           backendCorrelationId: backendProfile?.correlationId ?? null,
@@ -1647,7 +1878,7 @@ export function ReportsPage() {
           backendInFlightJoin: backendProfile?.inFlightJoin ?? null,
           backendFallbackUsed:
             backendProfile?.fallbackMs != null ? backendProfile.fallbackMs > 0 : null,
-          pdfSizeBytes: fetchResult.blob.size,
+          payloadSizeBytes: fetchResult.blob.size,
           clickToFetchStartMs:
             fetchResult.fetchStartedAtMs != null
               ? fetchResult.fetchStartedAtMs - attemptStartedAtMs
@@ -1659,7 +1890,7 @@ export function ReportsPage() {
           settingsLoadMs,
           fingerprintWaitMs: fetchResult.fingerprintWaitMs,
           settingsRequestShared: fetchResult.settingsRequestShared,
-          clickToBlobReadyMs,
+          clickToDocumentReadyMs,
           backendTotalMs: backendProfile?.totalMs ?? null,
           backendSnapshotMs: backendProfile?.snapshotMs ?? null,
           backendVerifierLookupMs: backendProfile?.verifierLookupMs ?? null,
@@ -1687,6 +1918,165 @@ export function ReportsPage() {
         });
       }
     }
+
+    return printSucceeded;
+  };
+
+  const handleFastPrintResults = async (
+    orderId: string,
+    order?: OrderHistoryItemDto,
+    options?: { skipPaymentCheck?: boolean },
+  ): Promise<boolean> => {
+    const summaryOrder = (order ?? getOrderSummaryById(orderId) ?? undefined) as OrderHistoryItemDto | undefined;
+    if (summaryOrder && isCancelledOrder(summaryOrder)) {
+      message.warning('Cancelled orders cannot release results');
+      return false;
+    }
+
+    if (!supportsFastHtmlPrint) {
+      message.info('Fast Print is available only in desktop Edge or Chrome.');
+      return handlePrintResults(orderId, summaryOrder, options);
+    }
+
+    const skipPaymentCheck = options?.skipPaymentCheck === true;
+    if (!skipPaymentCheck && summaryOrder && !canReleaseResults(summaryOrder)) {
+      setPaymentModalOrder(summaryOrder);
+      setPaymentModalPendingAction(
+        () => () => handleFastPrintResults(orderId, summaryOrder, { skipPaymentCheck: true }),
+      );
+      setPaymentModalOpen(true);
+      return false;
+    }
+
+    const attemptStartedAtMs = Date.now();
+    const attemptId = createReportPrintAttemptId();
+    const attemptNumber = (reportPrintAttemptCountsRef.current[orderId] ?? 0) + 1;
+    reportPrintAttemptCountsRef.current[orderId] = attemptNumber;
+    let fetchStartedAtMs: number | null = null;
+    let fetchCompletedAtMs: number | null = null;
+    let fetchResult: ResultsHtmlFetchResult | null = null;
+    let clickToDocumentReadyMs: number | null = null;
+    let previewReadyAtMs: number | null = null;
+    let printInvokedAtMs: number | null = null;
+    let failureMessage: string | null = null;
+    let resultPath: ReportPrintProfileRecord['resultPath'] = 'failed';
+    let printSucceeded = false;
+
+    setDownloading(`fast-print-${orderId}`);
+    try {
+      fetchStartedAtMs = Date.now();
+      fetchResult = await getResultsHtmlDetailed(orderId, { correlationId: attemptId });
+      fetchCompletedAtMs = fetchResult.fetchCompletedAtMs;
+      clickToDocumentReadyMs = fetchResult.fetchCompletedAtMs - attemptStartedAtMs;
+
+      await printResultsHtmlInBrowser(fetchResult.html, {
+        onFrameLoaded: () => {
+          previewReadyAtMs = Date.now();
+        },
+        onPrintInvoked: () => {
+          printInvokedAtMs = Date.now();
+        },
+      });
+      resultPath = 'fast_html';
+      printSucceeded = true;
+      void trackReportAction(orderId, 'PRINT');
+    } catch (error: unknown) {
+      fetchCompletedAtMs = fetchCompletedAtMs ?? Date.now();
+      const status =
+        error &&
+        typeof error === 'object' &&
+        'response' in error
+          ? (error as { response?: { status?: number } }).response?.status
+          : undefined;
+      const errorDetails = await extractApiErrorDetailsAsync(error);
+      const fallbackMessageBase =
+        errorDetails.message ||
+        (error instanceof Error ? error.message : null) ||
+        'Fast Print could not be started.';
+
+      if (status === 403 && summaryOrder && !isCancelledOrder(summaryOrder)) {
+        setPaymentModalOrder(summaryOrder);
+        setPaymentModalPendingAction(
+          () => () => handleFastPrintResults(orderId, summaryOrder, { skipPaymentCheck: true }),
+        );
+        setPaymentModalOpen(true);
+        failureMessage = fallbackMessageBase;
+      } else {
+        if (status === 409 && errorDetails.code === 'REPORT_HTML_PRINT_REQUIRES_PDF') {
+          message.info(
+            errorDetails.message ||
+              'This report includes attached PDF result pages. Using standard PDF print instead.',
+          );
+        } else {
+          message.warning(`${fallbackMessageBase} Falling back to standard PDF print.`);
+        }
+
+        const fallbackSucceeded = await handlePrintResults(orderId, summaryOrder, {
+          skipPaymentCheck: true,
+        });
+        resultPath = fallbackSucceeded ? 'pdf_fallback' : 'failed';
+        printSucceeded = fallbackSucceeded;
+        if (!fallbackSucceeded) {
+          failureMessage = fallbackMessageBase;
+        }
+      }
+    } finally {
+      const totalMs = Date.now() - attemptStartedAtMs;
+      setDownloading(null);
+      if (fetchResult || fetchStartedAtMs != null) {
+        const profileWithoutClassification = {
+          attemptId,
+          createdAt: new Date(attemptStartedAtMs).toISOString(),
+          orderId,
+          orderNumber: summaryOrder?.orderNumber ?? null,
+          patientName: summaryOrder?.patient?.fullName ?? null,
+          attemptNumber,
+          documentKind: 'html' as const,
+          configuredMode: 'fast_html' as const,
+          resultPath,
+          success: printSucceeded,
+          fetchSource: 'network' as const,
+          frontendInFlightJoin: false,
+          backendCorrelationId: fetchResult?.correlationId ?? null,
+          backendCacheHit: null,
+          backendInFlightJoin: null,
+          backendFallbackUsed: null,
+          payloadSizeBytes: fetchResult?.payloadSizeBytes ?? null,
+          clickToFetchStartMs:
+            fetchStartedAtMs != null ? fetchStartedAtMs - attemptStartedAtMs : null,
+          fetchDurationMs:
+            fetchStartedAtMs != null && fetchCompletedAtMs != null
+              ? fetchCompletedAtMs - fetchStartedAtMs
+              : null,
+          settingsLoadMs: null,
+          fingerprintWaitMs: null,
+          settingsRequestShared: null,
+          clickToDocumentReadyMs,
+          backendTotalMs: null,
+          backendSnapshotMs: null,
+          backendVerifierLookupMs: null,
+          backendAssetsMs: null,
+          backendHtmlMs: null,
+          backendRenderMs: null,
+          backendFallbackMs: null,
+          clickToPreviewReadyMs:
+            previewReadyAtMs != null ? previewReadyAtMs - attemptStartedAtMs : null,
+          clickToPrintInvokeMs:
+            printInvokedAtMs != null ? printInvokedAtMs - attemptStartedAtMs : null,
+          directPrintDurationMs: null,
+          clickToDirectPrintCompleteMs: null,
+          totalMs,
+          errorMessage: failureMessage,
+        };
+
+        appendReportPrintProfile({
+          ...profileWithoutClassification,
+          classification: classifyReportPrintBottleneck(profileWithoutClassification),
+        });
+      }
+    }
+
+    return printSucceeded;
   };
 
   const handlePrintReceipt = async (order: OrderHistoryItemDto) => {
@@ -2529,6 +2919,17 @@ export function ReportsPage() {
         disabled: cancelled || !reportReady,
         onClick: () => handlePrintResults(record.id, record),
       },
+      ...(supportsFastHtmlPrint
+        ? [
+            {
+              key: 'fast-print',
+              label: withTick('Fast Print', printDone),
+              icon: <ThunderboltOutlined />,
+              disabled: cancelled || !reportReady,
+              onClick: () => handleFastPrintResults(record.id, record),
+            },
+          ]
+        : []),
       {
         key: 'wa',
         label: (
@@ -2594,6 +2995,26 @@ export function ReportsPage() {
             {withTick('Print', printDone)}
           </Button>
         </Tooltip>
+        {supportsFastHtmlPrint ? (
+          <Tooltip
+            title={
+              cancelledTooltip ||
+              (!reportReady ? notReadyTooltip : paymentTooltip || 'Fast browser print (Edge/Chrome)')
+            }
+          >
+            <Button
+              type="link"
+              size="small"
+              icon={<ThunderboltOutlined />}
+              className="reports-order-action-btn"
+              disabled={cancelled || !reportReady}
+              loading={downloading === `fast-print-${record.id}`}
+              onClick={() => handleFastPrintResults(record.id, record)}
+            >
+              {withTick('Fast Print', printDone)}
+            </Button>
+          </Tooltip>
+        ) : null}
         <Tooltip
           title={
             cancelledTooltip ||

@@ -15,6 +15,7 @@ export declare class ReportsController {
     private readonly reportsService;
     private readonly auditService;
     constructor(reportsService: ReportsService, auditService: AuditService);
+    private buildHttpExceptionPayload;
     private setResultsPdfProfilingHeaders;
     getOrderActionFlags(req: RequestWithUser, orderIdsRaw: string | undefined, res: Response): Promise<Response<any, Record<string, any>>>;
     logReportAction(req: RequestWithUser & {
@@ -25,6 +26,7 @@ export declare class ReportsController {
     }, res: Response): Promise<Response<any, Record<string, any>>>;
     getOrderReceiptPDF(req: RequestWithUser, orderId: string, res: Response): Promise<Response<any, Record<string, any>> | undefined>;
     getTestResultsPDF(req: Request & RequestWithUser, orderId: string, res: Response): Promise<Response<any, Record<string, any>> | undefined>;
+    getTestResultsPrintHtml(req: Request & RequestWithUser, orderId: string, res: Response): Promise<Response<any, Record<string, any>>>;
     logReportDelivery(req: RequestWithUser & {
         ip?: string;
         headers?: Record<string, string | string[] | undefined>;

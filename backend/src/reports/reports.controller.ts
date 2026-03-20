@@ -64,6 +64,17 @@ export class ReportsController {
     private readonly auditService: AuditService,
   ) {}
 
+  private buildHttpExceptionPayload(error: HttpException): Record<string, unknown> {
+    const response = error.getResponse();
+    if (typeof response === 'string') {
+      return { message: response };
+    }
+    if (response && typeof response === 'object') {
+      return response as Record<string, unknown>;
+    }
+    return { message: error.message };
+  }
+
   private setResultsPdfProfilingHeaders(
     res: Response,
     performance: {
@@ -264,6 +275,58 @@ export class ReportsController {
         message: 'Failed to generate PDF',
         error: error instanceof Error ? error.message : 'Unknown error'
       });
+    }
+  }
+
+  @Get('orders/:id/print-html')
+  async getTestResultsPrintHtml(
+    @Req() req: Request & RequestWithUser,
+    @Param('id', ParseUUIDPipe) orderId: string,
+    @Res() res: Response,
+  ) {
+    const labId = req.user?.labId;
+    const actor = buildLabActorContext(req.user);
+    if (!labId) {
+      return res.status(401).json({ message: 'Lab ID not found in token' });
+    }
+
+    try {
+      const correlationId = readSingleHeaderValue(req.headers['x-report-print-attempt-id']);
+      const html = await this.reportsService.generateTestResultsPrintHtml(orderId, labId);
+      const impersonationAudit =
+        actor.isImpersonation && actor.platformUserId
+          ? {
+              impersonation: {
+                active: true,
+                platformUserId: actor.platformUserId,
+              },
+            }
+          : {};
+
+      await this.auditService.log({
+        actorType: actor.actorType,
+        actorId: actor.actorId,
+        labId,
+        userId: actor.userId,
+        action: AuditAction.REPORT_GENERATE,
+        entityType: 'order',
+        entityId: orderId,
+        description: `Generated test results HTML print document for order ${orderId}`,
+        newValues: impersonationAudit,
+      });
+      if (correlationId) {
+        res.setHeader('x-report-print-attempt-id', correlationId);
+      }
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      return res.send(html);
+    } catch (error) {
+      if (error instanceof HttpException) {
+        return res.status(error.getStatus()).json(this.buildHttpExceptionPayload(error));
+      }
+      if (error instanceof Error && error.message.includes('not found')) {
+        return res.status(404).json({ message: error.message });
+      }
+      return res.status(500).json({ message: 'Failed to generate printable HTML report' });
     }
   }
 

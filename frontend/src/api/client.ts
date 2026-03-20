@@ -1775,6 +1775,11 @@ export interface DownloadTestResultsPdfResult {
   profilingHeaders: DownloadTestResultsPdfProfilingHeaders;
 }
 
+export interface DownloadTestResultsHtmlResult {
+  html: string;
+  correlationId?: string;
+}
+
 function readResponseHeader(
   headers: unknown,
   key: string,
@@ -1829,6 +1834,25 @@ export async function downloadTestResultsPDF(
       cacheHit: readResponseHeader(res.headers, 'x-report-pdf-cache-hit'),
       inFlightJoin: readResponseHeader(res.headers, 'x-report-pdf-inflight-join'),
     },
+  };
+}
+
+export async function downloadTestResultsHtml(
+  orderId: string,
+  options?: { correlationId?: string },
+): Promise<DownloadTestResultsHtmlResult> {
+  const res = await api.get(`/reports/orders/${orderId}/print-html`, {
+    responseType: 'text',
+    headers: options?.correlationId
+      ? {
+          'x-report-print-attempt-id': options.correlationId,
+        }
+      : undefined,
+  });
+
+  return {
+    html: typeof res.data === 'string' ? res.data : String(res.data ?? ''),
+    correlationId: readResponseHeader(res.headers, 'x-report-print-attempt-id'),
   };
 }
 
