@@ -109,6 +109,8 @@ export declare class ReportsService implements OnModuleInit, OnModuleDestroy {
     constructor(orderRepo: Repository<Order>, orderTestRepo: Repository<OrderTest>, testComponentRepo: Repository<TestComponent>, patientRepo: Repository<Patient>, labRepo: Repository<Lab>, userRepo: Repository<User>, auditLogRepo: Repository<AuditLog>, resultDocumentsService: ResultDocumentsService, fileStorageService: FileStorageService);
     private parseEnvInt;
     private mapResultDocumentSummary;
+    private getPdfReportAttachments;
+    private appendUploadedResultDocumentsToPdf;
     onModuleInit(): void;
     private getBrowser;
     private renderPdfFromHtml;

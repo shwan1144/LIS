@@ -1,9 +1,10 @@
-import { Injectable, NotFoundException, ForbiddenException, BadRequestException, Logger, type OnModuleDestroy, type OnModuleInit } from '@nestjs/common';
+import { Injectable, NotFoundException, ForbiddenException, BadRequestException, InternalServerErrorException, Logger, type OnModuleDestroy, type OnModuleInit } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In } from 'typeorm';
 import { readFileSync, existsSync } from 'fs';
 import { join } from 'path';
 import { createHash } from 'crypto';
+import { PDFDocument as MergedPdfDocument } from 'pdf-lib';
 // require() for CommonJS interop (pdfkit has no default export in some builds)
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const PDFDocument = require('pdfkit');
@@ -142,6 +143,27 @@ function formatDateTime(value: Date | string | null | undefined): string {
   return d.toLocaleString();
 }
 
+function isPdfUploadOrderTest(orderTest: OrderTest): boolean {
+  return (
+    String((orderTest.test as { resultEntryType?: unknown } | undefined)?.resultEntryType ?? '')
+      .toUpperCase() === 'PDF_UPLOAD'
+  );
+}
+
+function hasAttachedPdfResultDocument(orderTest: OrderTest): boolean {
+  return (
+    isPdfUploadOrderTest(orderTest) &&
+    String((orderTest as { resultDocumentStorageKey?: unknown }).resultDocumentStorageKey ?? '')
+      .trim()
+      .length > 0
+  );
+}
+
+function getOrderTestAttachmentLabel(orderTest: OrderTest): string {
+  const test = orderTest.test as Test | undefined;
+  return test?.code || test?.name || orderTest.id;
+}
+
 function getNormalRange(
   test: Test,
   sex: string | null,
@@ -161,13 +183,7 @@ function getNormalRange(
 }
 
 function formatResultValue(ot: OrderTest): string {
-  const resultEntryType = String(
-    (ot.test as { resultEntryType?: unknown } | undefined)?.resultEntryType ?? '',
-  ).toUpperCase();
-  if (
-    resultEntryType === 'PDF_UPLOAD' &&
-    String((ot as { resultDocumentStorageKey?: unknown }).resultDocumentStorageKey ?? '').trim()
-  ) {
+  if (hasAttachedPdfResultDocument(ot)) {
     return 'Attached PDF';
   }
 
@@ -413,7 +429,7 @@ function buildLabReportDesignFingerprint(lab: unknown): string {
 
 @Injectable()
 export class ReportsService implements OnModuleInit, OnModuleDestroy {
-  private static readonly REPORT_PDF_LAYOUT_VERSION = 'results-report-layout-2026-03-16-panel-sections';
+  private static readonly REPORT_PDF_LAYOUT_VERSION = 'results-report-layout-2026-03-20-pdf-attachments';
   private readonly logger = new Logger(ReportsService.name);
   private browserPromise: Promise<Browser> | null = null;
   private readonly reportStorageSyncInFlight = new Map<string, Promise<string | null>>();
@@ -474,6 +490,63 @@ export class ReportsService implements OnModuleInit, OnModuleDestroy {
         : null,
       uploadedBy: orderTest.resultDocumentUploadedBy ?? null,
     };
+  }
+
+  private getPdfReportAttachments(orderTests: OrderTest[]): OrderTest[] {
+    return orderTests.filter(
+      (orderTest) =>
+        orderTest.status === OrderTestStatus.VERIFIED && hasAttachedPdfResultDocument(orderTest),
+    );
+  }
+
+  private async appendUploadedResultDocumentsToPdf(
+    basePdf: Buffer,
+    orderTests: OrderTest[],
+  ): Promise<Buffer> {
+    const attachments = this.getPdfReportAttachments(orderTests);
+    if (attachments.length === 0) {
+      return Buffer.from(basePdf);
+    }
+
+    const mergedPdf = await MergedPdfDocument.load(basePdf);
+    for (const orderTest of attachments) {
+      const fileName = String(orderTest.resultDocumentFileName ?? '').trim() || 'result.pdf';
+      const storageKey = String(orderTest.resultDocumentStorageKey ?? '').trim();
+      const testLabel = getOrderTestAttachmentLabel(orderTest);
+
+      let attachmentBuffer: Buffer;
+      try {
+        attachmentBuffer = await this.resultDocumentsService.readDocument(storageKey);
+      } catch (error) {
+        if (error instanceof NotFoundException) {
+          throw new NotFoundException(
+            `Uploaded result PDF "${fileName}" for test ${testLabel} could not be read.`,
+          );
+        }
+        throw error;
+      }
+
+      let attachmentPdf: MergedPdfDocument;
+      try {
+        attachmentPdf = await MergedPdfDocument.load(attachmentBuffer);
+      } catch {
+        throw new InternalServerErrorException(
+          `Uploaded result PDF "${fileName}" for test ${testLabel} is invalid and could not be appended.`,
+        );
+      }
+
+      const attachmentPageIndices = attachmentPdf.getPageIndices();
+      if (attachmentPageIndices.length === 0) {
+        throw new InternalServerErrorException(
+          `Uploaded result PDF "${fileName}" for test ${testLabel} has no pages to append.`,
+        );
+      }
+
+      const copiedPages = await mergedPdf.copyPages(attachmentPdf, attachmentPageIndices);
+      copiedPages.forEach((page) => mergedPdf.addPage(page));
+    }
+
+    return Buffer.from(await mergedPdf.save());
   }
 
   onModuleInit(): void {
@@ -877,7 +950,9 @@ export class ReportsService implements OnModuleInit, OnModuleDestroy {
         const updatedAtMs = ot.updatedAt ? new Date(ot.updatedAt).getTime() : 0;
         const resultValue = ot.resultValue == null ? '' : String(ot.resultValue);
         const resultText = ot.resultText?.trim() ?? '';
-        return `${ot.id}:${updatedAtMs}:${ot.status}:${ot.flag ?? ''}:${resultValue}:${resultText}`;
+        const resultDocumentStorageKey = String(ot.resultDocumentStorageKey ?? '').trim();
+        const resultDocumentFileName = String(ot.resultDocumentFileName ?? '').trim();
+        return `${ot.id}:${updatedAtMs}:${ot.status}:${ot.flag ?? ''}:${resultValue}:${resultText}:${resultDocumentStorageKey}:${resultDocumentFileName}`;
       })
       .sort()
       .join('|');
@@ -2247,7 +2322,11 @@ export class ReportsService implements OnModuleInit, OnModuleDestroy {
       }
     };
 
-    const pdf = await generatePdf();
+    const generatedPdf = await generatePdf();
+    const pdf = await this.appendUploadedResultDocumentsToPdf(
+      generatedPdf,
+      renderedOrderTestsWithSections,
+    );
     const performance = buildPerformance(false, false);
     this.logResultsPdfPerformance(performance);
     return {

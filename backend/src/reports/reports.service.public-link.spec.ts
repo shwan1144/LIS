@@ -105,4 +105,48 @@ describe('ReportsService public result link resolution', () => {
 
     expect(keyA).not.toBe(keyB);
   });
+
+  it('changes the stored report object key when uploaded result document metadata changes', () => {
+    const service = createService();
+    const baseInput = {
+      labId: 'lab-1',
+      order: {
+        id: 'order-1',
+        paymentStatus: 'PAID',
+        updatedAt: new Date('2026-03-20T08:00:00.000Z'),
+        lab: {
+          updatedAt: new Date('2026-03-20T08:00:00.000Z'),
+          reportStyle: null,
+        },
+      },
+      reportableOrderTests: [
+        {
+          id: 'ot-1',
+          updatedAt: new Date('2026-03-20T08:00:00.000Z'),
+          status: 'VERIFIED',
+          flag: null,
+          resultValue: null,
+          resultText: null,
+          resultDocumentStorageKey: 'storage-key-a',
+          resultDocumentFileName: 'result-a.pdf',
+        },
+      ],
+      latestVerifiedAt: new Date('2026-03-20T09:00:00.000Z'),
+      orderQrValue: 'https://lab01.medilis.net/public/results/order-1',
+    };
+
+    const keyA = (service as any).buildStoredReportPdfObjectKey(baseInput);
+    const keyB = (service as any).buildStoredReportPdfObjectKey({
+      ...baseInput,
+      reportableOrderTests: [
+        {
+          ...baseInput.reportableOrderTests[0],
+          resultDocumentStorageKey: 'storage-key-b',
+          resultDocumentFileName: 'result-b.pdf',
+        },
+      ],
+    });
+
+    expect(keyA).not.toBe(keyB);
+  });
 });

@@ -20,6 +20,7 @@ const typeorm_2 = require("typeorm");
 const fs_1 = require("fs");
 const path_1 = require("path");
 const crypto_1 = require("crypto");
+const pdf_lib_1 = require("pdf-lib");
 const PDFDocument = require('pdfkit');
 const QRCode = require('qrcode');
 const order_entity_1 = require("../entities/order.entity");
@@ -49,6 +50,20 @@ function formatDateTime(value) {
         return '-';
     return d.toLocaleString();
 }
+function isPdfUploadOrderTest(orderTest) {
+    return (String(orderTest.test?.resultEntryType ?? '')
+        .toUpperCase() === 'PDF_UPLOAD');
+}
+function hasAttachedPdfResultDocument(orderTest) {
+    return (isPdfUploadOrderTest(orderTest) &&
+        String(orderTest.resultDocumentStorageKey ?? '')
+            .trim()
+            .length > 0);
+}
+function getOrderTestAttachmentLabel(orderTest) {
+    const test = orderTest.test;
+    return test?.code || test?.name || orderTest.id;
+}
 function getNormalRange(test, sex, patientAge) {
     const { normalMin: min, normalMax: max } = (0, normal_range_util_1.resolveNumericRange)(test, sex, patientAge);
     const resolvedText = (0, normal_range_util_1.resolveNormalText)(test, sex);
@@ -63,9 +78,7 @@ function getNormalRange(test, sex, patientAge) {
     return '-';
 }
 function formatResultValue(ot) {
-    const resultEntryType = String(ot.test?.resultEntryType ?? '').toUpperCase();
-    if (resultEntryType === 'PDF_UPLOAD' &&
-        String(ot.resultDocumentStorageKey ?? '').trim()) {
+    if (hasAttachedPdfResultDocument(ot)) {
         return 'Attached PDF';
     }
     const cultureResult = ot.cultureResult;
@@ -299,6 +312,45 @@ let ReportsService = ReportsService_1 = class ReportsService {
                 : null,
             uploadedBy: orderTest.resultDocumentUploadedBy ?? null,
         };
+    }
+    getPdfReportAttachments(orderTests) {
+        return orderTests.filter((orderTest) => orderTest.status === order_test_entity_1.OrderTestStatus.VERIFIED && hasAttachedPdfResultDocument(orderTest));
+    }
+    async appendUploadedResultDocumentsToPdf(basePdf, orderTests) {
+        const attachments = this.getPdfReportAttachments(orderTests);
+        if (attachments.length === 0) {
+            return Buffer.from(basePdf);
+        }
+        const mergedPdf = await pdf_lib_1.PDFDocument.load(basePdf);
+        for (const orderTest of attachments) {
+            const fileName = String(orderTest.resultDocumentFileName ?? '').trim() || 'result.pdf';
+            const storageKey = String(orderTest.resultDocumentStorageKey ?? '').trim();
+            const testLabel = getOrderTestAttachmentLabel(orderTest);
+            let attachmentBuffer;
+            try {
+                attachmentBuffer = await this.resultDocumentsService.readDocument(storageKey);
+            }
+            catch (error) {
+                if (error instanceof common_1.NotFoundException) {
+                    throw new common_1.NotFoundException(`Uploaded result PDF "${fileName}" for test ${testLabel} could not be read.`);
+                }
+                throw error;
+            }
+            let attachmentPdf;
+            try {
+                attachmentPdf = await pdf_lib_1.PDFDocument.load(attachmentBuffer);
+            }
+            catch {
+                throw new common_1.InternalServerErrorException(`Uploaded result PDF "${fileName}" for test ${testLabel} is invalid and could not be appended.`);
+            }
+            const attachmentPageIndices = attachmentPdf.getPageIndices();
+            if (attachmentPageIndices.length === 0) {
+                throw new common_1.InternalServerErrorException(`Uploaded result PDF "${fileName}" for test ${testLabel} has no pages to append.`);
+            }
+            const copiedPages = await mergedPdf.copyPages(attachmentPdf, attachmentPageIndices);
+            copiedPages.forEach((page) => mergedPdf.addPage(page));
+        }
+        return Buffer.from(await mergedPdf.save());
     }
     onModuleInit() {
         this.getBrowser().catch(() => { });
@@ -653,7 +705,9 @@ let ReportsService = ReportsService_1 = class ReportsService {
             const updatedAtMs = ot.updatedAt ? new Date(ot.updatedAt).getTime() : 0;
             const resultValue = ot.resultValue == null ? '' : String(ot.resultValue);
             const resultText = ot.resultText?.trim() ?? '';
-            return `${ot.id}:${updatedAtMs}:${ot.status}:${ot.flag ?? ''}:${resultValue}:${resultText}`;
+            const resultDocumentStorageKey = String(ot.resultDocumentStorageKey ?? '').trim();
+            const resultDocumentFileName = String(ot.resultDocumentFileName ?? '').trim();
+            return `${ot.id}:${updatedAtMs}:${ot.status}:${ot.flag ?? ''}:${resultValue}:${resultText}:${resultDocumentStorageKey}:${resultDocumentFileName}`;
         })
             .sort()
             .join('|');
@@ -1738,7 +1792,8 @@ let ReportsService = ReportsService_1 = class ReportsService {
                 return fallbackPdf;
             }
         };
-        const pdf = await generatePdf();
+        const generatedPdf = await generatePdf();
+        const pdf = await this.appendUploadedResultDocumentsToPdf(generatedPdf, renderedOrderTestsWithSections);
         const performance = buildPerformance(false, false);
         this.logResultsPdfPerformance(performance);
         return {
@@ -2345,7 +2400,7 @@ let ReportsService = ReportsService_1 = class ReportsService {
     }
 };
 exports.ReportsService = ReportsService;
-ReportsService.REPORT_PDF_LAYOUT_VERSION = 'results-report-layout-2026-03-16-panel-sections';
+ReportsService.REPORT_PDF_LAYOUT_VERSION = 'results-report-layout-2026-03-20-pdf-attachments';
 ReportsService.cachedFont = null;
 exports.ReportsService = ReportsService = ReportsService_1 = __decorate([
     (0, common_1.Injectable)(),

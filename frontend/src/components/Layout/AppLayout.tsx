@@ -1,6 +1,6 @@
 import { Outlet, useNavigate, useLocation, Navigate } from 'react-router-dom';
 import { Alert, Layout as AntLayout, Typography, Space, Menu, Modal, Dropdown, Switch } from 'antd';
-import { LogoutOutlined, DashboardOutlined, BarChartOutlined, UserOutlined, DownOutlined, FileTextOutlined, UnorderedListOutlined, SettingOutlined, FilePdfOutlined, CheckCircleOutlined, MoonOutlined, SunOutlined } from '@ant-design/icons';
+import { LogoutOutlined, DashboardOutlined, BarChartOutlined, UserOutlined, DownOutlined, FileTextOutlined, UnorderedListOutlined, SettingOutlined, FilePdfOutlined, CheckCircleOutlined, MoonOutlined, SunOutlined, ShopOutlined } from '@ant-design/icons';
 import { useEffect, useState } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTheme } from '../../contexts/ThemeContext';
@@ -48,6 +48,7 @@ function getMenuItems(role: string | undefined) {
       { key: '/worklist', icon: <UnorderedListOutlined />, label: 'Worklist' },
       { key: '/verification', icon: <CheckCircleOutlined />, label: 'Verification' },
       { key: '/reports', icon: <FilePdfOutlined />, label: 'Reports' },
+      { key: 'store-management', icon: <ShopOutlined />, label: 'Store Management (Coming soon)', disabled: true },
       { key: '/statistics', icon: <BarChartOutlined />, label: 'Statistics' },
       {
         key: 'settings',
