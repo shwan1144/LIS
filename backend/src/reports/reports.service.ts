@@ -124,6 +124,7 @@ type GenerateTestResultsPdfOptions = {
   disableCache?: boolean;
   cultureOnly?: boolean;
   correlationId?: string | null;
+  allowCacheWithReportDesignOverride?: boolean;
   reportDesignOverride?: {
     reportBranding?: ReportBrandingOverride;
     reportStyle?: ReportStyleConfig | null;
@@ -1529,7 +1530,22 @@ export class ReportsService implements OnModuleInit, OnModuleDestroy {
     if (!ready) {
       throw new ForbiddenException('Results are not completed yet. Please check again later.');
     }
-    return this.generateTestResultsPDF(orderId, order.labId);
+    const onlineWatermarkDataUrl = String(order.lab?.onlineResultWatermarkDataUrl ?? '').trim() || null;
+
+    return this.generateTestResultsPDF(
+      orderId,
+      order.labId,
+      onlineWatermarkDataUrl
+        ? {
+            allowCacheWithReportDesignOverride: true,
+            reportDesignOverride: {
+              reportBranding: {
+                watermarkDataUrl: onlineWatermarkDataUrl,
+              },
+            },
+          }
+        : undefined,
+    );
   }
 
   async getPublicResultDocument(
@@ -2008,9 +2024,11 @@ export class ReportsService implements OnModuleInit, OnModuleDestroy {
       );
     }
 
+    const allowCacheWithReportDesignOverride =
+      Boolean(options?.reportDesignOverride) && options?.allowCacheWithReportDesignOverride === true;
     const orderQrValue = this.resolveOrderQrValue(orderForRender);
     const storedReportKey =
-      !disableCache && !cultureOnly && !options?.reportDesignOverride
+      !disableCache && !cultureOnly && (!options?.reportDesignOverride || allowCacheWithReportDesignOverride)
         ? this.buildStoredReportPdfObjectKey({
           labId,
           order: orderForRender,
@@ -2045,7 +2063,9 @@ export class ReportsService implements OnModuleInit, OnModuleDestroy {
     });
 
     if (storedReportKey && this.fileStorageService.isConfigured()) {
-      if (order.reportS3Key === storedReportKey) {
+      // Override-backed variants use object-key caching directly because order.reportS3Key
+      // tracks only the default report artifact for the order.
+      if (allowCacheWithReportDesignOverride) {
         try {
           const storedPdf = await this.fileStorageService.getFile(storedReportKey);
           const performance = buildPerformance(true, false);
@@ -2060,23 +2080,40 @@ export class ReportsService implements OnModuleInit, OnModuleDestroy {
             `Stored report fetch failed for order ${orderId} (${storedReportKey}): ${message}`,
           );
         }
-      }
+      } else {
+        if (order.reportS3Key === storedReportKey) {
+          try {
+            const storedPdf = await this.fileStorageService.getFile(storedReportKey);
+            const performance = buildPerformance(true, false);
+            this.logResultsPdfPerformance(performance);
+            return {
+              pdf: storedPdf,
+              performance,
+            };
+          } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            this.logger.warn(
+              `Stored report fetch failed for order ${orderId} (${storedReportKey}): ${message}`,
+            );
+          }
+        }
 
-      const syncedKey = await this.syncReportToS3(orderId, labId);
-      if (syncedKey) {
-        try {
-          const storedPdf = await this.fileStorageService.getFile(syncedKey);
-          const performance = buildPerformance(true, false);
-          this.logResultsPdfPerformance(performance);
-          return {
-            pdf: storedPdf,
-            performance,
-          };
-        } catch (error) {
-          const message = error instanceof Error ? error.message : String(error);
-          this.logger.warn(
-            `Stored report fetch after sync failed for order ${orderId} (${syncedKey}): ${message}`,
-          );
+        const syncedKey = await this.syncReportToS3(orderId, labId);
+        if (syncedKey) {
+          try {
+            const storedPdf = await this.fileStorageService.getFile(syncedKey);
+            const performance = buildPerformance(true, false);
+            this.logResultsPdfPerformance(performance);
+            return {
+              pdf: storedPdf,
+              performance,
+            };
+          } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            this.logger.warn(
+              `Stored report fetch after sync failed for order ${orderId} (${syncedKey}): ${message}`,
+            );
+          }
         }
       }
     }
@@ -2119,14 +2156,26 @@ export class ReportsService implements OnModuleInit, OnModuleDestroy {
     };
 
     const generatedPdf = await generatePdf();
-    const pdf = await this.appendUploadedResultDocumentsToPdf(
-      generatedPdf,
-      renderedOrderTestsWithSections,
+    const pdfBuffer = Buffer.from(
+      await this.appendUploadedResultDocumentsToPdf(
+        generatedPdf,
+        renderedOrderTestsWithSections,
+      ),
     );
+    if (storedReportKey && allowCacheWithReportDesignOverride && this.fileStorageService.isConfigured()) {
+      try {
+        await this.fileStorageService.uploadFile(storedReportKey, pdfBuffer, 'application/pdf');
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        this.logger.warn(
+          `Failed to cache override-backed report for order ${orderId} (${storedReportKey}): ${message}`,
+        );
+      }
+    }
     const performance = buildPerformance(false, false);
     this.logResultsPdfPerformance(performance);
     return {
-      pdf: Buffer.from(pdf),
+      pdf: pdfBuffer,
       performance,
     };
   }

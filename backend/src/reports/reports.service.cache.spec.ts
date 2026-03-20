@@ -215,4 +215,107 @@ describe('ReportsService stored report behavior', () => {
     expect(result.pdf.toString()).toBe('synced-pdf');
     expect(result.performance.cacheHit).toBe(true);
   });
+
+  it('reads an override-backed stored report directly when override cache is enabled', async () => {
+    const fileStorageService = createFileStorageMock();
+    const service = createService({ fileStorageService });
+    const reportableOrderTests = [buildOrderTest()];
+    const order = buildOrder({
+      reportS3Key: 'reports/lab-1/order-1/default.pdf',
+      reportGeneratedAt: new Date('2026-03-17T09:00:00.000Z'),
+    });
+
+    jest.spyOn(service as any, 'loadOrderResultsSnapshot').mockResolvedValue({
+      order,
+      reportableOrderTests,
+      verifiedTests: reportableOrderTests,
+      latestVerifiedAt: new Date('2026-03-17T08:45:00.000Z'),
+    });
+    jest.spyOn(service as any, 'loadPanelSectionLookup').mockResolvedValue({
+      byPanelAndChildTest: new Map(),
+      fingerprint: 'panel-fingerprint',
+    });
+    jest
+      .spyOn(service as any, 'attachPanelSectionMetadata')
+      .mockImplementation((tests: unknown[]) => tests);
+    jest.spyOn(service as any, 'resolveOrderQrValue').mockReturnValue('qr-value');
+    jest
+      .spyOn(service as any, 'buildStoredReportPdfObjectKey')
+      .mockReturnValue('reports/lab-1/order-1/public-watermark.pdf');
+    fileStorageService.getFile.mockResolvedValue(Buffer.from('override-cached-pdf'));
+    const syncSpy = jest.spyOn(service, 'syncReportToS3');
+    const renderSpy = jest.spyOn(service as any, 'renderPdfFromHtml');
+
+    const result = await service.generateTestResultsPDFWithProfile('order-1', 'lab-1', {
+      allowCacheWithReportDesignOverride: true,
+      reportDesignOverride: {
+        reportBranding: {
+          watermarkDataUrl: 'data:image/png;base64,b25saW5l',
+        },
+      },
+    });
+
+    expect(result.pdf.toString()).toBe('override-cached-pdf');
+    expect(fileStorageService.getFile).toHaveBeenCalledWith('reports/lab-1/order-1/public-watermark.pdf');
+    expect(syncSpy).not.toHaveBeenCalled();
+    expect(renderSpy).not.toHaveBeenCalled();
+    expect(result.performance.cacheHit).toBe(true);
+  });
+
+  it('uploads an override-backed stored report when the override cache misses', async () => {
+    const fileStorageService = createFileStorageMock();
+    const service = createService({ fileStorageService });
+    const reportableOrderTests = [buildOrderTest()];
+    const order = buildOrder({
+      reportS3Key: 'reports/lab-1/order-1/default.pdf',
+      reportGeneratedAt: new Date('2026-03-17T09:00:00.000Z'),
+    });
+
+    jest.spyOn(service as any, 'loadOrderResultsSnapshot').mockResolvedValue({
+      order,
+      reportableOrderTests,
+      verifiedTests: reportableOrderTests,
+      latestVerifiedAt: new Date('2026-03-17T08:45:00.000Z'),
+    });
+    jest.spyOn(service as any, 'loadPanelSectionLookup').mockResolvedValue({
+      byPanelAndChildTest: new Map(),
+      fingerprint: 'panel-fingerprint',
+    });
+    jest
+      .spyOn(service as any, 'attachPanelSectionMetadata')
+      .mockImplementation((tests: unknown[]) => tests);
+    jest.spyOn(service as any, 'resolveOrderQrValue').mockReturnValue('qr-value');
+    jest
+      .spyOn(service as any, 'buildStoredReportPdfObjectKey')
+      .mockReturnValue('reports/lab-1/order-1/public-watermark.pdf');
+    fileStorageService.getFile.mockRejectedValue(new Error('missing'));
+    jest.spyOn(service as any, 'buildResultsReportHtmlDocument').mockResolvedValue({
+      html: '<html><body>report</body></html>',
+      verifiers: [],
+      comments: [],
+      verifierLookupMs: 0,
+      assetsMs: 0,
+      htmlMs: 0,
+    });
+    jest.spyOn(service as any, 'renderPdfFromHtml').mockResolvedValue(Buffer.from('generated-override-pdf'));
+    const syncSpy = jest.spyOn(service, 'syncReportToS3');
+
+    const result = await service.generateTestResultsPDFWithProfile('order-1', 'lab-1', {
+      allowCacheWithReportDesignOverride: true,
+      reportDesignOverride: {
+        reportBranding: {
+          watermarkDataUrl: 'data:image/png;base64,b25saW5l',
+        },
+      },
+    });
+
+    expect(result.pdf.toString()).toBe('generated-override-pdf');
+    expect(fileStorageService.uploadFile).toHaveBeenCalledWith(
+      'reports/lab-1/order-1/public-watermark.pdf',
+      Buffer.from('generated-override-pdf'),
+      'application/pdf',
+    );
+    expect(syncSpy).not.toHaveBeenCalled();
+    expect(result.performance.cacheHit).toBe(false);
+  });
 });

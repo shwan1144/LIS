@@ -81,6 +81,7 @@ type GenerateTestResultsPdfOptions = {
     disableCache?: boolean;
     cultureOnly?: boolean;
     correlationId?: string | null;
+    allowCacheWithReportDesignOverride?: boolean;
     reportDesignOverride?: {
         reportBranding?: ReportBrandingOverride;
         reportStyle?: ReportStyleConfig | null;
