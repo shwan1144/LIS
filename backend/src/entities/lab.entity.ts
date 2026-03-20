@@ -74,7 +74,7 @@ export class Lab {
   @Column({ type: 'text', nullable: true })
   onlineResultWatermarkDataUrl: string | null;
 
-  /** Optional text watermark shown on public online result page (e.g. "ONLINE VERSION"). */
+  /** Legacy dormant storage for the removed online watermark text feature. */
   @Column({ type: 'varchar', length: 120, nullable: true })
   onlineResultWatermarkText: string | null;
 

@@ -21,7 +21,6 @@ export declare class SettingsController {
         sequenceResetBy: string;
         enableOnlineResults: boolean;
         onlineResultWatermarkDataUrl: string | null;
-        onlineResultWatermarkText: string | null;
         printing: {
             mode: string;
             receiptPrinterName: string | null;
@@ -49,7 +48,6 @@ export declare class SettingsController {
         sequenceResetBy?: string;
         enableOnlineResults?: boolean;
         onlineResultWatermarkDataUrl?: string | null;
-        onlineResultWatermarkText?: string | null;
         printing?: {
             mode?: 'browser' | 'direct_gateway';
             receiptPrinterName?: string | null;
@@ -78,7 +76,6 @@ export declare class SettingsController {
         sequenceResetBy: string;
         enableOnlineResults: boolean;
         onlineResultWatermarkDataUrl: string | null;
-        onlineResultWatermarkText: string | null;
         printing: {
             mode: string;
             receiptPrinterName: string | null;
@@ -134,7 +131,16 @@ export declare class SettingsController {
         password?: string;
     }): Promise<void>;
     deleteUser(req: RequestWithUser, id: string): Promise<void>;
-    getReportThemes(req: RequestWithUser): Promise<import("../entities/report-theme.entity").ReportTheme[]>;
+    getReportThemes(req: RequestWithUser): Promise<{
+        id: string;
+        labId: string;
+        name: string;
+        reportStyle: any;
+        reportBranding: any;
+        onlineResultWatermarkDataUrl: string | null;
+        createdAt: Date;
+        updatedAt: Date;
+    }[]>;
     saveReportTheme(req: RequestWithUser, body: {
         name: string;
         reportStyle: ReportStyleConfig;
@@ -145,8 +151,16 @@ export declare class SettingsController {
             watermarkDataUrl?: string | null;
         };
         onlineResultWatermarkDataUrl: string | null;
-        onlineResultWatermarkText: string | null;
-    }): Promise<import("../entities/report-theme.entity").ReportTheme>;
+    }): Promise<{
+        id: string;
+        labId: string;
+        name: string;
+        reportStyle: any;
+        reportBranding: any;
+        onlineResultWatermarkDataUrl: string | null;
+        createdAt: Date;
+        updatedAt: Date;
+    }>;
     applyReportTheme(req: RequestWithUser, id: string): Promise<{
         id: string;
         code: string;
@@ -155,7 +169,6 @@ export declare class SettingsController {
         sequenceResetBy: string;
         enableOnlineResults: boolean;
         onlineResultWatermarkDataUrl: string | null;
-        onlineResultWatermarkText: string | null;
         printing: {
             mode: string;
             receiptPrinterName: string | null;

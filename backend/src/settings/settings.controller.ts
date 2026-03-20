@@ -55,7 +55,6 @@ export class SettingsController {
       sequenceResetBy?: string;
       enableOnlineResults?: boolean;
       onlineResultWatermarkDataUrl?: string | null;
-      onlineResultWatermarkText?: string | null;
       printing?: {
         mode?: 'browser' | 'direct_gateway';
         receiptPrinterName?: string | null;
@@ -86,7 +85,6 @@ export class SettingsController {
       sequenceResetBy: body.sequenceResetBy,
       enableOnlineResults: body.enableOnlineResults,
       onlineResultWatermarkDataUrl: body.onlineResultWatermarkDataUrl,
-      onlineResultWatermarkText: body.onlineResultWatermarkText,
       printing: body.printing,
       reportBranding: body.reportBranding,
       reportStyle: body.reportStyle,
@@ -207,7 +205,6 @@ export class SettingsController {
         watermarkDataUrl?: string | null;
       };
       onlineResultWatermarkDataUrl: string | null;
-      onlineResultWatermarkText: string | null;
     },
   ) {
     const labId = req.user?.labId;

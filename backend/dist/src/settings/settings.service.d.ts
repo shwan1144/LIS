@@ -46,7 +46,6 @@ export declare class SettingsService {
         sequenceResetBy: string;
         enableOnlineResults: boolean;
         onlineResultWatermarkDataUrl: string | null;
-        onlineResultWatermarkText: string | null;
         printing: {
             mode: string;
             receiptPrinterName: string | null;
@@ -74,7 +73,6 @@ export declare class SettingsService {
         sequenceResetBy?: string;
         enableOnlineResults?: boolean;
         onlineResultWatermarkDataUrl?: string | null;
-        onlineResultWatermarkText?: string | null;
         printing?: LabPrintingUpdate;
         reportBranding?: ReportBrandingUpdate;
         reportStyle?: ReportStyleConfig | null;
@@ -89,7 +87,6 @@ export declare class SettingsService {
         sequenceResetBy: string;
         enableOnlineResults: boolean;
         onlineResultWatermarkDataUrl: string | null;
-        onlineResultWatermarkText: string | null;
         printing: {
             mode: string;
             receiptPrinterName: string | null;
@@ -112,14 +109,31 @@ export declare class SettingsService {
         referringDoctors: string[];
         dashboardAnnouncementText: string | null;
     }>;
-    getReportThemes(labId: string): Promise<ReportTheme[]>;
+    getReportThemes(labId: string): Promise<{
+        id: string;
+        labId: string;
+        name: string;
+        reportStyle: any;
+        reportBranding: any;
+        onlineResultWatermarkDataUrl: string | null;
+        createdAt: Date;
+        updatedAt: Date;
+    }[]>;
     saveReportTheme(labId: string, data: {
         name: string;
         reportStyle: ReportStyleConfig;
         reportBranding: ReportBrandingUpdate;
         onlineResultWatermarkDataUrl: string | null;
-        onlineResultWatermarkText: string | null;
-    }): Promise<ReportTheme>;
+    }): Promise<{
+        id: string;
+        labId: string;
+        name: string;
+        reportStyle: any;
+        reportBranding: any;
+        onlineResultWatermarkDataUrl: string | null;
+        createdAt: Date;
+        updatedAt: Date;
+    }>;
     applyReportTheme(labId: string, themeId: string): Promise<{
         id: string;
         code: string;
@@ -128,7 +142,6 @@ export declare class SettingsService {
         sequenceResetBy: string;
         enableOnlineResults: boolean;
         onlineResultWatermarkDataUrl: string | null;
-        onlineResultWatermarkText: string | null;
         printing: {
             mode: string;
             receiptPrinterName: string | null;
@@ -159,7 +172,7 @@ export declare class SettingsService {
         reportStyle: unknown;
     }): Promise<Buffer>;
     private normalizeReportImageDataUrl;
-    private normalizeOnlineResultWatermarkText;
+    private toReportThemeDto;
     private normalizePrintMethod;
     private normalizePrinterName;
     private normalizeReferringDoctors;

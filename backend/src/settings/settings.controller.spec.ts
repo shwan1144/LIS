@@ -17,7 +17,6 @@ describe('SettingsController', () => {
     };
     const body = {
       dashboardAnnouncementText: 'System maintenance at 8 PM',
-      onlineResultWatermarkText: 'ONLINE',
       reportStyle: {} as never,
       reportBranding: {
         logoDataUrl: 'data:image/png;base64,AAAA',
@@ -31,7 +30,6 @@ describe('SettingsController', () => {
       sequenceResetBy: undefined,
       enableOnlineResults: undefined,
       onlineResultWatermarkDataUrl: undefined,
-      onlineResultWatermarkText: 'ONLINE',
       printing: undefined,
       reportBranding: {
         logoDataUrl: 'data:image/png;base64,AAAA',

@@ -34,7 +34,6 @@ function createStatus(overrides: Partial<PublicResultStatus> = {}): PublicResult
     patientName: 'Patient Name',
     labName: 'Main Lab',
     onlineResultWatermarkDataUrl: null,
-    onlineResultWatermarkText: null,
     registeredAt: '2026-03-12T10:00:00.000Z',
     paymentStatus: 'paid',
     reportableCount: 2,
@@ -79,6 +78,8 @@ describe('PublicReportsController', () => {
     expect(html).toContain('يرجى الانتظار');
     expect((html.match(/dir=\"rtl\"/g) ?? []).length).toBeGreaterThanOrEqual(2);
     expect(html).toContain('Checking every 5 seconds');
+    expect(html).not.toContain('wm-text');
+    expect(html).not.toContain('onlineResultWatermarkText');
   });
 
   it('redirects to PDF when status is ready', async () => {

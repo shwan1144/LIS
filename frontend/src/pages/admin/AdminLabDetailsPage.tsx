@@ -670,9 +670,6 @@ export function AdminLabDetailsPage() {
                         <Tag color="red">Disabled</Tag>
                       )}
                     </Descriptions.Item>
-                    <Descriptions.Item label="Watermark Text">
-                      {settings?.onlineResultWatermarkText || '-'}
-                    </Descriptions.Item>
                     <Descriptions.Item label="Label Sequence">
                       {settings?.labelSequenceBy || '-'}
                     </Descriptions.Item>

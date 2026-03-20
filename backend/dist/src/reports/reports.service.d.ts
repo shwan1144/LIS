@@ -31,7 +31,6 @@ export interface PublicResultStatus {
     patientName: string;
     labName: string;
     onlineResultWatermarkDataUrl: string | null;
-    onlineResultWatermarkText: string | null;
     registeredAt: string;
     paymentStatus: string;
     reportableCount: number;

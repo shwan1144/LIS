@@ -77,7 +77,6 @@ export interface AdminLabSettingsSummary {
   sequenceResetBy: 'day' | 'shift';
   enableOnlineResults: boolean;
   hasOnlineResultWatermarkImage: boolean;
-  onlineResultWatermarkText: string | null;
   printing: {
     mode: 'browser' | 'direct_gateway';
     receiptPrinterName: string | null;
@@ -116,7 +115,6 @@ export interface AdminLabReportDesign {
   };
   reportStyle: ReportStyleConfig | null;
   onlineResultWatermarkDataUrl: string | null;
-  onlineResultWatermarkText: string | null;
 }
 
 export interface AdminTestsTransferLabRef {
@@ -1681,7 +1679,6 @@ export class PlatformAdminService {
       sequenceResetBy?: string;
       enableOnlineResults?: boolean;
       onlineResultWatermarkDataUrl?: string | null;
-      onlineResultWatermarkText?: string | null;
       printing?: {
         mode?: 'browser' | 'direct_gateway';
         receiptPrinterName?: string | null;
@@ -2665,7 +2662,6 @@ export class PlatformAdminService {
       sequenceResetBy: settings.sequenceResetBy === 'shift' ? 'shift' : 'day',
       enableOnlineResults: settings.enableOnlineResults,
       hasOnlineResultWatermarkImage: Boolean(settings.onlineResultWatermarkDataUrl),
-      onlineResultWatermarkText: settings.onlineResultWatermarkText,
       printing: {
         ...settings.printing,
         mode: settings.printing.mode === 'direct_gateway' ? 'direct_gateway' : 'browser',
@@ -2699,7 +2695,6 @@ export class PlatformAdminService {
       reportBranding: settings.reportBranding,
       reportStyle: settings.reportStyle,
       onlineResultWatermarkDataUrl: settings.onlineResultWatermarkDataUrl,
-      onlineResultWatermarkText: settings.onlineResultWatermarkText,
     };
   }
 

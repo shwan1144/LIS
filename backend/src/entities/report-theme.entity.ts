@@ -35,6 +35,7 @@ export class ReportTheme {
   @Column({ type: 'text', nullable: true })
   onlineResultWatermarkDataUrl: string | null;
 
+  /** Legacy dormant storage for the removed online watermark text feature. */
   @Column({ type: 'varchar', length: 120, nullable: true })
   onlineResultWatermarkText: string | null;
 

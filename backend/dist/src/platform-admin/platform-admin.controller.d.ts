@@ -64,7 +64,6 @@ export declare class PlatformAdminController {
         sequenceResetBy?: string;
         enableOnlineResults?: boolean;
         onlineResultWatermarkDataUrl?: string | null;
-        onlineResultWatermarkText?: string | null;
         printing?: {
             mode?: 'browser' | 'direct_gateway';
             receiptPrinterName?: string | null;

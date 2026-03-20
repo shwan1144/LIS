@@ -27,7 +27,6 @@ import { ReportsService, type ReportBrandingOverride } from '../reports/reports.
 const ROLES = ['SUPER_ADMIN', 'LAB_ADMIN', 'RECEPTION', 'TECHNICIAN', 'VERIFIER', 'DOCTOR', 'INSTRUMENT_SERVICE'];
 const MAX_REPORT_IMAGE_DATA_URL_LENGTH = 4 * 1024 * 1024;
 const REPORT_IMAGE_DATA_URL_PATTERN = /^data:image\/(png|jpeg|jpg|webp);base64,[a-zA-Z0-9+/=]+$/;
-const MAX_ONLINE_WATERMARK_TEXT_LENGTH = 120;
 const MAX_PRINTER_NAME_LENGTH = 128;
 const MAX_REFERRING_DOCTOR_NAME_LENGTH = 80;
 const MAX_REFERRING_DOCTORS_COUNT = 500;
@@ -100,7 +99,6 @@ export class SettingsService {
       sequenceResetBy: lab.sequenceResetBy ?? 'day',
       enableOnlineResults: lab.enableOnlineResults !== false,
       onlineResultWatermarkDataUrl: lab.onlineResultWatermarkDataUrl ?? null,
-      onlineResultWatermarkText: lab.onlineResultWatermarkText ?? null,
       printing: {
         mode: lab.printMethod === 'browser' ? 'browser' : 'direct_gateway',
         receiptPrinterName: lab.receiptPrinterName ?? null,
@@ -125,7 +123,6 @@ export class SettingsService {
       sequenceResetBy?: string;
       enableOnlineResults?: boolean;
       onlineResultWatermarkDataUrl?: string | null;
-      onlineResultWatermarkText?: string | null;
       printing?: LabPrintingUpdate;
       reportBranding?: ReportBrandingUpdate;
       reportStyle?: ReportStyleConfig | null;
@@ -160,11 +157,6 @@ export class SettingsService {
       lab.onlineResultWatermarkDataUrl = this.normalizeReportImageDataUrl(
         data.onlineResultWatermarkDataUrl,
         'onlineResultWatermarkDataUrl',
-      );
-    }
-    if (data.onlineResultWatermarkText !== undefined) {
-      lab.onlineResultWatermarkText = this.normalizeOnlineResultWatermarkText(
-        data.onlineResultWatermarkText,
       );
     }
     if (data.printing !== undefined) {
@@ -290,10 +282,11 @@ export class SettingsService {
   }
 
   async getReportThemes(labId: string) {
-    return this.reportThemeRepo.find({
+    const themes = await this.reportThemeRepo.find({
       where: { labId },
       order: { createdAt: 'DESC' },
     });
+    return themes.map((theme) => this.toReportThemeDto(theme));
   }
 
   async saveReportTheme(
@@ -303,7 +296,6 @@ export class SettingsService {
       reportStyle: ReportStyleConfig;
       reportBranding: ReportBrandingUpdate;
       onlineResultWatermarkDataUrl: string | null;
-      onlineResultWatermarkText: string | null;
     },
   ) {
     const theme = this.reportThemeRepo.create({
@@ -315,11 +307,9 @@ export class SettingsService {
         data.onlineResultWatermarkDataUrl,
         'onlineResultWatermarkDataUrl',
       ),
-      onlineResultWatermarkText: this.normalizeOnlineResultWatermarkText(
-        data.onlineResultWatermarkText,
-      ),
     });
-    return this.reportThemeRepo.save(theme);
+    const savedTheme = await this.reportThemeRepo.save(theme);
+    return this.toReportThemeDto(savedTheme);
   }
 
   async applyReportTheme(labId: string, themeId: string) {
@@ -335,7 +325,6 @@ export class SettingsService {
     lab.reportLogoDataUrl = theme.reportBranding.logoDataUrl;
     lab.reportWatermarkDataUrl = theme.reportBranding.watermarkDataUrl;
     lab.onlineResultWatermarkDataUrl = theme.onlineResultWatermarkDataUrl;
-    lab.onlineResultWatermarkText = theme.onlineResultWatermarkText;
 
     await this.labRepo.save(lab);
     return this.getLabSettings(labId);
@@ -391,19 +380,17 @@ export class SettingsService {
     return trimmed;
   }
 
-  private normalizeOnlineResultWatermarkText(value: string | null): string | null {
-    if (value === null) return null;
-    if (typeof value !== 'string') {
-      throw new BadRequestException('onlineResultWatermarkText must be a string or null');
-    }
-    const trimmed = value.trim();
-    if (!trimmed) return null;
-    if (trimmed.length > MAX_ONLINE_WATERMARK_TEXT_LENGTH) {
-      throw new BadRequestException(
-        `onlineResultWatermarkText must be at most ${MAX_ONLINE_WATERMARK_TEXT_LENGTH} characters`,
-      );
-    }
-    return trimmed;
+  private toReportThemeDto(theme: ReportTheme) {
+    return {
+      id: theme.id,
+      labId: theme.labId,
+      name: theme.name,
+      reportStyle: theme.reportStyle,
+      reportBranding: theme.reportBranding,
+      onlineResultWatermarkDataUrl: theme.onlineResultWatermarkDataUrl ?? null,
+      createdAt: theme.createdAt,
+      updatedAt: theme.updatedAt,
+    };
   }
 
   private normalizePrintMethod(value: string | undefined): string {

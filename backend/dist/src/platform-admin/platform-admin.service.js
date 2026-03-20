@@ -1812,7 +1812,6 @@ let PlatformAdminService = PlatformAdminService_1 = class PlatformAdminService {
             sequenceResetBy: settings.sequenceResetBy === 'shift' ? 'shift' : 'day',
             enableOnlineResults: settings.enableOnlineResults,
             hasOnlineResultWatermarkImage: Boolean(settings.onlineResultWatermarkDataUrl),
-            onlineResultWatermarkText: settings.onlineResultWatermarkText,
             printing: {
                 ...settings.printing,
                 mode: settings.printing.mode === 'direct_gateway' ? 'direct_gateway' : 'browser',
@@ -1842,7 +1841,6 @@ let PlatformAdminService = PlatformAdminService_1 = class PlatformAdminService {
             reportBranding: settings.reportBranding,
             reportStyle: settings.reportStyle,
             onlineResultWatermarkDataUrl: settings.onlineResultWatermarkDataUrl,
-            onlineResultWatermarkText: settings.onlineResultWatermarkText,
         };
     }
     resolveDashboardDateRange(rawDateFrom, rawDateTo) {

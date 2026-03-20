@@ -1101,7 +1101,6 @@ let ReportsService = ReportsService_1 = class ReportsService {
             patientName: order.patient?.fullName || '-',
             labName: order.lab?.name || 'Laboratory',
             onlineResultWatermarkDataUrl: order.lab?.onlineResultWatermarkDataUrl ?? null,
-            onlineResultWatermarkText: order.lab?.onlineResultWatermarkText ?? null,
             registeredAt: order.registeredAt.toISOString(),
             paymentStatus,
             reportableCount: tests.length,

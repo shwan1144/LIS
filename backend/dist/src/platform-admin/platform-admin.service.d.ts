@@ -39,7 +39,6 @@ export interface AdminLabSettingsSummary {
     sequenceResetBy: 'day' | 'shift';
     enableOnlineResults: boolean;
     hasOnlineResultWatermarkImage: boolean;
-    onlineResultWatermarkText: string | null;
     printing: {
         mode: 'browser' | 'direct_gateway';
         receiptPrinterName: string | null;
@@ -80,7 +79,6 @@ export interface AdminLabReportDesign {
     };
     reportStyle: ReportStyleConfig | null;
     onlineResultWatermarkDataUrl: string | null;
-    onlineResultWatermarkText: string | null;
 }
 export interface AdminTestsTransferLabRef {
     id: string;
@@ -383,7 +381,6 @@ export declare class PlatformAdminService {
         sequenceResetBy?: string;
         enableOnlineResults?: boolean;
         onlineResultWatermarkDataUrl?: string | null;
-        onlineResultWatermarkText?: string | null;
         printing?: {
             mode?: 'browser' | 'direct_gateway';
             receiptPrinterName?: string | null;

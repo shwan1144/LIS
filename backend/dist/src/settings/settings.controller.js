@@ -44,7 +44,6 @@ let SettingsController = class SettingsController {
             sequenceResetBy: body.sequenceResetBy,
             enableOnlineResults: body.enableOnlineResults,
             onlineResultWatermarkDataUrl: body.onlineResultWatermarkDataUrl,
-            onlineResultWatermarkText: body.onlineResultWatermarkText,
             printing: body.printing,
             reportBranding: body.reportBranding,
             reportStyle: body.reportStyle,

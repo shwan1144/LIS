@@ -893,7 +893,6 @@ export function ReportDesignStudio() {
   const [branding, setBranding] = useState<ReportBrandingDto>(emptyBranding);
   const [reportStyle, setReportStyle] = useState<ReportStyleDto>(defaultReportStyle);
   const [onlineResultWatermarkDataUrl, setOnlineResultWatermarkDataUrl] = useState<string | null>(null);
-  const [onlineResultWatermarkText, setOnlineResultWatermarkText] = useState('');
   const [activeTabKey, setActiveTabKey] = useState('designer');
   const [activeDesignerSection, setActiveDesignerSection] =
     useState<DesignerSectionId>('patient-information');
@@ -905,7 +904,6 @@ export function ReportDesignStudio() {
     branding: ReportBrandingDto;
     reportStyle: ReportStyleDto;
     onlineResultWatermarkDataUrl: string | null;
-    onlineResultWatermarkText: string;
     reportDesignFingerprint: string;
   } | null>(null);
   const [previewOrderQuery, setPreviewOrderQuery] = useState('');
@@ -940,16 +938,13 @@ export function ReportDesignStudio() {
         const nextBranding = data.reportBranding || emptyBranding();
         const nextReportStyle = data.reportStyle || defaultReportStyle();
         const nextWatermarkDataUrl = data.onlineResultWatermarkDataUrl || null;
-        const nextWatermarkText = data.onlineResultWatermarkText || '';
         setBranding(nextBranding);
         setReportStyle(cloneReportStyle(nextReportStyle));
         setOnlineResultWatermarkDataUrl(nextWatermarkDataUrl);
-        setOnlineResultWatermarkText(nextWatermarkText);
         setSavedSnapshot({
           branding: nextBranding,
           reportStyle: cloneReportStyle(nextReportStyle),
           onlineResultWatermarkDataUrl: nextWatermarkDataUrl,
-          onlineResultWatermarkText: nextWatermarkText,
           reportDesignFingerprint: data.reportDesignFingerprint,
         });
       } catch (error) {
@@ -1071,10 +1066,9 @@ export function ReportDesignStudio() {
       savedSnapshot.branding.logoDataUrl !== branding.logoDataUrl ||
       savedSnapshot.branding.watermarkDataUrl !== branding.watermarkDataUrl ||
       JSON.stringify(savedSnapshot.reportStyle) !== JSON.stringify(reportStyle) ||
-      savedSnapshot.onlineResultWatermarkDataUrl !== onlineResultWatermarkDataUrl ||
-      savedSnapshot.onlineResultWatermarkText !== onlineResultWatermarkText
+      savedSnapshot.onlineResultWatermarkDataUrl !== onlineResultWatermarkDataUrl
     );
-  }, [branding, reportStyle, onlineResultWatermarkDataUrl, onlineResultWatermarkText, savedSnapshot]);
+  }, [branding, reportStyle, onlineResultWatermarkDataUrl, savedSnapshot]);
 
   const sectionSummaries = useMemo<Record<DesignerSectionId, string[]>>(
     () => ({
@@ -1374,7 +1368,6 @@ export function ReportDesignStudio() {
       };
       const expectedReportStyle = cloneReportStyle(reportStyle);
       const expectedWatermarkDataUrl = onlineResultWatermarkDataUrl ?? null;
-      const expectedWatermarkText = onlineResultWatermarkText.trim();
       const previousBranding = savedSnapshot?.branding || emptyBranding();
       const brandingChanges = getChangedBrandingFields(previousBranding, expectedBranding);
       const hasBrandingChanges =
@@ -1385,15 +1378,11 @@ export function ReportDesignStudio() {
       const hasOnlineWatermarkDataUrlChanges =
         !savedSnapshot ||
         savedSnapshot.onlineResultWatermarkDataUrl !== expectedWatermarkDataUrl;
-      const hasOnlineWatermarkTextChanges =
-        !savedSnapshot ||
-        savedSnapshot.onlineResultWatermarkText !== expectedWatermarkText;
 
       if (
         !hasBrandingChanges &&
         !hasReportStyleChanges &&
-        !hasOnlineWatermarkDataUrlChanges &&
-        !hasOnlineWatermarkTextChanges
+        !hasOnlineWatermarkDataUrlChanges
       ) {
         message.info('No changes to save');
         setSaving(false);
@@ -1406,23 +1395,17 @@ export function ReportDesignStudio() {
         onlineResultWatermarkDataUrl: hasOnlineWatermarkDataUrlChanges
           ? expectedWatermarkDataUrl
           : undefined,
-        onlineResultWatermarkText: hasOnlineWatermarkTextChanges
-          ? expectedWatermarkText || null
-          : undefined,
       });
       const nextBranding = updated.reportBranding || emptyBranding();
       const nextReportStyle = updated.reportStyle || defaultReportStyle();
       const nextWatermarkDataUrl = updated.onlineResultWatermarkDataUrl || null;
-      const nextWatermarkText = updated.onlineResultWatermarkText || '';
       setBranding(nextBranding);
       setReportStyle(cloneReportStyle(nextReportStyle));
       setOnlineResultWatermarkDataUrl(nextWatermarkDataUrl);
-      setOnlineResultWatermarkText(nextWatermarkText);
       setSavedSnapshot({
         branding: nextBranding,
         reportStyle: cloneReportStyle(nextReportStyle),
         onlineResultWatermarkDataUrl: nextWatermarkDataUrl,
-        onlineResultWatermarkText: nextWatermarkText,
         reportDesignFingerprint: updated.reportDesignFingerprint,
       });
       const mismatchFields: string[] = [];
@@ -1434,9 +1417,6 @@ export function ReportDesignStudio() {
       }
       if (nextWatermarkDataUrl !== expectedWatermarkDataUrl) {
         mismatchFields.push('onlineResultWatermarkDataUrl');
-      }
-      if (nextWatermarkText !== expectedWatermarkText) {
-        mismatchFields.push('onlineResultWatermarkText');
       }
 
       if (mismatchFields.length > 0) {
@@ -1484,7 +1464,6 @@ export function ReportDesignStudio() {
               reportStyle,
               reportBranding: branding,
               onlineResultWatermarkDataUrl,
-              onlineResultWatermarkText,
             });
             message.success(`Theme "${name}" saved!`);
             void fetchThemes();
@@ -1502,17 +1481,14 @@ export function ReportDesignStudio() {
       const nextBranding = data.reportBranding || emptyBranding();
       const nextReportStyle = data.reportStyle || defaultReportStyle();
       const nextWatermarkDataUrl = data.onlineResultWatermarkDataUrl || null;
-      const nextWatermarkText = data.onlineResultWatermarkText || '';
 
       setBranding(nextBranding);
       setReportStyle(cloneReportStyle(nextReportStyle));
       setOnlineResultWatermarkDataUrl(nextWatermarkDataUrl);
-      setOnlineResultWatermarkText(nextWatermarkText);
       setSavedSnapshot({
         branding: nextBranding,
         reportStyle: cloneReportStyle(nextReportStyle),
         onlineResultWatermarkDataUrl: nextWatermarkDataUrl,
-        onlineResultWatermarkText: nextWatermarkText,
         reportDesignFingerprint: data.reportDesignFingerprint,
       });
       message.success(`Applied theme "${theme.name}"`);
@@ -3335,7 +3311,7 @@ export function ReportDesignStudio() {
             children: (
               <Card title="Online Result Watermark" loading={loading} className="admin-report-design-online-card">
                 <Text type="secondary" style={{ display: 'block', marginBottom: 12 }}>
-                  Optional image/text watermark for patient online result page.
+                  Optional image watermark for patient online result page.
                 </Text>
                 <div className="admin-report-design-online-preview">
                   {onlineResultWatermarkDataUrl ? (
@@ -3371,18 +3347,6 @@ export function ReportDesignStudio() {
                     Clear image
                   </Button>
                 </Space>
-                <Text type="secondary" style={{ display: 'block', marginBottom: 8 }}>
-                  Optional text watermark:
-                </Text>
-                <Input
-                  value={onlineResultWatermarkText}
-                  onChange={(event) => setOnlineResultWatermarkText(event.target.value)}
-                  maxLength={120}
-                  showCount
-                  placeholder="ONLINE VERSION"
-                  allowClear
-                  disabled={!canMutate}
-                />
               </Card>
             ),
           },
@@ -3414,7 +3378,6 @@ export function ReportDesignStudio() {
               setBranding(savedSnapshot.branding);
               setReportStyle(cloneReportStyle(savedSnapshot.reportStyle));
               setOnlineResultWatermarkDataUrl(savedSnapshot.onlineResultWatermarkDataUrl);
-              setOnlineResultWatermarkText(savedSnapshot.onlineResultWatermarkText);
             }}
             disabled={!hasChanges}
           >

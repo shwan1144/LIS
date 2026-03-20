@@ -134,8 +134,6 @@ function renderPendingPage(status) {
     .watermark {
       margin-top: 12px;
       display: flex;
-      flex-direction: column;
-      gap: 8px;
       align-items: flex-start;
     }
 
@@ -146,13 +144,6 @@ function renderPendingPage(status) {
       border-radius: 8px;
       border: 1px solid var(--line);
       background: #fff;
-    }
-
-    .watermark .wm-text {
-      font-size: 0.78rem;
-      color: var(--muted);
-      font-weight: 600;
-      letter-spacing: 0.02em;
     }
 
     .summary {
@@ -376,7 +367,6 @@ function renderPendingPage(status) {
         <p class="top-line" dir="rtl">يرجى الانتظار، يتم تحديث حالة التحاليل تلقائياً حتى اكتمال النتيجة.</p>
         <div class="watermark" id="wm-wrap" style="display:none;">
           <img id="wm-image" alt="Online watermark" style="display:none;" />
-          <div class="wm-text" id="wm-text" style="display:none;"></div>
         </div>
       </div>
 
@@ -440,34 +430,18 @@ function renderPendingPage(status) {
       function updateWatermark(current) {
         var wrap = document.getElementById('wm-wrap');
         var image = document.getElementById('wm-image');
-        var text = document.getElementById('wm-text');
-        if (!wrap || !image || !text) return;
+        if (!wrap || !image) return;
 
         var hasImage = !!current.onlineResultWatermarkDataUrl;
-        var hasText = !!current.onlineResultWatermarkText;
 
-        if (!hasImage && !hasText) {
+        if (!hasImage) {
           wrap.style.display = 'none';
           return;
         }
 
         wrap.style.display = 'flex';
-
-        if (hasImage) {
-          image.src = String(current.onlineResultWatermarkDataUrl);
-          image.style.display = 'block';
-        } else {
-          image.removeAttribute('src');
-          image.style.display = 'none';
-        }
-
-        if (hasText) {
-          text.textContent = String(current.onlineResultWatermarkText);
-          text.style.display = 'block';
-        } else {
-          text.textContent = '';
-          text.style.display = 'none';
-        }
+        image.src = String(current.onlineResultWatermarkDataUrl);
+        image.style.display = 'block';
       }
 
       function resolveTestProgress(current, test, nowMs) {

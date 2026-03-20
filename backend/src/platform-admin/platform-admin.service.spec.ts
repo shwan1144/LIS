@@ -685,7 +685,6 @@ describe('PlatformAdminService', () => {
       sequenceResetBy: 'shift',
       enableOnlineResults: true,
       onlineResultWatermarkDataUrl: 'data:image/png;base64,ONLINE',
-      onlineResultWatermarkText: 'ONLINE',
       printing: {
         mode: 'direct_gateway',
         receiptPrinterName: 'Receipt',
@@ -740,6 +739,7 @@ describe('PlatformAdminService', () => {
       }),
     );
     expect(Object.prototype.hasOwnProperty.call(summary, 'onlineResultWatermarkDataUrl')).toBe(false);
+    expect(Object.prototype.hasOwnProperty.call(summary, 'onlineResultWatermarkText')).toBe(false);
     expect(Object.prototype.hasOwnProperty.call(summary, 'reportBranding')).toBe(false);
     expect(Object.prototype.hasOwnProperty.call(summary, 'reportStyle')).toBe(false);
     expect(updated.onlineResultWatermarkDataUrl).toBe(fullSettings.onlineResultWatermarkDataUrl);
@@ -758,7 +758,6 @@ describe('PlatformAdminService', () => {
       sequenceResetBy: 'day',
       enableOnlineResults: true,
       onlineResultWatermarkDataUrl: 'data:image/png;base64,ONLINE',
-      onlineResultWatermarkText: 'ONLINE',
       printing: {
         mode: 'browser',
         receiptPrinterName: null,
@@ -794,11 +793,11 @@ describe('PlatformAdminService', () => {
         code: 'LAB01',
         reportDesignFingerprint: 'abc123',
         onlineResultWatermarkDataUrl: 'data:image/png;base64,ONLINE',
-        onlineResultWatermarkText: 'ONLINE',
         reportBranding: fullSettings.reportBranding,
         reportStyle: fullSettings.reportStyle,
       }),
     );
+    expect(Object.prototype.hasOwnProperty.call(result, 'onlineResultWatermarkText')).toBe(false);
   });
 
   it('surfaces actual access and refresh token lifetimes in platform settings overview', async () => {

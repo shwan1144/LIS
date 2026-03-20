@@ -95,7 +95,6 @@ export interface LabDto {
   sequenceResetBy?: 'day' | 'shift';
   enableOnlineResults?: boolean;
   onlineResultWatermarkDataUrl?: string | null;
-  onlineResultWatermarkText?: string | null;
   reportBranding?: ReportBrandingDto;
   reportStyle?: ReportStyleDto | null;
 }
@@ -379,7 +378,6 @@ export interface AdminLabSettingsSummaryDto {
   sequenceResetBy: 'day' | 'shift';
   enableOnlineResults: boolean;
   hasOnlineResultWatermarkImage: boolean;
-  onlineResultWatermarkText: string | null;
   printing: {
     mode: 'browser' | 'direct_gateway';
     receiptPrinterName: string | null;
@@ -408,7 +406,6 @@ export interface AdminLabReportDesignDto {
   reportBranding: ReportBrandingDto;
   reportStyle: ReportStyleDto | null;
   onlineResultWatermarkDataUrl: string | null;
-  onlineResultWatermarkText: string | null;
 }
 
 export interface AdminLabTestsTransferIssueDto {
@@ -932,7 +929,6 @@ export async function updateAdminLabSettings(
     sequenceResetBy?: 'day' | 'shift';
     enableOnlineResults?: boolean;
     onlineResultWatermarkDataUrl?: string | null;
-    onlineResultWatermarkText?: string | null;
     printing?: {
       mode?: 'browser' | 'direct_gateway';
       receiptPrinterName?: string | null;
@@ -2602,7 +2598,6 @@ export interface LabSettingsDto {
   sequenceResetBy: 'day' | 'shift';
   enableOnlineResults: boolean;
   onlineResultWatermarkDataUrl: string | null;
-  onlineResultWatermarkText: string | null;
   printing: {
     mode: 'browser' | 'direct_gateway';
     receiptPrinterName: string | null;
@@ -2625,7 +2620,6 @@ export interface UpdateLabSettingsDto {
   sequenceResetBy?: 'day' | 'shift';
   enableOnlineResults?: boolean;
   onlineResultWatermarkDataUrl?: string | null;
-  onlineResultWatermarkText?: string | null;
   printing?: {
     mode?: 'browser' | 'direct_gateway';
     receiptPrinterName?: string | null;
@@ -2649,7 +2643,6 @@ export interface ReportThemeDto {
   reportStyle: ReportStyleDto;
   reportBranding: ReportBrandingDto;
   onlineResultWatermarkDataUrl: string | null;
-  onlineResultWatermarkText: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -2664,7 +2657,6 @@ export async function saveReportTheme(data: {
   reportStyle: ReportStyleDto;
   reportBranding: Partial<ReportBrandingDto>;
   onlineResultWatermarkDataUrl: string | null;
-  onlineResultWatermarkText: string | null;
 }): Promise<ReportThemeDto> {
   const res = await api.post<ReportThemeDto>('/settings/lab/themes', data);
   return res.data;

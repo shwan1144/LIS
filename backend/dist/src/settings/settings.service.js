@@ -31,7 +31,6 @@ const reports_service_1 = require("../reports/reports.service");
 const ROLES = ['SUPER_ADMIN', 'LAB_ADMIN', 'RECEPTION', 'TECHNICIAN', 'VERIFIER', 'DOCTOR', 'INSTRUMENT_SERVICE'];
 const MAX_REPORT_IMAGE_DATA_URL_LENGTH = 4 * 1024 * 1024;
 const REPORT_IMAGE_DATA_URL_PATTERN = /^data:image\/(png|jpeg|jpg|webp);base64,[a-zA-Z0-9+/=]+$/;
-const MAX_ONLINE_WATERMARK_TEXT_LENGTH = 120;
 const MAX_PRINTER_NAME_LENGTH = 128;
 const MAX_REFERRING_DOCTOR_NAME_LENGTH = 80;
 const MAX_REFERRING_DOCTORS_COUNT = 500;
@@ -75,7 +74,6 @@ let SettingsService = class SettingsService {
             sequenceResetBy: lab.sequenceResetBy ?? 'day',
             enableOnlineResults: lab.enableOnlineResults !== false,
             onlineResultWatermarkDataUrl: lab.onlineResultWatermarkDataUrl ?? null,
-            onlineResultWatermarkText: lab.onlineResultWatermarkText ?? null,
             printing: {
                 mode: lab.printMethod === 'browser' ? 'browser' : 'direct_gateway',
                 receiptPrinterName: lab.receiptPrinterName ?? null,
@@ -115,9 +113,6 @@ let SettingsService = class SettingsService {
         }
         if (data.onlineResultWatermarkDataUrl !== undefined) {
             lab.onlineResultWatermarkDataUrl = this.normalizeReportImageDataUrl(data.onlineResultWatermarkDataUrl, 'onlineResultWatermarkDataUrl');
-        }
-        if (data.onlineResultWatermarkText !== undefined) {
-            lab.onlineResultWatermarkText = this.normalizeOnlineResultWatermarkText(data.onlineResultWatermarkText);
         }
         if (data.printing !== undefined) {
             if (!data.printing ||
@@ -214,10 +209,11 @@ let SettingsService = class SettingsService {
         return settings;
     }
     async getReportThemes(labId) {
-        return this.reportThemeRepo.find({
+        const themes = await this.reportThemeRepo.find({
             where: { labId },
             order: { createdAt: 'DESC' },
         });
+        return themes.map((theme) => this.toReportThemeDto(theme));
     }
     async saveReportTheme(labId, data) {
         const theme = this.reportThemeRepo.create({
@@ -226,9 +222,9 @@ let SettingsService = class SettingsService {
             reportStyle: (0, report_style_config_1.validateAndNormalizeReportStyleConfig)(data.reportStyle, 'reportStyle'),
             reportBranding: this.normalizePreviewReportBranding(data.reportBranding),
             onlineResultWatermarkDataUrl: this.normalizeReportImageDataUrl(data.onlineResultWatermarkDataUrl, 'onlineResultWatermarkDataUrl'),
-            onlineResultWatermarkText: this.normalizeOnlineResultWatermarkText(data.onlineResultWatermarkText),
         });
-        return this.reportThemeRepo.save(theme);
+        const savedTheme = await this.reportThemeRepo.save(theme);
+        return this.toReportThemeDto(savedTheme);
     }
     async applyReportTheme(labId, themeId) {
         const theme = await this.reportThemeRepo.findOne({ where: { id: themeId, labId } });
@@ -243,7 +239,6 @@ let SettingsService = class SettingsService {
         lab.reportLogoDataUrl = theme.reportBranding.logoDataUrl;
         lab.reportWatermarkDataUrl = theme.reportBranding.watermarkDataUrl;
         lab.onlineResultWatermarkDataUrl = theme.onlineResultWatermarkDataUrl;
-        lab.onlineResultWatermarkText = theme.onlineResultWatermarkText;
         await this.labRepo.save(lab);
         return this.getLabSettings(labId);
     }
@@ -283,19 +278,17 @@ let SettingsService = class SettingsService {
         }
         return trimmed;
     }
-    normalizeOnlineResultWatermarkText(value) {
-        if (value === null)
-            return null;
-        if (typeof value !== 'string') {
-            throw new common_1.BadRequestException('onlineResultWatermarkText must be a string or null');
-        }
-        const trimmed = value.trim();
-        if (!trimmed)
-            return null;
-        if (trimmed.length > MAX_ONLINE_WATERMARK_TEXT_LENGTH) {
-            throw new common_1.BadRequestException(`onlineResultWatermarkText must be at most ${MAX_ONLINE_WATERMARK_TEXT_LENGTH} characters`);
-        }
-        return trimmed;
+    toReportThemeDto(theme) {
+        return {
+            id: theme.id,
+            labId: theme.labId,
+            name: theme.name,
+            reportStyle: theme.reportStyle,
+            reportBranding: theme.reportBranding,
+            onlineResultWatermarkDataUrl: theme.onlineResultWatermarkDataUrl ?? null,
+            createdAt: theme.createdAt,
+            updatedAt: theme.updatedAt,
+        };
     }
     normalizePrintMethod(value) {
         if (value === undefined)

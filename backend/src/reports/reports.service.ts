@@ -69,7 +69,6 @@ export interface PublicResultStatus {
   patientName: string;
   labName: string;
   onlineResultWatermarkDataUrl: string | null;
-  onlineResultWatermarkText: string | null;
   registeredAt: string;
   paymentStatus: string;
   reportableCount: number;
@@ -1505,7 +1504,6 @@ export class ReportsService implements OnModuleInit, OnModuleDestroy {
       patientName: order.patient?.fullName || '-',
       labName: order.lab?.name || 'Laboratory',
       onlineResultWatermarkDataUrl: order.lab?.onlineResultWatermarkDataUrl ?? null,
-      onlineResultWatermarkText: order.lab?.onlineResultWatermarkText ?? null,
       registeredAt: order.registeredAt.toISOString(),
       paymentStatus,
       reportableCount: tests.length,
