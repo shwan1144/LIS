@@ -141,6 +141,7 @@ export declare class ReportsService implements OnModuleInit, OnModuleDestroy {
     private buildPublicResultTestItem;
     private resolveCollapsedPublicPanelStatus;
     private buildPublicResultDisplayTests;
+    private isPublicResultPaymentComplete;
     private isOrderTestResultEntered;
     private assertAllResultsEnteredForReport;
     private assertAllResultsVerifiedForReport;

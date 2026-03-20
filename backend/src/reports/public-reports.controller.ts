@@ -546,7 +546,7 @@ function renderPendingPage(status: PublicResultStatus): string {
           var progress = resolveTestProgress(current, test, nowMs);
           var meta = progress.meta ? '<div class="test-meta">' + escapeHtml(progress.meta) + '</div>' : '<div class="test-meta"></div>';
           var documentActions = '';
-          if (test.resultDocument && test.resultDocument.fileName) {
+          if (current && current.paymentStatus === 'paid' && test.resultDocument && test.resultDocument.fileName) {
             var documentPath = '/public/results/' + encodeURIComponent(current.orderId || '') + '/tests/' + encodeURIComponent(test.orderTestId || '') + '/document';
             documentActions =
               '<div class="test-actions">' +

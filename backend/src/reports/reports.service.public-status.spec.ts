@@ -195,4 +195,129 @@ describe('ReportsService public status display rows', () => {
       }),
     ]);
   });
+
+  it('keeps an unpaid uploaded PDF test visible but strips public document metadata', async () => {
+    const service = createService();
+    const uploadedPdfTest = buildOrderTest({
+      id: 'pdf-single',
+      status: OrderTestStatus.VERIFIED,
+      verifiedAt: new Date('2026-03-19T09:10:00.000Z'),
+      resultDocumentFileName: 'xray-result.pdf',
+      resultDocumentStorageKey: 'doc-key-1',
+      resultDocumentMimeType: 'application/pdf',
+      resultDocumentSizeBytes: 1024,
+      test: buildTest({
+        code: 'XRAY',
+        name: 'X-Ray',
+        resultEntryType: 'PDF_UPLOAD',
+        department: { name: 'Radiology' },
+      }),
+    });
+
+    jest.spyOn(service as any, 'loadOrderResultsSnapshot').mockResolvedValue({
+      order: buildOrder({ paymentStatus: 'unpaid' }),
+      reportableOrderTests: [uploadedPdfTest],
+      verifiedTests: [uploadedPdfTest],
+      latestVerifiedAt: new Date('2026-03-19T09:10:00.000Z'),
+    });
+
+    const status = await service.getPublicResultStatus('order-1');
+
+    expect(status.paymentStatus).toBe('unpaid');
+    expect(status.ready).toBe(false);
+    expect(status.tests).toEqual([
+      expect.objectContaining({
+        orderTestId: 'pdf-single',
+        testCode: 'XRAY',
+        testName: 'X-Ray',
+        hasResult: true,
+        resultDocument: null,
+      }),
+    ]);
+  });
+
+  it('treats partial payment the same as unpaid for uploaded PDF test metadata', async () => {
+    const service = createService();
+    const uploadedPdfTest = buildOrderTest({
+      id: 'pdf-partial',
+      status: OrderTestStatus.VERIFIED,
+      verifiedAt: new Date('2026-03-19T09:15:00.000Z'),
+      resultDocumentFileName: 'ultrasound.pdf',
+      resultDocumentStorageKey: 'doc-key-2',
+      resultDocumentMimeType: 'application/pdf',
+      resultDocumentSizeBytes: 2048,
+      test: buildTest({
+        code: 'US',
+        name: 'Ultrasound',
+        resultEntryType: 'PDF_UPLOAD',
+        department: { name: 'Radiology' },
+      }),
+    });
+
+    jest.spyOn(service as any, 'loadOrderResultsSnapshot').mockResolvedValue({
+      order: buildOrder({ paymentStatus: 'partial' }),
+      reportableOrderTests: [uploadedPdfTest],
+      verifiedTests: [uploadedPdfTest],
+      latestVerifiedAt: new Date('2026-03-19T09:15:00.000Z'),
+    });
+
+    const status = await service.getPublicResultStatus('order-1');
+
+    expect(status.paymentStatus).toBe('partial');
+    expect(status.ready).toBe(false);
+    expect(status.tests).toEqual([
+      expect.objectContaining({
+        orderTestId: 'pdf-partial',
+        resultDocument: null,
+      }),
+    ]);
+  });
+
+  it('keeps an unpaid panel row visible without exposing uploaded PDF metadata from a child test', async () => {
+    const service = createService();
+    const panelParent = buildOrderTest({
+      id: 'panel-parent',
+      status: OrderTestStatus.PENDING,
+      test: buildTest({
+        code: 'RAD',
+        name: 'Radiology Panel',
+        type: TestType.PANEL,
+        department: { name: 'Radiology' },
+      }),
+    });
+    const uploadedPdfChild = buildOrderTest({
+      id: 'panel-child-pdf',
+      parentOrderTestId: 'panel-parent',
+      status: OrderTestStatus.VERIFIED,
+      verifiedAt: new Date('2026-03-19T09:30:00.000Z'),
+      resultDocumentFileName: 'panel-child.pdf',
+      resultDocumentStorageKey: 'doc-key-panel',
+      resultDocumentMimeType: 'application/pdf',
+      resultDocumentSizeBytes: 4096,
+      test: buildTest({
+        code: 'XR1',
+        name: 'Radiology Child',
+        resultEntryType: 'PDF_UPLOAD',
+        department: { name: 'Radiology' },
+      }),
+    });
+
+    jest.spyOn(service as any, 'loadOrderResultsSnapshot').mockResolvedValue({
+      order: buildOrder({ paymentStatus: 'unpaid' }),
+      reportableOrderTests: [panelParent, uploadedPdfChild],
+      verifiedTests: [uploadedPdfChild],
+      latestVerifiedAt: new Date('2026-03-19T09:30:00.000Z'),
+    });
+
+    const status = await service.getPublicResultStatus('order-1');
+
+    expect(status.tests).toHaveLength(1);
+    expect(status.tests[0]).toEqual(
+      expect.objectContaining({
+        orderTestId: 'panel-parent',
+        status: OrderTestStatus.IN_PROGRESS,
+        resultDocument: null,
+      }),
+    );
+  });
 });

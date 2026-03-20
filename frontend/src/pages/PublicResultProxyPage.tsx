@@ -23,6 +23,7 @@ type PublicResultStatus = {
   orderNumber: string;
   patientName: string;
   registeredAt: string;
+  paymentStatus: string;
   reportableCount: number;
   verifiedCount: number;
   progressPercent: number;
@@ -307,6 +308,7 @@ export function PublicResultProxyPage() {
 
   const current = status;
   const tests = current?.tests ?? [];
+  const canAccessUploadedDocuments = current?.paymentStatus === 'paid';
   const reportableCount = Number(current?.reportableCount ?? 0);
   const verifiedCount = Number(current?.verifiedCount ?? 0);
   const progressPercentRaw = Number(current?.progressPercent ?? 0);
@@ -368,7 +370,7 @@ export function PublicResultProxyPage() {
                     <div className={`public-result-bar-fill ${progress.barClass}`} style={{ width: `${progress.percent}%` }} />
                   </div>
                   <div className="public-result-test-meta">{progress.meta}</div>
-                  {publicResultDocumentBaseUrl && test.resultDocument?.fileName ? (
+                  {canAccessUploadedDocuments && publicResultDocumentBaseUrl && test.resultDocument?.fileName ? (
                     <div className="public-result-doc-links">
                       <a
                         href={`${publicResultDocumentBaseUrl}/${encodeURIComponent(test.orderTestId)}/document`}

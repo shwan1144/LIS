@@ -120,4 +120,104 @@ describe('ReportsService public result document access', () => {
     expect(result.buffer).toBe(uploadedBuffer);
     expect(resultDocumentsService.readDocument).toHaveBeenCalledWith('doc-key-1');
   });
+
+  it('rejects public document access for an unpaid uploaded PDF test', async () => {
+    const { service, resultDocumentsService } = createService();
+    const pdfUploadTest = buildOrderTest({
+      id: 'ot-pdf',
+      status: OrderTestStatus.VERIFIED,
+      verifiedAt: new Date('2026-03-20T09:00:00.000Z'),
+      resultDocumentStorageKey: 'doc-key-unpaid',
+      resultDocumentFileName: 'unpaid-result.pdf',
+      resultDocumentMimeType: 'application/pdf',
+      resultDocumentSizeBytes: 64,
+      test: buildTest({
+        code: 'XRAY',
+        name: 'X-Ray Report',
+        resultEntryType: 'PDF_UPLOAD',
+      }),
+    });
+
+    jest.spyOn(service as any, 'loadOrderResultsSnapshot').mockResolvedValue({
+      order: buildOrder({ paymentStatus: 'unpaid' }),
+      reportableOrderTests: [pdfUploadTest],
+      verifiedTests: [pdfUploadTest],
+      latestVerifiedAt: new Date('2026-03-20T09:00:00.000Z'),
+    });
+
+    await expect(service.getPublicResultDocument('order-1', 'ot-pdf')).rejects.toThrow(
+      'Order is unpaid or partially paid. Complete payment to access uploaded PDF results.',
+    );
+    expect(resultDocumentsService.readDocument).not.toHaveBeenCalled();
+  });
+
+  it('rejects public document access for a partially paid uploaded PDF test', async () => {
+    const { service, resultDocumentsService } = createService();
+    const pdfUploadTest = buildOrderTest({
+      id: 'ot-pdf-partial',
+      status: OrderTestStatus.VERIFIED,
+      verifiedAt: new Date('2026-03-20T09:10:00.000Z'),
+      resultDocumentStorageKey: 'doc-key-partial',
+      resultDocumentFileName: 'partial-result.pdf',
+      resultDocumentMimeType: 'application/pdf',
+      resultDocumentSizeBytes: 64,
+      test: buildTest({
+        code: 'US',
+        name: 'Ultrasound Report',
+        resultEntryType: 'PDF_UPLOAD',
+      }),
+    });
+
+    jest.spyOn(service as any, 'loadOrderResultsSnapshot').mockResolvedValue({
+      order: buildOrder({ paymentStatus: 'partial' }),
+      reportableOrderTests: [pdfUploadTest],
+      verifiedTests: [pdfUploadTest],
+      latestVerifiedAt: new Date('2026-03-20T09:10:00.000Z'),
+    });
+
+    await expect(service.getPublicResultDocument('order-1', 'ot-pdf-partial')).rejects.toThrow(
+      'Order is unpaid or partially paid. Complete payment to access uploaded PDF results.',
+    );
+    expect(resultDocumentsService.readDocument).not.toHaveBeenCalled();
+  });
+
+  it('rejects guessed panel-child document URLs when the order is unpaid', async () => {
+    const { service, resultDocumentsService } = createService();
+    const panelParent = buildOrderTest({
+      id: 'ot-panel',
+      status: OrderTestStatus.PENDING,
+      test: buildTest({
+        code: 'RAD',
+        name: 'Radiology Panel',
+        type: TestType.PANEL,
+      }),
+    });
+    const panelChildPdf = buildOrderTest({
+      id: 'ot-panel-child-pdf',
+      parentOrderTestId: 'ot-panel',
+      status: OrderTestStatus.VERIFIED,
+      verifiedAt: new Date('2026-03-20T09:20:00.000Z'),
+      resultDocumentStorageKey: 'doc-key-panel-child',
+      resultDocumentFileName: 'panel-child-result.pdf',
+      resultDocumentMimeType: 'application/pdf',
+      resultDocumentSizeBytes: 64,
+      test: buildTest({
+        code: 'XR2',
+        name: 'Panel Child Report',
+        resultEntryType: 'PDF_UPLOAD',
+      }),
+    });
+
+    jest.spyOn(service as any, 'loadOrderResultsSnapshot').mockResolvedValue({
+      order: buildOrder({ paymentStatus: 'unpaid' }),
+      reportableOrderTests: [panelParent, panelChildPdf],
+      verifiedTests: [panelChildPdf],
+      latestVerifiedAt: new Date('2026-03-20T09:20:00.000Z'),
+    });
+
+    await expect(
+      service.getPublicResultDocument('order-1', 'ot-panel-child-pdf'),
+    ).rejects.toThrow('Order is unpaid or partially paid. Complete payment to access uploaded PDF results.');
+    expect(resultDocumentsService.readDocument).not.toHaveBeenCalled();
+  });
 });

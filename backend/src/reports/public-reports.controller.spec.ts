@@ -93,6 +93,46 @@ describe('PublicReportsController', () => {
     expect(res.redirect).toHaveBeenCalledWith('/public/results/11111111-1111-1111-1111-111111111111/pdf');
   });
 
+  it('renders pending-page document actions with a paid-only condition', async () => {
+    const reportsService = {
+      getPublicResultStatus: jest.fn().mockResolvedValue(
+        createStatus({
+          paymentStatus: 'unpaid',
+          tests: [
+            {
+              orderTestId: 'ot-pdf',
+              testCode: 'XRAY',
+              testName: 'X-Ray',
+              departmentName: 'Radiology',
+              expectedCompletionMinutes: 30,
+              status: 'VERIFIED',
+              isVerified: true,
+              hasResult: true,
+              resultValue: 'Attached PDF',
+              unit: null,
+              verifiedAt: '2026-03-12T10:30:00.000Z',
+              resultEntryType: 'PDF_UPLOAD',
+              resultDocument: {
+                fileName: 'xray.pdf',
+                mimeType: 'application/pdf',
+                sizeBytes: 1024,
+                uploadedAt: '2026-03-12T10:20:00.000Z',
+                uploadedBy: 'tech',
+              },
+            },
+          ],
+        }),
+      ),
+    } as unknown as ReportsService;
+    const controller = new PublicReportsController(reportsService);
+    const res = createResponseMock();
+
+    await controller.getResultStatusPage('11111111-1111-1111-1111-111111111111', res);
+
+    const html = String(res.send.mock.calls[0]?.[0] ?? '');
+    expect(html).toContain("current && current.paymentStatus === 'paid' && test.resultDocument && test.resultDocument.fileName");
+  });
+
   it('returns no-store JSON from status endpoint', async () => {
     const status = createStatus();
     const reportsService = {

@@ -946,9 +946,10 @@ let ReportsService = ReportsService_1 = class ReportsService {
         }
         return order_test_entity_1.OrderTestStatus.PENDING;
     }
-    buildPublicResultDisplayTests(reportableOrderTests) {
+    buildPublicResultDisplayTests(reportableOrderTests, options) {
         const { regularTests, panelParents, panelChildrenByParent } = this.classifyOrderTestsForReport(reportableOrderTests);
-        const regularItems = regularTests.map((orderTest) => this.buildPublicResultTestItem(orderTest));
+        const exposeResultDocuments = options?.exposeResultDocuments ?? true;
+        const regularItems = regularTests.map((orderTest) => this.buildPublicResultTestItem(orderTest, exposeResultDocuments ? {} : { resultDocument: null }));
         const panelItems = panelParents.map((panelParent) => {
             const panelChildren = panelChildrenByParent.get(panelParent.id) ?? [];
             const panelMembers = [panelParent, ...panelChildren];
@@ -982,6 +983,9 @@ let ReportsService = ReportsService_1 = class ReportsService {
                 return code;
             return a.testName.localeCompare(b.testName);
         });
+    }
+    isPublicResultPaymentComplete(order) {
+        return order.paymentStatus === 'paid';
     }
     isOrderTestResultEntered(orderTest, childOrderTestParentIds) {
         const test = orderTest.test;
@@ -1079,10 +1083,14 @@ let ReportsService = ReportsService_1 = class ReportsService {
         if (order.lab?.enableOnlineResults === false) {
             throw new common_1.ForbiddenException('Online results are disabled by laboratory settings.');
         }
-        const ready = order.paymentStatus === 'paid' &&
+        const paymentStatus = order.paymentStatus || 'unpaid';
+        const canAccessUploadedDocuments = this.isPublicResultPaymentComplete(order);
+        const ready = canAccessUploadedDocuments &&
             reportableOrderTests.length > 0 &&
             verifiedTests.length === reportableOrderTests.length;
-        const tests = this.buildPublicResultDisplayTests(reportableOrderTests);
+        const tests = this.buildPublicResultDisplayTests(reportableOrderTests, {
+            exposeResultDocuments: canAccessUploadedDocuments,
+        });
         const verifiedDisplayCount = tests.filter((test) => test.isVerified).length;
         const progressPercent = tests.length > 0
             ? Math.round((verifiedDisplayCount / tests.length) * 100)
@@ -1095,7 +1103,7 @@ let ReportsService = ReportsService_1 = class ReportsService {
             onlineResultWatermarkDataUrl: order.lab?.onlineResultWatermarkDataUrl ?? null,
             onlineResultWatermarkText: order.lab?.onlineResultWatermarkText ?? null,
             registeredAt: order.registeredAt.toISOString(),
-            paymentStatus: order.paymentStatus || 'unpaid',
+            paymentStatus,
             reportableCount: tests.length,
             verifiedCount: verifiedDisplayCount,
             progressPercent,
@@ -1123,6 +1131,9 @@ let ReportsService = ReportsService_1 = class ReportsService {
         this.assertOrderCanReleaseResults(order);
         if (order.lab?.enableOnlineResults === false) {
             throw new common_1.ForbiddenException('Online results are disabled by laboratory settings.');
+        }
+        if (!this.isPublicResultPaymentComplete(order)) {
+            throw new common_1.ForbiddenException('Order is unpaid or partially paid. Complete payment to access uploaded PDF results.');
         }
         const target = reportableOrderTests.find((item) => item.id === orderTestId);
         if (!target || target.status !== 'VERIFIED' || !String(target.resultDocumentStorageKey ?? '').trim()) {
