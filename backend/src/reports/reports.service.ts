@@ -1519,22 +1519,14 @@ export class ReportsService implements OnModuleInit, OnModuleDestroy {
     orderId: string,
     orderTestId: string,
   ): Promise<{ buffer: Buffer; fileName: string; mimeType: string }> {
-    const { order, reportableOrderTests, verifiedTests } = await this.loadOrderResultsSnapshot(orderId);
+    const { order, reportableOrderTests } = await this.loadOrderResultsSnapshot(orderId);
     this.assertOrderCanReleaseResults(order);
     if (order.lab?.enableOnlineResults === false) {
       throw new ForbiddenException('Online results are disabled by laboratory settings.');
     }
 
-    const ready =
-      order.paymentStatus === 'paid' &&
-      reportableOrderTests.length > 0 &&
-      verifiedTests.length === reportableOrderTests.length;
-    if (!ready) {
-      throw new ForbiddenException('Results are not completed yet. Please check again later.');
-    }
-
     const target = reportableOrderTests.find((item) => item.id === orderTestId);
-    if (!target || target.status !== 'VERIFIED') {
+    if (!target || target.status !== 'VERIFIED' || !String(target.resultDocumentStorageKey ?? '').trim()) {
       throw new NotFoundException('Result document not found');
     }
 

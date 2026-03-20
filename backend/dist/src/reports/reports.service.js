@@ -1119,19 +1119,13 @@ let ReportsService = ReportsService_1 = class ReportsService {
         return this.generateTestResultsPDF(orderId, order.labId);
     }
     async getPublicResultDocument(orderId, orderTestId) {
-        const { order, reportableOrderTests, verifiedTests } = await this.loadOrderResultsSnapshot(orderId);
+        const { order, reportableOrderTests } = await this.loadOrderResultsSnapshot(orderId);
         this.assertOrderCanReleaseResults(order);
         if (order.lab?.enableOnlineResults === false) {
             throw new common_1.ForbiddenException('Online results are disabled by laboratory settings.');
         }
-        const ready = order.paymentStatus === 'paid' &&
-            reportableOrderTests.length > 0 &&
-            verifiedTests.length === reportableOrderTests.length;
-        if (!ready) {
-            throw new common_1.ForbiddenException('Results are not completed yet. Please check again later.');
-        }
         const target = reportableOrderTests.find((item) => item.id === orderTestId);
-        if (!target || target.status !== 'VERIFIED') {
+        if (!target || target.status !== 'VERIFIED' || !String(target.resultDocumentStorageKey ?? '').trim()) {
             throw new common_1.NotFoundException('Result document not found');
         }
         return {

@@ -9,6 +9,13 @@ type PublicResultTestItem = {
   expectedCompletionMinutes: number | null;
   status: string;
   isVerified: boolean;
+  resultDocument?: {
+    fileName: string;
+    mimeType: string;
+    sizeBytes: number;
+    uploadedAt: string | null;
+    uploadedBy: string | null;
+  } | null;
 };
 
 type PublicResultStatus = {
@@ -142,6 +149,10 @@ export function PublicResultProxyPage() {
   );
   const apiPdfUrl = useMemo(
     () => (id ? `${apiBaseUrl}/public/results/${encodedOrderId}/pdf` : null),
+    [apiBaseUrl, encodedOrderId, id],
+  );
+  const publicResultDocumentBaseUrl = useMemo(
+    () => (id ? `${apiBaseUrl}/public/results/${encodedOrderId}/tests` : null),
     [apiBaseUrl, encodedOrderId, id],
   );
   const remainderSegment = String(remainder ?? '')
@@ -357,6 +368,23 @@ export function PublicResultProxyPage() {
                     <div className={`public-result-bar-fill ${progress.barClass}`} style={{ width: `${progress.percent}%` }} />
                   </div>
                   <div className="public-result-test-meta">{progress.meta}</div>
+                  {publicResultDocumentBaseUrl && test.resultDocument?.fileName ? (
+                    <div className="public-result-doc-links">
+                      <a
+                        href={`${publicResultDocumentBaseUrl}/${encodeURIComponent(test.orderTestId)}/document`}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        View PDF
+                      </a>
+                      <a
+                        href={`${publicResultDocumentBaseUrl}/${encodeURIComponent(test.orderTestId)}/document?download=true`}
+                        rel="noreferrer"
+                      >
+                        Download PDF
+                      </a>
+                    </div>
+                  ) : null}
                 </div>
               );
             })
@@ -534,6 +562,21 @@ export function PublicResultProxyPage() {
           font-size: 0.88rem;
           color: #64748b;
           font-weight: 600;
+        }
+        .public-result-doc-links {
+          margin-top: 10px;
+          display: flex;
+          gap: 12px;
+          flex-wrap: wrap;
+        }
+        .public-result-doc-links a {
+          color: #2563eb;
+          font-size: 0.9rem;
+          font-weight: 700;
+          text-decoration: none;
+        }
+        .public-result-doc-links a:hover {
+          text-decoration: underline;
         }
         .public-result-footer {
           border-top: 1px solid #e2e8f0;
